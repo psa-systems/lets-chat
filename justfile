@@ -25,7 +25,7 @@ pre-commit: check test
 
 # Run all checks
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-table-scroll check-locale-ellipsis check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
+check: check-asset-color-tokens check-file-pickers check-table-scroll check-locale-ellipsis check-boolean-settings check-single-tab-controller check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
 
 # Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
 # browser assets, and untokenized backgrounds on the [aria-selected="true"]
@@ -50,6 +50,18 @@ check-table-scroll:
 [group('check')]
 check-locale-ellipsis:
     nu ci-build/check-locale-ellipsis.nu
+
+# A boolean setting announces as a switch, and only partials/settings_toggle.html
+# hand-rolls the switch markup (LC-747).
+[group('check')]
+check-boolean-settings:
+    nu ci-build/check-boolean-settings.nu
+
+# Only assets/tabs.js drives the [data-lc-tab] contract; the three consumers go
+# through window.lcInitTabs (LC-747).
+[group('check')]
+check-single-tab-controller:
+    nu ci-build/check-single-tab-controller.nu
 
 # Check server compilation (standalone)
 [group('check')]

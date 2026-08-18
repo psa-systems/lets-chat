@@ -42,7 +42,7 @@
      sr-only checkbox keeps the existing hx-post mute wiring; CSS swaps the bell
      for a slashed bell (and tints) via :has(input:checked). #}
   <label class="lc-header-action cursor-pointer select-none" data-lc-tip="{{ "partials-dm-mute-title"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "partials-dm-mute-title"|t }}">
-    <input type="checkbox"
+    <input type="checkbox" role="switch"
            name="muted"
            hx-post="/dm/{{ peer.id }}/mute"
            hx-trigger="change"

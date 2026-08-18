@@ -30,7 +30,7 @@
       </div>
       <div class="lc-set-form">
         <label class="lc-toggle">
-          <input type="checkbox" name="link_filter_enabled" value="1" {% if link_filter_enabled %}checked{% endif %}>
+          <input type="checkbox" role="switch" name="link_filter_enabled" value="1" {% if link_filter_enabled %}checked{% endif %}>
           <span class="lc-toggle-track" aria-hidden="true"></span>
           <span class="lc-toggle-text">
             <span class="lc-toggle-title">{{ "admin-antispam-link-filter"|t }}</span>
@@ -38,7 +38,7 @@
           </span>
         </label>
         <label class="lc-toggle">
-          <input type="checkbox" name="honeypot_enabled" value="1" {% if honeypot_enabled %}checked{% endif %}>
+          <input type="checkbox" role="switch" name="honeypot_enabled" value="1" {% if honeypot_enabled %}checked{% endif %}>
           <span class="lc-toggle-track" aria-hidden="true"></span>
           <span class="lc-toggle-text">
             <span class="lc-toggle-title">{{ "admin-antispam-honeypot"|t }}</span>

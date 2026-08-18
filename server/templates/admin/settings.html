@@ -23,7 +23,7 @@
     <form class="lc-set-form" method="post" action="/admin/maintenance"
           hx-post="/admin/maintenance" hx-target="#st-maint" hx-swap="innerHTML" hx-disabled-elt="this">
       <label class="lc-toggle">
-        <input type="checkbox" name="enabled" value="1" {% if maintenance_enabled %}checked{% endif %}>
+        <input type="checkbox" role="switch" name="enabled" value="1" {% if maintenance_enabled %}checked{% endif %}>
         <span class="lc-toggle-track" aria-hidden="true"></span>
         <span class="lc-toggle-text">
           <span class="lc-toggle-title">{{ "admin-settings-maintenance-enable"|t }}</span>
@@ -56,7 +56,7 @@
     <form class="lc-set-form" method="post" action="/admin/settings/llm"
           hx-post="/admin/settings/llm" hx-target="#st-llm" hx-swap="innerHTML" hx-disabled-elt="this">
       <label class="lc-toggle">
-        <input type="checkbox" name="enabled" value="1" {% if llm_flag_enabled %}checked{% endif %}>
+        <input type="checkbox" role="switch" name="enabled" value="1" {% if llm_flag_enabled %}checked{% endif %}>
         <span class="lc-toggle-track" aria-hidden="true"></span>
         <span class="lc-toggle-text">
           <span class="lc-toggle-title">{{ "admin-settings-llm-enable"|t }}</span>
@@ -172,7 +172,7 @@
         <p class="lc-set-help">{{ "admin-settings-imap-port-note"|t }}</p>
       </div>
       <label class="lc-toggle">
-        <input id="imap_tls" name="imap_tls" type="checkbox" value="1" {% if imap_tls %}checked{% endif %}>
+        <input id="imap_tls" name="imap_tls" type="checkbox" role="switch" value="1" {% if imap_tls %}checked{% endif %}>
         <span class="lc-toggle-track" aria-hidden="true"></span>
         <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "admin-settings-imap-use-tls"|t }}</span></span>
       </label>
@@ -201,7 +201,7 @@
         <p class="lc-set-help">{{ "admin-settings-imap-dead-letter-note-1"|t }} <code>\Seen</code> {{ "admin-settings-imap-dead-letter-note-2"|t }}</p>
       </div>
       <label class="lc-toggle">
-        <input id="imap_enabled" name="imap_enabled" type="checkbox" value="1" {% if imap_enabled %}checked{% endif %}>
+        <input id="imap_enabled" name="imap_enabled" type="checkbox" role="switch" value="1" {% if imap_enabled %}checked{% endif %}>
         <span class="lc-toggle-track" aria-hidden="true"></span>
         <span class="lc-toggle-text">
           <span class="lc-toggle-title">{{ "admin-settings-imap-enable"|t }}</span>
@@ -307,7 +307,7 @@
     <form class="lc-set-form" method="post" action="/admin/settings/email-digest-default"
           hx-post="/admin/settings/email-digest-default" hx-target="#st-defaults" hx-swap="innerHTML" hx-disabled-elt="this">
       <label class="lc-toggle">
-        <input type="checkbox" name="default_notify_email_digest" value="1" {% if default_notify_email_digest %}checked{% endif %}>
+        <input type="checkbox" role="switch" name="default_notify_email_digest" value="1" {% if default_notify_email_digest %}checked{% endif %}>
         <span class="lc-toggle-track" aria-hidden="true"></span>
         <span class="lc-toggle-text">
           <span class="lc-toggle-title">{{ "admin-settings-defaults-digest"|t }}</span>

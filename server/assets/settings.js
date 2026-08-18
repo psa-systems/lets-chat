@@ -1,79 +1,13 @@
 // LC-426: Settings page interactivity.
 //
-//  - Real tabs: one panel visible at a time, synced to location.hash, with
-//    arrow-key navigation. All panels stay in the DOM so every form keeps its
-//    htmx wiring; this only toggles visibility.
+//  - Real tabs: LC-747 moved the controller to the shared assets/tabs.js; this
+//    only supplies the root and the storage key.
 //  - Avatar live preview: show the chosen image immediately and a "not applied
 //    until you save" hint; clear it once the profile form saves successfully.
 //  - Loading affordances for the non-htmx actions (data download, account
 //    delete) that cannot return a status fragment.
 (function () {
   'use strict';
-
-  function tabsInit(root) {
-    var tabs = Array.prototype.slice.call(root.querySelectorAll('[data-lc-tab]'));
-    var panels = Array.prototype.slice.call(root.querySelectorAll('[data-lc-tabpanel]'));
-    if (!tabs.length) return;
-
-    function valid(key) {
-      return tabs.some(function (t) { return t.getAttribute('data-lc-tab') === key; });
-    }
-
-    function select(key, focus) {
-      tabs.forEach(function (t) {
-        var on = t.getAttribute('data-lc-tab') === key;
-        t.setAttribute('aria-selected', on ? 'true' : 'false');
-        t.tabIndex = on ? 0 : -1;
-        if (on && focus) { try { t.focus(); } catch (e) {} }
-      });
-      panels.forEach(function (p) {
-        p.hidden = p.getAttribute('data-lc-tabpanel') !== key;
-      });
-      // Remember the tab so a full-page reload (no-JS fallback redirect, or the
-      // DnD pause/resume forms) returns to it instead of resetting to the first.
-      try { sessionStorage.setItem('lc-settings-tab', key); } catch (e) {}
-    }
-
-    function keyFromHash() {
-      var h = (location.hash || '').replace(/^#/, '');
-      if (valid(h)) return h;
-      var stored;
-      try { stored = sessionStorage.getItem('lc-settings-tab'); } catch (e) {}
-      return valid(stored) ? stored : tabs[0].getAttribute('data-lc-tab');
-    }
-
-    root.addEventListener('click', function (e) {
-      var tab = e.target.closest && e.target.closest('[data-lc-tab]');
-      if (!tab || !root.contains(tab)) return;
-      var key = tab.getAttribute('data-lc-tab');
-      if (location.hash.replace(/^#/, '') !== key) {
-        // pushState-free: update the hash without a jarring scroll jump.
-        history.replaceState(null, '', '#' + key);
-      }
-      select(key, false);
-    });
-
-    // Roving-tabindex arrow navigation across the tablist.
-    root.addEventListener('keydown', function (e) {
-      var tab = e.target.closest && e.target.closest('[data-lc-tab]');
-      if (!tab) return;
-      var idx = tabs.indexOf(tab);
-      if (idx < 0) return;
-      var next = null;
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = tabs[(idx + 1) % tabs.length];
-      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = tabs[(idx - 1 + tabs.length) % tabs.length];
-      else if (e.key === 'Home') next = tabs[0];
-      else if (e.key === 'End') next = tabs[tabs.length - 1];
-      if (!next) return;
-      e.preventDefault();
-      var key = next.getAttribute('data-lc-tab');
-      history.replaceState(null, '', '#' + key);
-      select(key, true);
-    });
-
-    window.addEventListener('hashchange', function () { select(keyFromHash(), false); });
-    select(keyFromHash(), false);
-  }
 
   // LC-740: the filename echo, the type/size rejection and the Save block all
   // live in the shared file_picker.js handler now. This only adds what is
@@ -212,7 +146,7 @@
   function init() {
     var root = document.querySelector('[data-lc-settings]');
     if (!root) return;
-    tabsInit(root);
+    window.lcInitTabs(root, 'lc-settings-tab');
     avatarInit(root);
     actionsInit(root);
     dismissInit();
