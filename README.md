@@ -225,3 +225,7 @@ Users with no email address on file are skipped by the digest tick regardless of
 - **Styles**: Tailwind CSS (compiled via Bun), with semantic design tokens driving light/dark/high-contrast themes
 - **i18n**: [Project Fluent](https://projectfluent.org/) catalogs embedded at compile time (see [`docs/i18n.md`](docs/i18n.md))
 - **Desktop**: Optional Tao + Wry native webview wrapper in `desktop/`
+
+## Development happens on Forgejo
+
+The development home for this repository is <https://dev.a8n.run/psa-systems/lets-chat>. The [GitHub](https://github.com/psa-systems/lets-chat) and [Codeberg](https://codeberg.org/psa-systems/lets-chat) copies are read-only mirrors that exist for visibility only: issues and pull requests are disabled there, and no community support runs on the mirrors. File issues and open pull requests on Forgejo.
