@@ -18,6 +18,10 @@ pub struct RoomHeaderFragment<'a> {
     /// `RoomPage` view computed; recomputed here on the notify-prefs
     /// swap path so the link does not vanish when the user toggles mute.
     pub can_manage_overrides: bool,
+    /// LC-767: the room's enclave (when it has one), so the header's "Invite
+    /// people" action survives the notify-prefs header swap. Mirrors the field
+    /// `RoomPage` passes; `None` for a DM, where the action does not render.
+    pub sidebar_current_enclave: Option<i64>,
     /// LC-484: gates the "Catch me up" action; recomputed here so it
     /// survives the notify-prefs header swap.
     pub llm_available: bool,

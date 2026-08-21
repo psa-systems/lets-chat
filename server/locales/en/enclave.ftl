@@ -57,6 +57,10 @@ enclave-room-type-public = public
 enclave-room-type-private = private
 enclave-add-room = Add room
 enclave-invite-placeholder = Invite by username...
+# LC-767: the invite search hosted in the shared thread-panel drawer, opened
+# from the room header and the member panel.
+invite-panel-title = Invite people
+invite-panel-sub = Search by name to add someone to this space.
 # LC-516: add a bot (which cannot accept invitations) directly to the enclave.
 enclave-add-bot-title = Add a bot
 enclave-add-bot-button = Add bot
