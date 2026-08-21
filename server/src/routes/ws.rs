@@ -2427,12 +2427,14 @@ fn relay_voice_signal(
 /// this connection (broadcast_to_user already targets the right user); the
 /// swap is a no-op on tabs not currently showing the invitations page.
 async fn render_invitations(state: &AppState, viewer: &User) -> Option<String> {
-    let invs = db::enclave::list_invitations_for_user(&state.chat, &viewer.id)
+    let cards = crate::routes::enclave::load_invitation_cards(state, &viewer.id)
         .await
         .ok()?;
-    crate::views::enclave::InvitationsLiveFragment { invitations: &invs }
-        .render()
-        .ok()
+    crate::views::enclave::InvitationsLiveFragment {
+        invitations: &cards,
+    }
+    .render()
+    .ok()
 }
 
 /// LC-769: an invitation arriving or resolving must update the live

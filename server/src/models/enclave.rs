@@ -77,3 +77,18 @@ pub struct EnclaveInvitation {
     pub invited_by: String,
     pub created_at: String,
 }
+
+/// LC-772: a pending invitation enriched with the enclave context the invitee
+/// needs to decide (name, description, live member count). The inviter id is
+/// still raw here; users live in a separate pool, so the route resolves it to a
+/// friendly name + avatar (see `db::auth::user_identities_for_ids`) rather than
+/// showing a UUID.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InvitationListing {
+    pub id: i64,
+    pub enclave_id: i64,
+    pub enclave_name: String,
+    pub enclave_description: Option<String>,
+    pub member_count: i64,
+    pub invited_by: String,
+}

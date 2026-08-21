@@ -1411,6 +1411,43 @@ pub async fn display_names_for_ids(
     Ok(map)
 }
 
+/// LC-772: id -> identity (username, display name, avatar extension) for a set
+/// of user ids. Like `display_names_for_ids` but also returns `avatar_ext` so
+/// the caller can render a real avatar, not just a name. Used to resolve
+/// invitation inviters to a friendly card without an N+1 across the auth pool.
+pub async fn user_identities_for_ids(
+    pool: &SqlitePool,
+    ids: &[&str],
+) -> Result<std::collections::HashMap<String, crate::models::user::UserIdentity>, sqlx::Error> {
+    use crate::models::user::UserIdentity;
+    if ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let placeholders = std::iter::repeat_n("?", ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql =
+        format!("SELECT id, username, display_name, avatar_ext FROM users WHERE id IN ({placeholders})");
+    let mut q = sqlx::query(&sql);
+    for id in ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    let mut map = std::collections::HashMap::with_capacity(rows.len());
+    for r in rows {
+        let id: String = r.get("id");
+        map.insert(
+            id,
+            UserIdentity {
+                username: r.get("username"),
+                display_name: r.get("display_name"),
+                avatar_ext: r.get("avatar_ext"),
+            },
+        );
+    }
+    Ok(map)
+}
+
 /// Bulk-load id + username + status for a set of user ids. Used by
 /// `@here` resolution to filter out DND users in one query rather than N.
 /// Banned users are excluded (same as `list_user_ids`); their messages and
