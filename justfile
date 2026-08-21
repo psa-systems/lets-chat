@@ -25,7 +25,7 @@ pre-commit: check test
 
 # Run all checks
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-ui-conventions check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
+check: check-asset-color-tokens check-file-pickers check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-ui-conventions check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
 
 # Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
 # browser assets, and untokenized backgrounds on the [aria-selected="true"]
@@ -74,6 +74,13 @@ check-single-tab-controller:
 [group('check')]
 check-revoke-confirm:
     nu ci-build/check-revoke-confirm.nu
+
+# No apostrophe in a catalog string interpolated into an inline confirm('...');
+# askama escapes it, the HTML parser hands a bare quote to the JS compiler, and
+# the confirmation silently never runs (LC-753).
+[group('check')]
+check-confirm-apostrophe:
+    nu ci-build/check-confirm-apostrophe.nu
 
 # The convention classes the 2026-08-11 UI audit closed, held closed: palette
 # literals in templates, fake link buttons, open-coded .btn-danger-outline,
