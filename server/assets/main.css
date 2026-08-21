@@ -6083,6 +6083,12 @@ html[data-lc-support-open] .lc-support-root .lc-support-launcher::after { displa
     bottom: calc(100% + 0.625rem);
     align-items: center;
     gap: 0.5rem;
+    /* LC-772: the root is `width: max-content` and sized by the 3.25rem
+       launcher; this nudge is absolutely positioned, so without an intrinsic
+       width it shrink-to-fits into that ~52px containing block and the hint
+       stacks into a cramped vertical column. Size to content (clamped by
+       max-width) so it reads as a clean one/two-line bubble. */
+    width: max-content;
     max-width: 15rem;
     padding: 0.5rem 0.5rem 0.5rem 0.75rem;
     border: 1px solid var(--border);
