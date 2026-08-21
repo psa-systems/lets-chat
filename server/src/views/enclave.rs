@@ -250,6 +250,18 @@ pub struct EnclaveInviteSearchFragment<'a> {
     pub results: &'a [EnclaveInviteCandidate],
 }
 
+/// LC-767: the invite search hosted in the shared `#thread-panel` drawer, so
+/// the invite control is reachable from the room header and the member panel
+/// (where people look for it) and not only the sidebar foot. It only wraps a
+/// drawer shell around the existing invite endpoints; the search input targets
+/// `GET /enclave/{id}/invite/search` and each result row posts to
+/// `POST /enclave/{id}/invite`, exactly as the settings page does.
+#[derive(Template)]
+#[template(path = "enclave/invite_panel.html")]
+pub struct EnclaveInvitePanel {
+    pub enclave_id: i64,
+}
+
 /// Per-row response returned by `POST /enclave/{id}/invite`. The typeahead
 /// row swaps itself with this fragment via `hx-swap="outerHTML"`. `ok` is
 /// true on a successful invite (renders "Invited"), false on a validation

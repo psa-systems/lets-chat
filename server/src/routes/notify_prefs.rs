@@ -96,6 +96,7 @@ pub async fn post_notify_prefs(
         mute_mode: mode.as_str(),
         is_starred,
         can_manage_overrides,
+        sidebar_current_enclave: current_enclave,
         llm_available: ai_llm,
         llm_teaser: !state.llm_available() && user.role == "admin",
         member_count: member_ids.len(),
