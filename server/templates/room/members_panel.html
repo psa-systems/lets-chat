@@ -83,9 +83,21 @@
   </div>
 
   {# LC-683: management stays gated and reuses the existing manage page rather
-     than reimplementing promote/kick inline. Hidden for members who can't manage. #}
+     than reimplementing promote/kick inline. Hidden for members who can't manage.
+     LC-767: the same footer also offers "Invite people", opening the invite
+     search in this same #thread-panel slot - so the panel that lists who is here
+     also offers to add someone, instead of sending people hunting for the
+     sidebar control. Both are gated on can_manage (the invite endpoints enforce
+     the identical authority). The invite link needs an enclave to invite into. #}
   {% if can_manage %}
-  <footer class="border-t border-border px-3 py-2">
+  <footer class="border-t border-border px-3 py-2 flex items-center gap-3">
+    {% if let Some(eid) = enclave_id %}
+    <button type="button"
+            hx-get="/enclave/{{ eid }}/invite/panel"
+            hx-target="#thread-panel"
+            hx-swap="outerHTML"
+            class="text-xs font-medium text-accent hover:underline">{{ "sidebar-invite-people"|t }}</button>
+    {% endif %}
     <a href="/room/{{ room_id }}/manage" class="text-xs font-medium text-accent hover:underline">{{ "members-manage-link"|t }}</a>
   </footer>
   {% endif %}

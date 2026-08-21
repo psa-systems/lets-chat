@@ -57,6 +57,10 @@ enclave-room-type-public = publica
 enclave-room-type-private = privada
 enclave-add-room = Anadir sala
 enclave-invite-placeholder = Invitar por nombre de usuario...
+# LC-767: la busqueda de invitacion alojada en el panel lateral compartido,
+# abierta desde el encabezado de la sala y el panel de miembros.
+invite-panel-title = Invitar personas
+invite-panel-sub = Busca por nombre para agregar a alguien a este espacio.
 # LC-516: agregar un bot (que no puede aceptar invitaciones) directamente al enclave.
 enclave-add-bot-title = Agregar un bot
 enclave-add-bot-button = Agregar bot

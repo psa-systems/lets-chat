@@ -1,0 +1,46 @@
+{# LC-767: "Invite people" drawer. Occupies the shared #thread-panel slot (one
+   drawer at a time), so it reuses the thread panel's close affordance
+   (DELETE /thread-panel), exactly like the members roster and the catch-up
+   summary. Reachable from the room header and the member panel footer so the
+   invite control sits where people look for it, not only in the sidebar foot.
+   No new invite flow: the search input reuses GET /enclave/{id}/invite/search
+   and each result row posts to POST /enclave/{id}/invite (invite_search.html),
+   the same endpoints the enclave settings member search uses. Rendered only for
+   callers who can manage the enclave (route gate: require_manage), matching the
+   authority the invite endpoints enforce. #}
+<aside id="thread-panel" class="lc-panel flex flex-col">
+  <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+    <div class="min-w-0">
+      <div class="font-semibold leading-tight truncate">{{ "invite-panel-title"|t }}</div>
+      <div class="text-xs text-content-muted truncate">{{ "invite-panel-sub"|t }}</div>
+    </div>
+    <button
+      hx-delete="/thread-panel"
+      hx-target="#thread-panel"
+      hx-swap="outerHTML"
+      class="text-content-subtle hover:text-content-muted flex-none"
+      aria-label="{{ "room-thread-close"|t }}"
+    >&#10005;</button>
+  </header>
+
+  {# Same hx contract as the settings member search: typeahead over users,
+     results rendered by invite_search.html into the container below. A blank
+     query returns an empty body, so the results block collapses (empty:hidden). #}
+  <div class="p-3">
+    <input
+      name="q"
+      placeholder="{{ "enclave-invite-placeholder"|t }}"
+      aria-label="{{ "enclave-invite-placeholder"|t }}"
+      hx-get="/enclave/{{ enclave_id }}/invite/search"
+      hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+      hx-target="#lc-invite-panel-results"
+      hx-swap="innerHTML"
+      autocomplete="off"
+      data-lc-search
+      data-lc-search-results="#lc-invite-panel-results"
+      role="combobox" aria-expanded="false" aria-controls="lc-invite-panel-results" aria-autocomplete="list"
+      class="input text-sm"
+      autofocus>
+    <div id="lc-invite-panel-results" class="mt-2 empty:hidden"></div>
+  </div>
+</aside>
