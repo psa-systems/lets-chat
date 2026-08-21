@@ -113,7 +113,7 @@ partials-dm-mute-title = Mute notifications from this DM
 partials-dm-mute = Mute
 partials-dm-block = Block
 partials-dm-block-confirm-prefix = Block
-partials-dm-block-confirm-suffix = They won't be able to message you and you won't see their messages.
+partials-dm-block-confirm-suffix = They will not be able to message you and you will not see their messages.
 
 ## Pinned strip
 partials-pinned-heading = Pinned
