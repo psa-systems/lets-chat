@@ -13,12 +13,21 @@ use sqlx::{Row, SqlitePool};
 /// is the only length bound needed - cf. the LC-153 markdown caps).
 pub const MAX_SEGMENT_CHARS: usize = 4_000;
 
+/// LC-752: `started_at` / `spoken_at` written with millisecond precision. The
+/// columns default to `datetime('now')` (whole seconds), which quantized the
+/// exported VTT cue offset (`spoken_at - started_at`) to whole seconds, so a
+/// segment 1.4s into a call exported as if it were at 1.0s. Milliseconds match
+/// the resolution `duration_ms` already carries.
+const NOW_MS: &str = "strftime('%Y-%m-%d %H:%M:%f', 'now')";
+
 /// One transcription session.
 #[derive(Debug, Clone)]
 pub struct Transcript {
     pub id: i64,
     pub room_id: i64,
     pub started_by: String,
+    /// `YYYY-MM-DD HH:MM:SS.mmm` (LC-752); rows written before that are
+    /// whole-second `YYYY-MM-DD HH:MM:SS`.
     pub started_at: String,
     pub ended_at: Option<String>,
     pub status: String,
@@ -38,6 +47,7 @@ pub struct Segment {
     /// LC-629: the original, uncorrected recognition when it differs from
     /// `text`; `None` when no correction was applied (raw equals display).
     pub raw_text: Option<String>,
+    /// Same format as [`Transcript::started_at`] (LC-752).
     pub spoken_at: String,
     /// LC-591: real spoken length in ms from the engine's segment timings, or 0
     /// when unknown (browser Web Speech, or a non-verbose_json engine).
@@ -91,12 +101,14 @@ pub async fn start_session(
     if let Some(existing) = open_session_for_room(pool, room_id).await? {
         return Ok(existing);
     }
-    let id = sqlx::query("INSERT INTO call_transcripts (room_id, started_by) VALUES (?, ?)")
-        .bind(room_id)
-        .bind(started_by)
-        .execute(pool)
-        .await?
-        .last_insert_rowid();
+    let id = sqlx::query(&format!(
+        "INSERT INTO call_transcripts (room_id, started_by, started_at) VALUES (?, ?, {NOW_MS})"
+    ))
+    .bind(room_id)
+    .bind(started_by)
+    .execute(pool)
+    .await?
+    .last_insert_rowid();
     get(pool, id).await?.ok_or(sqlx::Error::RowNotFound)
 }
 
@@ -142,10 +154,11 @@ pub async fn append_segment(
 ) -> sqlx::Result<i64> {
     let capped: String = text.chars().take(MAX_SEGMENT_CHARS).collect();
     let capped_raw: Option<String> = raw_text.map(|r| r.chars().take(MAX_SEGMENT_CHARS).collect());
-    let id = sqlx::query(
-        "INSERT INTO transcript_segments (transcript_id, user_id, text, raw_text, duration_ms) \
-         VALUES (?, ?, ?, ?, ?)",
-    )
+    let id = sqlx::query(&format!(
+        "INSERT INTO transcript_segments \
+         (transcript_id, user_id, text, raw_text, duration_ms, spoken_at) \
+         VALUES (?, ?, ?, ?, ?, {NOW_MS})"
+    ))
     .bind(transcript_id)
     .bind(user_id)
     .bind(&capped)

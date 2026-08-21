@@ -768,8 +768,11 @@ async fn server_stt_stores_real_segment_duration_and_exports_it() {
         "the real spoken duration from the engine's segments is stored"
     );
 
-    // The VTT export uses the real duration: a single cue starting at 00:00:00
-    // and ending 2.5s later, not the synthetic 2-3s fallback.
+    // The VTT export uses the real duration: the cue is exactly 2.5s long, not
+    // the synthetic 2-3s fallback. Its START is the wall-clock gap between the
+    // /start and /audio POSTs, which the test does not control, so assert the
+    // LENGTH exactly and only bound the start (LC-752: before sub-second
+    // storage that gap rounded to 0 or 1 whole second at random).
     let (st, vtt) = get(
         &s.app,
         &s.a_session,
@@ -777,10 +780,190 @@ async fn server_stt_stores_real_segment_duration_and_exports_it() {
     )
     .await;
     assert_eq!(st, StatusCode::OK);
+    let (start_ms, end_ms) = first_cue_ms(&vtt);
+    assert_eq!(end_ms - start_ms, 2500, "cue uses the real duration: {vtt}");
     assert!(
-        vtt.contains("00:00:00.000 --> 00:00:02.500"),
-        "cue uses the real duration: {vtt}"
+        start_ms < 5_000,
+        "cue starts at the real offset of two back-to-back POSTs: {vtt}"
     );
+}
+
+/// The first cue's `(start_ms, end_ms)` from a WebVTT body.
+fn first_cue_ms(vtt: &str) -> (i64, i64) {
+    let line = vtt
+        .lines()
+        .find(|l| l.contains(" --> "))
+        .unwrap_or_else(|| panic!("no cue timing line in: {vtt}"));
+    let (start, end) = line.split_once(" --> ").unwrap();
+    (vtt_ms(start), vtt_ms(end))
+}
+
+/// "HH:MM:SS.mmm" -> milliseconds.
+fn vtt_ms(t: &str) -> i64 {
+    let parts: Vec<&str> = t.trim().split(':').collect();
+    assert_eq!(parts.len(), 3, "bad VTT timestamp: {t}");
+    let (secs, ms) = parts[2]
+        .split_once('.')
+        .unwrap_or_else(|| panic!("bad VTT timestamp: {t}"));
+    parts[0].parse::<i64>().unwrap() * 3_600_000
+        + parts[1].parse::<i64>().unwrap() * 60_000
+        + secs.parse::<i64>().unwrap() * 1_000
+        + ms.parse::<i64>().unwrap()
+}
+
+/// LC-752: the cue offset is `spoken_at - started_at` at millisecond
+/// resolution. With known fractional timestamps the exported cue start is
+/// exact, so a regression to whole-second storage or whole-second parsing
+/// fails here instead of passing by luck.
+#[tokio::test]
+async fn export_vtt_cue_offset_keeps_sub_second_precision() {
+    let s = setup().await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=hello+world"),
+    )
+    .await;
+
+    // Pin both timestamps 1.25s apart, within the same whole second.
+    sqlx::query("UPDATE call_transcripts SET started_at = '2026-01-01 00:00:00.500' WHERE id = ?")
+        .bind(tid)
+        .execute(&s.chat)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE transcript_segments SET spoken_at = '2026-01-01 00:00:01.750' \
+         WHERE transcript_id = ?",
+    )
+    .bind(tid)
+    .execute(&s.chat)
+    .await
+    .unwrap();
+
+    let (st, vtt) = get(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/export?format=vtt"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let (start_ms, _) = first_cue_ms(&vtt);
+    assert_eq!(
+        start_ms, 1_250,
+        "cue offset keeps the sub-second part (whole-second rounding gives 1000): {vtt}"
+    );
+
+    // The page and the txt header still show whole seconds; the fraction is
+    // precision for the cue maths, not for a human reading a timestamp.
+    let (st, txt) = get(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/export?format=txt"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        txt.contains("2026-01-01 00:00:00\n") && !txt.contains("00:00:00.500"),
+        "txt header shows the whole-second timestamp: {txt}"
+    );
+}
+
+/// LC-752: rows written before the millisecond change still export at their
+/// real offset instead of collapsing to the start of the call.
+#[tokio::test]
+async fn export_vtt_still_parses_legacy_whole_second_timestamps() {
+    let s = setup().await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=hello+world"),
+    )
+    .await;
+
+    sqlx::query("UPDATE call_transcripts SET started_at = '2026-01-01 00:00:00' WHERE id = ?")
+        .bind(tid)
+        .execute(&s.chat)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE transcript_segments SET spoken_at = '2026-01-01 00:00:07' WHERE transcript_id = ?",
+    )
+    .bind(tid)
+    .execute(&s.chat)
+    .await
+    .unwrap();
+
+    let (st, vtt) = get(
+        &s.app,
+        &s.a_session,
+        &format!("/transcripts/{tid}/export?format=vtt"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let (start_ms, _) = first_cue_ms(&vtt);
+    assert_eq!(
+        start_ms, 7_000,
+        "the whole-second form still parses (0 would mean it fell through): {vtt}"
+    );
+}
+
+/// LC-752: the sessions and segments the app writes carry millisecond
+/// precision, so the cue offset above is real rather than quantized.
+#[tokio::test]
+async fn stored_transcript_timestamps_carry_milliseconds() {
+    let s = setup().await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=hello+world"),
+    )
+    .await;
+
+    let session = db::transcripts::get(&s.chat, tid).await.unwrap().unwrap();
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs.len(), 1);
+    for (label, ts) in [
+        ("started_at", &session.started_at),
+        ("spoken_at", &segs[0].spoken_at),
+    ] {
+        assert_eq!(
+            ts.len(),
+            "2026-01-01 00:00:00.000".len(),
+            "{label} is stored with milliseconds, got {ts}"
+        );
+        assert_eq!(
+            ts.as_bytes().get(19),
+            Some(&b'.'),
+            "{label} is stored with milliseconds, got {ts}"
+        );
+    }
 }
 
 #[tokio::test]
