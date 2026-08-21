@@ -35,6 +35,8 @@ sidebar-section-direct-messages = Mensajes directos
 sidebar-room-add = Anadir chat
 # LC-576: sidebar foot action (prototype .sb-foot)
 sidebar-invite-people = Invitar personas
+# LC-769: banner en la barra lateral cuando el usuario tiene invitaciones pendientes.
+sidebar-invitations-pending = Invitaciones pendientes
 sidebar-star = Destacar
 sidebar-unstar = Quitar de destacados
 sidebar-draft-indicator = Borrador sin enviar

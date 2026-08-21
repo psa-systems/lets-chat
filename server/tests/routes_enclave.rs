@@ -661,6 +661,83 @@ async fn invite_panel_refused_for_non_manager() {
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
 }
 
+// LC-769: an invited user must see a labeled invitations indicator in the
+// sidebar (present on every page), not only on the invitations page or blended
+// into the Home rail badge. Before any invite Bob's sidebar has no banner;
+// after Alice invites him it appears, pointing at /invitations.
+#[tokio::test]
+async fn invitation_surfaces_a_sidebar_banner_to_the_invitee() {
+    let (app, s1, _id1, s2, id2) = app_with_two_users().await;
+
+    // Before any invite, Bob's home carries no invitations banner.
+    let home = Request::builder()
+        .method(Method::GET)
+        .uri("/")
+        .header("cookie", cookie(&s2))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(home).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    assert!(
+        !s.contains("data-lc-invites-banner"),
+        "no banner should show before an invite exists"
+    );
+
+    // Alice creates an enclave and invites Bob.
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&s1))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=alices-place"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let enclave_id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+    let invite = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{enclave_id}/invite"))
+        .header("cookie", cookie(&s1))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from(format!("user_id={id2}")))
+        .unwrap();
+    let res = app.clone().oneshot(invite).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Now Bob's home shows the banner, linking to /invitations.
+    let home = Request::builder()
+        .method(Method::GET)
+        .uri("/")
+        .header("cookie", cookie(&s2))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(home).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    assert!(
+        s.contains("data-lc-invites-banner"),
+        "the invited user must see the sidebar invitations banner"
+    );
+    assert!(
+        s.contains("href=\"/invitations\""),
+        "the banner must link to the accept / decline page"
+    );
+}
+
 #[tokio::test]
 async fn invitation_decline_only_by_invitee() {
     let (app, s1, _id1, _s2, _id2) = app_with_two_users().await;
