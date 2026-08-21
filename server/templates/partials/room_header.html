@@ -45,6 +45,27 @@
       {% endif %}
     </button>
     {% endif %}
+    {# LC-767: "Invite people" next to the who's-here cluster, so someone looking
+       at who is in the room finds the invite control on the same surface instead
+       of hunting for the sidebar foot. Opens the existing invite search in the
+       shared #thread-panel slot (GET /enclave/{id}/invite/panel). Gated on the
+       same manage authority the invite endpoints enforce (can_manage_overrides),
+       and only for a room that belongs to an enclave (DMs have nobody to invite). #}
+    {% if can_manage_overrides %}{% if let Some(eid) = sidebar_current_enclave %}
+    <button type="button"
+            hx-get="/enclave/{{ eid }}/invite/panel"
+            hx-target="#thread-panel"
+            hx-swap="outerHTML"
+            class="lc-header-action"
+            data-lc-tip="{{ "sidebar-invite-people"|t }}" data-lc-tip-pos="bottom"
+            aria-label="{{ "sidebar-invite-people"|t }}">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+        <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z"/>
+        <path d="M15.75 6.75a.75.75 0 00-1.5 0v1.5h-1.5a.75.75 0 000 1.5h1.5v1.5a.75.75 0 001.5 0v-1.5h1.5a.75.75 0 000-1.5h-1.5v-1.5z"/>
+      </svg>
+      <span>{{ "sidebar-invite-people"|t }}</span>
+    </button>
+    {% endif %}{% endif %}
     {# LC-268: search scoped to THIS room. Reuses /search (room_id filter) +
        search.js combobox nav; results are jump links to #msg-{id} in-room. #}
     {# LC-388: search field aligned to the .lc-header-action height (h-8) with a

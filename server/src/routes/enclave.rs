@@ -97,8 +97,8 @@ use crate::perms::{enclave_can_delete, enclave_can_manage_admins};
 use crate::state::AppState;
 use crate::views::enclave::{
     DiscoverPage, EnclaveBrandingPage, EnclaveInviteCandidate, EnclaveInviteCandidateState,
-    EnclaveInviteRowResult, EnclaveInviteSearchFragment, EnclaveMemberView, EnclavePage,
-    EnclaveSettingsPage,
+    EnclaveInvitePanel, EnclaveInviteRowResult, EnclaveInviteSearchFragment, EnclaveMemberView,
+    EnclavePage, EnclaveSettingsPage,
 };
 use crate::views::settings::SettingsFeedback;
 use crate::views::{html, Html};
@@ -169,6 +169,7 @@ pub fn router() -> Router<AppState> {
             post(post_invite_code).delete(delete_invite_code),
         )
         .route("/enclave/{id}/invite", post(post_invite))
+        .route("/enclave/{id}/invite/panel", get(get_invite_panel))
         .route("/enclave/{id}/invite/search", get(get_invite_search))
         .route("/invitations", get(get_invitations))
         .route("/invitations/{id}/accept", post(post_invitation_accept))
@@ -615,6 +616,21 @@ pub struct InviteForm {
 pub struct InviteSearchQuery {
     #[serde(default)]
     pub q: Option<String>,
+}
+
+/// GET /enclave/{id}/invite/panel - LC-767. The invite search hosted in the
+/// shared `#thread-panel` drawer, reachable from the room header and the member
+/// panel footer so the invite control sits where people look for it, not only
+/// in the sidebar foot. It wraps the existing invite endpoints in a drawer
+/// shell and enforces the same manage gate they do, so a non-manager cannot
+/// open it (nor invite through it).
+pub async fn get_invite_panel(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+) -> Result<Html, AppError> {
+    require_manage(&state, &user, id).await?;
+    html(&EnclaveInvitePanel { enclave_id: id })
 }
 
 /// GET /enclave/{id}/invite/search?q=... - typeahead candidates for inviting
