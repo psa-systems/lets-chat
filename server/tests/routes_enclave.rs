@@ -586,6 +586,81 @@ async fn invite_then_accept_creates_membership() {
     assert_eq!(res.status(), StatusCode::OK);
 }
 
+// LC-767: the "Invite people" drawer opened from the room header and the member
+// panel is the existing invite search behind the same manage gate as the invite
+// endpoints. A manager gets the drawer (wired to the real search endpoint); a
+// non-member is refused, so the added entry points cannot bypass the gate.
+#[tokio::test]
+async fn invite_panel_served_to_a_manager() {
+    let (app, s1, _id1, _s2, _id2) = app_with_two_users().await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&s1))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=alices-place"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let enclave_id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/enclave/{enclave_id}/invite/panel"))
+        .header("cookie", cookie(&s1))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    assert!(
+        s.contains(&format!("/enclave/{enclave_id}/invite/search")),
+        "invite drawer must wire the existing invite search endpoint"
+    );
+}
+
+#[tokio::test]
+async fn invite_panel_refused_for_non_manager() {
+    let (app, s1, _id1, s2, _id2) = app_with_two_users().await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&s1))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=alices-place"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let enclave_id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    // Bob is not a member of Alice's enclave, so he cannot open the invite drawer.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/enclave/{enclave_id}/invite/panel"))
+        .header("cookie", cookie(&s2))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
 // LC-769: an invited user must see a labeled invitations indicator in the
 // sidebar (present on every page), not only on the invitations page or blended
 // into the Home rail badge. Before any invite Bob's sidebar has no banner;
