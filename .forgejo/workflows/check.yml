@@ -106,6 +106,15 @@ jobs:
         # ci-build/check-revoke-confirm.nu and LC-738.
         run: nu ci-build/check-revoke-confirm.nu
 
+      - name: Inline confirm() apostrophe guard
+        # Askama escapes `'` to `&#x27;`, the HTML parser decodes it back before
+        # the handler attribute is compiled as JavaScript, so an apostrophe in
+        # the string ends the JS literal early and the confirmation never runs.
+        # The webhook rotate and DM block dialogs were disabled that way, with
+        # no console error the operator sees. See
+        # ci-build/check-confirm-apostrophe.nu and LC-753.
+        run: nu ci-build/check-confirm-apostrophe.nu
+
       - name: UI convention guard
         # The classes the 2026-08-11 UI audit closed, held closed by one grep
         # each: palette literals in templates, buttons styled as text links,
