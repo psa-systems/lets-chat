@@ -595,7 +595,7 @@ async fn build_index_rows(
             title,
             kind_label,
             is_dm,
-            started_at: c.started_at,
+            started_at: display_dt(&c.started_at),
             ended: c.status != "active",
             segment_count: c.segment_count,
             can_delete,
@@ -753,7 +753,7 @@ pub async fn show(
         lines.push(TranscriptLine {
             speaker_name,
             text: s.text,
-            spoken_at: s.spoken_at,
+            spoken_at: display_dt(&s.spoken_at),
         });
     }
 
@@ -800,7 +800,7 @@ pub async fn show(
         asset_version: &state.asset_version,
         transcript_id,
         room_name: room.name,
-        started_at: session.started_at,
+        started_at: display_dt(&session.started_at),
         ended: session.status != "active",
         lines,
         llm_available: ai_llm,
@@ -1077,9 +1077,22 @@ pub struct ExportQuery {
     pub raw: Option<String>,
 }
 
-/// Parse a `datetime('now')` string ("%Y-%m-%d %H:%M:%S").
+/// Parse a stored transcript timestamp. LC-752 writes millisecond precision
+/// ("%Y-%m-%d %H:%M:%S%.f"); the whole-second `datetime('now')` form is kept as
+/// a fallback so rows written before that still export.
 fn parse_dt(s: &str) -> Option<chrono::NaiveDateTime> {
-    chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S").ok()
+    chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f")
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S"))
+        .ok()
+}
+
+/// LC-752: the timestamp as shown to a human - the stored value without its
+/// sub-second fraction, which is precision for the cue maths, not for the page.
+fn display_dt(s: &str) -> String {
+    match s.split_once('.') {
+        Some((secs, _frac)) => secs.to_string(),
+        None => s.to_string(),
+    }
 }
 
 /// Seconds -> "HH:MM:SS".
@@ -1142,7 +1155,19 @@ pub async fn export(
         };
         let off = match (start, parse_dt(&s.spoken_at)) {
             (Some(a), Some(b)) => (b - a).num_milliseconds().max(0) as f64 / 1000.0,
-            _ => 0.0,
+            // LC-752: an unparseable timestamp still exports (0.0 keeps the cue
+            // ordered) but is NOT silently a real offset - it is a wrong answer
+            // presented as a real one, so say so.
+            _ => {
+                tracing::warn!(
+                    transcript_id,
+                    segment_id = s.id,
+                    started_at = %session.started_at,
+                    spoken_at = %s.spoken_at,
+                    "unparseable transcript timestamp; exporting this cue at offset 0"
+                );
+                0.0
+            }
         };
         // LC-629: raw export emits the uncorrected recognition; the default
         // emits the AI-corrected display text.
@@ -1159,7 +1184,7 @@ pub async fn export(
         (build_vtt(&lines), "text/vtt; charset=utf-8", "vtt")
     } else {
         (
-            build_txt(&room.name, &session.started_at, &lines),
+            build_txt(&room.name, &display_dt(&session.started_at), &lines),
             "text/plain; charset=utf-8",
             "txt",
         )
@@ -1183,9 +1208,9 @@ fn build_txt(room_name: &str, started_at: &str, lines: &[(f64, String, String, i
     out
 }
 
-/// WebVTT transcript. Cue times are forced monotonic (the stored timestamps are
-/// only second-resolution, so several segments can share an offset): each cue
-/// starts at `max(real_offset, prev_end)`. Its END is the real spoken duration
+/// WebVTT transcript. Cue times are forced monotonic (segments can still share
+/// an offset, and pre-LC-752 rows are only second-resolution): each cue starts
+/// at `max(real_offset, prev_end)`. Its END is the real spoken duration
 /// (LC-591, from the engine's segment timings) when known, else the pre-LC-591
 /// synthetic length: the next cue's start, floored to keep the cue non-zero.
 /// Either way cues stay valid, ordered, and non-overlapping.
