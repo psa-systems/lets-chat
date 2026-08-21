@@ -35,6 +35,8 @@ sidebar-section-direct-messages = Direct messages
 sidebar-room-add = Add chat
 # LC-576: sidebar foot action (prototype .sb-foot)
 sidebar-invite-people = Invite people
+# LC-769: sidebar banner shown when the viewer has pending enclave invitations.
+sidebar-invitations-pending = Pending invitations
 sidebar-star = Star
 sidebar-unstar = Unstar
 sidebar-draft-indicator = Unsent draft
