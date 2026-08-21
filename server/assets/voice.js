@@ -63,6 +63,21 @@
     });
   }
 
+  // LC-764: opt-in call diagnostics for the mesh path (the SFU path logs from
+  // huddle_sfu.js). Set `window.__lcCallDebug = true` in the console before
+  // reproducing to log each local audio track's real state on both sides of a
+  // mute toggle. Off by default, so a normal call logs nothing.
+  function dbg() {
+    if (!window.__lcCallDebug || !window.console || !console.log) return;
+    try { console.log.apply(console, ['[lc-call mesh]'].concat([].slice.call(arguments))); } catch (e) {}
+  }
+  function audioTrackStates() {
+    if (!localStream) return 'no local stream';
+    return localStream.getAudioTracks().map(function (t) {
+      return { enabled: t.enabled, muted: t.muted, readyState: t.readyState };
+    });
+  }
+
   // ---- dom -----------------------------------------------------------
   function q(sel) { return root ? root.querySelector(sel) : null; }
   function grid() { return q('[data-lc-voice-grid]'); }
@@ -738,6 +753,16 @@
           tiles[i].setAttribute('data-speaking', loud[id] ? 'true' : 'false');
         }
       },
+      // LC-764: huddle_sfu.js calls this when a mute toggle rejects or resolves
+      // without flipping the track. Surface it instead of only correcting the
+      // button label, so the user knows the change did not take (and peers are
+      // not hearing them) rather than believing they are live.
+      micError: function () {
+        try {
+          alert(window.__lcS('callMicToggleFailed',
+            'Could not change your microphone. Try muting and unmuting again.'));
+        } catch (e) {}
+      },
     };
   }
 
@@ -822,9 +847,11 @@
       return;
     }
     if (!localStream) return;
+    dbg('toggle: before', audioTrackStates());
     var on = true;
     localStream.getAudioTracks().forEach(function (t) { t.enabled = !t.enabled; on = t.enabled; });
     var muted = !on;
+    dbg('toggle: after', audioTrackStates());
     selfMuted = muted;
     var btn = q('[data-lc-voice-mute]');
     if (btn) {
