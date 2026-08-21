@@ -297,7 +297,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 | ChatEvent::EnclaveInvitationResolved { invitee_id }
                                     if invitee_id == &send_user.id =>
                                 {
-                                    render_invitations(&send_state, &send_user).await
+                                    // LC-769: also refresh the global #sidebar so
+                                    // the invitations indicator (banner + Home
+                                    // rail badge) appears and clears live, not
+                                    // only the invitations page the recipient is
+                                    // almost never looking at.
+                                    render_invitation_change(
+                                        &send_state,
+                                        &send_user,
+                                        cur_enclave,
+                                    )
+                                    .await
                                 }
                                 // LC-172: enclave member list changed. Broadcast
                                 // on the enclave:{id} topic, so only connections
@@ -2423,6 +2433,30 @@ async fn render_invitations(state: &AppState, viewer: &User) -> Option<String> {
     crate::views::enclave::InvitationsLiveFragment { invitations: &invs }
         .render()
         .ok()
+}
+
+/// LC-769: an invitation arriving or resolving must update the live
+/// `/invitations` list AND the global invitation indicator in the rail /
+/// sidebar (the Home tile badge and the pending-invitations banner), so a
+/// recipient who is not sitting on the invitations page still sees it appear -
+/// and see it clear when they accept or decline. Emits both OOB fragments in one
+/// frame; each connection applies whichever targets its DOM currently has and
+/// htmx drops the rest. `current_enclave` keeps the sidebar render in the
+/// recipient's current context (see `render_sidebar`).
+async fn render_invitation_change(
+    state: &AppState,
+    viewer: &User,
+    current_enclave: Option<i64>,
+) -> Option<String> {
+    let mut out = render_invitations(state, viewer).await.unwrap_or_default();
+    if let Some(sidebar) = render_sidebar(state, viewer, current_enclave).await {
+        out.push_str(&sidebar);
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 /// LC-170: re-render the enclave landing-page member list as an OOB fragment.
