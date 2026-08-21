@@ -21,10 +21,10 @@
 # matching shows up as a hit count going to zero instead of rotting behind a
 # comment.
 #
-# Files are read with `open --raw`, never `grep -r`: server/templates/layout.html
-# contains a literal NUL byte (a separator in an inline JS `join`), which makes
-# grep skip that whole file as binary - and it is the file two of these rules
-# match today. Tracked in LC-757.
+# Files are read with `open --raw`, never `grep -r`, so no rule depends on
+# grep's binary heuristic: one raw control byte would make it skip a whole file
+# silently. The `no-raw-nul-bytes` rule below keeps that class closed at source
+# (LC-757).
 
 # Tailwind utilities that take a color, and the full default hue set; same pair
 # as ci-build/check-asset-color-tokens.nu, which guards the JS half.
@@ -284,6 +284,21 @@ def bare-timestamps [] {
     | where {|hit| not ($hit | str contains "<time") }
 }
 
+# LC-757: a raw NUL makes grep, git grep and ripgrep classify the file as binary
+# and skip it, so a grep-based gate over a directory reads nothing and passes.
+# Read as bytes: `open --raw` hands back a string for valid UTF-8, and a NUL is
+# valid UTF-8.
+def raw-nul-bytes [] {
+    tracked-text-files | each {|file|
+        let offset = (open --raw $file | into binary | bytes index-of 0x[00])
+        if $offset >= 0 {
+            [$"($file): raw NUL byte at offset ($offset)"]
+        } else {
+            []
+        }
+    } | flatten
+}
+
 def offline-brand-name [] {
     $OFFLINE_ASSETS | each {|file|
         open --raw $file
@@ -380,6 +395,12 @@ def rules [] {
             pending: null
             fix: "server/assets/offline.html resolves `lc-mode` and paints from its own light/dark custom properties; a light-only `color-scheme` flashes a white page at a dark-mode user at the worst moment (LC-748)"
             check: {|| scan-lines ["server/assets/offline.html"] $LIGHT_ONLY_SCHEME }
+        }
+        {
+            id: "no-raw-nul-bytes"
+            pending: null
+            fix: "write the byte as a language escape (`\\u0000` in a JS string literal), never as a raw control character: a literal NUL makes every grep-family tool treat the whole file as binary and skip it, so a grep-based gate over the directory reads nothing and still passes (LC-757)"
+            check: {|| raw-nul-bytes }
         }
         {
             id: "no-em-dash"

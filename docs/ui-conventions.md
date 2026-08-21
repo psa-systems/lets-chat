@@ -327,6 +327,7 @@ Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded 
 | Timestamps are time elements | `{{ ..._at }}` on a line with no `<time>` | none; `email/` is already out of scope |
 | Offline page brand name | `lets-chat` in `server/assets/offline.html` and `server/assets/sw.js` | a comment line, which may keep the repo name |
 | Offline page follows the mode | a light-only `color-scheme` in `server/assets/offline.html` | none |
+| No raw NUL bytes | a literal U+0000 in every tracked text file | vendored assets (`server/assets/vendor/`); binary assets carry no text extension and are never read |
 | One ellipsis glyph, no em dash | U+2026 in the locale catalogs; U+2014 in every tracked text file | vendored assets (`server/assets/vendor/`) |
 
 Email templates are excluded from every template rule: they render in a mail client with no stylesheet, so a Tailwind class there is inert. The U+2026 half lives in `ci-build/check-locale-ellipsis.nu` and the `server/assets/**/*.js` palette rule in `ci-build/check-asset-color-tokens.nu`; both run in the same job.
@@ -334,4 +335,4 @@ Email templates are excluded from every template rule: they render in a mail cli
 Two things to know before editing the script:
 
 - A rule whose class is not clear yet carries a `pending: "<issue>"` marker. It still runs and prints its hits on every run, but does not fail the build; the issue named in the marker deletes it as part of its own change, which is why each of those issues carries "add the CI check" in its own acceptance criteria. The script is the source of which rules are live; do not restate that here.
-- Read files with `open --raw`, never `grep -r`. `server/templates/layout.html` contains a literal NUL byte (a separator in an inline JS `join`), so grep skips the whole file as binary, and that file is where two of these rules match today (LC-757).
+- Read files with `open --raw`, never `grep -r`, so no rule depends on grep's binary heuristic: a single raw control byte makes every grep-family tool skip the whole file silently. A NUL written as a raw byte in `layout.html` did exactly that until LC-757 respelled it as the `\u0000` JS escape; the `no-raw-nul-bytes` rule now fails the build if one comes back.
