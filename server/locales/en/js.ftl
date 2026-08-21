@@ -24,6 +24,9 @@ js-call-peer-left = %name% left the call
 js-call-no-mic-camera = Could not access your microphone or camera.
 js-call-no-camera = Could not access your camera.
 js-call-no-mic = Could not access your microphone.
+# LC-764: shown when a mute/unmute toggle fails to change the mic track, so the
+# user knows the change did not take rather than trusting a self-corrected button.
+js-call-mic-toggle-failed = Could not change your microphone. Try muting and unmuting again.
 js-call-no-screenshare = Screen sharing is not supported by your browser.
 js-call-a-contact = A contact
 js-call-request-control = Request control

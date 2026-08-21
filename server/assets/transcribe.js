@@ -176,14 +176,25 @@
 
   // ---- local mic capture ------------------------------------------------
   // Pick the engine per the server config; each captures the user's own mic.
+  // LC-764: opt-in diagnostics. Set `window.__lcCallDebug = true` before
+  // reproducing to log when the transcription capture opens and releases the
+  // microphone relative to a mute toggle - the prime suspect for the unmute
+  // regression, since this is the only mic acquisition LC-626 tied to mute.
+  function dbg() {
+    if (!window.__lcCallDebug || !window.console || !console.log) return;
+    try { console.log.apply(console, ['[lc-call transcribe]'].concat([].slice.call(arguments))); } catch (e) {}
+  }
+
   function startLocalCapture() {
     if (capturing) return;
     // LC-626: a muted session opens no mic. Unmuting resumes capture via the
     // lc:mic-muted handler (which re-calls this once a session is live).
     if (micMuted) return;
+    dbg('startLocalCapture: acquiring mic', sttServer ? 'server-engine' : 'browser-engine');
     if (sttServer) startServerCapture(); else startBrowserCapture();
   }
   function stopLocalCapture() {
+    dbg('stopLocalCapture: releasing mic', sttServer ? 'server-engine' : 'browser-engine');
     stopBrowserCapture();
     stopServerCapture();
     capturing = false;
