@@ -908,7 +908,7 @@ async fn render_dm_read(
     if room.room_type != "dm" {
         // LC-489: a group-room read advanced a member's watermark - refresh this
         // viewer's "Seen by" bar (gating + eligibility handled in the helper).
-        return render_room_seen_bar(state, viewer, room_id).await;
+        return render_room_seen_bar(state, viewer, &room).await;
     }
 
     if !viewer.read_receipts_enabled {
@@ -989,13 +989,24 @@ async fn render_dm_read(
 /// LC-489: render the group-room "Seen by" bar OOB for one viewer, or `None`
 /// when the room is ineligible (DM / too large / viewer has receipts off). The
 /// id-keyed `#lc-seen-{room_id}` swap drops on connections not viewing the room.
-async fn render_room_seen_bar(state: &AppState, viewer: &User, room_id: i64) -> Option<String> {
-    let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
-    let members = super::room_seen_members_if_applicable(state, viewer, &room)
-        .await
-        .ok()??;
+///
+/// LC-778: takes the already-loaded room, so a caller that holds one does not
+/// pay a second `get_room` per event.
+async fn render_room_seen_bar(
+    state: &AppState,
+    viewer: &User,
+    room: &models::Room,
+) -> Option<String> {
+    let members = match super::room_seen_members_if_applicable(state, viewer, room).await {
+        Ok(m) => m?,
+        // Best-effort decoration: the bar is dropped, but not silently.
+        Err(e) => {
+            tracing::warn!(error = %e, room_id = room.id, "seen-bar members lookup failed");
+            return None;
+        }
+    };
     crate::views::room::RoomSeenBar {
-        room_id,
+        room_id: room.id,
         members,
         oob: true,
     }
@@ -1062,7 +1073,16 @@ pub async fn render_new_message_or_bump(
                 last_read_message_id: message.id,
                 read_at,
             };
-            state.hub.broadcast_to_room(message.room_id, &event);
+            // LC-778: deliver only to the parties that render something from
+            // this DmRead - the author (the DM "Seen" caption, and the group
+            // "Seen by" bar) and this viewer's other tabs (badge clear). A
+            // room-wide broadcast made one message in a room with M foreground
+            // viewers cost M squared render_dm_read runs, each up to five
+            // queries. The trade: a third member's "Seen by" stack no longer
+            // updates live when someone else reads; it is best-effort already
+            // and re-renders on the next page load or event that reaches them.
+            state.hub.broadcast_to_user(&message.user_id, &event);
+            state.hub.broadcast_to_user(&viewer.id, &event);
         }
         return render_new_message(state, message, None, viewer).await;
     }
@@ -1354,8 +1374,22 @@ async fn render_new_message(
     // LC-489: a new message resets the room's "Seen by" bar (only the author is
     // caught up to it). Append the recomputed bar OOB so it refreshes live for
     // anyone viewing the room; ineligible rooms append nothing.
-    if let Some(bar) = render_room_seen_bar(state, viewer, message.room_id).await {
-        out.push_str(&bar);
+    // LC-778: a viewer with receipts off never renders a bar, so skip the room
+    // lookup entirely for them rather than loading it and discarding the result.
+    if viewer.read_receipts_enabled {
+        match db::chat::get_room(&state.chat, message.room_id).await {
+            // The bar is best-effort decoration on the message render; a failed
+            // lookup drops it but must not drop the message itself.
+            Err(e) => {
+                tracing::warn!(error = %e, room_id = message.room_id, "seen-bar room lookup failed")
+            }
+            Ok(None) => {}
+            Ok(Some(room)) => {
+                if let Some(bar) = render_room_seen_bar(state, viewer, &room).await {
+                    out.push_str(&bar);
+                }
+            }
+        }
     }
     Some(out)
 }
