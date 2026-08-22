@@ -406,7 +406,7 @@ def rules [] {
     [
         {
             id: "no-palette-literals-in-templates"
-            pending: "LC-741"
+            pending: null
             fix: $"use the semantic tokens from tailwind.config.js \(bg-surface-elevated, text-content, border-border, bg-danger, ...\); the one deliberately-dark call stage line must carry a comment with the ($PALETTE_ALLOW) marker naming why \(LC-741, and LC-735 for the same rule over the browser assets\)"
             check: {|| palette-in-templates }
         }
