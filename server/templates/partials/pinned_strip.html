@@ -36,7 +36,7 @@
         <span class="font-medium">{{ p.author_label }}:</span>
         {{ p.snippet }}
       </a>
-      <span class="text-xs text-content-muted shrink-0">{{ p.pinned_at }}</span>
+      <span class="text-xs text-content-muted shrink-0"><time data-lc-ts datetime="{{ p.pinned_at|iso }}" title="{{ p.pinned_at }}">{{ p.pinned_at }}</time></span>
     </li>
     {% endfor %}
     {% if has_more %}

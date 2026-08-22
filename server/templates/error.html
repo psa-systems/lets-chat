@@ -11,7 +11,7 @@
    role="alert" tells assistive tech this section is the error announcement
    (a URL change alone is not always announced). #}
 <main class="min-h-screen flex items-center justify-center p-6 bg-surface text-content">
-  <section role="alert" class="card w-full max-w-md p-8 text-center space-y-5">
+  <section role="alert" class="card lc-page-narrow p-8 text-center space-y-5">
     {# LC-552: an icon carries the tone at a glance - a warning triangle for
        4xx (client / informational) and a server-fault glyph for 5xx. Tinted
        surface + matching text color, theme-aware via the design tokens. A
@@ -34,7 +34,7 @@
     </div>
     <div class="space-y-1">
       <p class="font-mono text-xs text-content-subtle">{{ status }}</p>
-      <h1 class="text-xl font-semibold {% if status >= 500 %}text-danger{% else %}text-warning{% endif %}">{{ status_heading }}</h1>
+      <h1 class="lc-display {% if status >= 500 %}text-danger{% else %}text-warning{% endif %}">{{ status_heading }}</h1>
     </div>
     {# LC-552: friendly, human description keyed by the error variant - always
        present, so even a bare 404 / 403 reads as real copy. #}
@@ -46,7 +46,7 @@
     <p class="rounded-md bg-surface-sunken px-3 py-2 text-xs text-content-subtle">{{ d }}</p>
     {% endif %}
     <div class="pt-1">
-      <a href="{{ back_url }}" class="inline-block rounded-md bg-accent px-5 py-2 text-sm font-medium text-accent-content hover:bg-accent-hover">{{ back_label }}</a>
+      <a href="{{ back_url }}" class="btn btn-primary">{{ back_label }}</a>
     </div>
   </section>
 </main>

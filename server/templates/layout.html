@@ -1155,7 +1155,7 @@ document.body.addEventListener('click', function(e){
     var mid = row.getAttribute('data-lc-quick-react');
     if (!mid) return;
     var list = quickList();
-    var sig = list.join(' ');
+    var sig = list.join('\u0000');
     if (bar.getAttribute('data-lc-quick-sig') === sig) return;
     bar.setAttribute('data-lc-quick-sig', sig);
     bar.replaceChildren();

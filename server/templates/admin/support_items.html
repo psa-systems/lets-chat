@@ -14,7 +14,7 @@
     <div class="flex items-center justify-between gap-2 mb-1">
       <div class="flex items-center gap-2">
         <span class="text-sm font-medium">{{ t.requester_label }}</span>
-        <span class="text-xs text-content-muted">{{ t.created_at }}</span>
+        <span class="text-xs text-content-muted"><time datetime="{{ t.created_at|iso }}" title="{{ t.created_at }}">{{ t.created_at }}</time></span>
       </div>
       {# LC-725: the old "open channel" link pointed at the ticket's origin room,
          which for a bubble-filed request is the requester's private assistant-bot

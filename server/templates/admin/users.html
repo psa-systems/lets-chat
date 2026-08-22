@@ -4,7 +4,7 @@
 
 {% block admin_main %}
 {# LC-510: standardized admin table (card-wrapped, .lc-table). The page header
-   is rendered by the shell from `section`, so no per-page <h1>. #}
+   is rendered by the shell from `section`, so no per-page page title. #}
 {% if users.is_empty() %}
 {% let empty_text_key = "admin-users-empty" %}
 {% include "partials/empty_state.html" %}

@@ -72,6 +72,13 @@ jobs:
         # ci-build/check-table-scroll.nu and LC-737.
         run: nu ci-build/check-table-scroll.nu
 
+      - name: Table shape guard
+        # A hand-rolled table re-derives the row height, header color and row
+        # rules that .lc-table already owns, so the same list rendered at two
+        # different heights depending on the surface. See
+        # ci-build/check-table-shape.nu and LC-745.
+        run: nu ci-build/check-table-shape.nu
+
       - name: Locale ellipsis guard
         # One ellipsis spelling in the catalogs: three periods, never U+2026.
         # The mixed spelling put "Search..." beside "Search…" in the same
@@ -99,6 +106,26 @@ jobs:
         # on one click of a text link in a table row. See
         # ci-build/check-revoke-confirm.nu and LC-738.
         run: nu ci-build/check-revoke-confirm.nu
+
+      - name: Inline confirm() apostrophe guard
+        # Askama escapes `'` to `&#x27;`, the HTML parser decodes it back before
+        # the handler attribute is compiled as JavaScript, so an apostrophe in
+        # the string ends the JS literal early and the confirmation never runs.
+        # The webhook rotate and DM block dialogs were disabled that way, with
+        # no console error the operator sees. See
+        # ci-build/check-confirm-apostrophe.nu and LC-753.
+        run: nu ci-build/check-confirm-apostrophe.nu
+
+      - name: UI convention guard
+        # The classes the 2026-08-11 UI audit closed, held closed by one grep
+        # each: palette literals in templates, buttons styled as text links,
+        # the open-coded .btn-danger-outline string, borders with no color
+        # token, clipping admin table wrappers, raw h1 sizes, the offline
+        # page's mode bootstrap and brand name, and the em-dash
+        # ban. A rule whose class is not clear yet reports its hits without
+        # failing, and names the issue that enables it. See
+        # ci-build/check-ui-conventions.nu and LC-749.
+        run: nu ci-build/check-ui-conventions.nu
 
       - name: Cache Rust build
         uses: https://github.com/Swatinem/rust-cache@v2

@@ -3,7 +3,7 @@ use crate::i18n::filters;
 use askama::Template; // LC-188: in-scope for the |t/|tn template filters.
 
 use crate::models::custom_emoji::CustomEmoji;
-use crate::models::enclave::{Enclave, EnclaveInvitation, EnclaveRole};
+use crate::models::enclave::{Enclave, EnclaveRole};
 use crate::models::User;
 use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 
@@ -250,6 +250,18 @@ pub struct EnclaveInviteSearchFragment<'a> {
     pub results: &'a [EnclaveInviteCandidate],
 }
 
+/// LC-767: the invite search hosted in the shared `#thread-panel` drawer, so
+/// the invite control is reachable from the room header and the member panel
+/// (where people look for it) and not only the sidebar foot. It only wraps a
+/// drawer shell around the existing invite endpoints; the search input targets
+/// `GET /enclave/{id}/invite/search` and each result row posts to
+/// `POST /enclave/{id}/invite`, exactly as the settings page does.
+#[derive(Template)]
+#[template(path = "enclave/invite_panel.html")]
+pub struct EnclaveInvitePanel {
+    pub enclave_id: i64,
+}
+
 /// Per-row response returned by `POST /enclave/{id}/invite`. The typeahead
 /// row swaps itself with this fragment via `hx-swap="outerHTML"`. `ok` is
 /// true on a successful invite (renders "Invited"), false on a validation
@@ -261,12 +273,57 @@ pub struct EnclaveInviteRowResult<'a> {
     pub message: &'a str,
 }
 
+/// LC-772: one pending-invitation card, fully resolved by the route so the
+/// template never touches business logic or raw ids. Carries the enclave
+/// context the invitee decides on (name, description, member count, optional
+/// logo) and the inviter resolved to a friendly name + avatar. Shared by the
+/// full invitations page and the live OOB fragment so both render identically.
+pub struct InvitationCard {
+    pub id: i64,
+    pub enclave_id: i64,
+    pub enclave_name: String,
+    pub enclave_description: Option<String>,
+    pub member_count: i64,
+    /// URL of the enclave's branding logo, or None to fall back to a monogram.
+    pub logo_url: Option<String>,
+    pub inviter_id: String,
+    /// Inviter display name / handle, already resolved (never a raw UUID).
+    pub inviter_name: String,
+    pub inviter_avatar_ext: Option<String>,
+}
+
+impl InvitationCard {
+    /// Uppercase first character of the enclave name, for the monogram tile
+    /// shown when the enclave has no logo.
+    pub fn enclave_initial(&self) -> String {
+        first_initial(&self.enclave_name)
+    }
+
+    /// Uppercase first character of the inviter name, for the avatar fallback.
+    pub fn inviter_initial(&self) -> String {
+        first_initial(&self.inviter_name)
+    }
+
+    /// Member count by value, so the `tn` plural filter receives an `i64`
+    /// rather than the `&i64` a bare field access yields in the template.
+    pub fn members(&self) -> i64 {
+        self.member_count
+    }
+}
+
+fn first_initial(s: &str) -> String {
+    s.chars()
+        .next()
+        .map(|c| c.to_uppercase().to_string())
+        .unwrap_or_else(|| "?".to_string())
+}
+
 /// LC-161: OOB fragment swapping the live `#lc-invitations` region over the
 /// WebSocket when a user's invitation set changes.
 #[derive(Template)]
 #[template(path = "ws/invitations_live.html")]
 pub struct InvitationsLiveFragment<'a> {
-    pub invitations: &'a [(EnclaveInvitation, Enclave)],
+    pub invitations: &'a [InvitationCard],
 }
 
 /// LC-172: OOB fragment swapping the live `#lc-enclave-settings-members` region
@@ -286,7 +343,7 @@ pub struct EnclaveSettingsMembersLiveFragment<'a> {
 #[template(path = "invitations/page.html")]
 pub struct InvitationsPage<'a> {
     pub user: &'a User,
-    pub invitations: &'a [(EnclaveInvitation, Enclave)],
+    pub invitations: &'a [InvitationCard],
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],

@@ -22,6 +22,8 @@ js-call-peer-left = %name% salió de la llamada
 js-call-no-mic-camera = No se pudo acceder al micrófono o la cámara.
 js-call-no-camera = No se pudo acceder a la cámara.
 js-call-no-mic = No se pudo acceder al micrófono.
+# LC-764: se muestra cuando un cambio de silencio no logra cambiar la pista del microfono.
+js-call-mic-toggle-failed = No se pudo cambiar tu micrófono. Intenta silenciar y activar de nuevo.
 js-call-no-screenshare = Tu navegador no admite compartir pantalla.
 js-call-a-contact = Un contacto
 js-call-request-control = Solicitar control

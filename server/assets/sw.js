@@ -52,7 +52,11 @@ self.addEventListener('install', (event) => {
     const cache = await caches.open(CACHE_NAME);
     // Add one at a time and tolerate individual misses: a single 404 in
     // cache.addAll() would reject the whole install.
-    await Promise.all(PRECACHE_URLS.map((u) => cache.add(u).catch(() => {})));
+    await Promise.all(PRECACHE_URLS.map((u) => cache.add(u).catch((e) => {
+      // Tolerated, not hidden: a shell that precached nothing (no offline
+      // page) must not look identical to one that precached everything.
+      try { console.warn('[lc-sw] precache failed for', u, e); } catch (e2) {}
+    })));
     await self.skipWaiting();
   })());
 });
@@ -284,7 +288,7 @@ self.addEventListener('push', (event) => {
       try { return new URL(c.url).pathname === target; } catch (e) { return false; }
     });
     if (onTarget) return; // user is already reading the room
-    return self.registration.showNotification(payload.title || 'lets-chat', {
+    return self.registration.showNotification(payload.title || "Let's Chat", {
       body: payload.body || '',
       icon: payload.icon,
       tag: payload.tag,

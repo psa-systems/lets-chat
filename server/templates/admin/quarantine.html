@@ -34,7 +34,7 @@
           <div class="font-mono">{{ e.matched_pattern }}</div>
           <div class="text-content-muted break-all">{{ e.matched_url }}</div>
         </td>
-        <td class="text-xs text-content-muted">{{ e.created_at }}</td>
+        <td class="text-xs text-content-muted"><time datetime="{{ e.created_at|iso }}" title="{{ e.created_at }}">{{ e.created_at }}</time></td>
         <td class="lc-table-actions">
           <div class="inline-flex justify-end gap-1">
             <form method="post" action="/admin/quarantine/{{ e.message_id }}/approve">

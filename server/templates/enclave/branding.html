@@ -5,7 +5,7 @@
 {% block main %}
 <header class="lc-header">
   <div class="min-w-0">
-    <h1 class="font-semibold truncate">{{ "enclave-branding-breadcrumb-current"|t }} <span class="text-content-subtle font-normal">{{ enclave.name }}</span></h1>
+    <h1 class="lc-h1 truncate">{{ "enclave-branding-breadcrumb-current"|t }} <span class="text-content-subtle font-normal">{{ enclave.name }}</span></h1>
   </div>
   <a href="/enclave/{{ enclave.id }}/settings" class="btn btn-secondary btn-sm flex-none">{{ "enclave-branding-back"|t }}</a>
 </header>
@@ -15,7 +15,7 @@
    success, re-renders with `error` on validation failure) is unchanged. #}
 <div class="flex-1 overflow-y-auto" data-lc-branding>
   {% if saved %}<div data-lc-flash-toast hidden>{{ "enclave-branding-saved"|t }}</div>{% endif %}
-  <div class="mx-auto max-w-2xl px-4 py-6 flex flex-col gap-5">
+  <div class="lc-page-medium lc-page-pad lc-page-stack">
     {% if let Some(err) = error %}
     <div class="alert alert-danger" role="alert">{{ err }}</div>
     {% endif %}

@@ -35,13 +35,13 @@
         <input type="datetime-local"
                name="scheduled_for_local"
                required aria-required="true"
-               class="rounded border border-border-strong px-2 py-1">
+               class="input">
       </label>
       {# LC-485: optional recurrence. The JS reads this select and includes it
          in the POST body as `repeat`. #}
       <label class="flex flex-col gap-1 text-sm">
         <span class="text-content-muted">{{ "scheduled-modal-repeat"|t }}</span>
-        <select name="repeat" class="rounded border border-border-strong px-2 py-1">
+        <select name="repeat" class="input">
           <option value="none">{{ "scheduled-repeat-none"|t }}</option>
           <option value="daily">{{ "scheduled-repeat-daily"|t }}</option>
           <option value="weekdays">{{ "scheduled-repeat-weekdays"|t }}</option>
@@ -55,7 +55,7 @@
         <button type="button" data-lc-scheduled-modal-cancel
                 class="rounded px-3 py-1 text-sm text-content-muted hover:bg-surface-sunken">{{ "action-cancel"|t }}</button>
         <button type="submit"
-                class="rounded bg-accent px-3 py-1 text-sm text-accent-content hover:bg-accent-hover">{{ "scheduled-modal-submit"|t }}</button>
+                class="btn btn-primary">{{ "scheduled-modal-submit"|t }}</button>
       </div>
     </form>
   </div>

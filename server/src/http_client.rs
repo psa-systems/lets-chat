@@ -8,7 +8,7 @@
 //! internal service is reachable - same trust posture as the SMTP/IMAP relays;
 //! it must never see a user/remote-derived URL. It still lives in THIS module,
 //! so the grep-ban stays a single-file allowance. The
-//! underlying `reqwest::Client`s are private to this module — there is NO
+//! underlying `reqwest::Client`s are private to this module - there is NO
 //! public way to obtain a `reqwest::Client` from outside `http_client.rs`,
 //! which makes the no-bypass rule structural (no `.get()` / `.post()`
 //! verb-grepping necessary; there is no out-of-helper Client to call them
@@ -20,7 +20,7 @@
 //! 1. **URL-input validation** (`outbound_*` async fns): parse the URL,
 //!    reject non-`http(s)` schemes, call `ssrf::host_resolves_public`. The
 //!    last step uses `tokio::net::lookup_host`, which returns the IP
-//!    itself for literal-IP URLs — so this layer catches the
+//!    itself for literal-IP URLs - so this layer catches the
 //!    **literal-IP bypass** (e.g., `http://127.0.0.1/`, AWS metadata
 //!    `http://169.254.169.254/`) that reqwest's custom resolver does NOT
 //!    see. Reqwest 0.12's connector takes a literal-IP fast path that
@@ -54,12 +54,12 @@
 //! method, so building this requires a tower-middleware dance that's
 //! version-fragile. If a future reqwest release exposes a clean
 //! connector hook, fold these two layers into one connector-level filter
-//! — same security boundary, fewer moving parts.
+//! - same security boundary, fewer moving parts.
 //!
 //! ## Pool keying (confirmed; no design impact)
 //!
 //! reqwest 0.12 keys the connection pool on `(scheme, authority)` where
-//! authority is the hostname + port — NOT the resolved IP. A validated
+//! authority is the hostname + port - NOT the resolved IP. A validated
 //! connection cannot be reused for a different host; Host-header
 //! manipulation on a pooled HTTPS connection is bounded by the original
 //! SNI'd hostname.
@@ -68,7 +68,7 @@
 //!
 //! There is deliberately NO reqwest-auto-redirect client here. reqwest's
 //! redirect follower resolves each new hop with its OWN connector, and the
-//! connector's literal-IP fast path skips `dns::Resolve` (see layer 1) — so a
+//! connector's literal-IP fast path skips `dns::Resolve` (see layer 1) - so a
 //! response that 302s to a literal private IP (`http://169.254.169.254/...`)
 //! would be followed WITHOUT either layer firing, an SSRF bypass. The only
 //! code that follows redirects (link unfurl) does it MANUALLY, re-running
@@ -85,7 +85,7 @@
 //! proves reqwest uses the resolver's IPs, not a silent re-resolve). So the
 //! connected IP is always a validated-public IP, and a DNS rebind to a private
 //! address between submit-time validation and connect-time resolution is
-//! REFUSED at connect — the rebind window is already collapsed, not left open.
+//! REFUSED at connect - the rebind window is already collapsed, not left open.
 //! A single connect-layer IP-pin (Option A below) would additionally guarantee
 //! "connected IP == the exact IP validated" even against a hypothetical
 //! `is_globally_routable` bug; that is defense-in-depth only and still awaits a
@@ -103,7 +103,7 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Errors surfaced from the URL-input validation layer. Each variant
 /// corresponds to a distinct attack class so callers can pattern-match if
-/// they need to (the killer test pair asserts on the specific variant —
+/// they need to (the killer test pair asserts on the specific variant -
 /// `is_err()` alone is too loose, because a connect-failed / network-
 /// unreachable also satisfies it without proving the filter fired).
 #[derive(Debug, thiserror::Error)]
@@ -113,7 +113,7 @@ pub enum OutboundError {
     InvalidUrl(#[from] url::ParseError),
 
     /// The URL parsed but its scheme is not `http` or `https`. Catches
-    /// `file://`, `gopher://`, `chrome://`, etc. — none of which should
+    /// `file://`, `gopher://`, `chrome://`, etc. - none of which should
     /// reach reqwest from operator- or user-supplied URLs.
     #[error("unsupported url scheme: {0}")]
     UnsupportedScheme(String),
@@ -123,7 +123,7 @@ pub enum OutboundError {
     /// CGNAT, etc.). For literal-IP URLs the "resolution" returns the
     /// IP itself; this variant catches both literal-IP and DNS-resolved-
     /// to-private cases. This is the variant the killer test pair
-    /// asserts on; do NOT bare-match `is_err()` — a connect-failed
+    /// asserts on; do NOT bare-match `is_err()` - a connect-failed
     /// returns a different error and would mask a filter regression.
     #[error("host resolves to a non-public address; refusing to connect")]
     HostNotPublic,
@@ -204,7 +204,7 @@ fn client_no_redirects() -> &'static reqwest::Client {
 
 /// Validate a URL string before letting reqwest see it. Parses, gates
 /// scheme to `http`/`https`, calls `ssrf::host_resolves_public` (which
-/// resolves through `tokio::net::lookup_host` — handles literal-IP URLs
+/// resolves through `tokio::net::lookup_host` - handles literal-IP URLs
 /// by returning the IP itself, so literal-private bypasses are caught
 /// here, NOT at the resolver layer).
 async fn validate_url(url: &str) -> Result<url::Url, OutboundError> {

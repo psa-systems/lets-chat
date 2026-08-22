@@ -4,9 +4,9 @@
 
 {% block main %}
 <div class="flex-1 overflow-y-auto">
-<section class="p-6 max-w-2xl space-y-6">
+<section class="lc-page-medium lc-page-pad lc-page-stack">
   <div class="flex items-baseline gap-2">
-    <h1 class="text-2xl font-semibold">{{ "room-feeds-heading"|t }}</h1>
+    <h1 class="lc-h1">{{ "room-feeds-heading"|t }}</h1>
     <span class="text-sm text-content-muted">#{{ room.name }}</span>
   </div>
   <p class="text-sm text-content-muted">
@@ -15,14 +15,16 @@
   </p>
 
   {% if let Some(err) = error %}
-  <div class="p-3 rounded bg-danger-surface border border-danger-border text-danger text-sm">{{ err }}</div>
+  <div class="alert alert-danger" role="alert">{{ err }}</div>
   {% endif %}
 
   {% if let Some(url) = new_url %}
-  <div class="p-3 rounded bg-success-surface border border-success-border text-success-surface-content text-sm space-y-1">
-    <p class="font-medium text-success">{{ "room-feeds-created"|t }}</p>
-    <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ url }}</code>
-  </div>
+  {% let secret_heading_key = "room-feeds-created" %}
+  {% let secret_subject = "" %}
+  {% let secret_suffix_key = "" %}
+  {% let secret_value = url %}
+  {% let secret_note_key = "" %}
+  {% include "partials/secret_reveal.html" %}
   {% endif %}
 
   {% if !available %}
@@ -31,51 +33,63 @@
     {{ "room-feeds-unavailable-2"|t }}</span>
   </div>
   {% else %}
-  <form method="post" action="/room/{{ room.id }}/feeds" class="flex flex-wrap items-end gap-3 border rounded p-4">
+  <form id="room-feeds-create" method="post" action="/room/{{ room.id }}/feeds" class="card flex flex-wrap items-end gap-3 p-4">
     <label class="block text-sm">
       <span class="text-content-muted">{{ "room-feeds-type-label"|t }}</span>
-      <select name="kind" class="mt-1 block border border-border-strong rounded px-2 py-1 text-sm">
+      <select name="kind" class="input mt-1 w-auto">
         <option value="rss">{{ "room-feeds-type-rss"|t }}</option>
         <option value="ical">{{ "room-feeds-type-ical"|t }}</option>
       </select>
     </label>
-    <button type="submit" class="rounded bg-accent px-3 py-1.5 text-sm text-accent-content hover:bg-accent-hover">{{ "room-feeds-create-button"|t }}</button>
+    <button type="submit" class="btn btn-primary">{{ "room-feeds-create-button"|t }}</button>
   </form>
   {% endif %}
 
-  <div class="lc-table-wrap">
-  <table class="w-full text-sm">
-    <thead>
-      <tr class="text-left text-content-muted border-b border-border">
-        <th class="py-2">{{ "room-feeds-table-type"|t }}</th>
-        <th class="py-2">{{ "room-table-created"|t }}</th>
-        <th class="py-2">{{ "room-feeds-table-last-fetched"|t }}</th>
-        <th class="py-2">{{ "room-table-status"|t }}</th>
-        <th class="py-2 text-right">{{ "room-table-actions"|t }}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for f in feeds %}
-      <tr class="border-t border-border">
-        <td class="py-1 uppercase text-xs">{{ f.kind }}</td>
-        <td class="py-1 text-xs text-content-muted">{{ f.created_at }}</td>
-        <td class="py-1 text-xs text-content-muted">{% if let Some(at) = f.last_fetched_at %}{{ at }}{% else %}{{ "room-table-never"|t }}{% endif %}</td>
-        <td class="py-1 text-xs">{% if f.revoked %}<span class="text-danger">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
-        <td class="py-1 text-right">
-          {% if !f.revoked %}
-          <form method="post" action="/room/{{ room.id }}/feeds/{{ f.id }}/revoke" class="inline">
-            <button type="submit" class="btn btn-sm btn-danger-outline" onclick="return confirm('{{ "room-table-revoke-confirm"|t }}')">{{ "room-table-revoke"|t }}</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-      {% if feeds.is_empty() %}
-      <tr><td colspan="5" class="py-4 text-center text-content-subtle text-xs">{{ "room-feeds-empty"|t }}</td></tr>
-      {% endif %}
-    </tbody>
-  </table>
+  {% if feeds.is_empty() %}
+  {% let empty_text_key = "room-feeds-empty" %}
+  {% if available %}
+  {# LC-744: the empty state carries the action, pointing at the create form
+     above; with no secret key configured there is no form to point at. #}
+  {% let empty_action_href = "#room-feeds-create" %}
+  {% let empty_action_key = "room-feeds-create-button" %}
+  {% include "partials/empty_state_block.html" %}
+  {% else %}
+  {% include "partials/empty_state.html" %}
+  {% endif %}
+  {% else %}
+  <div class="card lc-table-wrap">
+    <table class="lc-table">
+      <thead>
+        <tr>
+          <th>{{ "room-feeds-table-type"|t }}</th>
+          <th>{{ "room-table-created"|t }}</th>
+          <th>{{ "room-feeds-table-last-fetched"|t }}</th>
+          <th>{{ "room-table-status"|t }}</th>
+          <th class="lc-table-actions">{{ "room-table-actions"|t }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in feeds %}
+        <tr>
+          <td class="uppercase">{{ f.kind }}</td>
+          <td class="text-content-muted"><time datetime="{{ f.created_at|iso }}" title="{{ f.created_at }}">{{ f.created_at }}</time></td>
+          <td class="text-content-muted">{% if let Some(at) = f.last_fetched_at %}<time datetime="{{ at|iso }}" title="{{ at }}">{{ at }}</time>{% else %}{{ "room-table-never"|t }}{% endif %}</td>
+          <td>{% if f.revoked %}<span class="text-danger">{{ "room-table-revoked"|t }}</span>{% else %}{{ "room-table-active"|t }}{% endif %}</td>
+          <td class="lc-table-actions">
+            {% if !f.revoked %}
+            <form method="post" action="/room/{{ room.id }}/feeds/{{ f.id }}/revoke" class="inline">
+              <button type="submit" class="btn btn-sm btn-danger-outline" onclick="return confirm('{{ "room-table-revoke-confirm"|t }}')">{{ "room-table-revoke"|t }}</button>
+            </form>
+            {% else %}
+            <span class="text-content-subtle">-</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
+  {% endif %}
 </section>
 </div>
 {% endblock %}

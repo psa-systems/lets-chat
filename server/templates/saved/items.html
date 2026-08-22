@@ -37,7 +37,7 @@
         {# LC-684: the caption links to the permalink route, which jumps to this
            exact message in its original room / DM context. #}
         <a href="{{ e.context_path }}" class="text-accent hover:underline">{{ e.context_label }}</a>
-        &middot; {{ "saved-saved-at"|t }} {{ e.saved_at }}
+        &middot; {{ "saved-saved-at"|t }} <time data-lc-ts datetime="{{ e.saved_at|iso }}" title="{{ e.saved_at }}">{{ e.saved_at }}</time>
       </span>
       <span class="flex items-center gap-2 shrink-0">
         {# LC-479: inline label editor (tag-style). Posts on change (htmx sends
@@ -47,14 +47,14 @@
                hx-trigger="change" hx-swap="none"
                placeholder="{{ "saved-label-placeholder"|t }}"
                aria-label="{{ "saved-label-aria"|t }}"
-               class="w-24 rounded-full border border-border bg-surface-sunken px-2.5 py-0.5 text-xs text-content placeholder:text-content-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+               class="input w-24 rounded-full bg-surface-sunken px-2.5 py-0.5 text-xs placeholder:text-content-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
         {# LC-684: Unsave as a clear secondary/destructive control with a confirm
            step, so an accidental click doesn't silently drop a save. #}
         <button hx-delete="/messages/{{ e.message_id }}/bookmark"
                 hx-target="#saved-row-{{ e.message_id }}"
                 hx-swap="delete"
                 hx-confirm="{{ "saved-unsave-confirm"|t }}"
-                class="rounded-md border border-border px-2 py-0.5 text-xs font-medium text-danger hover:bg-danger-surface hover:border-danger-border focus:outline-none focus:ring-1 focus:ring-danger">{{ "saved-unsave"|t }}</button>
+                class="btn btn-sm btn-danger-outline">{{ "saved-unsave"|t }}</button>
       </span>
     </div>
     {# LC-684: real content - markdown-rendered body (bold/italic/links) and the

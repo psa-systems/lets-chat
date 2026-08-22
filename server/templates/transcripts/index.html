@@ -10,7 +10,7 @@
      hx-push-url keeps the URL shareable / back-button friendly. No-JS still
      works as a plain GET submit. #}
   <header class="lc-header flex-wrap">
-    <h1 class="lc-h2 truncate">{{ "transcript-index-heading"|t }}</h1>
+    <h1 class="lc-h1 truncate">{{ "transcript-index-heading"|t }}</h1>
     <form id="lc-tx-controls" action="/transcripts" method="get" autocomplete="off"
           hx-get="/transcripts" hx-target="#lc-transcript-list" hx-swap="innerHTML"
           hx-trigger="input from:[name='q'] changed delay:300ms, change from:[name='hide_empty']"
@@ -31,7 +31,7 @@
           <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
         </svg>
         <input name="q" value="{{ query }}" placeholder="{{ "transcript-search-placeholder"|t }}" aria-label="{{ "transcript-search-placeholder"|t }}"
-               class="w-56 h-8 rounded-md border border-border bg-surface-elevated pl-7 pr-2 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+               class="input h-8 w-56 py-0 pl-7 pr-2 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
       </div>
     </form>
   </header>

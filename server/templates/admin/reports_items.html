@@ -19,7 +19,7 @@
           {%- else if r.category == "inappropriate" %}{{ "report-category-inappropriate"|t }}
           {%- else %}{{ "report-category-other"|t }}{% endif %}
         </span>
-        <span class="text-xs text-content-muted">{{ r.created_at }}</span>
+        <span class="text-xs text-content-muted"><time datetime="{{ r.created_at|iso }}" title="{{ r.created_at }}">{{ r.created_at }}</time></span>
       </div>
       <a href="/m/{{ r.message_id }}" class="text-xs text-accent hover:underline">{{ "report-jump"|t }}</a>
     </div>

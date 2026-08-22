@@ -5,7 +5,7 @@
 {% block main %}
 <div class="flex flex-1 flex-col overflow-hidden">
   <header class="lc-header">
-    <h1 class="font-semibold truncate">{{ "activity-heading"|t }}</h1>
+    <h1 class="lc-h1 truncate">{{ "activity-heading"|t }}</h1>
     <nav aria-label="{{ "activity-filter-label"|t }}" class="flex gap-1 text-xs">
       <a href="/activity" class="px-2 py-1 rounded{% if active_tab == "all" %} bg-surface-sunken font-semibold{% else %} text-content-muted hover:text-content{% endif %}">{{ "activity-tab-all"|t }}</a>
       <a href="/activity?tab=mention" class="px-2 py-1 rounded{% if active_tab == "mention" %} bg-surface-sunken font-semibold{% else %} text-content-muted hover:text-content{% endif %}">{{ "activity-tab-mentions"|t }}</a>
@@ -19,7 +19,7 @@
        reloads the current URL, preserving the active tab. Avoids re-rendering
        the tab-filtered list server-side (the WS cannot know the active tab). #}
     <button id="lc-activity-refresh" type="button" hidden onclick="location.reload()"
-            class="sticky top-0 z-10 w-full bg-accent text-accent-content text-xs py-1.5 hover:bg-accent-hover">
+            class="btn btn-sm btn-primary sticky top-0 z-10 w-full rounded-none">
       {{ "activity-new"|t }}
     </button>
     {% if items.is_empty() %}
@@ -45,7 +45,7 @@
           <div class="min-w-0 flex-1">
             <div class="flex items-baseline justify-between gap-2">
               <span class="truncate text-sm font-semibold text-content">{{ item.actor_label }}</span>
-              <span class="shrink-0 text-xs text-content-subtle">{{ item.created_at }}</span>
+              <span class="shrink-0 text-xs text-content-muted"><time data-lc-ts datetime="{{ item.created_at|iso }}" title="{{ item.created_at }}">{{ item.created_at }}</time></span>
             </div>
             <div class="truncate text-xs text-content-muted">{{ item.kind_label }} &middot; {{ item.room_label }}</div>
             {# Actor is the heading, so the action line drops the leading name. #}

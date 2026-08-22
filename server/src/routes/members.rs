@@ -168,6 +168,7 @@ pub async fn get_members_panel(
         member_count,
         members,
         can_manage,
+        enclave_id,
     })
 }
 

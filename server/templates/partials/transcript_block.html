@@ -20,7 +20,7 @@
 <div class="mt-1 flex max-w-sm items-center gap-2 text-xs text-content-muted">
   <span>{{ "partials-voice-transcript-failed"|t }}</span>
   {% if message.can_edit %}
-  <button type="button" class="text-accent hover:underline"
+  <button type="button" class="btn btn-sm btn-ghost"
           hx-post="/api/files/{{ a.id }}/retranscribe"
           hx-target="#msg-{{ message.id }}" hx-swap="outerHTML">{{ "partials-voice-transcript-retry"|t }}</button>
   {% endif %}

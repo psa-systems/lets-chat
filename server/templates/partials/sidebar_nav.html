@@ -69,12 +69,12 @@
           <div class="absolute right-0 top-full mt-1 z-30 bg-surface-elevated border border-border rounded shadow text-sm w-56 p-2 space-y-2">
             <form hx-patch="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" class="flex flex-col gap-1">
               <label class="text-xs text-content-muted">{{ "sidebar-category-name-label"|t }}{% include "partials/required_mark.html" %}
-                <input type="text" name="name" value="{{ category.name }}" maxlength="50" required aria-required="true" class="mt-0.5 block w-full border rounded px-1 py-0.5 text-xs">
+                <input type="text" name="name" value="{{ category.name }}" maxlength="50" required aria-required="true" class="input mt-0.5 px-1 py-0.5 text-xs">
               </label>
-              <button type="submit" class="self-end px-2 text-xs bg-accent text-accent-content rounded">{{ "sidebar-category-rename"|t }}</button>
+              <button type="submit" class="btn btn-sm btn-primary self-end">{{ "sidebar-category-rename"|t }}</button>
             </form>
             <form hx-delete="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" hx-confirm="{{ "sidebar-category-delete-confirm"|t }}" class="text-right">
-              <button type="submit" class="text-xs text-danger hover:underline">{{ "sidebar-category-delete"|t }}</button>
+              <button type="submit" class="btn btn-sm btn-danger-outline">{{ "sidebar-category-delete"|t }}</button>
             </form>
           </div>
         </details>
@@ -170,7 +170,7 @@
       <form hx-post="/enclave/{{ eid }}/sidebar/categories" hx-target="#sidebar" hx-swap="outerHTML" class="px-2 pt-2">
         <label for="lc-newcat-{{ eid }}" class="block text-xs text-content-muted">{{ "sidebar-category-name-label"|t }}{% include "partials/required_mark.html" %}</label>
         <div class="mt-0.5 flex gap-1">
-          <input id="lc-newcat-{{ eid }}" type="text" name="name" placeholder="{{ "sidebar-category-new-placeholder"|t }}" maxlength="50" required aria-required="true" class="flex-1 min-w-0 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+          <input id="lc-newcat-{{ eid }}" type="text" name="name" placeholder="{{ "sidebar-category-new-placeholder"|t }}" maxlength="50" required aria-required="true" class="input min-w-0 flex-1 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
           <button type="submit" class="shrink-0 rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs text-content-muted hover:bg-surface-sunken hover:text-content">+ {{ "sidebar-category-add"|t }}</button>
         </div>
       </form>

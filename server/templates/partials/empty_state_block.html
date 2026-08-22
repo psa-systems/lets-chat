@@ -1,0 +1,15 @@
+{# LC-744: the empty-state markup itself. Reached through
+   partials/empty_state.html for the text-only case; included directly by a
+   caller that has bound `empty_action_href` / `empty_action_key` and wants the
+   action inside the same centered block. #}
+<div class="lc-empty">
+  <svg class="lc-empty-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M3 7.5 12 3l9 4.5-9 4.5z"/>
+    <path d="M3 7.5v9L12 21l9-4.5v-9"/>
+    <path d="M12 12v9"/>
+  </svg>
+  <p class="lc-empty-text">{{ empty_text_key|t }}</p>
+  {% if !empty_action_href.is_empty() %}
+  <a href="{{ empty_action_href }}" class="btn btn-sm btn-secondary">{{ empty_action_key|t }}</a>
+  {% endif %}
+</div>

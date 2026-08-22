@@ -297,7 +297,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 | ChatEvent::EnclaveInvitationResolved { invitee_id }
                                     if invitee_id == &send_user.id =>
                                 {
-                                    render_invitations(&send_state, &send_user).await
+                                    // LC-769: also refresh the global #sidebar so
+                                    // the invitations indicator (banner + Home
+                                    // rail badge) appears and clears live, not
+                                    // only the invitations page the recipient is
+                                    // almost never looking at.
+                                    render_invitation_change(
+                                        &send_state,
+                                        &send_user,
+                                        cur_enclave,
+                                    )
+                                    .await
                                 }
                                 // LC-172: enclave member list changed. Broadcast
                                 // on the enclave:{id} topic, so only connections
@@ -898,7 +908,7 @@ async fn render_dm_read(
     if room.room_type != "dm" {
         // LC-489: a group-room read advanced a member's watermark - refresh this
         // viewer's "Seen by" bar (gating + eligibility handled in the helper).
-        return render_room_seen_bar(state, viewer, room_id).await;
+        return render_room_seen_bar(state, viewer, &room).await;
     }
 
     if !viewer.read_receipts_enabled {
@@ -979,13 +989,24 @@ async fn render_dm_read(
 /// LC-489: render the group-room "Seen by" bar OOB for one viewer, or `None`
 /// when the room is ineligible (DM / too large / viewer has receipts off). The
 /// id-keyed `#lc-seen-{room_id}` swap drops on connections not viewing the room.
-async fn render_room_seen_bar(state: &AppState, viewer: &User, room_id: i64) -> Option<String> {
-    let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
-    let members = super::room_seen_members_if_applicable(state, viewer, &room)
-        .await
-        .ok()??;
+///
+/// LC-778: takes the already-loaded room, so a caller that holds one does not
+/// pay a second `get_room` per event.
+async fn render_room_seen_bar(
+    state: &AppState,
+    viewer: &User,
+    room: &models::Room,
+) -> Option<String> {
+    let members = match super::room_seen_members_if_applicable(state, viewer, room).await {
+        Ok(m) => m?,
+        // Best-effort decoration: the bar is dropped, but not silently.
+        Err(e) => {
+            tracing::warn!(error = %e, room_id = room.id, "seen-bar members lookup failed");
+            return None;
+        }
+    };
     crate::views::room::RoomSeenBar {
-        room_id,
+        room_id: room.id,
         members,
         oob: true,
     }
@@ -1052,7 +1073,16 @@ pub async fn render_new_message_or_bump(
                 last_read_message_id: message.id,
                 read_at,
             };
-            state.hub.broadcast_to_room(message.room_id, &event);
+            // LC-778: deliver only to the parties that render something from
+            // this DmRead - the author (the DM "Seen" caption, and the group
+            // "Seen by" bar) and this viewer's other tabs (badge clear). A
+            // room-wide broadcast made one message in a room with M foreground
+            // viewers cost M squared render_dm_read runs, each up to five
+            // queries. The trade: a third member's "Seen by" stack no longer
+            // updates live when someone else reads; it is best-effort already
+            // and re-renders on the next page load or event that reaches them.
+            state.hub.broadcast_to_user(&message.user_id, &event);
+            state.hub.broadcast_to_user(&viewer.id, &event);
         }
         return render_new_message(state, message, None, viewer).await;
     }
@@ -1344,8 +1374,22 @@ async fn render_new_message(
     // LC-489: a new message resets the room's "Seen by" bar (only the author is
     // caught up to it). Append the recomputed bar OOB so it refreshes live for
     // anyone viewing the room; ineligible rooms append nothing.
-    if let Some(bar) = render_room_seen_bar(state, viewer, message.room_id).await {
-        out.push_str(&bar);
+    // LC-778: a viewer with receipts off never renders a bar, so skip the room
+    // lookup entirely for them rather than loading it and discarding the result.
+    if viewer.read_receipts_enabled {
+        match db::chat::get_room(&state.chat, message.room_id).await {
+            // The bar is best-effort decoration on the message render; a failed
+            // lookup drops it but must not drop the message itself.
+            Err(e) => {
+                tracing::warn!(error = %e, room_id = message.room_id, "seen-bar room lookup failed")
+            }
+            Ok(None) => {}
+            Ok(Some(room)) => {
+                if let Some(bar) = render_room_seen_bar(state, viewer, &room).await {
+                    out.push_str(&bar);
+                }
+            }
+        }
     }
     Some(out)
 }
@@ -2417,12 +2461,38 @@ fn relay_voice_signal(
 /// this connection (broadcast_to_user already targets the right user); the
 /// swap is a no-op on tabs not currently showing the invitations page.
 async fn render_invitations(state: &AppState, viewer: &User) -> Option<String> {
-    let invs = db::enclave::list_invitations_for_user(&state.chat, &viewer.id)
+    let cards = crate::routes::enclave::load_invitation_cards(state, &viewer.id)
         .await
         .ok()?;
-    crate::views::enclave::InvitationsLiveFragment { invitations: &invs }
-        .render()
-        .ok()
+    crate::views::enclave::InvitationsLiveFragment {
+        invitations: &cards,
+    }
+    .render()
+    .ok()
+}
+
+/// LC-769: an invitation arriving or resolving must update the live
+/// `/invitations` list AND the global invitation indicator in the rail /
+/// sidebar (the Home tile badge and the pending-invitations banner), so a
+/// recipient who is not sitting on the invitations page still sees it appear -
+/// and see it clear when they accept or decline. Emits both OOB fragments in one
+/// frame; each connection applies whichever targets its DOM currently has and
+/// htmx drops the rest. `current_enclave` keeps the sidebar render in the
+/// recipient's current context (see `render_sidebar`).
+async fn render_invitation_change(
+    state: &AppState,
+    viewer: &User,
+    current_enclave: Option<i64>,
+) -> Option<String> {
+    let mut out = render_invitations(state, viewer).await.unwrap_or_default();
+    if let Some(sidebar) = render_sidebar(state, viewer, current_enclave).await {
+        out.push_str(&sidebar);
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 /// LC-170: re-render the enclave landing-page member list as an OOB fragment.

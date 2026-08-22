@@ -47,4 +47,8 @@ pub struct MembersPanel {
     /// Whether to show the gated "Manage members" footer link to
     /// `/room/{id}/manage` (viewer can manage role overrides).
     pub can_manage: bool,
+    /// LC-767: the room's enclave, when it has one. Drives the "Invite people"
+    /// footer link (which opens `/enclave/{id}/invite/panel`). `None` for a DM
+    /// or any room without an enclave, where there is nobody to invite.
+    pub enclave_id: Option<i64>,
 }

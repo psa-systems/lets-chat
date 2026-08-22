@@ -5,29 +5,28 @@
 {% block main %}
 <div class="flex flex-1 flex-col overflow-hidden">
   <header class="lc-header">
-    <h1 class="font-semibold truncate">{{ "reminders-heading"|t }}</h1>
+    <h1 class="lc-h1 truncate">{{ "reminders-heading"|t }}</h1>
   </header>
-  <div class="flex-1 overflow-y-auto p-4 space-y-6 max-w-2xl">
+  <div class="flex-1 overflow-y-auto lc-page-medium lc-page-pad lc-page-stack">
 
     <section class="space-y-2">
       <h2 class="text-sm font-semibold text-content-muted">{{ "reminders-pending"|t }}</h2>
       {% if pending.is_empty() %}
-      <p class="text-sm text-content-muted">
-        {{ "reminders-pending-empty"|t }}
-      </p>
+      {% let empty_text_key = "reminders-pending-empty" %}
+      {% include "partials/empty_state.html" %}
       {% else %}
-      <ul class="divide-y divide-border border rounded">
+      <ul class="card divide-y divide-border">
         {% for r in pending %}
         <li id="reminder-row-{{ r.id }}" class="px-3 py-2">
           <div class="flex items-center justify-between gap-2 text-xs text-content-muted">
             <span>
               <a href="{{ r.context_path }}" class="text-accent hover:underline">{{ r.context_label }}</a>
-              &middot; {{ "reminders-remind-at"|t }} {{ r.remind_at }} UTC
+              &middot; {{ "reminders-remind-at"|t }} <time datetime="{{ r.remind_at|iso }}" title="{{ r.remind_at }}">{{ r.remind_at }}</time> UTC
             </span>
             <button hx-delete="/reminders/{{ r.id }}"
                     hx-target="#reminder-row-{{ r.id }}"
                     hx-swap="delete"
-                    class="text-danger hover:underline">{{ "reminders-cancel"|t }}</button>
+                    class="btn btn-sm btn-danger-outline">{{ "reminders-cancel"|t }}</button>
           </div>
           <div class="mt-1 text-sm text-content">{{ r.snippet }}</div>
         </li>
@@ -39,18 +38,18 @@
     {% if !fired.is_empty() %}
     <section class="space-y-2">
       <h2 class="text-sm font-semibold text-content-muted">{{ "reminders-fired"|t }}</h2>
-      <ul class="divide-y divide-border border rounded">
+      <ul class="card divide-y divide-border">
         {% for r in fired %}
         <li id="reminder-row-{{ r.id }}" class="px-3 py-2">
           <div class="flex items-center justify-between gap-2 text-xs text-content-muted">
             <span>
               <a href="{{ r.context_path }}" class="text-accent hover:underline">{{ r.context_label }}</a>
-              {% if let Some(at) = r.fired_at %}&middot; {{ "reminders-fired-at"|t }} {{ at }} UTC{% endif %}
+              {% if let Some(at) = r.fired_at %}&middot; {{ "reminders-fired-at"|t }} <time datetime="{{ at|iso }}" title="{{ at }}">{{ at }}</time> UTC{% endif %}
             </span>
             <button hx-delete="/reminders/{{ r.id }}"
                     hx-target="#reminder-row-{{ r.id }}"
                     hx-swap="delete"
-                    class="text-content-muted hover:underline">{{ "reminders-dismiss"|t }}</button>
+                    class="btn btn-sm btn-ghost">{{ "reminders-dismiss"|t }}</button>
           </div>
           <div class="mt-1 text-sm text-content">{{ r.snippet }}</div>
         </li>

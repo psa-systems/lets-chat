@@ -4,14 +4,21 @@
 
 {% block main %}
 <div class="flex-1 overflow-y-auto">
-<section class="p-6 max-w-2xl">
-  {# LC-161: live-updated region. EnclaveInvitation{Created,Resolved} already
-     broadcast_to_user, so every tab's socket receives them; the WS send task
-     swaps this #lc-invitations block by id (no topic subscription needed -
-     broadcast_to_user already fans out to all of the user's connections). #}
-  <div id="lc-invitations">
-    {% include "invitations/items.html" %}
+  {# LC-772: center the content in the viewport so a short list (usually a
+     single card) is not stranded at the top of a tall empty page. `min-h-full`
+     lets `justify-center` balance the whitespace when the content is short, yet
+     the wrapper grows with a long list so it flows from the top and the parent
+     scrolls normally instead of clipping. #}
+  <div class="flex min-h-full flex-col justify-center">
+    <section class="lc-page-narrow lc-page-pad">
+      {# LC-161: live-updated region. EnclaveInvitation{Created,Resolved} already
+         broadcast_to_user, so every tab's socket receives them; the WS send task
+         swaps this #lc-invitations block by id (no topic subscription needed -
+         broadcast_to_user already fans out to all of the user's connections). #}
+      <div id="lc-invitations">
+        {% include "invitations/items.html" %}
+      </div>
+    </section>
   </div>
-</section>
 </div>
 {% endblock %}

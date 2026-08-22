@@ -6,7 +6,7 @@
 <div class="flex flex-1 flex-col overflow-hidden">
   <header class="lc-header">
     <div class="min-w-0">
-      <h1 class="font-semibold">{{ "kudos-title"|t }}</h1>
+      <h1 class="lc-h1">{{ "kudos-title"|t }}</h1>
       <p class="lc-small text-content-muted">{{ "kudos-window"|t }}</p>
     </div>
   </header>
@@ -16,7 +16,7 @@
     {% let empty_text_key = "kudos-empty" %}
     {% include "partials/empty_state.html" %}
     {% else %}
-    <div class="mx-auto grid max-w-2xl gap-6 sm:grid-cols-2">
+    <div class="lc-page-medium grid gap-6 sm:grid-cols-2">
       <section>
         <h2 class="lc-section-label mb-2">{{ "kudos-most-appreciated"|t }}</h2>
         {% if receivers.is_empty() %}
@@ -42,7 +42,7 @@
         {% endif %}
       </section>
     </div>
-    <p class="mx-auto mt-4 max-w-2xl text-xs text-content-subtle">{{ "kudos-hint"|t }}</p>
+    <p class="lc-page-medium mt-4 text-xs text-content-subtle">{{ "kudos-hint"|t }}</p>
     {% endif %}
   </div>
 </div>

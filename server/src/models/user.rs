@@ -131,6 +131,27 @@ pub struct User {
     pub dnd_active: bool,
 }
 
+/// LC-772: minimal identity for rendering a reference to a user (a friendly
+/// name + avatar) without loading the full `User` projection. Resolved in bulk
+/// by `db::auth::user_identities_for_ids` so callers with a list of ids (e.g.
+/// invitation inviters) avoid an N+1 across the auth pool.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UserIdentity {
+    pub username: String,
+    pub display_name: Option<String>,
+    pub avatar_ext: Option<String>,
+}
+
+impl UserIdentity {
+    /// Display name when set and non-empty, otherwise the username.
+    pub fn label(&self) -> &str {
+        self.display_name
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or(&self.username)
+    }
+}
+
 impl User {
     /// LC-541: saved mode preference, defaulting to "system" when unset.
     pub fn theme_mode_or_system(&self) -> &str {

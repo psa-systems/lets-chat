@@ -325,10 +325,17 @@ pub(crate) fn day_label_for(created_at: &str) -> String {
 /// LC-314: convert a SQLite `YYYY-MM-DD HH:MM:SS` UTC timestamp to a JS-safe
 /// RFC3339 (`YYYY-MM-DDTHH:MM:SSZ`). Non-standard input passes through.
 /// LC-319: also reused by the status picker for the auto-clear expiry hint.
+/// LC-746: also accepts the minute-precision `YYYY-MM-DD HH:MM` shape, which a
+/// space alone would leave invalid as a `<time datetime>` value.
 pub(crate) fn to_iso_utc(created_at: &str) -> String {
     let s = created_at.trim();
-    if s.len() >= 19 && s.as_bytes().get(10) == Some(&b' ') {
+    if s.as_bytes().get(10) != Some(&b' ') {
+        return s.to_string();
+    }
+    if s.len() >= 19 {
         format!("{}T{}Z", &s[..10], &s[11..19])
+    } else if s.len() == 16 {
+        format!("{}T{}Z", &s[..10], &s[11..16])
     } else {
         s.to_string()
     }
@@ -936,6 +943,21 @@ mod tests {
     #[test]
     fn to_iso_utc_converts_sqlite_datetime() {
         assert_eq!(to_iso_utc("2026-06-15 14:23:01"), "2026-06-15T14:23:01Z");
+    }
+
+    /// LC-746: every `<time datetime>` in the templates goes through this, so
+    /// the minute-precision stamps and the already-RFC3339 ones have to survive
+    /// it. Anything unrecognized passes through rather than becoming garbage.
+    #[test]
+    fn to_iso_utc_handles_the_other_timestamp_shapes() {
+        assert_eq!(to_iso_utc("2026-06-15 14:23"), "2026-06-15T14:23Z");
+        assert_eq!(
+            to_iso_utc("2026-06-15T14:23:01Z"),
+            "2026-06-15T14:23:01Z",
+            "an already-RFC3339 value is left alone"
+        );
+        assert_eq!(to_iso_utc("2026-06-15"), "2026-06-15");
+        assert_eq!(to_iso_utc(""), "");
     }
 
     #[test]

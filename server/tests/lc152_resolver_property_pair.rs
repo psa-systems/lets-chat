@@ -1,4 +1,4 @@
-//! LC-152: killer test pair — destination correctness + rejection correctness.
+//! LC-152: killer test pair - destination correctness + rejection correctness.
 //!
 //! The whole LC-152 fix rests on TWO contracts, each closing a distinct
 //! attack class:
@@ -14,7 +14,7 @@
 //!    this, literal-IP URLs skip `dns::Resolve` entirely (reqwest takes
 //!    a literal-IP fast path) and the resolver never fires. Tested
 //!    directly: call `outbound_get` with a literal-private URL and
-//!    assert the **specific** `OutboundError::HostNotPublic` variant —
+//!    assert the **specific** `OutboundError::HostNotPublic` variant -
 //!    `is_err()` alone is too loose (a connect-failed or network-
 //!    unreachable also satisfies it without proving the filter fired,
 //!    as the prior round caught).
@@ -42,7 +42,7 @@ use tokio::net::TcpListener;
 
 /// Counter-instrumented stub resolver. Returns a fixed `SocketAddr` for
 /// every hostname. The test asserts the LISTENER bound to that address
-/// received the request — proving reqwest used the resolver's IP at
+/// received the request - proving reqwest used the resolver's IP at
 /// connect time, did not silently re-resolve, did not look up the fake
 /// hostname via the system resolver.
 struct StubResolver {
@@ -127,7 +127,7 @@ async fn reqwest_connects_to_resolver_supplied_ip() {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Test 2-5: rejection correctness — assert the SPECIFIC variant
+// Test 2-5: rejection correctness - assert the SPECIFIC variant
 //           Bare is_err() is too loose; a connect-failed or
 //           network-unreachable satisfies it without proving the filter
 //           fired.
@@ -165,7 +165,7 @@ async fn outbound_get_rejects_cloud_metadata_endpoint_with_host_not_public() {
     // Azure instance-metadata endpoint. If Web Push had remained on the
     // raw client, a malicious push-subscription endpoint pointing here
     // would have been reachable. This assertion proves the URL-input
-    // layer refuses it via the specific variant — not via a "network
+    // layer refuses it via the specific variant - not via a "network
     // unreachable" false positive.
     let result = http_client::outbound_get("http://169.254.169.254/latest/meta-data/").await;
     assert!(

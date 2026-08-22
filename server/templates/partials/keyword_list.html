@@ -2,6 +2,10 @@
    (HTMX swaps this whole #lc-keyword-list element) and included by the settings
    page for the initial render. #}
 <div id="lc-keyword-list">
+  {% if keywords.is_empty() %}
+  {% let empty_text_key = "settings-keyword-empty" %}
+  {% include "partials/empty_state.html" %}
+  {% else %}
   <div class="flex flex-wrap gap-2">
     {% for word in keywords %}
     <span class="inline-flex items-center gap-1 rounded-full bg-surface-sunken px-2 py-0.5 text-sm">
@@ -12,16 +16,14 @@
       </form>
     </span>
     {% endfor %}
-    {% if keywords.is_empty() %}
-    <span class="text-sm text-content-muted">{{ "settings-keyword-empty"|t }}</span>
-    {% endif %}
   </div>
+  {% endif %}
   <form hx-post="/settings/keywords" hx-target="#lc-keyword-list" hx-swap="outerHTML" class="mt-2 flex items-center gap-2"
     {% if at_cap %}data-lc-at-cap{% endif %}>
-    <input type="text" name="word" autocomplete="off" maxlength="50"
+    <input type="text" name="word" autocomplete="off" maxlength="50" aria-label="{{ "settings-keyword-placeholder"|t }}"
       {% if at_cap %}disabled placeholder="{{ "settings-keyword-cap"|t }}"{% else %}placeholder="{{ "settings-keyword-placeholder"|t }}"{% endif %}
-      class="w-48 rounded border border-border px-2 py-1 text-sm disabled:opacity-50">
+      class="input w-48 disabled:opacity-50">
     <button type="submit" {% if at_cap %}disabled{% endif %}
-      class="rounded bg-accent px-3 py-1 text-sm font-medium text-accent-content hover:bg-accent-hover disabled:opacity-50">{{ "settings-keyword-add"|t }}</button>
+      class="btn btn-primary">{{ "settings-keyword-add"|t }}</button>
   </form>
 </div>

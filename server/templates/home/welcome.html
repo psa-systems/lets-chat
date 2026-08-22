@@ -313,7 +313,7 @@
      centering keeps the card group optically centered in the main pane at
      common widths instead of floating top-left. #}
   <div class="min-h-full flex items-center justify-center p-6">
-    <section class="w-full max-w-md">
+    <section class="lc-page-narrow">
       {% if let Some(msg) = flash_error %}
       {# LC-564: shared alert component, matching the login error (was a
          hand-rolled danger box with the same tokens). #}
@@ -326,7 +326,7 @@
             <path d="M15.75 7.5c-1.376 0-2.739.057-4.086.169C10.124 7.797 9 9.103 9 10.609v4.285c0 1.507 1.128 2.814 2.67 2.94 1.243.102 2.5.157 3.768.165l2.782 2.781a.75.75 0 001.28-.53v-2.39l.33-.026c1.542-.125 2.67-1.433 2.67-2.94v-4.286c0-1.505-1.125-2.811-2.664-2.94A49.392 49.392 0 0015.75 7.5z"/>
           </svg>
         </div>
-        <h1 class="lc-display">{{ "home-welcome"|t }} {{ user.display_label() }}</h1>
+        <h2 class="lc-display">{{ "home-welcome"|t }} {{ user.display_label() }}</h2>
         <p class="mt-2 lc-body text-content-muted">{{ "home-subtitle"|t }}</p>
       </div>
       {# LC-621: the "create your first enclave" empty-state was removed - every

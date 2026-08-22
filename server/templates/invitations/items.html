@@ -1,25 +1,55 @@
-{# LC-161: the dynamic invitations region, shared by the full page and the
-   live OOB fragment (ws/invitations_live.html) so both render identically.
-   References `invitations: &[(EnclaveInvitation, Enclave)]` from whichever
-   parent struct includes it. #}
-<h1 class="text-2xl font-semibold">{{ "invitations-pending-heading"|t }} ({{ invitations.len() }})</h1>
+{# LC-772: the pending-invitations region, shared by the full page and the live
+   OOB fragment (ws/invitations_live.html) so both render identically.
+   References `invitations: &[InvitationCard]` from whichever parent struct
+   includes it. Every field is pre-resolved by the route
+   (routes::enclave::load_invitation_cards): the inviter is a friendly name +
+   avatar (never a raw id), and each enclave carries its live member count and
+   optional branding logo so the invitee can decide without guessing. #}
+<h1 class="lc-h1">{{ "invitations-pending-heading"|t }} ({{ invitations.len() }})</h1>
 {% if invitations.is_empty() %}
-<p class="text-content-muted mt-4">{{ "invitations-empty"|t }}</p>
+{% let empty_text_key = "invitations-empty" %}
+{% include "partials/empty_state.html" %}
 {% else %}
-<ul class="mt-4 space-y-2">
-  {% for pair in invitations %}
-  <li class="flex items-center justify-between border rounded p-3">
-    <div>
-      <div class="font-medium">{{ pair.1.name }}</div>
-      {% if let Some(d) = pair.1.description %}<div class="text-sm text-content-muted">{{ d }}</div>{% endif %}
-      <div class="text-xs text-content-muted">{{ "invitations-invited-by"|t }} {{ pair.0.invited_by }}</div>
+<ul class="mt-4 space-y-3">
+  {% for card in invitations %}
+  <li class="card p-4">
+    <div class="flex items-start gap-3">
+      {# Enclave icon: branding logo when the enclave has one, else a monogram. #}
+      {% if let Some(logo) = card.logo_url %}
+      <img src="{{ logo }}" alt="" class="h-12 w-12 shrink-0 rounded-lg object-cover">
+      {% else %}
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-surface-sunken text-lg font-semibold text-content">{{ card.enclave_initial() }}</div>
+      {% endif %}
+      <div class="min-w-0 flex-1">
+        <div class="font-semibold text-content">{{ card.enclave_name }}</div>
+        {% if let Some(d) = card.enclave_description %}{% if !d.trim().is_empty() %}
+        <p class="mt-1 line-clamp-2 text-sm text-content-muted">{{ d }}</p>
+        {% endif %}{% endif %}
+        <div class="mt-1 text-xs text-content-muted">{{ "invitations-members"|tn(card.members()) }}</div>
+        {# Inviter, resolved to a friendly name + avatar (LC-772 bug: was a UUID). #}
+        <div class="mt-2 flex items-center gap-2">
+          {% if card.inviter_avatar_ext.is_some() %}
+          <img src="/avatars/{{ card.inviter_id }}" alt="" class="h-6 w-6 shrink-0 rounded-full object-cover">
+          {% else %}
+          <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-xs font-semibold text-content">{{ card.inviter_initial() }}</div>
+          {% endif %}
+          <span class="min-w-0 truncate text-xs text-content-muted">{{ "invitations-invited-by"|t }} {% if card.inviter_name.is_empty() %}{{ "invitations-inviter-unknown"|t }}{% else %}{{ card.inviter_name }}{% endif %}</span>
+        </div>
+      </div>
     </div>
-    <div class="flex gap-2">
-      <form method="post" action="/invitations/{{ pair.0.id }}/accept">
-        <button type="submit" class="bg-success text-success-content rounded px-3 py-1 text-sm">{{ "invitations-accept"|t }}</button>
-      </form>
-      <form method="post" action="/invitations/{{ pair.0.id }}/decline">
-        <button type="submit" class="bg-surface-sunken rounded px-3 py-1 text-sm">{{ "invitations-decline"|t }}</button>
+    <div class="mt-4 flex items-center justify-end gap-2">
+      {# Decline is quiet + secondary and asks for a one-tap confirm so a
+         mis-click does not throw away an invitation. The htmx response OOB-swaps
+         this whole region, so the card vanishes and the "(N)" count updates in
+         place; the WS EnclaveInvitationResolved push clears the sidebar badge. #}
+      <button type="button" class="btn btn-secondary btn-sm"
+              hx-post="/invitations/{{ card.id }}/decline"
+              hx-confirm="{{ "invitations-decline-confirm"|t }}"
+              hx-swap="none">{{ "invitations-decline"|t }}</button>
+      {# Accept is the clear primary action; the server redirects the invitee
+         straight into the enclave they just joined. #}
+      <form method="post" action="/invitations/{{ card.id }}/accept">
+        <button type="submit" class="btn btn-primary btn-sm">{{ "invitations-accept"|t }}</button>
       </form>
     </div>
   </li>

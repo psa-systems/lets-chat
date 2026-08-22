@@ -11,11 +11,11 @@
 {# LC-742: page top bar on the shared .lc-header skeleton. This was the one
    in-app page with no bar, so the bar vanished when the pane swapped in. #}
 <header class="lc-header">
-  <h1 class="font-semibold truncate">{{ enclave.name }}</h1>
+  <h1 class="lc-h1 truncate">{{ enclave.name }}</h1>
   {% if enclave.is_public %}<span class="flex-none text-xs bg-success-surface text-success-surface-content rounded px-2 py-0.5">{{ "enclave-public-badge"|t }}</span>{% endif %}
 </header>
 <div class="flex-1 overflow-y-auto" data-lc-live-topic="enclave:{{ enclave.id }}">
-<section class="p-6 max-w-2xl">
+<section class="lc-page-medium lc-page-pad">
   {% if let Some(msg) = flash_error %}
   <div class="mb-4 alert alert-danger">
     {{ msg }}

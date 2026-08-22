@@ -24,7 +24,7 @@
                 hx-post="/follow-up/{{ item.id }}/claim"
                 hx-target="#followup-{{ follow_up.message_id }}"
                 hx-swap="innerHTML"
-                class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs {% if item.assigned_to_me %}bg-accent-surface text-accent{% else %}text-content-subtle hover:text-content-muted hover:underline{% endif %}">
+                class="btn btn-sm {% if item.assigned_to_me %}bg-accent-surface text-accent{% else %}btn-ghost{% endif %}">
           {% if item.assigned_to_me %}
           <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-hidden="true"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>{{ "followup-assigned-you"|t }}
           {% else if let Some(label) = item.assignee_label.as_ref() %}

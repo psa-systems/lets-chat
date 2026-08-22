@@ -3509,7 +3509,7 @@ fn scope_label(kind: &str, id: Option<i64>) -> String {
 async fn render_outgoing_page(
     state: &AppState,
     user: &crate::models::User,
-    revealed: Option<(i64, String)>,
+    revealed: Option<(String, String)>,
     error: Option<String>,
 ) -> Result<Html, AppError> {
     let (
@@ -3653,7 +3653,7 @@ pub async fn post_outgoing_webhooks(
     )
     .await?;
     Ok(
-        render_outgoing_page(&state, &actor, Some((id, secret)), None)
+        render_outgoing_page(&state, &actor, Some((format!("#{id}"), secret)), None)
             .await?
             .into_response(),
     )
@@ -3666,7 +3666,7 @@ pub async fn post_outgoing_rotate(
 ) -> Result<Html, AppError> {
     let secret = crate::auth::generate_api_token();
     db::outgoing_webhooks::rotate_secret(&state.chat, id, &secret).await?;
-    render_outgoing_page(&state, &actor, Some((id, secret)), None).await
+    render_outgoing_page(&state, &actor, Some((format!("#{id}"), secret)), None).await
 }
 
 #[derive(Deserialize)]
