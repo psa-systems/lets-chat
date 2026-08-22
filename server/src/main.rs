@@ -269,24 +269,51 @@ fn init_tracing() {
         .init();
 }
 
-/// Cache-buster for static assets. Uses the mtime of the built Tailwind CSS so
-/// every rebuild forces browsers to re-fetch the stylesheet (and other vendored
-/// assets that share the query). Falls back to a per-process random value if
-/// the file cannot be stat'd, so cache busts are never silently disabled.
+/// Cache-buster for static assets: the newest mtime across the whole
+/// `server/assets` tree, so ANY asset change forces browsers to re-fetch under a
+/// new `?v=` query. Keying on the built Tailwind CSS alone shipped stale
+/// JavaScript whenever a JS-only change landed without a CSS rebuild: the query
+/// never bumped, and the service worker's cache-first store (keyed on the full
+/// URL including `?v=`) kept serving the previous script. That silently hid
+/// LC-764's `__lcCallDebug` instrumentation, which was live on disk but never
+/// reached the browser. Walking the tree ties the version to whichever asset
+/// changed last, CSS or JS. Falls back to a per-process value if the tree cannot
+/// be walked, so cache busts are never silently disabled.
 fn compute_asset_version() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let path = "server/assets/tailwind-built.css";
-    if let Ok(meta) = std::fs::metadata(path) {
-        if let Ok(modified) = meta.modified() {
-            if let Ok(d) = modified.duration_since(UNIX_EPOCH) {
-                return d.as_secs().to_string();
-            }
-        }
+    if let Some(secs) = newest_asset_mtime_secs(std::path::Path::new("server/assets")) {
+        return secs.to_string();
     }
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs().to_string())
         .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string())
+}
+
+/// Newest file mtime (Unix seconds) anywhere under `dir`, or `None` if the
+/// directory cannot be read or holds no stat-able file. Recurses depth-first;
+/// unreadable entries are skipped rather than aborting the walk.
+fn newest_asset_mtime_secs(dir: &std::path::Path) -> Option<u64> {
+    use std::time::UNIX_EPOCH;
+    let mut newest: Option<u64> = None;
+    let entries = std::fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let secs = if path.is_dir() {
+            newest_asset_mtime_secs(&path)
+        } else {
+            entry
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+        };
+        if let Some(secs) = secs {
+            newest = Some(newest.map_or(secs, |cur| cur.max(secs)));
+        }
+    }
+    newest
 }
 
 /// Periodically flip users from `'active'` to `'idle'` once their
