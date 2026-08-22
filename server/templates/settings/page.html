@@ -365,26 +365,33 @@
           <form method="post" action="/settings"
                 hx-post="/settings" hx-target="#st-prefs" hx-swap="innerHTML"
                 hx-disabled-elt="find button[type=submit]" class="lc-set-form">
-            <label class="lc-toggle">
-              <input type="checkbox" role="switch" name="read_receipts_enabled" value="1" {% if user.read_receipts_enabled %}checked{% endif %}>
-              <span class="lc-toggle-track" aria-hidden="true"></span>
-              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-read-receipts"|t }}</span></span>
-            </label>
-            <label class="lc-toggle">
-              <input type="checkbox" role="switch" name="is_profile_public" value="1" {% if user.is_profile_public %}checked{% endif %}>
-              <span class="lc-toggle-track" aria-hidden="true"></span>
-              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-public-profile"|t }}</span><span class="lc-toggle-desc">{{ "settings-pref-public-profile-help"|t }}</span></span>
-            </label>
-            <label class="lc-toggle">
-              <input type="checkbox" role="switch" name="notify_browser_enabled" value="1" {% if user.notify_browser_enabled %}checked{% endif %}>
-              <span class="lc-toggle-track" aria-hidden="true"></span>
-              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-browser-notify"|t }}</span></span>
-            </label>
-            <label class="lc-toggle">
-              <input type="checkbox" role="switch" name="notify_sound_enabled" value="1" {% if user.notify_sound_enabled %}checked{% endif %}>
-              <span class="lc-toggle-track" aria-hidden="true"></span>
-              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-sound"|t }}</span></span>
-            </label>
+            {% let name = "read_receipts_enabled" %}
+            {% let checked = user.read_receipts_enabled %}
+            {% let disabled = false %}
+            {% let title = "settings-pref-read-receipts"|t %}
+            {% let desc = "" %}
+            {% include "partials/toggle_row.html" %}
+            {% let name = "is_profile_public" %}
+            {% let checked = user.is_profile_public %}
+            {% let disabled = false %}
+            {% let title = "settings-pref-public-profile"|t %}
+            {% let desc = "settings-pref-public-profile-help"|t %}
+            {% include "partials/toggle_row.html" %}
+            {% let name = "notify_browser_enabled" %}
+            {% let checked = user.notify_browser_enabled %}
+            {% let disabled = false %}
+            {% let title = "settings-pref-browser-notify"|t %}
+            {% let desc = "" %}
+            {% include "partials/toggle_row.html" %}
+            {% let name = "notify_sound_enabled" %}
+            {% let checked = user.notify_sound_enabled %}
+            {% let disabled = false %}
+            {% let title = "settings-pref-sound"|t %}
+            {% let desc = "" %}
+            {% include "partials/toggle_row.html" %}
+            {# The push row keeps its hand-written block: its unavailable reason
+               names LETS_CHAT_SECRET_KEY in a <code>, which askama escapes if it
+               goes through a `desc` binding. #}
             <label class="lc-toggle">
               <input type="checkbox" role="switch" name="notify_push_enabled" value="1" {% if user.notify_push_enabled %}checked{% endif %}{% if !push_available %} disabled{% endif %}>
               <span class="lc-toggle-track" aria-hidden="true"></span>
@@ -407,27 +414,49 @@
               <p class="lc-set-help">{{ "settings-push-enable-help"|t }}</p>
             </div>
             {% endif %}
-            <label class="lc-toggle">
-              <input type="checkbox" role="switch" name="notify_email_digest_enabled" value="1" {% if user.notify_email_digest_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
-              <span class="lc-toggle-track" aria-hidden="true"></span>
-              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-email-digest"|t }}</span>{% if !email_available %}<span class="lc-toggle-desc">{{ "settings-pref-email-unavailable"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-email-digest-help"|t }}</span>{% endif %}</span>
-            </label>
-            <label class="lc-toggle">
-              <input type="checkbox" role="switch" name="notify_login_alerts_enabled" value="1" {% if user.notify_login_alerts_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
-              <span class="lc-toggle-track" aria-hidden="true"></span>
-              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-login-alerts"|t }}</span>{% if !email_available %}<span class="lc-toggle-desc">{{ "settings-pref-email-unavailable"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-login-alerts-help"|t }}</span>{% endif %}</span>
-            </label>
-            <label class="lc-toggle">
-              <input type="checkbox" role="switch" name="notify_email_activity_enabled" value="1" {% if user.notify_email_activity_enabled %}checked{% endif %}{% if !email_available %} disabled{% endif %}>
-              <span class="lc-toggle-track" aria-hidden="true"></span>
-              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-email-activity"|t }}</span>{% if !email_available %}<span class="lc-toggle-desc">{{ "settings-pref-email-unavailable"|t }}</span>{% else %}<span class="lc-toggle-desc">{{ "settings-pref-email-activity-help"|t }}</span>{% endif %}</span>
-            </label>
+            {# The three email rows read their description off email_available,
+               and `desc` is bound inside the branch because askama scopes a
+               `{% let %}` to the block it sits in. #}
+            {% let name = "notify_email_digest_enabled" %}
+            {% let checked = user.notify_email_digest_enabled %}
+            {% let disabled = !email_available %}
+            {% let title = "settings-pref-email-digest"|t %}
+            {% if !email_available %}
+              {% let desc = "settings-pref-email-unavailable"|t %}
+              {% include "partials/toggle_row.html" %}
+            {% else %}
+              {% let desc = "settings-pref-email-digest-help"|t %}
+              {% include "partials/toggle_row.html" %}
+            {% endif %}
+            {% let name = "notify_login_alerts_enabled" %}
+            {% let checked = user.notify_login_alerts_enabled %}
+            {% let disabled = !email_available %}
+            {% let title = "settings-pref-login-alerts"|t %}
+            {% if !email_available %}
+              {% let desc = "settings-pref-email-unavailable"|t %}
+              {% include "partials/toggle_row.html" %}
+            {% else %}
+              {% let desc = "settings-pref-login-alerts-help"|t %}
+              {% include "partials/toggle_row.html" %}
+            {% endif %}
+            {% let name = "notify_email_activity_enabled" %}
+            {% let checked = user.notify_email_activity_enabled %}
+            {% let disabled = !email_available %}
+            {% let title = "settings-pref-email-activity"|t %}
+            {% if !email_available %}
+              {% let desc = "settings-pref-email-unavailable"|t %}
+              {% include "partials/toggle_row.html" %}
+            {% else %}
+              {% let desc = "settings-pref-email-activity-help"|t %}
+              {% include "partials/toggle_row.html" %}
+            {% endif %}
             {# LC-526 follow-up: opt out of the public kudos leaderboard. #}
-            <label class="lc-toggle">
-              <input type="checkbox" role="switch" name="kudos_leaderboard_opt_out" value="1" {% if kudos_opt_out %}checked{% endif %}>
-              <span class="lc-toggle-track" aria-hidden="true"></span>
-              <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "settings-pref-kudos-optout"|t }}</span><span class="lc-toggle-desc">{{ "settings-pref-kudos-optout-help"|t }}</span></span>
-            </label>
+            {% let name = "kudos_leaderboard_opt_out" %}
+            {% let checked = kudos_opt_out %}
+            {% let disabled = false %}
+            {% let title = "settings-pref-kudos-optout"|t %}
+            {% let desc = "settings-pref-kudos-optout-help"|t %}
+            {% include "partials/toggle_row.html" %}
             <div class="lc-set-actions">
               <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "settings-save-preferences"|t }}</span></button>
               <span id="st-prefs" class="lc-set-status" role="status" aria-live="polite"></span>
