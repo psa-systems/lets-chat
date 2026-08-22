@@ -41,11 +41,13 @@ pub struct Segment {
     pub id: i64,
     pub transcript_id: i64,
     pub user_id: String,
-    /// The DISPLAY text: LC-629 correction output when an LLM is configured,
-    /// else the raw recognition. This is what the live caption + saved page show.
+    /// The recognized caption, stored verbatim. This is what the live caption
+    /// and the saved page show.
     pub text: String,
-    /// LC-629: the original, uncorrected recognition when it differs from
-    /// `text`; `None` when no correction was applied (raw equals display).
+    /// Legacy second copy of the recognition, set only by the removed LC-629
+    /// live-correction pass (the original when correction changed the display).
+    /// `None` for every segment written since; retained so transcripts recorded
+    /// while correction existed still expose their raw recognition.
     pub raw_text: Option<String>,
     /// Same format as [`Transcript::started_at`] (LC-752).
     pub spoken_at: String,
@@ -55,8 +57,8 @@ pub struct Segment {
 }
 
 impl Segment {
-    /// LC-629: the raw, uncorrected recognition - `raw_text` when a correction
-    /// replaced it, otherwise the display `text` (which is itself the raw text).
+    /// The raw recognition: `raw_text` for a correction-era row that stored a
+    /// separate original, otherwise the display `text` (itself verbatim now).
     pub fn raw(&self) -> &str {
         self.raw_text.as_deref().unwrap_or(&self.text)
     }
