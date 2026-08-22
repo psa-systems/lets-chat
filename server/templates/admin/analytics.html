@@ -10,11 +10,11 @@
 <div class="lc-toolbar">
   <nav class="flex gap-1 text-sm" aria-label="{{ "admin-analytics-date-range"|t }}">
     <a href="/admin/analytics?days=7"
-       class="px-2 py-1 rounded {% if range_days == 7 %}bg-accent text-accent-content{% else %}text-content-muted hover:text-content{% endif %}">7d</a>
+       class="btn btn-sm {% if range_days == 7 %}btn-primary{% else %}btn-ghost{% endif %}">7d</a>
     <a href="/admin/analytics?days=30"
-       class="px-2 py-1 rounded {% if range_days == 30 %}bg-accent text-accent-content{% else %}text-content-muted hover:text-content{% endif %}">30d</a>
+       class="btn btn-sm {% if range_days == 30 %}btn-primary{% else %}btn-ghost{% endif %}">30d</a>
     <a href="/admin/analytics?days=90"
-       class="px-2 py-1 rounded {% if range_days == 90 %}bg-accent text-accent-content{% else %}text-content-muted hover:text-content{% endif %}">90d</a>
+       class="btn btn-sm {% if range_days == 90 %}btn-primary{% else %}btn-ghost{% endif %}">90d</a>
   </nav>
   <form method="post" action="/admin/analytics/recompute" class="ml-auto">
     <input type="hidden" name="days" value="{{ range_days }}">

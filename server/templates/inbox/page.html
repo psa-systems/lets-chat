@@ -14,7 +14,7 @@
        reloads the current page (preserving nothing view-specific is needed -
        inbox has a single ordering). Avoids clobbering infinite-scroll. #}
     <button id="lc-inbox-refresh" type="button" hidden onclick="location.reload()"
-            class="sticky top-0 z-10 w-full bg-accent text-accent-content text-xs py-1.5 hover:bg-accent-hover">
+            class="btn btn-sm btn-primary sticky top-0 z-10 w-full rounded-none">
       {{ "inbox-new-unread"|t }}
     </button>
     {% if items.is_empty() %}
