@@ -508,7 +508,7 @@ async fn discover_join_rejects_private() {
 
 #[tokio::test]
 async fn invite_then_accept_creates_membership() {
-    let (app, s1, _id1, s2, id2) = app_with_two_users().await;
+    let (app, s1, id1, s2, id2) = app_with_two_users().await;
     // Alice creates an enclave.
     let create = Request::builder()
         .method(Method::POST)
@@ -557,6 +557,15 @@ async fn invite_then_accept_creates_membership() {
         s.contains("alices-place"),
         "invitations page must show enclave name"
     );
+    // LC-772: the inviter must resolve to a friendly name, never the raw id.
+    assert!(
+        s.contains("Invited by alice"),
+        "invitations page must resolve the inviter to a name"
+    );
+    assert!(
+        !s.contains(&id1),
+        "invitations page must not leak the inviter's raw user id"
+    );
 
     // Bob accepts (find the invitation id from the DB via the response).
     // Easier: re-fetch via a direct DB call by extracting the invite id from the rendered HTML.
@@ -584,6 +593,88 @@ async fn invite_then_accept_creates_membership() {
         .unwrap();
     let res = app.clone().oneshot(landing).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
+}
+
+// LC-772: declining from the invitations page is an htmx request; the handler
+// answers with the OOB #lc-invitations fragment so the card disappears and the
+// "(N)" count drops in place, rather than a full-page redirect.
+#[tokio::test]
+async fn invitation_decline_via_htmx_returns_fragment() {
+    let (app, s1, _id1, s2, id2) = app_with_two_users().await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&s1))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=alices-place"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let enclave_id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    let invite = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{enclave_id}/invite"))
+        .header("cookie", cookie(&s1))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from(format!("user_id={id2}")))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(invite).await.unwrap().status(),
+        StatusCode::OK
+    );
+
+    // Bob reads his invitations to recover the invite id.
+    let list = Request::builder()
+        .method(Method::GET)
+        .uri("/invitations")
+        .header("cookie", cookie(&s2))
+        .body(Body::empty())
+        .unwrap();
+    let body = axum::body::to_bytes(
+        app.clone().oneshot(list).await.unwrap().into_body(),
+        1 << 20,
+    )
+    .await
+    .unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    let inv_id: i64 = {
+        let start = s.find("/invitations/").expect("invite link missing");
+        let rest = &s[start + "/invitations/".len()..];
+        let end = rest.find('/').unwrap();
+        rest[..end].parse().unwrap()
+    };
+
+    // Bob declines as htmx would (HX-Request). The response is the live region
+    // fragment, now empty, not a redirect.
+    let decline = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/invitations/{inv_id}/decline"))
+        .header("cookie", cookie(&s2))
+        .header("HX-Request", "true")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(decline).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let s = String::from_utf8(body.to_vec()).unwrap();
+    assert!(
+        s.contains("id=\"lc-invitations\""),
+        "decline must return the OOB invitations region"
+    );
+    assert!(
+        s.contains("(0)"),
+        "the pending count must drop to zero after declining the only invite"
+    );
 }
 
 // LC-767: the "Invite people" drawer opened from the room header and the member
