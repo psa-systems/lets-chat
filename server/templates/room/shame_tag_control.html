@@ -7,7 +7,7 @@
     <button type="button"
             hx-post="/messages/{{ message_id }}/tags/{{ t.tag }}"
             hx-target="#shame-control-{{ message_id }}" hx-swap="outerHTML"
-            class="rounded px-2 py-0.5 border border-border {% if t.voted %}bg-accent text-accent-content{% else %}bg-surface-sunken hover:bg-surface{% endif %}">
+            class="btn btn-sm border border-border {% if t.voted %}btn-primary{% else %}bg-surface-sunken hover:bg-surface{% endif %}">
       {{ t.tag }}{% if t.count > 0 %} ({{ t.count }}){% endif %}
     </button>
     {% endfor %}

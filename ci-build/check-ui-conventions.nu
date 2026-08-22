@@ -39,6 +39,15 @@ const PALETTE_ALLOW = "lc-allow-palette"
 # Character-for-character what `.btn-danger-outline` (main.css) expands to.
 const DANGER_OUTLINE = "text-danger border border-danger-border hover:bg-danger-surface"
 
+# LC-755: the third shape of the same defect - the primary accent fill spelled
+# out inline instead of `.btn-primary` (tailwind.css). Matched on the whole
+# opening tag, because the class attribute usually sits on a continuation line.
+const CONTROL_TAG = '(?<tag><(?:button|a|label)(?:\s[^>]*)?>)'
+
+# Template syntax separates utilities the way whitespace does: an active-state
+# branch reads `{% if x %}bg-accent text-accent-content{% endif %}`.
+const TEMPLATE_TAG = '\{[%{][^{}]*[%}]\}'
+
 # A border utility used to paint Tailwind's `colors.gray[200]` default - a fixed
 # light grey in all four modes and every palette. LC-744 set `borderColor.DEFAULT`
 # to `var(--border)`, so that is no longer the failure mode; the rule stays
@@ -279,6 +288,42 @@ def hand-rolled-callouts [] {
     }
 }
 
+# LC-755: only an unprefixed pair counts. `hover:bg-accent`, `focus:bg-accent`
+# and `aria-pressed:bg-accent` paint a state, not the resting primary fill, and
+# `bg-accent-surface` is a different token, so the check is on whole utilities.
+def class-tokens [value: string] {
+    $value
+    | str replace --all --regex $TEMPLATE_TAG " "
+    | split row --regex '\s+'
+    | where {|t| $t != "" }
+}
+
+def open-coded-primary-fill [] {
+    template-files | each {|file|
+        # `parse` reads the whole document only from a bound string; piped
+        # straight out of `open` it matches line by line and misses every tag
+        # whose class attribute sits on a continuation line.
+        let text = (open --raw $file | decode utf-8)
+        let lines = ($text | lines)
+        $text
+        | parse --regex $CONTROL_TAG
+        | get tag
+        | each {|tag|
+            class-attrs $tag
+            | where {|value|
+                let tokens = (class-tokens $value)
+                ("bg-accent" in $tokens) and ("text-accent-content" in $tokens) and ("btn-primary" not-in $tokens)
+            }
+            | each {|value|
+                let at = ($lines | enumerate | where {|row| $row.item | str contains $value } | get index)
+                let line = (if ($at | is-empty) { "?" } else { ($at | first) + 1 })
+                $"($file):($line): class=\"($value)\""
+            }
+        }
+        | flatten
+    } | flatten
+}
+
 def bare-timestamps [] {
     scan-lines (template-files) $BARE_TIMESTAMP
     | where {|hit| not ($hit | str contains "<time") }
@@ -329,6 +374,12 @@ def rules [] {
             pending: "LC-743"
             fix: $"use `btn btn-sm btn-danger-outline` \(main.css\); the inline copy is character-for-character what the class expands to \(LC-743\)"
             check: {|| scan-lines (template-files) $DANGER_OUTLINE }
+        }
+        {
+            id: "no-open-coded-primary-fill"
+            pending: null
+            fix: "a primary action gets `btn btn-primary` (plus `btn-sm` when it is the compact one); the inline `bg-accent` + `text-accent-content` pair is what `.btn-primary` expands to, and 28 sites carried their own copy of it until LC-755. A `hover:` / `focus:` / `aria-pressed:` accent is a state, not the resting fill, and does not match"
+            check: {|| open-coded-primary-fill }
         }
         {
             id: "no-untokenized-borders"
