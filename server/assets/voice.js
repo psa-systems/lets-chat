@@ -298,6 +298,12 @@
       empty.classList.remove('hidden');
       list.classList.add('hidden');
       names.replaceChildren();
+      // LC-789: re-evaluate huddle-bar visibility on the empty path too. For a
+      // member only VIEWING the room (never joined), the bar is shown purely by
+      // applyHuddleVisibility() (visible while someone is on the line). When the
+      // last participant left, this branch returned before that call, so the bar
+      // hung open in the viewer's room after the huddle had emptied.
+      applyHuddleVisibility(); // LC-493
       return;
     }
     empty.classList.add('hidden');
