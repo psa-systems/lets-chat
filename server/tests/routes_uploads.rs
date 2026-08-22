@@ -33,11 +33,18 @@ fn tiny_png() -> &'static [u8] {
 const TINY_ZIP: &[u8] = b"PK\x03\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
 
 /// A 500x500 PNG, big enough that the 360px preview is meaningfully smaller
-/// than the stored original. The exact colours do not matter; the pipeline
-/// just needs something it can decode and re-encode.
-fn medium_png() -> Vec<u8> {
+/// than the stored original. `tag` recolours the image so different callers get
+/// different bytes: uploads are content-addressed, so two tests using the SAME
+/// image share one on-disk `{sha}_preview.png`. `dedup_upload_heals_missing_preview_on_disk`
+/// deletes that file mid-test, which - when it runs concurrently with a test
+/// reading the same sha's preview - left the reader served the original (the
+/// handler's missing-preview fallback), so preview and original came back
+/// byte-identical. A distinct `tag` per test keeps their previews on separate
+/// paths. The exact colours do not matter; the pipeline just needs something it
+/// can decode and re-encode.
+fn medium_png(tag: u8) -> Vec<u8> {
     use image::ImageEncoder;
-    let img = image::RgbaImage::from_pixel(500, 500, image::Rgba([100, 200, 50, 255]));
+    let img = image::RgbaImage::from_pixel(500, 500, image::Rgba([100, 200, tag, 255]));
     let mut buf = Vec::new();
     image::codecs::png::PngEncoder::new(&mut buf)
         .write_image(&img, 500, 500, image::ExtendedColorType::Rgba8)
@@ -380,7 +387,7 @@ async fn other_user_cannot_fetch_orphan_upload() {
 #[tokio::test]
 async fn preview_query_returns_smaller_bytes_than_original() {
     let (app, sess, _uid) = app_with_user("eve").await;
-    let png = medium_png();
+    let png = medium_png(50);
     let (status, body) = post_upload(app.clone(), &sess, "mid.png", &png).await;
     assert_eq!(status, StatusCode::OK, "body: {body}");
     let v: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -423,7 +430,7 @@ async fn preview_query_returns_smaller_bytes_than_original() {
 #[tokio::test]
 async fn dedup_upload_heals_missing_preview_on_disk() {
     let (app, sess_a, _id_a, sess_b, _id_b) = app_with_two_users().await;
-    let png = medium_png();
+    let png = medium_png(150);
 
     // First upload: writes original + preview. Verify preview is on disk.
     let (status, _body) = post_upload(app.clone(), &sess_a, "pic.png", &png).await;
