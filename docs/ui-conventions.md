@@ -59,6 +59,18 @@ The template half of the same rule lives in `ci-build/check-ui-conventions.nu` (
 
 One surface is deliberately outside the token layer: `server/assets/offline.html`, the service worker's navigation fallback. It is precached and served with the network down, so it can neither link `main.css` nor run the layout's bootstrap. It therefore carries its own copy of the six colors it needs and its own `lc-mode` resolver, mirroring `server/templates/base.html`. Keep the copied values in step with `main.css` when the light or dark ramp moves; the gate below only checks that the page still resolves a mode, not that the hexes still match (LC-748).
 
+## Action buttons (LC-743, LC-755)
+
+A control that performs an action is `class="btn <variant>"`. The variants are `btn-primary`, `btn-secondary`, `btn-ghost` and `btn-danger` (`server/assets/tailwind.css`) plus `btn-danger-outline` and `btn-warning-outline` (`server/assets/main.css`); `btn-sm` is the compact size. `.btn` owns the geometry (`inline-flex`, `rounded-lg`, padding, `text-sm`, `font-medium`, `transition-colors`, the `disabled:` pair) and the variant owns the color, so a converted control carries neither of those as its own utilities. Only a genuinely positional or shape utility rides alongside: `self-end`, `w-full`, `ml-auto`, `absolute`, `rounded-full` on the floating jump pills, `rounded-none` on the full-bleed sticky refresh bars.
+
+Three shapes re-derive that look inline instead, and each is closed by a gate below:
+
+- A `<button>` styled as a link: `hover:underline` plus a color, with no button chrome. It is indistinguishable from navigation while performing a POST (LC-743).
+- A hand-rolled copy of the `.btn-danger-outline` declaration, `text-danger border border-danger-border hover:bg-danger-surface`, which is character for character what the class expands to (LC-743).
+- A hand-rolled primary fill: `bg-accent` and `text-accent-content` in the same class list, which is what `.btn-primary` expands to. 28 controls across 26 templates carried their own copy of it until LC-755.
+
+An accent utility behind a state prefix is not the third shape and stays as it is: `hover:bg-accent` on the accent-outline ack pill (`partials/ack_bar.html`, `ws/ack_update.html`), `focus:bg-accent` on the `base.html` skip link and `aria-pressed:bg-accent` on the sidebar unread-only toggle all paint a state, not the resting fill.
+
 ## Page top bars (LC-742)
 
 Every page-level top bar is `<header class="lc-header">` (`server/assets/main.css`). The class fixes the bar's height floor (`min-height: 3.5rem`), padding (`0.875rem 1.25rem`) and bottom border in one place, and its 20px gutter is what lines the bar's content up with the `px-5` message timeline below it. Hand-rolling the bar with utilities is what gave the app four different top-bar heights that jumped as the user navigated; `server/tests/lc742_page_header_shape.rs` now fails if a `<header>` re-creates the skeleton or a converted bar loses the class. The admin console's `.lc-admin-header` keeps the same height floor and padding.
@@ -330,6 +342,7 @@ Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded 
 | No palette literals in templates | `server/templates/**/*.html` | a line (or the line above it) carrying an `lc-allow-palette` comment naming why, for the deliberately-dark call stage |
 | No fake link buttons | `<button ... hover:underline>` in templates | none |
 | No open-coded danger outline | the literal `.btn-danger-outline` expansion | none |
+| No open-coded primary fill | an unprefixed `bg-accent` + `text-accent-content` pair in a `<button>` / `<a>` / `<label>` opening tag that carries no `btn-primary` | a `hover:` / `focus:` / `aria-pressed:` accent, which paints a state rather than the resting fill |
 | No untokenized borders | a `border` / `border-t` / `divide-y` class attribute with no `border-`/`divide-` color | none; a numbered palette color counts as named here and is the palette rule's to reject |
 | No superseded component classes | the class names LC-744 deleted, over the templates and both stylesheets | none |
 | Page width from a helper | `mx-auto` next to a `max-w-*` in a template | `landing.html`, a marketing page with a wider grid |

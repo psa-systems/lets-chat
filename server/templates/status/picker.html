@@ -82,7 +82,7 @@
     </p>
     {% endif %}
     <div class="flex gap-2">
-      <button type="submit" class="rounded bg-accent px-3 py-1 text-xs text-accent-content hover:bg-accent-hover">{{ "action-save"|t }}</button>
+      <button type="submit" class="btn btn-sm btn-primary">{{ "action-save"|t }}</button>
       <button type="button" hx-get="/status/cancel" hx-target="#status-picker" hx-swap="innerHTML" class="text-xs text-content-muted hover:text-content">{{ "reminders-close"|t }}</button>
     </div>
   </form>
