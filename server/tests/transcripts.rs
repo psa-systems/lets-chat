@@ -1803,10 +1803,16 @@ impl lets_chat::llm::LlmClient for CorrectingMock {
     }
 }
 
-/// The live transcript shows AI-corrected text while the raw, uncorrected
-/// recognition is persisted separately and stays retrievable (page + exports).
+/// Live captions are the raw speech recognition, verbatim, even when an LLM is
+/// configured. An earlier build ran each recognized line through a per-segment
+/// LLM pass before display (LC-629); on a self-hosted model that surfaced the
+/// model's reply to the line instead of the words and added its latency to every
+/// caption, so the live path no longer consults the LLM at all. This guards
+/// against reintroducing it: a "correcting" LLM is configured, yet the stored and
+/// displayed caption is the exact recognized text. The LLM is for the post-call
+/// summary / brief only.
 #[tokio::test]
-async fn live_transcript_is_ai_corrected_and_raw_is_retained() {
+async fn live_captions_are_verbatim_even_with_llm_configured() {
     let mock: Arc<dyn lets_chat::llm::LlmClient> = Arc::new(CorrectingMock::default());
     let s = setup_with_clients(None, Some(mock)).await;
 
@@ -1819,103 +1825,37 @@ async fn live_transcript_is_ai_corrected_and_raw_is_retained() {
     .await;
     let tid = parse_id(&body);
 
-    // A sample of misrecognized phrases; the correction pass fixes each.
-    for phrase in ["i program in java script", "we use post gres"] {
-        let (st, _) = post(
-            &s.app,
-            &s.a_session,
-            &format!("/call/transcript/{tid}/segment"),
-            Some(&format!("text={}", phrase.replace(' ', "+"))),
-        )
-        .await;
-        assert_eq!(st, StatusCode::OK);
-    }
-
-    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
-    assert_eq!(segs.len(), 2);
-    // Display text is corrected...
-    assert_eq!(segs[0].text, "I program in JavaScript");
-    assert_eq!(segs[1].text, "we use Postgres");
-    // ...and the raw recognition is retained, unchanged, in a separate column.
-    assert_eq!(segs[0].raw(), "i program in java script");
-    assert_eq!(segs[1].raw(), "we use post gres");
-    assert_eq!(
-        segs[0].raw_text.as_deref(),
-        Some("i program in java script")
-    );
-
-    // The saved page shows the corrected text, not the raw mis-hearing.
-    let (st, page) = get(&s.app, &s.a_session, &format!("/transcripts/{tid}")).await;
-    assert_eq!(st, StatusCode::OK);
-    assert!(
-        page.contains("I program in JavaScript"),
-        "page shows corrected text: {page}"
-    );
-    assert!(
-        !page.contains("java script"),
-        "page must not show the raw mis-hearing"
-    );
-
-    // Default export is corrected; the `raw` export preserves the recognition.
-    let (_, txt) = get(
-        &s.app,
-        &s.a_session,
-        &format!("/transcripts/{tid}/export?format=txt"),
-    )
-    .await;
-    assert!(
-        txt.contains("I program in JavaScript"),
-        "export body: {txt}"
-    );
-    assert!(!txt.contains("java script"));
-    let (_, raw_txt) = get(
-        &s.app,
-        &s.a_session,
-        &format!("/transcripts/{tid}/export?format=txt&raw=1"),
-    )
-    .await;
-    assert!(
-        raw_txt.contains("i program in java script"),
-        "raw export preserves the uncorrected recognition: {raw_txt}"
-    );
-    assert!(!raw_txt.contains("JavaScript"));
-}
-
-/// A line the correction leaves unchanged stores no separate raw row: the
-/// display text IS the raw, so `raw_text` stays NULL and `raw()` returns it.
-#[tokio::test]
-async fn unchanged_line_stores_no_separate_raw() {
-    let mock: Arc<dyn lets_chat::llm::LlmClient> = Arc::new(CorrectingMock::default());
-    let s = setup_with_clients(None, Some(mock)).await;
-    let (_, body) = post(
-        &s.app,
-        &s.a_session,
-        &format!("/call/{}/transcript/start", s.dm_room),
-        None,
-    )
-    .await;
-    let tid = parse_id(&body);
-
+    // A phrase the mock WOULD rewrite if the live path fed it to the LLM.
     let (st, _) = post(
         &s.app,
         &s.a_session,
         &format!("/call/transcript/{tid}/segment"),
-        Some("text=already+correct"),
+        Some("text=i+program+in+java+script"),
     )
     .await;
     assert_eq!(st, StatusCode::OK);
 
     let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
-    assert_eq!(segs[0].text, "already correct");
-    assert_eq!(
-        segs[0].raw_text, None,
-        "an unchanged line stores no separate raw"
+    assert_eq!(segs.len(), 1);
+    // Stored verbatim: the LLM never touched the live caption.
+    assert_eq!(segs[0].text, "i program in java script");
+    assert_eq!(segs[0].raw_text, None, "no separate raw is stored");
+
+    // The saved page shows the verbatim recognition, not an LLM rewrite.
+    let (st, page) = get(&s.app, &s.a_session, &format!("/transcripts/{tid}")).await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        page.contains("i program in java script"),
+        "page shows the verbatim caption: {page}"
     );
-    assert_eq!(segs[0].raw(), "already correct");
+    assert!(
+        !page.contains("JavaScript"),
+        "the LLM must not rewrite live captions"
+    );
 }
 
-/// With no LLM configured the display text is the raw recognition and no
-/// separate raw is stored - correction is strictly opt-in.
+/// With no LLM configured the display text is the raw recognition, stored
+/// verbatim with no separate raw column.
 #[tokio::test]
 async fn without_llm_display_equals_raw() {
     let s = setup().await; // llm_client = None
@@ -1937,36 +1877,6 @@ async fn without_llm_display_equals_raw() {
     let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
     assert_eq!(segs[0].text, "verbatim text");
     assert_eq!(segs[0].raw_text, None);
-}
-
-/// The correction context is a bounded rolling window (the last few lines,
-/// oldest-first), never the whole session.
-#[tokio::test]
-async fn correction_context_is_a_bounded_rolling_window() {
-    let s = setup().await;
-    let (_, body) = post(
-        &s.app,
-        &s.a_session,
-        &format!("/call/{}/transcript/start", s.dm_room),
-        None,
-    )
-    .await;
-    let tid = parse_id(&body);
-    for i in 0..10 {
-        db::transcripts::append_segment(&s.chat, tid, &s.b_id, &format!("line {i}"), None, 0)
-            .await
-            .unwrap();
-    }
-    let ctx = db::transcripts::recent_segment_texts(&s.chat, tid, 6)
-        .await
-        .unwrap();
-    assert_eq!(ctx.len(), 6, "window is bounded to the requested size");
-    assert_eq!(
-        ctx.first().unwrap(),
-        "line 4",
-        "oldest-first, only the tail"
-    );
-    assert_eq!(ctx.last().unwrap(), "line 9", "most recent line last");
 }
 
 // ── LC-662: automatic post-call AI recap ──────────────────────────────────────
