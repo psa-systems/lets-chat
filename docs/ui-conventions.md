@@ -150,6 +150,20 @@ A boolean setting is a checkbox plus a Save button (`.lc-toggle`), not a one-cli
 
 Either way the control announces as a switch, because the two look identical and a setting must not be described differently depending on which page it is on (LC-747). The partial's button carries `role="switch"` with a server-set `aria-checked`; a `.lc-toggle` checkbox carries `role="switch"` on the `<input>` itself, where the native checked state supplies `aria-checked`. Never add a literal `aria-checked` to a checkbox: it goes stale the moment the user clicks. `ci-build/check-boolean-settings.nu` (wired into `just check` and the Check workflow) rejects a `.lc-toggle` checkbox with no `role="switch"`, and rejects `.lc-switch` markup anywhere but the partial.
 
+The `.lc-toggle` row itself is written once, in `partials/toggle_row.html` (LC-751). It renders the label, the checkbox with its `role="switch"`, the track and the title, plus the description when `desc` is non-empty. It has no `<form>` of its own: the caller owns the form and the Save button. Bind these names with `{% let %}` and include it:
+
+```jinja
+{% let name = "read_receipts_enabled" %}
+{% let checked = user.read_receipts_enabled %}
+{% let disabled = false %}
+{% let title = "settings-pref-read-receipts"|t %}
+{% let desc = "" %}
+{% include "partials/toggle_row.html" %}
+```
+
+- Where the description depends on a condition, bind `desc` inside the `{% if %}` branch and include the partial in each branch: askama scopes a `{% let %}` to its block, so a binding made inside the branch is not visible after it (the three email rows in `settings/page.html` are the example).
+- A description carrying inline markup cannot come through the binding, because askama escapes it, and a `|safe` binding would put translated content on an unescaped path. Those rows stay hand-written and are named, with their reason, in `EXEMPT_ROWS` in `ci-build/check-boolean-settings.nu`: the push row in `settings/page.html` (a `<code>` naming `LETS_CHAT_SECRET_KEY`) and the link-filter row in `admin/anti_spam.html` (a link to `/admin/link-filter`). The same check rejects `.lc-toggle` markup spelled out in any other template, and fails if an exempt file grows a second hand-written row.
+
 A checkbox that is one option among several (an API-token scope list, a webhook event list, the LLM audience) is not a switch and correctly stays a plain checkbox; it lives inside a `<fieldset>` with a `<legend>` naming the group, and carries no `.lc-toggle` class.
 
 ## Required fields (LC-750)
