@@ -26,7 +26,7 @@
             <button hx-delete="/reminders/{{ r.id }}"
                     hx-target="#reminder-row-{{ r.id }}"
                     hx-swap="delete"
-                    class="text-danger hover:underline">{{ "reminders-cancel"|t }}</button>
+                    class="btn btn-sm btn-danger-outline">{{ "reminders-cancel"|t }}</button>
           </div>
           <div class="mt-1 text-sm text-content">{{ r.snippet }}</div>
         </li>
@@ -49,7 +49,7 @@
             <button hx-delete="/reminders/{{ r.id }}"
                     hx-target="#reminder-row-{{ r.id }}"
                     hx-swap="delete"
-                    class="text-content-muted hover:underline">{{ "reminders-dismiss"|t }}</button>
+                    class="btn btn-sm btn-ghost">{{ "reminders-dismiss"|t }}</button>
           </div>
           <div class="mt-1 text-sm text-content">{{ r.snippet }}</div>
         </li>

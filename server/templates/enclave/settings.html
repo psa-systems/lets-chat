@@ -301,7 +301,7 @@
                  posts on never fires when the user picks "Cancel". #}
               <form method="post" action="/enclave/{{ enclave.id }}/emojis/{{ e.id }}/delete" class="flex flex-wrap items-center gap-2"
                     hx-post="/enclave/{{ enclave.id }}/emojis/{{ e.id }}/delete" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
-                <button type="submit" class="inline-flex items-center gap-1 text-xs text-danger hover:underline"
+                <button type="submit" class="btn btn-sm btn-danger-outline"
                         onclick="return confirm('{{ "enclave-settings-emoji-delete-confirm-prefix"|t }}{{ e.shortcode }}{{ "enclave-settings-emoji-delete-confirm-suffix"|t }}')"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "enclave-settings-emoji-delete"|t }}</span></button>
                 <span class="lc-set-status" role="status" aria-live="polite"></span>
               </form>
@@ -359,7 +359,7 @@
                         hx-delete="/enclave/{{ enclave.id }}/groups/{{ g.id }}"
                         hx-confirm="{{ "enclave-settings-group-delete-confirm-prefix"|t }}{{ g.name }}{{ "enclave-settings-group-delete-confirm-suffix"|t }}"
                         hx-on::after-request="window.location.reload()"
-                        class="text-xs text-danger hover:underline">{{ "enclave-settings-group-delete"|t }}</button>
+                        class="btn btn-sm btn-danger-outline">{{ "enclave-settings-group-delete"|t }}</button>
               </div>
               {% if !g.member_labels.is_empty() %}
               <div class="text-xs text-content-muted flex flex-wrap gap-1">
