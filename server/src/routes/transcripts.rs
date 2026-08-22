@@ -161,53 +161,16 @@ async fn broadcast_to_members(
     }
 }
 
-/// LC-629: how many recent (already-corrected) lines feed the correction pass
-/// as context. Bounds token cost per the ticket's rolling-window requirement -
-/// correction sees the last few lines, never the whole session.
-const CORRECTION_CONTEXT_LINES: i64 = 6;
-
-/// LC-629: best-effort AI correction of one freshly recognized line against the
-/// recent conversation. Returns the corrected DISPLAY text, or the raw text
-/// unchanged when no LLM is configured or the call fails - a live caption must
-/// never be dropped or blocked because correction was unavailable, and the raw
-/// recognition is preserved by the caller regardless.
-async fn correct_line(state: &AppState, transcript_id: i64, raw: &str) -> String {
-    let Some(llm) = state.llm_client.clone() else {
-        return raw.to_string();
-    };
-    // LC-679: kill switch silences live transcript correction too (flag-only;
-    // per-segment system path with no user). Off -> raw recognition passes through.
-    if !super::ai_gate::flag_on(state).await {
-        return raw.to_string();
-    }
-    let context =
-        db::transcripts::recent_segment_texts(&state.chat, transcript_id, CORRECTION_CONTEXT_LINES)
-            .await
-            .unwrap_or_default();
-    match llm.correct(&context, raw).await {
-        Ok(corrected) => {
-            let corrected = corrected.trim();
-            if corrected.is_empty() {
-                raw.to_string()
-            } else {
-                corrected.to_string()
-            }
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, "transcript correction failed; using raw recognition");
-            raw.to_string()
-        }
-    }
-}
-
 /// Store one final speech result (trimmed, length-capped in the db layer) and
 /// fan it out as an attributed live caption. Shared by the browser-text path
 /// (`segment`) and the server-STT path (`audio`). A blank result is a no-op.
 ///
-/// LC-629: the recognized text is first passed through a best-effort correction
-/// pass against a rolling window of recent lines; the CORRECTED text is what is
-/// displayed and broadcast, while the original recognition is preserved as the
-/// segment's `raw_text` (NULL when correction was off, failed, or was a no-op).
+/// Live captions are the raw speech recognition, verbatim. An earlier build
+/// (LC-629) ran every line through a per-segment LLM "correction" pass before
+/// display, but on a self-hosted model that returned the model's reply to the
+/// line rather than a corrected transcript and added its latency to every
+/// caption. The LLM now only powers the post-call summary / brief (batch), which
+/// is what the transcript AI was for; live capture stays verbatim.
 async fn record_and_broadcast(
     state: &AppState,
     room: &Room,
@@ -220,15 +183,12 @@ async fn record_and_broadcast(
     if trimmed.is_empty() {
         return Ok(());
     }
-    let corrected = correct_line(state, transcript_id, trimmed).await;
-    // Keep the raw recognition only when correction actually changed it.
-    let raw_text = (corrected != trimmed).then_some(trimmed);
     db::transcripts::append_segment(
         &state.chat,
         transcript_id,
         &user.id,
-        &corrected,
-        raw_text,
+        trimmed,
+        None,
         duration_ms,
     )
     .await?;
@@ -239,7 +199,7 @@ async fn record_and_broadcast(
         transcript_id,
         speaker_id: user.id.clone(),
         speaker_name: speaker.clone(),
-        text: corrected.clone(),
+        text: trimmed.to_string(),
     })
     .await;
     Ok(())
