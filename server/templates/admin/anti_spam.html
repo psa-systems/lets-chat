@@ -29,6 +29,9 @@
         <h3 class="lc-set-card-title">{{ "admin-antispam-defenses-heading"|t }}</h3>
       </div>
       <div class="lc-set-form">
+        {# The link-filter row keeps its hand-written block: its note links to
+           /admin/link-filter, and askama escapes an <a> passed as a `desc`
+           binding to partials/toggle_row.html. #}
         <label class="lc-toggle">
           <input type="checkbox" role="switch" name="link_filter_enabled" value="1" {% if link_filter_enabled %}checked{% endif %}>
           <span class="lc-toggle-track" aria-hidden="true"></span>
@@ -37,14 +40,12 @@
             <span class="lc-toggle-desc">{{ "admin-antispam-link-filter-note-1"|t }} <a href="/admin/link-filter" class="text-accent hover:underline">/admin/link-filter</a>. {{ "admin-antispam-link-filter-note-2"|t }}</span>
           </span>
         </label>
-        <label class="lc-toggle">
-          <input type="checkbox" role="switch" name="honeypot_enabled" value="1" {% if honeypot_enabled %}checked{% endif %}>
-          <span class="lc-toggle-track" aria-hidden="true"></span>
-          <span class="lc-toggle-text">
-            <span class="lc-toggle-title">{{ "admin-antispam-honeypot"|t }}</span>
-            <span class="lc-toggle-desc">{{ "admin-antispam-honeypot-note"|t }}</span>
-          </span>
-        </label>
+        {% let name = "honeypot_enabled" %}
+        {% let checked = honeypot_enabled %}
+        {% let disabled = false %}
+        {% let title = "admin-antispam-honeypot"|t %}
+        {% let desc = "admin-antispam-honeypot-note"|t %}
+        {% include "partials/toggle_row.html" %}
       </div>
       <div class="lc-set-actions mt-4">
         <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-antispam-save"|t }}</span></button>

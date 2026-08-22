@@ -1,0 +1,18 @@
+{# LC-751: the one `.lc-toggle` row. Every boolean setting that batches into a
+   form with its own Save button renders through this partial, so the track, the
+   text spans and the `role="switch"` that makes the control announce as a
+   switch cannot be half-copied by a new call site. No `<form>` here: the caller
+   owns the form and the Save button. The other shape is
+   partials/settings_toggle.html, a one-click switch that posts immediately and
+   re-renders itself from the response.
+
+   Callers bind these with `{% let %}` before the include: `name`, `checked`,
+   `disabled`, `title`, `desc`. `desc` is `""` on a row with no description.
+   A description carrying inline markup cannot come through a binding (askama
+   escapes it), so those rows stay hand-written; ci-build/check-boolean-settings.nu
+   names the exemptions. #}
+<label class="lc-toggle">
+  <input type="checkbox" role="switch" name="{{ name }}" value="1"{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}>
+  <span class="lc-toggle-track" aria-hidden="true"></span>
+  <span class="lc-toggle-text"><span class="lc-toggle-title">{{ title }}</span>{% if !desc.is_empty() %}<span class="lc-toggle-desc">{{ desc }}</span>{% endif %}</span>
+</label>

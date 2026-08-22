@@ -22,14 +22,12 @@
     {% endif %}
     <form class="lc-set-form" method="post" action="/admin/maintenance"
           hx-post="/admin/maintenance" hx-target="#st-maint" hx-swap="innerHTML" hx-disabled-elt="this">
-      <label class="lc-toggle">
-        <input type="checkbox" role="switch" name="enabled" value="1" {% if maintenance_enabled %}checked{% endif %}>
-        <span class="lc-toggle-track" aria-hidden="true"></span>
-        <span class="lc-toggle-text">
-          <span class="lc-toggle-title">{{ "admin-settings-maintenance-enable"|t }}</span>
-          <span class="lc-toggle-desc">{{ "admin-settings-maintenance-enable-note"|t }}</span>
-        </span>
-      </label>
+      {% let name = "enabled" %}
+      {% let checked = maintenance_enabled %}
+      {% let disabled = false %}
+      {% let title = "admin-settings-maintenance-enable"|t %}
+      {% let desc = "admin-settings-maintenance-enable-note"|t %}
+      {% include "partials/toggle_row.html" %}
       <div class="lc-set-field">
         <label class="lc-set-label" for="maintenance_message">{{ "admin-settings-maintenance-message-label"|t }}</label>
         <textarea id="maintenance_message" name="message" rows="3" class="input"
@@ -55,14 +53,12 @@
     <p class="lc-set-card-desc text-sm text-content-muted mb-3">{{ "admin-settings-llm-note"|t }}</p>
     <form class="lc-set-form" method="post" action="/admin/settings/llm"
           hx-post="/admin/settings/llm" hx-target="#st-llm" hx-swap="innerHTML" hx-disabled-elt="this">
-      <label class="lc-toggle">
-        <input type="checkbox" role="switch" name="enabled" value="1" {% if llm_flag_enabled %}checked{% endif %}>
-        <span class="lc-toggle-track" aria-hidden="true"></span>
-        <span class="lc-toggle-text">
-          <span class="lc-toggle-title">{{ "admin-settings-llm-enable"|t }}</span>
-          <span class="lc-toggle-desc">{{ "admin-settings-llm-enable-note"|t }}</span>
-        </span>
-      </label>
+      {% let name = "enabled" %}
+      {% let checked = llm_flag_enabled %}
+      {% let disabled = false %}
+      {% let title = "admin-settings-llm-enable"|t %}
+      {% let desc = "admin-settings-llm-enable-note"|t %}
+      {% include "partials/toggle_row.html" %}
       {# LC-702: who may use AI once the flag is on. Default "everyone"; "staff"
          narrows to site admins, enclave owners/admins and room moderators. #}
       <fieldset class="lc-set-field">
@@ -171,11 +167,12 @@
         <input id="imap_port" name="imap_port" type="text" value="{{ imap_port }}" class="input">
         <p class="lc-set-help">{{ "admin-settings-imap-port-note"|t }}</p>
       </div>
-      <label class="lc-toggle">
-        <input id="imap_tls" name="imap_tls" type="checkbox" role="switch" value="1" {% if imap_tls %}checked{% endif %}>
-        <span class="lc-toggle-track" aria-hidden="true"></span>
-        <span class="lc-toggle-text"><span class="lc-toggle-title">{{ "admin-settings-imap-use-tls"|t }}</span></span>
-      </label>
+      {% let name = "imap_tls" %}
+      {% let checked = imap_tls %}
+      {% let disabled = false %}
+      {% let title = "admin-settings-imap-use-tls"|t %}
+      {% let desc = "" %}
+      {% include "partials/toggle_row.html" %}
       <div class="lc-set-field lc-set-field--narrow">
         <label class="lc-set-label" for="imap_username">{{ "admin-settings-imap-username"|t }}</label>
         <input id="imap_username" name="imap_username" type="text" value="{{ imap_username }}" class="input">
@@ -200,14 +197,12 @@
         <input id="imap_dead_letter_folder" name="imap_dead_letter_folder" type="text" value="{{ imap_dead_letter_folder }}" placeholder="INBOX/lets-chat-rejected" class="input">
         <p class="lc-set-help">{{ "admin-settings-imap-dead-letter-note-1"|t }} <code>\Seen</code> {{ "admin-settings-imap-dead-letter-note-2"|t }}</p>
       </div>
-      <label class="lc-toggle">
-        <input id="imap_enabled" name="imap_enabled" type="checkbox" role="switch" value="1" {% if imap_enabled %}checked{% endif %}>
-        <span class="lc-toggle-track" aria-hidden="true"></span>
-        <span class="lc-toggle-text">
-          <span class="lc-toggle-title">{{ "admin-settings-imap-enable"|t }}</span>
-          <span class="lc-toggle-desc">{{ "admin-settings-imap-enable-note"|t }}</span>
-        </span>
-      </label>
+      {% let name = "imap_enabled" %}
+      {% let checked = imap_enabled %}
+      {% let disabled = false %}
+      {% let title = "admin-settings-imap-enable"|t %}
+      {% let desc = "admin-settings-imap-enable-note"|t %}
+      {% include "partials/toggle_row.html" %}
       <div class="lc-set-actions">
         <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-settings-imap-save"|t }}</span></button>
         <span id="st-imap" class="lc-set-status" role="status" aria-live="polite"></span>
@@ -306,14 +301,12 @@
     </div>
     <form class="lc-set-form" method="post" action="/admin/settings/email-digest-default"
           hx-post="/admin/settings/email-digest-default" hx-target="#st-defaults" hx-swap="innerHTML" hx-disabled-elt="this">
-      <label class="lc-toggle">
-        <input type="checkbox" role="switch" name="default_notify_email_digest" value="1" {% if default_notify_email_digest %}checked{% endif %}>
-        <span class="lc-toggle-track" aria-hidden="true"></span>
-        <span class="lc-toggle-text">
-          <span class="lc-toggle-title">{{ "admin-settings-defaults-digest"|t }}</span>
-          <span class="lc-toggle-desc">{{ "admin-settings-defaults-digest-note"|t }}</span>
-        </span>
-      </label>
+      {% let name = "default_notify_email_digest" %}
+      {% let checked = default_notify_email_digest %}
+      {% let disabled = false %}
+      {% let title = "admin-settings-defaults-digest"|t %}
+      {% let desc = "admin-settings-defaults-digest-note"|t %}
+      {% include "partials/toggle_row.html" %}
       <div class="lc-set-actions">
         <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-settings-defaults-save"|t }}</span></button>
         <span id="st-defaults" class="lc-set-status" role="status" aria-live="polite"></span>
