@@ -5,7 +5,7 @@
 {% block main %}
 <header class="lc-header">
   <div class="min-w-0">
-    <h1 class="font-semibold truncate">{{ enclave.name }} <span class="text-content-subtle font-normal">{{ "enclave-settings-title"|t }}</span></h1>
+    <h1 class="lc-h1 truncate">{{ enclave.name }} <span class="text-content-subtle font-normal">{{ "enclave-settings-title"|t }}</span></h1>
   </div>
   <a href="/enclave/{{ enclave.id }}" class="btn btn-secondary btn-sm flex-none">{{ "enclave-settings-back"|t }}</a>
 </header>
@@ -90,13 +90,12 @@
           </div>
           <form method="post" action="/enclave/{{ enclave.id }}/visibility" class="lc-set-form"
                 hx-post="/enclave/{{ enclave.id }}/visibility" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
-            <label class="lc-toggle">
-              <input type="checkbox" role="switch" name="is_public" value="1" {% if enclave.is_public %}checked{% endif %}>
-              <span class="lc-toggle-track" aria-hidden="true"></span>
-              <span class="lc-toggle-text">
-                <span class="lc-toggle-title">{{ "enclave-settings-visibility-public-label"|t }}</span>
-              </span>
-            </label>
+            {% let name = "is_public" %}
+            {% let checked = enclave.is_public %}
+            {% let disabled = false %}
+            {% let title = "enclave-settings-visibility-public-label"|t %}
+            {% let desc = "" %}
+            {% include "partials/toggle_row.html" %}
             <div class="lc-set-actions">
               <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "enclave-settings-save"|t }}</span></button>
               <span class="lc-set-status" role="status" aria-live="polite"></span>
@@ -138,6 +137,7 @@
             <input
               name="q"
               placeholder="{{ "enclave-invite-placeholder"|t }}"
+              aria-label="{{ "enclave-invite-placeholder"|t }}"
               hx-get="/enclave/{{ enclave.id }}/invite/search"
               hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
               hx-target="#enclave-invite-results"
@@ -160,7 +160,7 @@
                 <option value="{{ b.id }}">{{ b.label }}</option>
                 {% endfor %}
               </select>
-              <button type="submit" class="shrink-0 inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-content"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "enclave-add-bot-button"|t }}</span></button>
+              <button type="submit" class="btn btn-primary shrink-0"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "enclave-add-bot-button"|t }}</span></button>
               <span class="lc-set-status" role="status" aria-live="polite"></span>
             </form>
           </div>
@@ -202,14 +202,12 @@
           </div>
           <form method="post" action="/enclave/{{ enclave.id }}/coyote-mode" class="lc-set-form"
                 hx-post="/enclave/{{ enclave.id }}/coyote-mode" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
-            <label class="lc-toggle">
-              <input type="checkbox" role="switch" name="enabled" value="1" {% if enclave.coyote_mode %}checked{% endif %}>
-              <span class="lc-toggle-track" aria-hidden="true"></span>
-              <span class="lc-toggle-text">
-                <span class="lc-toggle-title">{{ "enclave-settings-coyote-enable"|t }}</span>
-                <span class="lc-toggle-desc">{{ "enclave-settings-coyote-on-text"|t }}</span>
-              </span>
-            </label>
+            {% let name = "enabled" %}
+            {% let checked = enclave.coyote_mode %}
+            {% let disabled = false %}
+            {% let title = "enclave-settings-coyote-enable"|t %}
+            {% let desc = "enclave-settings-coyote-on-text"|t %}
+            {% include "partials/toggle_row.html" %}
             <div class="lc-set-actions">
               <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "enclave-settings-save"|t }}</span></button>
               <span class="lc-set-status" role="status" aria-live="polite"></span>
@@ -225,14 +223,12 @@
           </div>
           <form method="post" action="/enclave/{{ enclave.id }}/shame-tags" class="lc-set-form"
                 hx-post="/enclave/{{ enclave.id }}/shame-tags" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
-            <label class="lc-toggle">
-              <input type="checkbox" role="switch" name="enabled" value="1" {% if enclave.shame_tags_enabled %}checked{% endif %}>
-              <span class="lc-toggle-track" aria-hidden="true"></span>
-              <span class="lc-toggle-text">
-                <span class="lc-toggle-title">{{ "enclave-settings-shame-enable"|t }}</span>
-                <span class="lc-toggle-desc">{{ "enclave-settings-shame-on-text"|t }}</span>
-              </span>
-            </label>
+            {% let name = "enabled" %}
+            {% let checked = enclave.shame_tags_enabled %}
+            {% let disabled = false %}
+            {% let title = "enclave-settings-shame-enable"|t %}
+            {% let desc = "enclave-settings-shame-on-text"|t %}
+            {% include "partials/toggle_row.html" %}
             <div class="lc-set-actions">
               <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "enclave-settings-save"|t }}</span></button>
               <span class="lc-set-status" role="status" aria-live="polite"></span>
@@ -255,7 +251,7 @@
             <li class="flex items-center justify-between gap-2 py-2 first:pt-0">
               <div class="min-w-0">
                 <div class="text-sm truncate" title="{{ b.user_id }}">{{ b.label }}</div>
-                <div class="text-xs text-content-muted">{% if let Some(r) = b.reason %}{{ r }} - {% endif %}{{ b.banned_at }}</div>
+                <div class="text-xs text-content-muted">{% if let Some(r) = b.reason %}{{ r }} - {% endif %}<time datetime="{{ b.banned_at|iso }}" title="{{ b.banned_at }}">{{ b.banned_at }}</time></div>
               </div>
               <form method="post" action="/enclave/{{ enclave.id }}/bans/{{ b.user_id }}/unban" class="flex flex-wrap items-center gap-2"
                     hx-post="/enclave/{{ enclave.id }}/bans/{{ b.user_id }}/unban" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
@@ -281,14 +277,12 @@
           </div>
           <form method="post" action="/enclave/{{ enclave.id }}/share-emojis" class="lc-set-form"
                 hx-post="/enclave/{{ enclave.id }}/share-emojis" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
-            <label class="lc-toggle">
-              <input type="checkbox" role="switch" name="share" value="1" {% if enclave.share_emojis_globally %}checked{% endif %}>
-              <span class="lc-toggle-track" aria-hidden="true"></span>
-              <span class="lc-toggle-text">
-                <span class="lc-toggle-title">{{ "enclave-settings-emojis-shared-label"|t }}</span>
-                <span class="lc-toggle-desc">{{ "enclave-settings-emojis-shared-text"|t }}</span>
-              </span>
-            </label>
+            {% let name = "share" %}
+            {% let checked = enclave.share_emojis_globally %}
+            {% let disabled = false %}
+            {% let title = "enclave-settings-emojis-shared-label"|t %}
+            {% let desc = "enclave-settings-emojis-shared-text"|t %}
+            {% include "partials/toggle_row.html" %}
             <div class="lc-set-actions">
               <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "enclave-settings-save"|t }}</span></button>
               <span class="lc-set-status" role="status" aria-live="polite"></span>
@@ -307,7 +301,7 @@
                  posts on never fires when the user picks "Cancel". #}
               <form method="post" action="/enclave/{{ enclave.id }}/emojis/{{ e.id }}/delete" class="flex flex-wrap items-center gap-2"
                     hx-post="/enclave/{{ enclave.id }}/emojis/{{ e.id }}/delete" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
-                <button type="submit" class="inline-flex items-center gap-1 text-xs text-danger hover:underline"
+                <button type="submit" class="btn btn-sm btn-danger-outline"
                         onclick="return confirm('{{ "enclave-settings-emoji-delete-confirm-prefix"|t }}{{ e.shortcode }}{{ "enclave-settings-emoji-delete-confirm-suffix"|t }}')"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "enclave-settings-emoji-delete"|t }}</span></button>
                 <span class="lc-set-status" role="status" aria-live="polite"></span>
               </form>
@@ -365,7 +359,7 @@
                         hx-delete="/enclave/{{ enclave.id }}/groups/{{ g.id }}"
                         hx-confirm="{{ "enclave-settings-group-delete-confirm-prefix"|t }}{{ g.name }}{{ "enclave-settings-group-delete-confirm-suffix"|t }}"
                         hx-on::after-request="window.location.reload()"
-                        class="text-xs text-danger hover:underline">{{ "enclave-settings-group-delete"|t }}</button>
+                        class="btn btn-sm btn-danger-outline">{{ "enclave-settings-group-delete"|t }}</button>
               </div>
               {% if !g.member_labels.is_empty() %}
               <div class="text-xs text-content-muted flex flex-wrap gap-1">
@@ -377,7 +371,7 @@
               <details class="text-xs">
                 <summary class="cursor-pointer text-content-muted hover:text-content">{{ "enclave-settings-group-add-member"|t }}</summary>
                 <div class="relative mt-2">
-                  <input name="q" placeholder="{{ "enclave-settings-group-search-placeholder"|t }}"
+                  <input name="q" placeholder="{{ "enclave-settings-group-search-placeholder"|t }}" aria-label="{{ "enclave-settings-group-search-placeholder"|t }}"
                     hx-get="/enclave/{{ enclave.id }}/groups/{{ g.id }}/members/search"
                     hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
                     hx-target="#group-{{ g.id }}-add-results" hx-swap="innerHTML"

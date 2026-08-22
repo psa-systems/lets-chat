@@ -1,30 +1,32 @@
 {# LC-440: transcripts list body (rows or empty state). Included by index.html
    and returned standalone for htmx search / filter / bulk-delete swaps. #}
 {% if rows.is_empty() %}
-<div class="lc-tx-empty">
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class="lc-tx-empty-ico">
-    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
-  </svg>
-  <p class="lc-tx-empty-title">
-    {%- if !query.is_empty() -%}{{ "transcript-search-empty"|t }}
-    {%- else if hide_empty -%}{{ "transcript-index-empty-content"|t }}
-    {%- else -%}{{ "transcript-index-empty"|t }}{%- endif -%}
-  </p>
-</div>
+{# LC-744: the shared empty state. This used to be a private duplicate of
+   `.lc-empty` that differed only in its numbers and inlined its own icon. #}
+{% if !query.is_empty() %}
+{% let empty_text_key = "transcript-search-empty" %}
+{% include "partials/empty_state.html" %}
+{% else if hide_empty %}
+{% let empty_text_key = "transcript-index-empty-content" %}
+{% include "partials/empty_state.html" %}
 {% else %}
-<div class="mx-auto max-w-2xl space-y-1.5">
+{% let empty_text_key = "transcript-index-empty" %}
+{% include "partials/empty_state.html" %}
+{% endif %}
+{% else %}
+<div class="lc-page-medium space-y-1.5">
   {% for r in rows %}
   <div data-lc-transcript-row class="lc-tx-row group{% if r.segment_count == 0 %} lc-tx-row--empty{% endif %}">
     {# Stretched link makes the whole row clickable; interactive children (the
        delete button) sit above it via z-index so they don't conflict. #}
-    <a href="/transcripts/{{ r.id }}" class="lc-tx-link" aria-label="{{ r.title }} {{ r.kind_label }} {{ r.started_at }}"></a>
+    <a href="/transcripts/{{ r.id }}" class="lc-tx-link" aria-labelledby="lc-tx-title-{{ r.id }} lc-tx-kind-{{ r.id }} lc-tx-when-{{ r.id }}"></a>
     <div class="lc-tx-main">
       <div class="lc-tx-titleline">
-        <span class="lc-tx-title">{{ r.title }}</span>
-        <span class="lc-tx-badge lc-tx-badge--{% if r.is_dm %}dm{% else %}voice{% endif %}">{{ r.kind_label }}</span>
+        <span id="lc-tx-title-{{ r.id }}" class="lc-tx-title">{{ r.title }}</span>
+        <span id="lc-tx-kind-{{ r.id }}" class="lc-tx-badge lc-tx-badge--{% if r.is_dm %}dm{% else %}voice{% endif %}">{{ r.kind_label }}</span>
         {% if !r.ended %}<span class="lc-tx-live">{{ "transcript-in-progress"|t }}</span>{% endif %}
       </div>
-      <div class="lc-tx-meta tabular-nums">{{ r.started_at }} &middot; {{ r.segment_count }} {{ "transcript-lines"|t }}</div>
+      <div class="lc-tx-meta tabular-nums"><time id="lc-tx-when-{{ r.id }}" data-lc-ts datetime="{{ r.started_at|iso }}" title="{{ r.started_at }}">{{ r.started_at }}</time> &middot; {{ r.segment_count }} {{ "transcript-lines"|t }}</div>
     </div>
     {% if r.can_delete %}
     <button type="button" class="lc-tx-del"

@@ -18,7 +18,7 @@
     {% else %}
     <input type="text" data-lc-forward-filter autocomplete="off"
            placeholder="{{ "room-forward-filter"|t }}" aria-label="{{ "room-forward-filter"|t }}"
-           class="w-full rounded border border-border-strong px-2 py-1 text-sm mb-2">
+           class="input mb-2">
     <div data-lc-forward-list class="max-h-72 overflow-y-auto flex flex-col gap-1">
       {% if !rooms.is_empty() %}
       <div class="text-xs uppercase tracking-wide text-content-muted px-1 pt-1">{{ "room-forward-rooms"|t }}</div>

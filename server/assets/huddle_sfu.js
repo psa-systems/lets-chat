@@ -26,6 +26,31 @@
   // Live session, or null. hooks are voice.js's tile callbacks.
   var session = null;
 
+  // LC-764: opt-in call diagnostics. Set `window.__lcCallDebug = true` in the
+  // console before reproducing to log the local mic track state on both sides of
+  // a mute toggle - the state acceptance criterion one asks to record. Off by
+  // default, so a normal call logs nothing.
+  function dbg() {
+    if (!window.__lcCallDebug || !window.console || !console.log) return;
+    try { console.log.apply(console, ['[lc-call sfu]'].concat([].slice.call(arguments))); } catch (e) {}
+  }
+
+  // Read the published microphone track's real state for diagnostics. Defensive
+  // across LiveKit versions: never throws, returns whatever it can resolve.
+  function micTrackState(lp) {
+    var out = { micEnabled: lp && lp.isMicrophoneEnabled };
+    try {
+      var LK = window.LivekitClient;
+      var pub = LK && LK.Track && lp.getTrackPublication
+        ? lp.getTrackPublication(LK.Track.Source.Microphone)
+        : null;
+      var mst = pub && pub.track && pub.track.mediaStreamTrack;
+      if (pub) out.pubMuted = pub.isMuted;
+      if (mst) { out.readyState = mst.readyState; out.trackMuted = mst.muted; out.trackEnabled = mst.enabled; }
+    } catch (e) { out.err = e && e.message; }
+    return out;
+  }
+
   function loadSdk() {
     if (window.LivekitClient) return Promise.resolve(window.LivekitClient);
     if (sdkPromise) return sdkPromise;
@@ -188,18 +213,28 @@
   async function toggleMute() {
     if (!session) return false;
     var lp = session.room.localParticipant;
-    // `isMicrophoneEnabled` is true when the mic is ON (unmuted). We flip it, so
-    // the post-toggle muted state equals the current enabled state.
-    var muted = lp.isMicrophoneEnabled;
+    // `isMicrophoneEnabled` is true when the mic is ON (unmuted). Read it BEFORE
+    // the toggle; the post-toggle muted state is derived from the REAL reading
+    // afterwards (mute-state.js), never from the state we aimed for, so a toggle
+    // that rejects or no-ops cannot leave the button lying.
+    var before = lp.isMicrophoneEnabled;
+    dbg('toggle: before', micTrackState(lp));
+    var ok = true;
     try {
-      await lp.setMicrophoneEnabled(!lp.isMicrophoneEnabled);
+      await lp.setMicrophoneEnabled(!before);
     } catch (e) {
-      // Toggle failed: the state did not change, so report what it actually is
-      // now, not the state we were aiming for.
-      return !lp.isMicrophoneEnabled;
+      ok = false;
+      if (window.console) console.warn('huddle sfu mic toggle:', e && e.message);
     }
-    session.hooks.setMuted(session.hooks.selfId, muted);
-    return muted; // true = now muted
+    var after = lp.isMicrophoneEnabled;
+    var r = window.LetsChatMute.nextState(before, after, ok);
+    dbg('toggle: after', micTrackState(lp), 'failed', r.failed);
+    // LC-764: a failed re-enable used to be swallowed (the button silently
+    // corrected itself). Surface it so the caller knows their unmute did not
+    // take and peers are not hearing them.
+    if (r.failed && session.hooks.micError) session.hooks.micError();
+    session.hooks.setMuted(session.hooks.selfId, r.muted);
+    return r.muted; // true = now muted
   }
 
   async function toggleCamera() {

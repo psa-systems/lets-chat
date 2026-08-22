@@ -5,12 +5,13 @@
 {% block main %}
 <div class="flex flex-1 flex-col overflow-hidden">
   <header class="lc-header">
-    <h1 class="font-semibold truncate">{{ "room-pins-title-prefix"|t }} {{ room_label }}</h1>
+    <h1 class="lc-h1 truncate">{{ "room-pins-title-prefix"|t }} {{ room_label }}</h1>
     <a href="{{ back_path }}" class="text-sm text-accent hover:underline">{{ "room-pins-back"|t }}</a>
   </header>
   <div class="flex-1 overflow-y-auto">
     {% if pins.is_empty() %}
-    <p class="p-4 text-sm text-content-muted">{{ "room-info-pinned-empty"|t }}</p>
+    {% let empty_text_key = "room-info-pinned-empty" %}
+    {% include "partials/empty_state.html" %}
     {% else %}
     <ul class="divide-y divide-border">
       {% for p in pins %}
@@ -18,12 +19,12 @@
         <div class="flex items-center justify-between gap-2 text-xs text-content-muted">
           <span>
             <span class="font-medium text-content-muted">{{ p.author_label }}</span>
-            &middot; {{ "room-info-pinned-by"|t }} {{ p.pinner_label }} {{ p.pinned_at }}
+            &middot; {{ "room-info-pinned-by"|t }} {{ p.pinner_label }} <time data-lc-ts datetime="{{ p.pinned_at|iso }}" title="{{ p.pinned_at }}">{{ p.pinned_at }}</time>
           </span>
           <button hx-delete="/messages/{{ p.message_id }}/pin"
                   hx-target="#pin-row-{{ p.message_id }}"
                   hx-swap="outerHTML"
-                  class="text-danger hover:underline">{{ "room-msg-unpin"|t }}</button>
+                  class="btn btn-sm btn-danger-outline">{{ "room-msg-unpin"|t }}</button>
         </div>
         <div class="mt-1 whitespace-pre-wrap text-sm text-content">{{ p.body }}</div>
       </li>

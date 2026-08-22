@@ -49,6 +49,6 @@
     <span>{{ poll.total_voters }} {% if poll.event_at.is_some() %}{{ "partials-event-responses"|t }}{% else %}{{ "partials-poll-voted"|t }}{% endif %}</span>
     {% if poll.allows_multi %}<span>&middot; {{ "partials-poll-multiple-choice"|t }}</span>{% endif %}
     {% if poll.anonymous %}<span>&middot; {{ "partials-poll-anonymous"|t }}</span>{% endif %}
-    {% if poll.closed %}<span>&middot; {{ "partials-poll-closed"|t }}</span>{% else if let Some(at) = poll.closes_at.as_ref() %}<span>&middot; {{ "partials-poll-closes"|t }} {{ at }} UTC</span>{% endif %}
+    {% if poll.closed %}<span>&middot; {{ "partials-poll-closed"|t }}</span>{% else if let Some(at) = poll.closes_at.as_ref() %}<span>&middot; {{ "partials-poll-closes"|t }} <time datetime="{{ at|iso }}" title="{{ at }}">{{ at }}</time> UTC</span>{% endif %}
   </div>
 </div>

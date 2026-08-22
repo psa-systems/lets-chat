@@ -40,7 +40,7 @@
                 onclick="return confirm('{{ "enclave-settings-member-transfer-confirm-prefix"|t }} {{ m.label }}{{ "enclave-settings-member-transfer-confirm-suffix"|t }}')">{{ "enclave-settings-member-transfer"|t }}</button>
       </form>
       <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/kick">
-        <button type="submit" class="btn btn-sm text-danger border border-danger-border hover:bg-danger-surface"
+        <button type="submit" class="btn btn-sm btn-danger-outline"
                 onclick="return confirm('{{ "enclave-settings-member-kick-confirm-prefix"|t }} {{ m.label }}{{ "enclave-settings-member-kick-confirm-suffix"|t }}')">{{ "enclave-settings-member-kick"|t }}</button>
       </form>
     </div>

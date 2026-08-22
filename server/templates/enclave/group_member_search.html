@@ -30,7 +30,7 @@
             class="inline">
         <input type="hidden" name="user_id" value="{{ r.id }}">
         <button type="submit"
-                class="text-xs bg-accent text-accent-content rounded px-2 py-1 hover:bg-accent-hover">{{ "enclave-search-add"|t }}</button>
+                class="btn btn-sm btn-primary">{{ "enclave-search-add"|t }}</button>
       </form>
       {% else if r.is_in_group() %}
       <span class="text-xs text-content-subtle">{{ "enclave-search-in-group"|t }}</span>

@@ -28,7 +28,7 @@ async fn setup_pools() -> (SqlitePool, SqlitePool) {
 async fn test_list_rooms_excludes_dm_rooms() {
     let (_, chat_pool) = setup_pools().await;
 
-    // Seeded rooms are public — admin sees all
+    // Seeded rooms are public - admin sees all
     let rooms = lets_chat::db::chat::list_rooms(&chat_pool, "admin-user", true)
         .await
         .unwrap();

@@ -4,14 +4,14 @@
 
 {% block body %}
 <main class="min-h-screen flex items-center justify-center p-6">
-  <div class="card w-full max-w-sm space-y-4 p-6 text-center">
+  <div class="card lc-page-narrow space-y-4 p-6 text-center">
     {% if brand_logo %}
     <div class="flex justify-center">
       <img src="/branding/logo?v={{ asset_version }}" alt="Logo"
            class="max-h-16 max-w-full object-contain">
     </div>
     {% endif %}
-    <h1 class="text-xl font-semibold">
+    <h1 class="lc-display">
       {% if !brand_heading.is_empty() %}{{ brand_heading }}{% else %}{{ "login-title"|t }}{% endif %}
     </h1>
     {% if !brand_body_html.is_empty() %}

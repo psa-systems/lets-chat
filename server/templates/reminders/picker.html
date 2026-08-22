@@ -26,11 +26,11 @@
     <form id="lc-reminder-custom" class="mt-4 flex flex-col gap-2" data-message-id="{{ message_id }}">
       <label class="text-sm text-content-muted">{{ "reminders-custom-time"|t }}{% include "partials/required_mark.html" %}
         <input type="datetime-local" name="when" required aria-required="true"
-               class="mt-1 w-full rounded border border-border-strong px-2 py-1">
+               class="input mt-1">
       </label>
       <div class="lc-reminder-error hidden text-sm text-danger" role="alert"></div>
       <button type="submit"
-              class="self-end rounded bg-accent px-3 py-1 text-sm text-accent-content hover:bg-accent-hover">{{ "reminders-set"|t }}</button>
+              class="btn btn-primary self-end">{{ "reminders-set"|t }}</button>
     </form>
   </div>
 </div>

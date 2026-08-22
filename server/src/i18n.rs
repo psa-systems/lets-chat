@@ -154,6 +154,15 @@ pub mod filters {
     pub fn lang(_: &str) -> askama::Result<String> {
         Ok(super::current_lang_code())
     }
+
+    /// `{{ row.created_at|iso }}` -> the same instant as an unambiguous UTC
+    /// RFC3339 string, for a `<time datetime>` attribute (LC-746). SQLite
+    /// stores `YYYY-MM-DD HH:MM:SS` UTC, which browsers parse as LOCAL time.
+    /// Lives here because this is the module every view imports its filters
+    /// from; it does no translation.
+    pub fn iso(ts: &str) -> askama::Result<String> {
+        Ok(crate::views::room::to_iso_utc(ts))
+    }
 }
 
 #[cfg(test)]

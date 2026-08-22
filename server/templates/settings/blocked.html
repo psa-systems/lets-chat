@@ -8,7 +8,7 @@
 <header class="lc-header">
   <div class="flex min-w-0 items-center gap-3">
     <a href="/settings" class="text-sm text-accent hover:underline">&larr; {{ "blocked-back"|t }}</a>
-    <h1 class="font-semibold">{{ "blocked-heading"|t }}</h1>
+    <h1 class="lc-h1">{{ "blocked-heading"|t }}</h1>
   </div>
 </header>
 <div class="flex-1 overflow-y-auto p-4 space-y-4">
@@ -28,15 +28,15 @@
             name="username"
             value="{{ form_username }}"
             placeholder="{{ "blocked-username-placeholder"|t }}"
-            class="block w-full border rounded px-2 py-1{% if error.is_some() %} input-error{% endif %}"
+            class="input{% if error.is_some() %} input-error{% endif %}"
             required aria-required="true">
           <div id="block-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
         </div>
-        <button type="submit" class="bg-accent text-accent-content px-3 py-1.5 rounded text-sm hover:bg-accent-hover">{{ "blocked-block-button"|t }}</button>
+        <button type="submit" class="btn btn-primary">{{ "blocked-block-button"|t }}</button>
       </div>
     </label>
     {% if let Some(msg) = error %}
-    <div class="p-2 bg-danger-surface border border-danger-border text-danger text-sm rounded">{{ msg }}</div>
+    <div class="alert alert-danger" role="alert">{{ msg }}</div>
     {% endif %}
   </form>
   <script>
@@ -96,7 +96,8 @@
   </script>
 
   {% if blocked.is_empty() %}
-  <p class="text-content-muted">{{ "blocked-empty"|t }}</p>
+  {% let empty_text_key = "blocked-empty" %}
+  {% include "partials/empty_state.html" %}
   {% else %}
   <ul class="space-y-1 max-w-xl">
     {% for b in blocked %}
@@ -112,7 +113,7 @@
       </div>
       <form method="post" action="/users/{{ b.id }}/unblock">
         <input type="hidden" name="return_to" value="/settings/blocked">
-        <button type="submit" class="text-sm text-accent hover:underline">{{ "blocked-unblock"|t }}</button>
+        <button type="submit" class="btn btn-sm btn-ghost">{{ "blocked-unblock"|t }}</button>
       </form>
     </li>
     {% endfor %}

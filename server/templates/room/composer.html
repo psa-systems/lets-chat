@@ -2,7 +2,7 @@
      encoding the moment a file input is inside a form, which would break
      the server's axum::Form parser. The JS uploads to /api/upload directly
      and stashes the returned file_id in the hidden input below. -->
-<input id="lc-file" type="file" class="hidden"
+<input id="lc-file" type="file" class="hidden" aria-label="{{ "room-composer-attach-file"|t }}"
        accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
        data-lc-max-bytes="{{ max_upload_bytes }}">
 <form

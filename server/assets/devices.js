@@ -238,7 +238,7 @@
         '<div data-fields class="space-y-3"></div>' +
         '<p data-perm-hint class="mt-4 text-xs text-content-subtle" style="display:none">' +
           window.__lcS('devicePermissionHint', 'Allow microphone or camera access to see device names.') + ' ' +
-          '<button type="button" data-grant class="font-medium text-accent hover:underline">' + window.__lcS('deviceShowNames', 'Show device names') + '</button>' +
+          '<button type="button" data-grant class="btn btn-sm btn-ghost">' + window.__lcS('deviceShowNames', 'Show device names') + '</button>' +
         '</p>' +
       '</div>';
     document.body.appendChild(overlay);

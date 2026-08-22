@@ -7,8 +7,8 @@
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">
 </head>
 <body class="bg-surface text-content min-h-screen flex items-center justify-center p-6">
-  <section class="max-w-md w-full text-center">
-    <h1 class="text-2xl font-semibold mb-3">{{ "maintenance-heading"|t }}</h1>
+  <section class="lc-page-narrow text-center">
+    <h1 class="lc-display mb-3">{{ "maintenance-heading"|t }}</h1>
     <p class="text-content-muted mb-4">{{ "maintenance-body"|t }}</p>
     {% if !message.is_empty() %}
     <div class="rounded border border-border bg-surface-elevated p-4 text-left text-sm whitespace-pre-wrap">{{ message }}</div>

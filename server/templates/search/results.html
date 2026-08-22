@@ -20,7 +20,7 @@
           <span class="text-content-subtle">&middot;</span>
           <span class="truncate">{{ r.context_label }}</span>
           <span class="text-content-subtle">&middot;</span>
-          <span class="flex-none">{{ r.created_at }}</span>
+          <span class="flex-none"><time data-lc-ts datetime="{{ r.created_at|iso }}" title="{{ r.created_at }}">{{ r.created_at }}</time></span>
         </div>
         {# LC-699: snippet is pre-escaped server-side with <mark> around the
            matched terms, so it is rendered safe. #}

@@ -14,7 +14,7 @@
             hx-target="#scheduled-row-{{ row.id }}"
             hx-swap="delete"
             hx-confirm="{{ "scheduled-cancel-confirm"|t }}"
-            class="flex-none rounded-md border border-border px-2 py-0.5 text-xs font-medium text-danger hover:bg-danger-surface hover:border-danger-border focus:outline-none focus:ring-1 focus:ring-danger">{{ "action-cancel"|t }}</button>
+            class="btn btn-sm btn-danger-outline flex-none">{{ "action-cancel"|t }}</button>
   </div>
   <div class="mt-2 lc-md whitespace-pre-wrap text-sm text-content break-words">{{ row.body_html|safe }}</div>
 </li>

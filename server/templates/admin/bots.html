@@ -11,11 +11,13 @@
 {% endif %}
 
 {% if let Some(tok) = new_token %}
-<div class="mb-4 rounded-md border border-success-border bg-success-surface px-3 py-2 text-sm text-success-surface-content space-y-1">
-  <p class="font-medium">
-    {{ "admin-bots-created-prefix"|t }}{% if let Some(n) = new_bot_name %} "{{ n }}"{% endif %} {{ "admin-bots-created-suffix"|t }}
-  </p>
-  <code class="block break-all bg-surface-elevated border border-success-border rounded px-2 py-1 font-mono text-xs">{{ tok }}</code>
+<div class="mb-4">
+  {% let secret_heading_key = "admin-bots-created-prefix" %}
+  {% let secret_subject = new_bot_name.as_deref().unwrap_or("") %}
+  {% let secret_suffix_key = "admin-bots-created-suffix" %}
+  {% let secret_value = tok %}
+  {% let secret_note_key = "" %}
+  {% include "partials/secret_reveal.html" %}
 </div>
 {% endif %}
 
@@ -101,7 +103,7 @@
       {% for b in bots %}
       <tr>
         <td class="font-mono text-xs">{{ b.username }}{% if b.is_assistant %} <span class="lc-pill lc-pill--neutral font-sans">{{ "admin-bots-assistant-pill"|t }}</span>{% endif %}</td>
-        <td class="text-xs text-content-muted">{{ b.created_at }}</td>
+        <td class="text-xs text-content-muted"><time datetime="{{ b.created_at|iso }}" title="{{ b.created_at }}">{{ b.created_at }}</time></td>
         <td class="text-xs">{% if b.disabled %}<span class="lc-pill lc-pill--danger">{{ "admin-bots-status-disabled"|t }}</span>{% else %}<span class="lc-pill lc-pill--neutral">{{ "admin-bots-status-active"|t }}</span>{% endif %}</td>
         <td class="lc-table-actions">
           {% if !b.disabled %}

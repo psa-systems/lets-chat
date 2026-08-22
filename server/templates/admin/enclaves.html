@@ -42,11 +42,11 @@
           <form method="post" action="/admin/enclaves/{{ e.id }}/quota" class="flex gap-1 items-center">
             <span class="font-mono text-content-muted">{{ e.usage_display }}</span>
             <span class="text-content-subtle">/</span>
-            <input type="number" name="quota_mib" value="{{ e.quota_mib_value }}" min="0" placeholder="{{ "admin-enclaves-unlimited"|t }}" class="w-20 rounded border border-border bg-surface-elevated px-1.5 py-0.5 text-xs">
+            <input type="number" name="quota_mib" value="{{ e.quota_mib_value }}" min="0" placeholder="{{ "admin-enclaves-unlimited"|t }}" aria-label="{{ "admin-enclaves-quota-label"|t }}" class="input w-20 px-1.5 py-0.5 text-xs">
             <button type="submit" class="btn btn-sm btn-secondary">{{ "admin-enclaves-save"|t }}</button>
           </form>
         </td>
-        <td class="text-xs text-content-muted">{{ e.created_at }}</td>
+        <td class="text-xs text-content-muted"><time datetime="{{ e.created_at|iso }}" title="{{ e.created_at }}">{{ e.created_at }}</time></td>
         <td class="lc-table-actions">
           <div class="inline-flex justify-end gap-1">
             <a href="/enclave/{{ e.id }}" class="btn btn-sm btn-ghost">{{ "admin-enclaves-open"|t }}</a>

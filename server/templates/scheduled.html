@@ -5,7 +5,7 @@
 {% block main %}
 <div class="flex flex-1 flex-col overflow-hidden">
   <header class="lc-header">
-    <h1 class="font-semibold truncate">{{ "scheduled-heading"|t }}</h1>
+    <h1 class="lc-h1 truncate">{{ "scheduled-heading"|t }}</h1>
     <span class="text-xs text-content-muted">{{ "scheduled-delivery-note"|t }}</span>
   </header>
   <div class="flex-1 overflow-y-auto">
@@ -33,8 +33,10 @@
                (previously an <a href> pointed at the label itself - a dead link). #}
             <span class="min-w-0 truncate">
               {{ "scheduled-for-prefix"|t }} <span class="font-medium text-content">{{ d.room_label }}</span>
-              &middot; {{ "scheduled-scheduled-for"|t }} {{ d.scheduled_for }} UTC
-              &middot; {{ "scheduled-dropped-at"|t }} {{ d.delivered_at }} UTC
+              &middot; {{ "scheduled-scheduled-for"|t }} <time datetime="{{ d.scheduled_for|iso }}" title="{{ d.scheduled_for }}">{{ d.scheduled_for }}</time> UTC
+              {# LC-746: a dropped row can carry no delivery stamp; an empty
+                 `datetime` is not a timestamp, so drop the clause instead. #}
+              {% if !d.delivered_at.is_empty() %}&middot; {{ "scheduled-dropped-at"|t }} <time datetime="{{ d.delivered_at|iso }}" title="{{ d.delivered_at }}">{{ d.delivered_at }}</time> UTC{% endif %}
             </span>
           </div>
           <div class="mt-1 text-sm text-danger">{{ "scheduled-dropped-label"|t }} {{ d.failed_reason }}</div>
