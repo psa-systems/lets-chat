@@ -58,7 +58,7 @@ Every color comes from the semantic tokens in `server/tailwind.config.js` (`text
 
 A surface that is deliberately dark in every mode says so explicitly rather than reaching for a dark palette shade: the fullscreen video stage is `bg-black` with a comment, and the chrome painted directly on it uses on-dark constants (`text-white`, `border-white/20`) instead of mode tokens, which would assume a background that follows the mode.
 
-The template half of the same rule lives in `ci-build/check-ui-conventions.nu` (see "Convention gates" below), reporting rather than failing until LC-741 clears the call overlays in `layout.html`.
+The template half of the same rule lives in `ci-build/check-ui-conventions.nu` (see "Convention gates" below) and now fails the build: LC-741 cleared the last raw palette literals (the call overlays in `layout.html`), so the rule dropped its `pending` marker and enforces like the rest.
 
 One surface is deliberately outside the token layer: `server/assets/offline.html`, the service worker's navigation fallback. It is precached and served with the network down, so it can neither link `main.css` nor run the layout's bootstrap. It therefore carries its own copy of the six colors it needs and its own `lc-mode` resolver, mirroring `server/templates/base.html`. Keep the copied values in step with `main.css` when the light or dark ramp moves; the gate below only checks that the page still resolves a mode, not that the hexes still match (LC-748).
 
