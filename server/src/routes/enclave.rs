@@ -1516,10 +1516,16 @@ pub async fn load_invitation_cards(
     let identities = db::auth::user_identities_for_ids(&state.auth, &inviter_ids).await?;
     let mut cards = Vec::with_capacity(listings.len());
     for l in listings {
-        let logo_url = db::branding::resolve(&state.chat, db::branding::Scope::Enclave(l.enclave_id))
-            .await?
-            .logo_upload_id
-            .map(|_| format!("/enclave/{}/branding/logo?v={}", l.enclave_id, state.asset_version));
+        let logo_url =
+            db::branding::resolve(&state.chat, db::branding::Scope::Enclave(l.enclave_id))
+                .await?
+                .logo_upload_id
+                .map(|_| {
+                    format!(
+                        "/enclave/{}/branding/logo?v={}",
+                        l.enclave_id, state.asset_version
+                    )
+                });
         // A deleted / unknown inviter must still not leak a UUID: fall back to a
         // neutral label the template localizes.
         let (inviter_name, inviter_avatar_ext) = match identities.get(&l.invited_by) {

@@ -1426,8 +1426,9 @@ pub async fn user_identities_for_ids(
     let placeholders = std::iter::repeat_n("?", ids.len())
         .collect::<Vec<_>>()
         .join(",");
-    let sql =
-        format!("SELECT id, username, display_name, avatar_ext FROM users WHERE id IN ({placeholders})");
+    let sql = format!(
+        "SELECT id, username, display_name, avatar_ext FROM users WHERE id IN ({placeholders})"
+    );
     let mut q = sqlx::query(&sql);
     for id in ids {
         q = q.bind(id);
