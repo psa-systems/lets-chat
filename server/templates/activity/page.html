@@ -19,7 +19,7 @@
        reloads the current URL, preserving the active tab. Avoids re-rendering
        the tab-filtered list server-side (the WS cannot know the active tab). #}
     <button id="lc-activity-refresh" type="button" hidden onclick="location.reload()"
-            class="sticky top-0 z-10 w-full bg-accent text-accent-content text-xs py-1.5 hover:bg-accent-hover">
+            class="btn btn-sm btn-primary sticky top-0 z-10 w-full rounded-none">
       {{ "activity-new"|t }}
     </button>
     {% if items.is_empty() %}

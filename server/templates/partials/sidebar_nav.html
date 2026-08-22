@@ -71,7 +71,7 @@
               <label class="text-xs text-content-muted">{{ "sidebar-category-name-label"|t }}{% include "partials/required_mark.html" %}
                 <input type="text" name="name" value="{{ category.name }}" maxlength="50" required aria-required="true" class="input mt-0.5 px-1 py-0.5 text-xs">
               </label>
-              <button type="submit" class="self-end px-2 text-xs bg-accent text-accent-content rounded">{{ "sidebar-category-rename"|t }}</button>
+              <button type="submit" class="btn btn-sm btn-primary self-end">{{ "sidebar-category-rename"|t }}</button>
             </form>
             <form hx-delete="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" hx-confirm="{{ "sidebar-category-delete-confirm"|t }}" class="text-right">
               <button type="submit" class="text-xs text-danger hover:underline">{{ "sidebar-category-delete"|t }}</button>
