@@ -1,15 +1,22 @@
 #!/usr/bin/env nu
 
-# Guard the design-token layer in browser assets (LC-735).
+# Guard the design-token layer in browser assets and templates (LC-735, LC-741).
 #
 # tailwind.config.js uses `extend`, so the raw numbered palette (text-slate-700,
 # bg-blue-500, ...) still compiles and still ships. A raw shade is fixed for all
 # four modes, so it breaks in the ones nobody was looking at: the offline outbox
 # banner rendered text-slate-700 on bg-surface-elevated, ~1.6:1 in dark mode.
-# Templates get eyeballed in the theme gallery; these JS files inject markup only
-# in transient states (offline, failed send, active search row), which is exactly
-# why they need a mechanical check. Vendor bundles carry their own styling and are
-# out of scope.
+# These JS files inject markup only in transient states (offline, failed send,
+# active search row), which is exactly why they need a mechanical check. Vendor
+# bundles carry their own styling and are out of scope.
+#
+# LC-741: templates are in scope too, now that the last of them (the call
+# overlays in layout.html: a hard-white remote-control consent card with an
+# unbrandable indigo grant button, and a bg-red-600 control banner) is
+# tokenized. "It gets eyeballed in the theme gallery" only covers what someone
+# opens; an overlay that renders during a call and a remote-control session
+# does not. The always-dark video stage is `bg-black`, not a dark palette
+# shade, so the whole tree is clean and the guard needs no exception list.
 
 # Tailwind utilities that take a color, and the full default hue set. Matching
 # the prefix (rather than any `<hue>-<n>` token) keeps CSS var names and message
@@ -28,9 +35,14 @@ const SELECTED_ATTR = '[aria-selected="true"]'
 
 def raw_palette_utilities [] {
     let pattern = $"\\b\(($PREFIXES)\)-\(($HUES)\)-[0-9]{2,3}\\b"
-    let files = (glob server/assets/**/*.js --exclude ["**/vendor/**"] | sort)
+    let files = (
+        [
+            ...(glob server/assets/**/*.js --exclude ["**/vendor/**"])
+            ...(glob server/templates/**/*.html)
+        ] | sort
+    )
     if ($files | is-empty) {
-        print --stderr "No JS assets found under server/assets/"
+        print --stderr "No JS assets or templates found under server/"
         exit 1
     }
 
@@ -68,7 +80,7 @@ def untokenized_selection_backgrounds [] {
 def main [] {
     let js = (raw_palette_utilities)
     if ($js.problems | is-not-empty) {
-        print --stderr "Raw palette utilities found in browser assets; use the semantic tokens from tailwind.config.js (text-content, text-content-muted, border-border, bg-surface-sunken, ...):"
+        print --stderr "Raw palette utilities found in browser assets or templates; use the semantic tokens from tailwind.config.js (text-content, text-content-muted, border-border, bg-surface-sunken, ...):"
         for p in $js.problems { print --stderr $"  ($p)" }
         exit 1
     }
@@ -80,5 +92,5 @@ def main [] {
         exit 1
     }
 
-    print $"Asset color tokens OK across ($js.files) JS files and every ($SELECTED_ATTR) rule in ($CSS_FILE)."
+    print $"Asset color tokens OK across ($js.files) JS + template files and every ($SELECTED_ATTR) rule in ($CSS_FILE)."
 }
