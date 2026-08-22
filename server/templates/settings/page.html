@@ -666,7 +666,7 @@
               <img src="/api/emojis/{{ e.id }}" alt=":{{ e.shortcode }}:" class="h-8 w-8">
               <span class="font-mono text-sm flex-1 truncate">:{{ e.shortcode }}:</span>
               <form method="post" action="/settings/emojis/{{ e.id }}/delete">
-                <button type="submit" class="text-xs text-danger hover:underline"
+                <button type="submit" class="btn btn-sm btn-danger-outline"
                         onclick="return confirm('{{ "settings-emoji-delete-confirm"|t }}')">{{ "settings-emoji-delete"|t }}</button>
               </form>
             </li>
@@ -721,7 +721,7 @@
                 <div class="mt-0.5 text-sm text-content-muted whitespace-pre-wrap break-words line-clamp-3">{{ c.target }}</div>
               </div>
               <form method="post" action="/settings/canned/{{ c.id }}/delete" class="shrink-0">
-                <button type="submit" class="text-xs text-danger hover:underline"
+                <button type="submit" class="btn btn-sm btn-danger-outline"
                         onclick="return confirm('{{ "settings-canned-delete-confirm"|t }}')">{{ "settings-canned-delete"|t }}</button>
               </form>
             </li>

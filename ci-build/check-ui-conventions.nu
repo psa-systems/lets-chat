@@ -44,6 +44,13 @@ const DANGER_OUTLINE = "text-danger border border-danger-border hover:bg-danger-
 # opening tag, because the class attribute usually sits on a continuation line.
 const CONTROL_TAG = '(?<tag><(?:button|a|label)(?:\s[^>]*)?>)'
 
+# LC-743: a `<button>` painted as a text link (`hover:underline` plus a color),
+# which is the treatment the real anchors use. Matched on the whole opening tag
+# for the same reason as CONTROL_TAG: a line-scoped pattern misses every button
+# whose class attribute sits on a continuation line, and 10 of the 24 sites this
+# rule closed were of exactly that shape.
+const BUTTON_TAG = '(?<tag><button(?:\s[^>]*)?>)'
+
 # Template syntax separates utilities the way whitespace does: an active-state
 # branch reads `{% if x %}bg-accent text-accent-content{% endif %}`.
 const TEMPLATE_TAG = '\{[%{][^{}]*[%}]\}'
@@ -133,6 +140,23 @@ def admin-template-files [] {
         exit 1
     }
     $files
+}
+
+# The browser scripts that build markup with string concatenation. Tailwind
+# scans them (`content` in tailwind.config.js lists `./assets/**/*.js`), so a
+# class spelled out there renders exactly like one in a template, and a rule
+# that swept only the templates would leave that half open (LC-743).
+def browser-asset-files [] {
+    let files = (glob server/assets/**/*.js --exclude ["**/vendor/**"] | sort)
+    if ($files | is-empty) {
+        print --stderr "No browser scripts found under server/assets/"
+        exit 1
+    }
+    $files
+}
+
+def markup-files [] {
+    (template-files) | append (browser-asset-files)
 }
 
 def tracked-text-files [] {
@@ -324,6 +348,29 @@ def open-coded-primary-fill [] {
     } | flatten
 }
 
+# LC-743: `<button>` opening tags carrying a link's `hover:underline`. Same
+# whole-document parse as open-coded-primary-fill, and over the browser scripts
+# as well, so neither a wrapped tag nor a JS-built one slips the rule.
+def fake-link-buttons [] {
+    markup-files | each {|file|
+        let text = (open --raw $file | decode utf-8)
+        let lines = ($text | lines)
+        $text
+        | parse --regex $BUTTON_TAG
+        | get tag
+        | each {|tag|
+            class-attrs $tag
+            | where {|value| $value | str contains "hover:underline" }
+            | each {|value|
+                let at = ($lines | enumerate | where {|row| $row.item | str contains $value } | get index)
+                let line = (if ($at | is-empty) { "?" } else { ($at | first) + 1 })
+                $"($file):($line): class=\"($value)\""
+            }
+        }
+        | flatten
+    } | flatten
+}
+
 def bare-timestamps [] {
     scan-lines (template-files) $BARE_TIMESTAMP
     | where {|hit| not ($hit | str contains "<time") }
@@ -365,15 +412,15 @@ def rules [] {
         }
         {
             id: "no-fake-link-buttons"
-            pending: "LC-743"
-            fix: "a control that performs an action looks like a button: `btn btn-sm btn-danger-outline` / `btn-ghost` / `btn-primary`, never a color plus hover:underline, which is what the 24 real anchors use (LC-743)"
-            check: {|| scan-lines (template-files) '<button[^>]*hover:underline' }
+            pending: null
+            fix: "a control that performs an action looks like a button: `btn btn-sm btn-danger-outline` (destructive), `btn-ghost` (dismiss / secondary) or `btn-primary` (an inline save), never a color plus hover:underline, which is the treatment the real anchors use (LC-743)"
+            check: {|| fake-link-buttons }
         }
         {
             id: "no-open-coded-danger-outline"
-            pending: "LC-743"
+            pending: null
             fix: $"use `btn btn-sm btn-danger-outline` \(main.css\); the inline copy is character-for-character what the class expands to \(LC-743\)"
-            check: {|| scan-lines (template-files) $DANGER_OUTLINE }
+            check: {|| scan-lines (markup-files) $DANGER_OUTLINE }
         }
         {
             id: "no-open-coded-primary-fill"

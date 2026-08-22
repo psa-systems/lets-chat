@@ -69,6 +69,8 @@ Three shapes re-derive that look inline instead, and each is closed by a gate be
 - A hand-rolled copy of the `.btn-danger-outline` declaration, `text-danger border border-danger-border hover:bg-danger-surface`, which is character for character what the class expands to (LC-743).
 - A hand-rolled primary fill: `bg-accent` and `text-accent-content` in the same class list, which is what `.btn-primary` expands to. 28 controls across 26 templates carried their own copy of it until LC-755.
 
+All three gates read whole opening tags out of the whole document, not single lines, because a button's class attribute usually sits on a continuation line; 10 of the 24 controls LC-743 converted were of that shape and a line-scoped grep saw none of them. The first two also sweep `server/assets/**/*.js` outside `vendor/`: Tailwind scans those scripts, so a class spelled out in a concatenated string renders exactly like one in a template (`assets/devices.js` built the call-picker's "Show device names" control that way).
+
 An accent utility behind a state prefix is not the third shape and stays as it is: `hover:bg-accent` on the accent-outline ack pill (`partials/ack_bar.html`, `ws/ack_update.html`), `focus:bg-accent` on the `base.html` skip link and `aria-pressed:bg-accent` on the sidebar unread-only toggle all paint a state, not the resting fill.
 
 ## Page top bars (LC-742)
@@ -340,8 +342,8 @@ Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded 
 | Rule | Scope | Allowed exceptions |
 |---|---|---|
 | No palette literals in templates | `server/templates/**/*.html` | a line (or the line above it) carrying an `lc-allow-palette` comment naming why, for the deliberately-dark call stage |
-| No fake link buttons | `<button ... hover:underline>` in templates | none |
-| No open-coded danger outline | the literal `.btn-danger-outline` expansion | none |
+| No fake link buttons | a `<button>` opening tag whose class carries `hover:underline`, in templates and in `server/assets/**/*.js` outside `vendor/` | none |
+| No open-coded danger outline | the literal `.btn-danger-outline` expansion, in the same file set | none |
 | No open-coded primary fill | an unprefixed `bg-accent` + `text-accent-content` pair in a `<button>` / `<a>` / `<label>` opening tag that carries no `btn-primary` | a `hover:` / `focus:` / `aria-pressed:` accent, which paints a state rather than the resting fill |
 | No untokenized borders | a `border` / `border-t` / `divide-y` class attribute with no `border-`/`divide-` color | none; a numbered palette color counts as named here and is the palette rule's to reject |
 | No superseded component classes | the class names LC-744 deleted, over the templates and both stylesheets | none |

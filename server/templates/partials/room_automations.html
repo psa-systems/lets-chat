@@ -39,7 +39,7 @@
                 hx-delete="/room/{{ room.id }}/automations/{{ a.id }}"
                 hx-target="#lc-automations" hx-swap="outerHTML"
                 hx-confirm="{{ "room-automations-delete-confirm"|t }}"
-                class="btn btn-sm text-danger border border-danger-border hover:bg-danger-surface">{{ "room-automations-delete"|t }}</button>
+                class="btn btn-sm btn-danger-outline">{{ "room-automations-delete"|t }}</button>
       </div>
     </li>
     {% endfor %}
