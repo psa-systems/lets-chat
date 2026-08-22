@@ -809,8 +809,9 @@ pub async fn post_invitation_accept(
 pub async fn post_invitation_decline(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
     Path(id): Path<i64>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     let Some(inv) = db::enclave::get_invitation(&state.chat, id).await? else {
         return Err(AppError::NotFound);
     };
@@ -824,7 +825,19 @@ pub async fn post_invitation_decline(
             invitee_id: user.id.clone(),
         },
     );
-    Ok(Redirect::to("/invitations"))
+    // LC-772: from the invitations page the Decline button is an htmx request;
+    // reply with the same OOB fragment the WS push uses so the card disappears
+    // and the "(N)" count updates in place, without a full-page reload. The WS
+    // broadcast above still clears the sidebar badge and updates other tabs.
+    // Non-htmx callers (or a JS-off fallback) get the classic redirect.
+    if headers.contains_key("HX-Request") {
+        let cards = load_invitation_cards(&state, &user.id).await?;
+        let fragment = crate::views::enclave::InvitationsLiveFragment {
+            invitations: &cards,
+        };
+        return Ok(html(&fragment)?.into_response());
+    }
+    Ok(Redirect::to("/invitations").into_response())
 }
 
 pub async fn get_settings(
@@ -1489,11 +1502,56 @@ pub async fn post_remove_room_member(
     Ok(Redirect::to(&format!("/enclave/{id}")))
 }
 
+/// LC-772: build the enriched invitation cards for `user`. Resolves each
+/// inviter's name + avatar against the auth pool (bulk, no N+1) and each
+/// enclave's branding logo, so the template shows friendly context instead of a
+/// raw inviter UUID. Shared by the full invitations page and the live WS
+/// fragment so both render identically.
+pub async fn load_invitation_cards(
+    state: &AppState,
+    user_id: &str,
+) -> Result<Vec<crate::views::enclave::InvitationCard>, AppError> {
+    let listings = db::enclave::list_invitation_listings_for_user(&state.chat, user_id).await?;
+    let inviter_ids: Vec<&str> = listings.iter().map(|l| l.invited_by.as_str()).collect();
+    let identities = db::auth::user_identities_for_ids(&state.auth, &inviter_ids).await?;
+    let mut cards = Vec::with_capacity(listings.len());
+    for l in listings {
+        let logo_url =
+            db::branding::resolve(&state.chat, db::branding::Scope::Enclave(l.enclave_id))
+                .await?
+                .logo_upload_id
+                .map(|_| {
+                    format!(
+                        "/enclave/{}/branding/logo?v={}",
+                        l.enclave_id, state.asset_version
+                    )
+                });
+        // A deleted / unknown inviter must still not leak a UUID: fall back to a
+        // neutral label the template localizes.
+        let (inviter_name, inviter_avatar_ext) = match identities.get(&l.invited_by) {
+            Some(u) => (u.label().to_string(), u.avatar_ext.clone()),
+            None => (String::new(), None),
+        };
+        cards.push(crate::views::enclave::InvitationCard {
+            id: l.id,
+            enclave_id: l.enclave_id,
+            enclave_name: l.enclave_name,
+            enclave_description: l.enclave_description,
+            member_count: l.member_count,
+            logo_url,
+            inviter_id: l.invited_by,
+            inviter_name,
+            inviter_avatar_ext,
+        });
+    }
+    Ok(cards)
+}
+
 pub async fn get_invitations(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
 ) -> Result<Html, AppError> {
-    let invs = db::enclave::list_invitations_for_user(&state.chat, &user.id).await?;
+    let invs = load_invitation_cards(&state, &user.id).await?;
     let (
         sidebar_categories,
         sidebar_starred_rooms,

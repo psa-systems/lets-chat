@@ -1,7 +1,9 @@
 use sqlx::{Row, SqlitePool};
 use std::str::FromStr;
 
-use crate::models::enclave::{Enclave, EnclaveInvitation, EnclaveMembership, EnclaveRole};
+use crate::models::enclave::{
+    Enclave, EnclaveInvitation, EnclaveMembership, EnclaveRole, InvitationListing,
+};
 
 pub async fn get_general_id(pool: &SqlitePool) -> Result<Option<i64>, sqlx::Error> {
     let row = sqlx::query("SELECT id FROM enclaves WHERE name='General'")
@@ -565,6 +567,39 @@ pub async fn list_invitations_for_user(
                 shame_tags_enabled: r.get::<i64, _>("shame_tags_enabled") != 0,
             };
             (inv, enc)
+        })
+        .collect())
+}
+
+/// LC-772: pending invitations for a user, each carrying the enclave name,
+/// description, and live member count so the invitations page renders an
+/// informative card in a single query per user (no N+1 member counting). The
+/// inviter id is returned raw; the route resolves it to a name/avatar against
+/// the auth pool, which holds the users table on a separate connection.
+pub async fn list_invitation_listings_for_user(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Vec<InvitationListing>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT i.id, i.enclave_id, i.invited_by, e.name, e.description, \
+                (SELECT COUNT(*) FROM enclave_members m WHERE m.enclave_id = e.id) AS member_count \
+         FROM enclave_invitations i \
+         JOIN enclaves e ON e.id = i.enclave_id \
+         WHERE i.invitee_id = ? \
+         ORDER BY i.created_at DESC",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| InvitationListing {
+            id: r.get("id"),
+            enclave_id: r.get("enclave_id"),
+            enclave_name: r.get("name"),
+            enclave_description: r.get("description"),
+            member_count: r.get("member_count"),
+            invited_by: r.get("invited_by"),
         })
         .collect())
 }
