@@ -41,11 +41,13 @@ pub struct Segment {
     pub id: i64,
     pub transcript_id: i64,
     pub user_id: String,
-    /// The DISPLAY text: LC-629 correction output when an LLM is configured,
-    /// else the raw recognition. This is what the live caption + saved page show.
+    /// The recognized caption, stored verbatim. This is what the live caption
+    /// and the saved page show.
     pub text: String,
-    /// LC-629: the original, uncorrected recognition when it differs from
-    /// `text`; `None` when no correction was applied (raw equals display).
+    /// Legacy second copy of the recognition, set only by the removed LC-629
+    /// live-correction pass (the original when correction changed the display).
+    /// `None` for every segment written since; retained so transcripts recorded
+    /// while correction existed still expose their raw recognition.
     pub raw_text: Option<String>,
     /// Same format as [`Transcript::started_at`] (LC-752).
     pub spoken_at: String,
@@ -55,8 +57,8 @@ pub struct Segment {
 }
 
 impl Segment {
-    /// LC-629: the raw, uncorrected recognition - `raw_text` when a correction
-    /// replaced it, otherwise the display `text` (which is itself the raw text).
+    /// The raw recognition: `raw_text` for a correction-era row that stored a
+    /// separate original, otherwise the display `text` (itself verbatim now).
     pub fn raw(&self) -> &str {
         self.raw_text.as_deref().unwrap_or(&self.text)
     }
@@ -139,10 +141,10 @@ pub async fn set_summary(pool: &SqlitePool, id: i64, summary: &str) -> sqlx::Res
         .map(|_| ())
 }
 
-/// Append a final speech result. `text` is the display text (LC-629 corrected,
-/// or the raw recognition when correction is off); `raw_text` is the original
-/// recognition, passed as `Some` ONLY when it differs from `text` (else the raw
-/// equals the display and the column stays NULL). Both are truncated to
+/// Append a final speech result. `text` is the recognized caption, stored
+/// verbatim. `raw_text` is a legacy second copy of the recognition (retained for
+/// transcripts written while the LC-629 live-correction pass existed); new
+/// segments always pass `None`, leaving the column NULL. Both are truncated to
 /// [`MAX_SEGMENT_CHARS`] on the char boundary. Returns the new segment id.
 pub async fn append_segment(
     pool: &SqlitePool,
@@ -168,26 +170,6 @@ pub async fn append_segment(
     .await?
     .last_insert_rowid();
     Ok(id)
-}
-
-/// LC-629: the display text of the last `limit` segments of a session, oldest
-/// first - the rolling context window fed to the correction pass. Bounded by the
-/// caller so a long call never grows the correction prompt without limit.
-pub async fn recent_segment_texts(
-    pool: &SqlitePool,
-    transcript_id: i64,
-    limit: i64,
-) -> sqlx::Result<Vec<String>> {
-    let rows = sqlx::query(
-        "SELECT text FROM transcript_segments WHERE transcript_id = ? ORDER BY id DESC LIMIT ?",
-    )
-    .bind(transcript_id)
-    .bind(limit.max(0))
-    .fetch_all(pool)
-    .await?;
-    let mut texts: Vec<String> = rows.into_iter().map(|row| row.get("text")).collect();
-    texts.reverse();
-    Ok(texts)
 }
 
 /// All segments of a session, oldest first.
