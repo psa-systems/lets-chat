@@ -74,7 +74,7 @@
               <button type="submit" class="btn btn-sm btn-primary self-end">{{ "sidebar-category-rename"|t }}</button>
             </form>
             <form hx-delete="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" hx-confirm="{{ "sidebar-category-delete-confirm"|t }}" class="text-right">
-              <button type="submit" class="text-xs text-danger hover:underline">{{ "sidebar-category-delete"|t }}</button>
+              <button type="submit" class="btn btn-sm btn-danger-outline">{{ "sidebar-category-delete"|t }}</button>
             </form>
           </div>
         </details>
