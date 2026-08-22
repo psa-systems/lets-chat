@@ -194,7 +194,7 @@
                   hx-delete="/room/{{ room.id }}/moderators/{{ o.user_id }}"
                   hx-confirm="{{ "room-mods-revoke-confirm-1"|t }} {{ o.role }} {{ "room-mods-revoke-confirm-2"|t }} {{ o.user_label }}?"
                   hx-on::after-request="window.location.reload()"
-                  class="btn btn-sm text-danger border border-danger-border hover:bg-danger-surface flex-none">{{ "room-table-revoke"|t }}</button>
+                  class="btn btn-sm btn-danger-outline flex-none">{{ "room-table-revoke"|t }}</button>
         </li>
         {% endfor %}
       </ul>
