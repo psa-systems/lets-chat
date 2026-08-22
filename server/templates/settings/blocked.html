@@ -113,7 +113,7 @@
       </div>
       <form method="post" action="/users/{{ b.id }}/unblock">
         <input type="hidden" name="return_to" value="/settings/blocked">
-        <button type="submit" class="text-sm text-accent hover:underline">{{ "blocked-unblock"|t }}</button>
+        <button type="submit" class="btn btn-sm btn-ghost">{{ "blocked-unblock"|t }}</button>
       </form>
     </li>
     {% endfor %}

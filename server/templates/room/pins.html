@@ -24,7 +24,7 @@
           <button hx-delete="/messages/{{ p.message_id }}/pin"
                   hx-target="#pin-row-{{ p.message_id }}"
                   hx-swap="outerHTML"
-                  class="text-danger hover:underline">{{ "room-msg-unpin"|t }}</button>
+                  class="btn btn-sm btn-danger-outline">{{ "room-msg-unpin"|t }}</button>
         </div>
         <div class="mt-1 whitespace-pre-wrap text-sm text-content">{{ p.body }}</div>
       </li>

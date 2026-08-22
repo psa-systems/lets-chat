@@ -53,7 +53,7 @@
       <li class="flex items-center gap-1.5 rounded-full bg-surface-elevated px-2 py-1">
         <img src="/avatars/{{ m.user_id }}" alt="{{ m.label }}" class="h-5 w-5 rounded-full object-cover">
         <span class="text-xs">{{ m.label }}</span>
-        {% if is_host %}<button type="button" data-lc-stage-demote="{{ m.user_id }}" class="text-xs text-danger hover:underline" title="{{ "stage-remove-speaker"|t }}">&times;</button>{% endif %}
+        {% if is_host %}<button type="button" data-lc-stage-demote="{{ m.user_id }}" class="btn btn-sm btn-danger-outline" title="{{ "stage-remove-speaker"|t }}">&times;</button>{% endif %}
       </li>
       {% endfor %}
     </ul>
@@ -72,7 +72,7 @@
         {% if m.hand_raised %}<span aria-hidden="true">&#9995;</span>{% endif %}
         <img src="/avatars/{{ m.user_id }}" alt="{{ m.label }}" class="h-5 w-5 rounded-full object-cover">
         <span class="text-xs">{{ m.label }}</span>
-        {% if is_host && m.hand_raised %}<button type="button" data-lc-stage-promote="{{ m.user_id }}" class="text-xs text-accent hover:underline">{{ "stage-approve"|t }}</button>{% endif %}
+        {% if is_host && m.hand_raised %}<button type="button" data-lc-stage-promote="{{ m.user_id }}" class="btn btn-sm btn-ghost">{{ "stage-approve"|t }}</button>{% endif %}
       </li>
       {% endfor %}
     </ul>
