@@ -52,7 +52,11 @@ self.addEventListener('install', (event) => {
     const cache = await caches.open(CACHE_NAME);
     // Add one at a time and tolerate individual misses: a single 404 in
     // cache.addAll() would reject the whole install.
-    await Promise.all(PRECACHE_URLS.map((u) => cache.add(u).catch(() => {})));
+    await Promise.all(PRECACHE_URLS.map((u) => cache.add(u).catch((e) => {
+      // Tolerated, not hidden: a shell that precached nothing (no offline
+      // page) must not look identical to one that precached everything.
+      try { console.warn('[lc-sw] precache failed for', u, e); } catch (e2) {}
+    })));
     await self.skipWaiting();
   })());
 });
