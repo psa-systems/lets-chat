@@ -171,6 +171,12 @@ async fn enclave_branding_picker_shares_the_one_shape() {
     assert_picker(&body, "lc-logo-input", "1048576");
 }
 
+// LC-785: the /admin surface is standalone-only (the router gates it behind
+// `#[cfg(feature = "standalone")]`), so these two admin cases 404 under `saas`.
+// This file is mixed - the settings/enclave pickers above run under both builds
+// - so the gate is per-test here rather than file-scope like the all-admin test
+// files (routes_admin_*, routes_branding, ...).
+#[cfg(feature = "standalone")]
 #[tokio::test]
 async fn admin_branding_pickers_share_the_one_shape() {
     let t = app().await;
@@ -180,6 +186,8 @@ async fn admin_branding_pickers_share_the_one_shape() {
     assert_picker(&body, "favicon", "1048576");
 }
 
+// LC-785: standalone-only /admin surface, gated per-test (see the note above).
+#[cfg(feature = "standalone")]
 #[tokio::test]
 async fn restore_archive_picker_shares_the_one_shape() {
     let t = app().await;
