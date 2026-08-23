@@ -172,7 +172,10 @@ pub mod filters {
     /// which is harmless: the route serves their default SVG `no-cache`.
     pub fn avatar_url(user_id: impl AsRef<str>) -> askama::Result<String> {
         let id = user_id.as_ref();
-        Ok(format!("/avatars/{id}?v={}", crate::avatar_version::version_of(id)))
+        Ok(format!(
+            "/avatars/{id}?v={}",
+            crate::avatar_version::version_of(id)
+        ))
     }
 }
 
