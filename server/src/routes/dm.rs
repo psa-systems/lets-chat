@@ -323,18 +323,27 @@ pub async fn get_dm(
             sysgroup_open: None,
             sysgroup_close: false,
             poll: if poll_ids.contains(&m.id) {
-                crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
-                    .await
-                    .ok()
-                    .flatten()
+                crate::views::room::optional_block(
+                    crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
+                        .await,
+                    m.id,
+                    "poll",
+                )
             } else {
                 None
             },
             follow_up: if followup_ids.contains(&m.id) {
-                crate::views::room::build_follow_up_view(&state.chat, &state.auth, m.id, &user.id)
-                    .await
-                    .ok()
-                    .flatten()
+                crate::views::room::optional_block(
+                    crate::views::room::build_follow_up_view(
+                        &state.chat,
+                        &state.auth,
+                        m.id,
+                        &user.id,
+                    )
+                    .await,
+                    m.id,
+                    "follow_up",
+                )
             } else {
                 None
             },
