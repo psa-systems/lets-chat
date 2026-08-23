@@ -89,7 +89,7 @@
       <div class="flex items-center gap-1" data-lc-voice-preview-names>
         {% for p in huddle_participants %}
         <span data-lc-voice-preview-name="{{ p.user_id }}" data-lc-label="{{ p.label }}">
-          <img class="h-6 w-6 rounded-full object-cover" src="/avatars/{{ p.user_id }}" alt="{{ p.label }}" title="{{ p.label }}">
+          <img class="h-6 w-6 rounded-full object-cover" src="{{ p.user_id|avatar_url }}" alt="{{ p.label }}" title="{{ p.label }}">
         </span>
         {% endfor %}
       </div>

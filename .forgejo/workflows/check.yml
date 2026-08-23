@@ -65,6 +65,13 @@ jobs:
         # ci-build/check-file-pickers.nu and LC-740.
         run: nu ci-build/check-file-pickers.nu
 
+      - name: Avatar cache-token guard
+        # A bare /avatars/{id} URL forces a conditional request (plus a user
+        # lookup and a stat) per author per navigation. Templates render the
+        # versioned /avatars/{id}?v={token} via the avatar_url filter so the
+        # route answers immutable. See ci-build/check-avatar-cache.nu, LC-781 F11.
+        run: nu ci-build/check-avatar-cache.nu
+
       - name: Table scroll-wrapper guard
         # A wrapper that clips instead of scrolling makes the trailing columns
         # unreachable on a 375px viewport: no scrollbar, no drag, and the

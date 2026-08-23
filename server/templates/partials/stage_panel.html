@@ -51,7 +51,7 @@
     <ul class="mt-1 flex flex-wrap gap-2">
       {% for m in speakers %}
       <li class="flex items-center gap-1.5 rounded-full bg-surface-elevated px-2 py-1">
-        <img src="/avatars/{{ m.user_id }}" alt="{{ m.label }}" class="h-5 w-5 rounded-full object-cover">
+        <img src="{{ m.user_id|avatar_url }}" alt="{{ m.label }}" class="h-5 w-5 rounded-full object-cover">
         <span class="text-xs">{{ m.label }}</span>
         {% if is_host %}<button type="button" data-lc-stage-demote="{{ m.user_id }}" class="btn btn-sm btn-danger-outline" title="{{ "stage-remove-speaker"|t }}">&times;</button>{% endif %}
       </li>
@@ -70,7 +70,7 @@
       {% for m in listeners %}
       <li class="flex items-center gap-1.5 rounded-full {% if m.hand_raised %}bg-warning-surface text-warning{% else %}bg-surface-elevated{% endif %} px-2 py-1">
         {% if m.hand_raised %}<span aria-hidden="true">&#9995;</span>{% endif %}
-        <img src="/avatars/{{ m.user_id }}" alt="{{ m.label }}" class="h-5 w-5 rounded-full object-cover">
+        <img src="{{ m.user_id|avatar_url }}" alt="{{ m.label }}" class="h-5 w-5 rounded-full object-cover">
         <span class="text-xs">{{ m.label }}</span>
         {% if is_host && m.hand_raised %}<button type="button" data-lc-stage-promote="{{ m.user_id }}" class="btn btn-sm btn-ghost">{{ "stage-approve"|t }}</button>{% endif %}
       </li>

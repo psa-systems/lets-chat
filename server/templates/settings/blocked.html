@@ -103,7 +103,7 @@
     {% for b in blocked %}
     <li class="flex items-center gap-3 p-2 rounded border border-border">
       {% if b.avatar_ext.is_some() %}
-      <img src="/avatars/{{ b.id }}?v={{ asset_version }}" alt="Avatar" class="h-8 w-8 rounded-full object-cover border border-border">
+      <img src="{{ b.id|avatar_url }}" alt="Avatar" class="h-8 w-8 rounded-full object-cover border border-border">
       {% else %}
       <div class="h-8 w-8 rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold text-sm">{% if let Some(c) = b.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
       {% endif %}
