@@ -14,7 +14,9 @@
       {% include "room/messages.html" %}
       {% include "partials/jump_to_latest.html" %}
     </div>
-    <div id="typing" class="px-4 text-xs text-content-muted"></div>
+    {# LC-800: reserve one text-xs line so toggling the indicator does not
+       resize #messages and re-trigger auto_scroll's ResizeObserver. #}
+    <div id="typing" class="px-4 text-xs text-content-muted min-h-[1rem]"></div>
     {% include "room/composer.html" %}
   </div>
   <aside id="thread-panel" class="hidden"></aside>
