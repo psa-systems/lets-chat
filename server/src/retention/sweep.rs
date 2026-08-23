@@ -82,7 +82,20 @@ pub async fn run_retention_sweep(pool: &SqlitePool) -> Result<SweepStats, sqlx::
 /// exercise the destructive path without touching process-wide env
 /// state. Production callers go through `run_retention_sweep`.
 pub async fn sweep_once(pool: &SqlitePool) -> Result<SweepStats, sqlx::Error> {
-    let predicate = candidate_predicate("datetime('now', '-' || r.retention_days || ' days')");
+    // Production measures the cutoff from the wall clock.
+    sweep_once_at(pool, "now").await
+}
+
+/// Same as [`sweep_once`], but the retention cutoff is measured from `base` (a
+/// SQLite `datetime()` base, `"now"` in production) instead of always the wall
+/// clock. Tests pass a single captured instant so a message stamped "exactly at
+/// the cutoff" is compared against the identical instant the sweep uses, making
+/// the strict-`<` boundary deterministic rather than racing the second-precision
+/// `datetime('now')` between message creation and the sweep (LC-793). `base`
+/// flows through a bound `?`, so `candidate_predicate`'s "cutoff_expr is a
+/// compile-time literal" safety invariant is preserved.
+pub async fn sweep_once_at(pool: &SqlitePool, base: &str) -> Result<SweepStats, sqlx::Error> {
+    let predicate = candidate_predicate("datetime(?, '-' || r.retention_days || ' days')");
     let select_sql = format!(
         "SELECT m.id, m.room_id \
          FROM messages m \
@@ -101,6 +114,10 @@ pub async fn sweep_once(pool: &SqlitePool) -> Result<SweepStats, sqlx::Error> {
 
     let result: Result<SweepStats, sqlx::Error> = async {
         let rows = sqlx::query(&select_sql)
+            // `base` appears twice in the predicate: `created_at < cutoff` and
+            // the `NOT EXISTS (... c.created_at >= cutoff)` recency check.
+            .bind(base)
+            .bind(base)
             .bind(SWEEP_LIMIT)
             .fetch_all(&mut *conn)
             .await?;

@@ -16,7 +16,9 @@
 
 mod common;
 
-use lets_chat::retention::sweep::{count_candidates_for_room, sweep_once, SweepStats, SWEEP_LIMIT};
+use lets_chat::retention::sweep::{
+    count_candidates_for_room, sweep_once, sweep_once_at, SweepStats, SWEEP_LIMIT,
+};
 use sqlx::SqlitePool;
 
 async fn fresh_pool() -> SqlitePool {
@@ -186,11 +188,33 @@ async fn message_exactly_at_cutoff_survives_strict_less_than() {
     // inspection: a future refactor that changes `<` to `<=` would flip
     // this assertion and is something a reviewer should consciously sign
     // off on.
+    //
+    // LC-793: capture ONE reference instant and stamp the message exactly at
+    // the 30-day cutoff for it, then sweep from that same instant via
+    // `sweep_once_at`. created_at and the cutoff then reference the identical
+    // moment, so the strict `<` keeps the message deterministically. The old
+    // form used `datetime('now')` at message-creation and again (a moment
+    // later) at sweep time; SQLite's second precision meant that when the two
+    // straddled a whole-second boundary the "boundary" message came out one
+    // second too old and was deleted, flaking under parallel load.
     let pool = fresh_pool().await;
     let room = make_room(&pool, "r", Some(30)).await;
-    make_message(&pool, room, "boundary", 30).await;
 
-    let stats = sweep_once(&pool).await.unwrap();
+    let base: String = sqlx::query_scalar("SELECT datetime('now')")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO messages (room_id, user_id, body, created_at) \
+         VALUES (?, 'u1', 'boundary', datetime(?, '-30 days'))",
+    )
+    .bind(room)
+    .bind(&base)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let stats = sweep_once_at(&pool, &base).await.unwrap();
 
     assert_eq!(stats.messages_deleted, 0);
     assert_eq!(count_messages(&pool, room).await, 1);
