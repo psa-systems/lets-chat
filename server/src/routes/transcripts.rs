@@ -396,8 +396,6 @@ async fn finalize(state: &AppState, room: &Room, transcript_id: i64) {
     .await;
     if transitioned {
         post_saved_message(state, room, transcript_id).await;
-        // LC-662: kick off the async AI recap (opt-in, best-effort).
-        maybe_post_call_recap(state, room, transcript_id);
     }
 }
 
@@ -433,8 +431,6 @@ pub async fn finalize_open_for_user(state: &AppState, user_id: &str) {
                 })
                 .await;
                 post_saved_message(state, &room, tid).await;
-                // LC-662: kick off the async AI recap (opt-in, best-effort).
-                maybe_post_call_recap(state, &room, tid);
             }
         }
     }
@@ -791,9 +787,9 @@ pub async fn show(
     })
 }
 
-/// LC-396/LC-662: assemble the `Speaker: text` transcript prompt for the model,
-/// bounded so the prompt stays a reasonable size. Shared by the on-demand summary
-/// handler and the automatic post-call recap.
+/// LC-396: assemble the `Speaker: text` transcript prompt for the model, bounded
+/// so the prompt stays a reasonable size. Shared by the on-demand summary handler
+/// and the per-viewer "what did I miss" brief.
 async fn build_transcript_prompt_text(
     state: &AppState,
     transcript_id: i64,
@@ -828,79 +824,6 @@ async fn build_transcript_prompt_text(
         }
     }
     Ok(text)
-}
-
-/// LC-662: after a call transcript finalizes, post an AI recap (summary + action
-/// items) into the room as the `assistant` bot, so nobody has to open the
-/// transcript page and click Summarize. Gated on `rooms.assistant_enabled` - the
-/// same manager opt-in that governs the /ask assistant, since this is the same
-/// bot posting in the same room. Fire-and-forget: local summarization can take
-/// many seconds and nobody is waiting on it, so a failure only logs.
-fn maybe_post_call_recap(state: &AppState, room: &Room, transcript_id: i64) {
-    let state = state.clone();
-    let room = room.clone();
-    tokio::spawn(async move {
-        if let Err(e) = post_call_recap(&state, &room, transcript_id).await {
-            tracing::warn!(error = %e, transcript_id, "auto call recap failed");
-        }
-    });
-}
-
-/// The recap body of [`maybe_post_call_recap`]. Idempotent: the transcript's
-/// stored `summary` doubles as a "recap already produced" marker, so a
-/// re-finalize race (explicit /end plus the WS-disconnect backstop) never
-/// double-posts. Silent no-op when no LLM is configured, the room has not opted
-/// in, or the call produced no speech.
-async fn post_call_recap(
-    state: &AppState,
-    room: &Room,
-    transcript_id: i64,
-) -> Result<(), AppError> {
-    let Some(llm) = state.llm_client.clone() else {
-        return Ok(());
-    };
-    // LC-679: the runtime kill switch also silences this auto-recap (no user
-    // context here, so it is flag-gated only, like the other background jobs).
-    if !super::ai_gate::flag_on(state).await {
-        return Ok(());
-    }
-    if !db::chat::get_room_assistant_enabled(&state.chat, room.id).await? {
-        return Ok(());
-    }
-    // Dedupe: a stored summary means the recap already ran for this transcript.
-    let Some(session) = db::transcripts::get(&state.chat, transcript_id).await? else {
-        return Ok(());
-    };
-    if session
-        .summary
-        .as_deref()
-        .map(str::trim)
-        .is_some_and(|s| !s.is_empty())
-    {
-        return Ok(());
-    }
-
-    let text = build_transcript_prompt_text(state, transcript_id).await?;
-    if text.trim().is_empty() {
-        return Ok(());
-    }
-    let md = match llm.summarize(&text).await {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::warn!(error = %e, transcript_id, "auto call recap summarization failed");
-            return Ok(());
-        }
-    };
-    // Store first so it doubles as the dedupe marker even if the post fails.
-    db::transcripts::set_summary(&state.chat, transcript_id, &md).await?;
-
-    let bot = super::assistant::assistant_bot(state).await?;
-    let body = format!(
-        "**\u{1F4DD} Call recap** \u{00B7} [full transcript](/transcripts/{transcript_id})\n\n{md}"
-    );
-    let new_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &body).await?;
-    super::room::finalize_message_send(state, room, &bot, new_id, &body, None).await?;
-    Ok(())
 }
 
 /// POST /transcripts/{id}/summary
