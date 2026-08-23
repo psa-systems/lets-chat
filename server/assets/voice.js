@@ -38,6 +38,12 @@
   // VoiceLeft / VoiceRoster events. The preview HTML is re-rendered from
   // this map so it never lies about who is on the line.
   var participants = {};  // user_id -> label
+  // LC-784: user_id -> avatar version token. Seeded from the server-rendered
+  // preview chips and each VoiceJoined / VoiceRoster event so avatarUrl() can
+  // build an immutable `/avatars/{id}?v={token}` instead of the bare, per-
+  // navigation-revalidating URL. A missing entry falls back to the bare URL,
+  // which still resolves (no-cache) - so an unversioned path never breaks.
+  var avatarVersions = {};
   var selfMuted = false;  // LC-402: our own mic state, broadcast to the channel
   var selfSharing = false; // LC-408: our own screen-share state, broadcast too
   var sfuCamOn = false;   // LC-610: our SFU camera state (localStream is null there)
@@ -92,6 +98,15 @@
 
   // LC-402: build a participant tile. Theme-token styling lives in main.css
   // (.lc-voice-tile and friends); JS only sets the data-lc-* hooks + content.
+  // LC-784: build a versioned avatar URL from the id + the tracked version
+  // token. With a token the route answers `immutable` and the browser skips
+  // revalidation; without one (an SFU tile whose identity came from LiveKit, or
+  // an older frame) it falls back to the bare URL, which still resolves.
+  function avatarUrl(uid) {
+    var v = avatarVersions[uid];
+    return '/avatars/' + encodeURIComponent(uid) + (v ? '?v=' + encodeURIComponent(v) : '');
+  }
+
   function createTile(userId, label, isSelf) {
     var g = grid();
     if (!g) return;
@@ -110,7 +125,7 @@
     var avatar = document.createElement('img');
     avatar.setAttribute('data-lc-voice-avatar', '');
     avatar.className = 'lc-voice-avatar';
-    avatar.src = '/avatars/' + encodeURIComponent(userId);
+    avatar.src = avatarUrl(userId);
     avatar.alt = label;
     // Mute indicator, revealed via [data-muted] on the tile.
     var mute = document.createElement('span');
@@ -278,6 +293,10 @@
       var uid = el.getAttribute('data-lc-voice-preview-name');
       // LC-416: chips carry the label in data-lc-label (was the text node).
       if (uid) participants[uid] = el.getAttribute('data-lc-label') || (el.textContent || '').trim() || uid;
+      // LC-784: chips also carry the avatar version so a re-rendered preview
+      // keeps immutable avatar URLs before any WS event arrives.
+      var ver = el.getAttribute('data-lc-avatar-version');
+      if (uid && ver) avatarVersions[uid] = ver;
     });
   }
 
@@ -327,7 +346,7 @@
       chip.setAttribute('data-lc-label', label);
       var img = document.createElement('img');
       img.className = 'lc-voice-lobby-avatar';
-      img.src = '/avatars/' + encodeURIComponent(uid);
+      img.src = avatarUrl(uid);
       img.alt = label;
       var nm = document.createElement('span');
       nm.className = 'lc-voice-lobby-name';
@@ -1144,6 +1163,9 @@
       participants[cfg.selfId] = cfg.selfName;
       list.forEach(function (pair) {
         participants[pair[0]] = pair[1];
+        // LC-784: pair[2] is the peer's avatar version (roster tuples became
+        // triples). Record it before addPeer -> createTile builds the URL.
+        if (pair[2]) avatarVersions[pair[0]] = pair[2];
         // We are the newest joiner: offer to everyone already here.
         addPeer(pair[0], pair[1], true);
       });
@@ -1154,6 +1176,9 @@
       // Track the new participant for the preview regardless of whether we
       // are joined to the call ourselves.
       if (userId) participants[userId] = username;
+      // LC-784: record their avatar version before addPeer/createTile below.
+      var joinedVersion = node.getAttribute('data-avatar-version');
+      if (userId && joinedVersion) avatarVersions[userId] = joinedVersion;
       renderPreview();
       // Someone joined after us; they will offer, we answer. Skip when the
       // event is about us (we already created our own tile in join()).
@@ -1204,12 +1229,14 @@
       roomId: parseInt(el.getAttribute('data-room-id'), 10),
       selfId: el.getAttribute('data-self-id'),
       selfName: el.getAttribute('data-self-name') || 'You',
+      selfVersion: el.getAttribute('data-self-version') || '', // LC-784
       iceServers: el.getAttribute('data-ice-servers') || '[]',
       // LC-610: the server sets this from `livekit::available()`. Absent (an
       // enclave voice channel page, or an older render) reads as mesh.
       sfu: el.getAttribute('data-lc-huddle-sfu') === '1',
     };
     joined = false;
+    if (cfg.selfId && cfg.selfVersion) avatarVersions[cfg.selfId] = cfg.selfVersion; // LC-784
     seedParticipantsFromDom();
     applyHuddleVisibility(); // LC-493: reveal the bar if a huddle is already live
   }
