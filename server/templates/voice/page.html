@@ -11,6 +11,7 @@
      data-enclave-id="{{ enclave_id }}"
      data-self-id="{{ user.id }}"
      data-self-name="{{ user.display_label() }}"
+     data-self-version="{{ user.id|avatar_version }}"
      data-ice-servers="{{ ice_servers }}">
   {# LC-416: in-call control bar. Three clear clusters - media controls
      (devices / Mute / Start video / Share screen), transcription (Transcribe
@@ -129,7 +130,7 @@
       <p class="lc-voice-lobby-title" data-lc-voice-preview-heading>{% if participants.len() == 1 %}{{ "voice-lobby-heading-one"|t }}{% else %}{{ participants.len() }} {{ "voice-lobby-heading-other"|t }}{% endif %}</p>
       <div class="lc-voice-lobby-avatars" data-lc-voice-preview-names>
         {% for p in participants %}
-        <span class="lc-voice-lobby-chip" data-lc-voice-preview-name="{{ p.user_id }}" data-lc-label="{{ p.label }}">
+        <span class="lc-voice-lobby-chip" data-lc-voice-preview-name="{{ p.user_id }}" data-lc-label="{{ p.label }}" data-lc-avatar-version="{{ p.user_id|avatar_version }}">
           <img class="lc-voice-lobby-avatar" src="{{ p.user_id|avatar_url }}" alt="{{ p.label }}">
           <span class="lc-voice-lobby-name">{{ p.label }}</span>
         </span>

@@ -177,6 +177,16 @@ pub mod filters {
             crate::avatar_version::version_of(id)
         ))
     }
+
+    /// LC-784: the bare avatar version token for `user_id` (no URL), so a
+    /// template can hand it to client JS that builds `/avatars/{id}?v={token}`
+    /// itself. The call/voice surfaces build their avatar URLs in JS from a
+    /// WS-delivered id (they cannot use `avatar_url`), so the token rides
+    /// alongside the id in a `data-*` attribute and the JS appends `?v=`. Same
+    /// source as `avatar_url`, so both stay in step on a re-upload.
+    pub fn avatar_version(user_id: impl AsRef<str>) -> askama::Result<String> {
+        Ok(crate::avatar_version::version_of(user_id.as_ref()))
+    }
 }
 
 #[cfg(test)]

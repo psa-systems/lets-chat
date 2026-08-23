@@ -1749,10 +1749,14 @@ fn render_call_signal(event: &ChatEvent) -> Option<String> {
     else {
         return None;
     };
+    // LC-784: carry the caller's avatar version so call.js builds an immutable
+    // remote-avatar URL instead of the bare, per-navigation-revalidating one.
+    let from_avatar_version = crate::avatar_version::version_of(from_user_id);
     CallSignalFragment {
         room_id: *room_id,
         from_user_id,
         from_name,
+        from_avatar_version: &from_avatar_version,
         kind,
         payload: payload.as_deref(),
     }
@@ -2177,33 +2181,48 @@ fn render_voice_event(event: &ChatEvent) -> Option<String> {
             room_id,
             user_id,
             username,
-        } => VoiceEventFragment {
-            room_id: *room_id,
-            kind: "joined",
-            user_id,
-            username,
-            peers_json: "",
-            payload: None,
+        } => {
+            // LC-784: the joiner's avatar version, so voice.js builds an
+            // immutable tile-avatar URL from the WS-delivered id.
+            let avatar_version = crate::avatar_version::version_of(user_id);
+            VoiceEventFragment {
+                room_id: *room_id,
+                kind: "joined",
+                user_id,
+                username,
+                avatar_version: &avatar_version,
+                peers_json: "",
+                payload: None,
+            }
+            .render()
+            .ok()
         }
-        .render()
-        .ok(),
         ChatEvent::VoiceLeft { room_id, user_id } => VoiceEventFragment {
             room_id: *room_id,
             kind: "left",
             user_id,
             username: "",
+            avatar_version: "",
             peers_json: "",
             payload: None,
         }
         .render()
         .ok(),
         ChatEvent::VoiceRoster { room_id, peers, .. } => {
-            let json = serde_json::to_string(peers).ok()?;
+            // LC-784: a version per peer rides inside the roster JSON as the
+            // third tuple element, so voice.js can version every existing
+            // participant's avatar the same way as fresh joins.
+            let triples: Vec<(&String, &String, String)> = peers
+                .iter()
+                .map(|(id, name)| (id, name, crate::avatar_version::version_of(id)))
+                .collect();
+            let json = serde_json::to_string(&triples).ok()?;
             VoiceEventFragment {
                 room_id: *room_id,
                 kind: "roster",
                 user_id: "",
                 username: "",
+                avatar_version: "",
                 peers_json: &json,
                 payload: None,
             }
@@ -2222,6 +2241,7 @@ fn render_voice_event(event: &ChatEvent) -> Option<String> {
             kind,
             user_id: from_user_id,
             username: from_name,
+            avatar_version: "",
             peers_json: "",
             payload: payload.as_deref(),
         }
@@ -2236,6 +2256,7 @@ fn render_voice_event(event: &ChatEvent) -> Option<String> {
             kind: "mute",
             user_id,
             username: "",
+            avatar_version: "",
             peers_json: "",
             payload: Some(if *muted { "1" } else { "0" }),
         }
@@ -2250,6 +2271,7 @@ fn render_voice_event(event: &ChatEvent) -> Option<String> {
             kind: "screen",
             user_id,
             username: "",
+            avatar_version: "",
             peers_json: "",
             payload: Some(if *sharing { "1" } else { "0" }),
         }
