@@ -600,6 +600,15 @@ pub async fn get_room(
     let mut huddle_participants = Vec::new();
     if huddle_enabled {
         for uid in state.hub.voice_room_users(room_id) {
+            // LC-792: never list the viewer themselves in the pre-join lobby. If
+            // they were really on the line they would be joined (voice.js shows
+            // the in-call grid, not this lobby), so seeing yourself here is always
+            // wrong - and after a reload the old mesh connection can still linger
+            // in `voice_room_users` (its WS-close cleanup races the fresh page
+            // render), which showed "you are in the huddle" next to a Join button.
+            if uid == user.id {
+                continue;
+            }
             let label = db::auth::find_user_by_id(&state.auth, &uid)
                 .await?
                 .map(|r| {
