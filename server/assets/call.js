@@ -26,6 +26,10 @@
   var roomId = null;
   var peerId = null;
   var peerName = null;
+  // LC-784: the remote peer's avatar version token, so setRemoteAvatar builds
+  // an immutable `/avatars/{id}?v={token}` URL. Sourced from the start button
+  // (outgoing) or the invite signal (incoming); null falls back to the bare URL.
+  var peerAvatarVersion = null;
 
   var pc = null;              // RTCPeerConnection while a call is live
   var localStream = null;
@@ -168,7 +172,7 @@
 
   function setRemoteAvatar() {
     if (peerId == null) return;
-    var src = '/avatars/' + peerId;
+    var src = '/avatars/' + encodeURIComponent(peerId) + (peerAvatarVersion ? '?v=' + encodeURIComponent(peerAvatarVersion) : '');
     // The active-call avatar plus the LC-437 incoming-call dialog avatar.
     [q('[data-lc-remote-avatar]'), q('[data-lc-call-incoming-avatar]')].forEach(function (av) {
       if (!av) return;
@@ -293,6 +297,7 @@
     roomId = null;
     peerId = null;
     peerName = null;
+    peerAvatarVersion = null; // LC-784
     // LC-393: the call is over - let transcribe.js finalize any open session.
     window.__lcSessionRoom = null;
     var __tt = q('[data-lc-transcribe-toggle]'); if (__tt) __tt.removeAttribute('data-lc-room');
@@ -502,6 +507,7 @@
       roomId = ctx.roomId;
       peerId = ctx.peerId;
       peerName = ctx.peerName;
+      peerAvatarVersion = ctx.peerAvatarVersion || null; // LC-784
       setRemoteAvatar();
     }
     Promise.all([ensureIce(), getMedia(withVideo)])
@@ -1144,6 +1150,7 @@
           roomId = msgRoomId;
           peerId = fromId;
           peerName = fromName;
+          peerAvatarVersion = node.getAttribute('data-from-avatar-version') || null; // LC-784
           setRemoteAvatar();
           incoming = { fromId: fromId, fromName: fromName, withVideo: payload === 'video' };
           var nm = q('[data-lc-call-incoming-name]'); if (nm) nm.textContent = fromName;
@@ -1239,6 +1246,7 @@
         roomId: parseInt(startBtn.getAttribute('data-room-id'), 10),
         peerId: startBtn.getAttribute('data-peer-id'),
         peerName: startBtn.getAttribute('data-peer-name') || 'your contact',
+        peerAvatarVersion: startBtn.getAttribute('data-peer-avatar-version'), // LC-784
       };
       if (!isFinite(ctx.roomId)) return;
       startCall(startBtn.getAttribute('data-lc-call-start') === 'video', ctx);
