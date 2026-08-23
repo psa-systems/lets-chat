@@ -1,5 +1,9 @@
 <!doctype html>
-<html lang="{{ ""|lang }}">
+{# LC-776: `/assets/*` is served with a one-year immutable Cache-Control for any
+   URL carrying `?v=`, so a script that builds an asset URL at runtime (the lazy
+   mermaid / LiveKit bundle loaders) has to stamp the same version or it pins a
+   stale bundle. They read it off this attribute. #}
+<html lang="{{ ""|lang }}" data-lc-asset-version="{{ asset_version }}">
 <head>
   <meta charset="utf-8">
   {# LC-199: viewport-fit=cover lets the layout extend behind iOS notch / home
@@ -14,6 +18,8 @@
   <link id="lc-favicon" rel="icon" href="/branding/favicon?v={{ asset_version }}">
   <link rel="manifest" href="/assets/manifest.webmanifest?v={{ asset_version }}">
   <meta name="theme-color" content="#2563eb">
+  {# Unversioned on purpose: the static manifest.webmanifest points at the same
+     file bare, and matching it keeps one cache entry. See sw.js PRECACHE_URLS. #}
   <link rel="apple-touch-icon" href="/assets/icon-192.png">
   {# LC-191/LC-192/LC-541: no-flash theme bootstrap, two axes. Synchronous +
      BEFORE the stylesheets so `data-theme` (palette) and `data-mode`
