@@ -435,7 +435,7 @@
     // LC-142: restore to the dynamic branding favicon (custom or default)
     // when there are no unread mentions; the unread "dot" stays the static
     // marker since there is no per-brand dot variant.
-    if (link) link.href = n > 0 ? '/assets/favicon-dot.svg' : '/branding/favicon?v={{ asset_version }}';
+    if (link) link.href = n > 0 ? '/assets/favicon-dot.svg?v={{ asset_version }}' : '/branding/favicon?v={{ asset_version }}';
   }
   // OOB-style replace of the sidebar mention chip. n=0 collapses to an empty span.
   function paintBadge(roomId, n){
@@ -477,7 +477,7 @@
   }
   function playSound(){
     if (!soundEnabled) return;
-    try { var p = new Audio('/assets/notify.ogg').play(); if (p && p.catch) p.catch(function(){}); } catch (e) {}
+    try { var p = new Audio('/assets/notify.ogg?v={{ asset_version }}').play(); if (p && p.catch) p.catch(function(){}); } catch (e) {}
   }
   // Translate one bus child into all of its side effects.
   function process(node){
