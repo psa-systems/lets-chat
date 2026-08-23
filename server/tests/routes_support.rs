@@ -109,6 +109,10 @@ async fn human_with_no_admin_files_a_ticket() {
     );
 }
 
+// LC-785: the /admin/support queue is standalone-only (the router gates the
+// admin area behind `#[cfg(feature = "standalone")]`), so these admin cases 404
+// under saas. Filing a ticket via /human above is build-agnostic and stays.
+#[cfg(feature = "standalone")]
 #[tokio::test]
 async fn resolving_a_ticket_notifies_the_requester() {
     let auth = common::pool("auth").await;
@@ -171,6 +175,8 @@ async fn resolving_a_ticket_notifies_the_requester() {
     );
 }
 
+// LC-785: standalone-only /admin/support surface (see the note above).
+#[cfg(feature = "standalone")]
 #[tokio::test]
 async fn claiming_a_ticket_opens_a_shared_channel() {
     let auth = common::pool("auth").await;
@@ -285,6 +291,8 @@ async fn claiming_a_ticket_opens_a_shared_channel() {
 // LC-726: pending support requests surface outside the admin section - an
 // admin-only rail tile (every page) and a Home dashboard card - so an admin does
 // not have to be in /admin to see the queue. A non-admin sees neither.
+// LC-785: the admin-home pending-support card is standalone-only (see above).
+#[cfg(feature = "standalone")]
 #[tokio::test]
 async fn pending_support_surfaces_on_home_for_admins_only() {
     let auth = common::pool("auth").await;
