@@ -133,17 +133,38 @@ async fn require_access(state: &AppState, user: &User, room: &Room) -> Result<()
     }
 }
 
-/// The set of users who should receive this call's live transcript events: the
-/// voice channel's current participants for a voice room, else the DM's members.
-/// Scoping voice broadcasts to actual participants is what keeps a room member
-/// who never joined from being auto-captured.
+/// The set of users who should receive this call's live transcript events.
+///
+/// - Enclave voice channel: the current mesh participants. Scoping to them keeps
+///   a member who never joined from being auto-captured.
+/// - DM (1:1 call): both members.
+/// - Ad-hoc huddle in a text room: the mesh participants (`voice_room_users`) -
+///   which is exactly who `require_participant` admits - UNIONED with the room's
+///   members. LC-791: a huddle can live in an ENCLAVE text room, and enclave
+///   rooms have no per-room `room_members` rows (access is enclave-scoped), so
+///   `list_room_member_ids` alone returned a set that excluded the actual
+///   participants. Their captions were stored but broadcast to no one, so live
+///   captions never appeared (the saved transcript still had them). Unioning in
+///   `voice_room_users` guarantees every participant receives their own caption,
+///   while a plain group room still reaches its members as before.
 async fn recipients(state: &AppState, room: &Room) -> Vec<String> {
     if room.is_voice {
         state.hub.voice_room_users(room.id)
-    } else {
+    } else if room.room_type == "dm" {
         db::chat::list_room_member_ids(&state.chat, room.id)
             .await
             .unwrap_or_default()
+    } else {
+        let mut set = state.hub.voice_room_users(room.id);
+        for m in db::chat::list_room_member_ids(&state.chat, room.id)
+            .await
+            .unwrap_or_default()
+        {
+            if !set.contains(&m) {
+                set.push(m);
+            }
+        }
+        set
     }
 }
 

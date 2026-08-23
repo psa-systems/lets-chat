@@ -523,6 +523,64 @@ async fn segments_persist_and_render_gated() {
     assert_eq!(st, StatusCode::FORBIDDEN);
 }
 
+/// LC-791: an ad-hoc huddle in a room with NO per-room `room_members` rows (an
+/// enclave text room, where access is enclave-scoped) still broadcasts live
+/// captions to its mesh participants. The recipient set was `list_room_member_ids`
+/// for non-voice rooms, which is empty here, so a participant's own caption was
+/// stored but broadcast to no one and never appeared live (the saved transcript
+/// still had it). Recipients now union in `voice_room_users`.
+#[tokio::test]
+async fn huddle_without_room_members_broadcasts_captions_to_participants() {
+    let s = setup().await;
+    // A text room created without any room_members rows (mirrors an enclave
+    // channel). Bob is NOT a member of it.
+    let room = db::chat::create_room(&s.chat, "huddle", None, "public", None, None)
+        .await
+        .unwrap();
+    // Bob joins the huddle mesh - which is what require_participant admits - but
+    // holds no room_members row.
+    let (conn, mut rx, _) = s.hub.connect(&s.b_id, "bob");
+    s.hub.voice_join(conn, room);
+
+    let (st, body) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{room}/transcript/start"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "start: {body}");
+    let tid = parse_id(&body);
+
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=hello+there"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    // Bob must receive his own caption over the hub, addressed to him. Before the
+    // fix the recipient set was empty, so nothing was broadcast.
+    let mut got = false;
+    while let Ok(ev) = rx.try_recv() {
+        if let lets_chat::ws::events::ChatEvent::TranscriptSegment {
+            to_user_id, text, ..
+        } = ev
+        {
+            if to_user_id == s.b_id && text == "hello there" {
+                got = true;
+                break;
+            }
+        }
+    }
+    assert!(
+        got,
+        "a huddle participant should receive their own live caption even when the room has no room_members rows"
+    );
+}
+
 #[tokio::test]
 async fn server_stt_audio_records_segment() {
     // Phase 3: with a server STT client configured, an audio clip POSTed to
