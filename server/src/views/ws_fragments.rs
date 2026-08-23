@@ -264,6 +264,10 @@ pub struct CallSignalFragment<'a> {
     pub room_id: i64,
     pub from_user_id: &'a str,
     pub from_name: &'a str,
+    /// LC-784: the caller's avatar version token, so call.js builds the remote
+    /// avatar as `/avatars/{from_user_id}?v={token}` (immutable) instead of the
+    /// bare, per-navigation-revalidating URL. Empty when not applicable.
+    pub from_avatar_version: &'a str,
     pub kind: &'a str,
     pub payload: Option<&'a str>,
 }
@@ -293,6 +297,13 @@ pub struct VoiceEventFragment<'a> {
     pub kind: &'a str,
     pub user_id: &'a str,
     pub username: &'a str,
+    /// LC-784: this user's avatar version token for the `joined` kind, so
+    /// voice.js builds their tile avatar as `/avatars/{user_id}?v={token}`
+    /// (immutable). The `roster` kind carries a version per peer inside
+    /// `peers_json` instead; every other kind leaves this empty.
+    pub avatar_version: &'a str,
+    /// `roster` payload: a JSON array of `[user_id, username, avatar_version]`
+    /// triples (LC-784 added the third element).
     pub peers_json: &'a str,
     pub payload: Option<&'a str>,
 }
@@ -472,4 +483,50 @@ pub struct HuddleRingFragment<'a> {
 pub struct InCallBadgeFragment {
     pub room_id: i64,
     pub in_call: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // LC-784: the call/voice avatar URLs are built in JS from these frames, so
+    // the version token must survive into the rendered `data-*` attributes -
+    // otherwise the JS has nothing to append and silently falls back to a bare,
+    // per-navigation-revalidating `/avatars/{id}`.
+    #[test]
+    fn voice_joined_fragment_carries_avatar_version() {
+        let html = VoiceEventFragment {
+            room_id: 7,
+            kind: "joined",
+            user_id: "u1",
+            username: "Alice",
+            avatar_version: "1712345678",
+            peers_json: "",
+            payload: None,
+        }
+        .render()
+        .unwrap();
+        assert!(
+            html.contains(r#"data-avatar-version="1712345678""#),
+            "joined frame must carry the avatar version, got: {html}"
+        );
+    }
+
+    #[test]
+    fn call_signal_fragment_carries_from_avatar_version() {
+        let html = CallSignalFragment {
+            room_id: 3,
+            from_user_id: "caller",
+            from_name: "Bob",
+            from_avatar_version: "999",
+            kind: "invite",
+            payload: None,
+        }
+        .render()
+        .unwrap();
+        assert!(
+            html.contains(r#"data-from-avatar-version="999""#),
+            "call signal must carry the caller's avatar version, got: {html}"
+        );
+    }
 }
