@@ -1064,6 +1064,10 @@ pub async fn post_profile(
             }
         }
         db::auth::set_user_avatar_ext(&state.auth, &user.id, Some(new_ext)).await?;
+        // LC-781 (F11): the file's mtime just changed, so drop the cached version
+        // token; the next render re-stats and emits a fresh `?v=`, busting the
+        // browser's immutable cache.
+        crate::avatar_version::invalidate(&user.id);
         avatar_saved = true;
     }
 
@@ -1211,6 +1215,9 @@ pub async fn post_avatar_delete(
         let _ = tokio::fs::remove_file(path).await;
     }
     db::auth::set_user_avatar_ext(&state.auth, &user.id, None).await?;
+    // LC-781 (F11): custom avatar gone; drop the cached token so renders fall
+    // back to the default SVG's URL rather than a stale immutable custom one.
+    crate::avatar_version::invalidate(&user.id);
     // LC-173: refresh the editor's other tabs (sidebar self block).
     state.hub.broadcast_to_user(
         &user.id,

@@ -1,18 +1,42 @@
 use std::hash::{Hash, Hasher};
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use serde::Deserialize;
 
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
 
+/// LC-781 (F11): a `?v=<token>` marks a versioned avatar URL. Its presence (not
+/// its value) flips the response to `immutable`; the token only has to differ
+/// across uploads, which `crate::avatar_version` guarantees.
+#[derive(Deserialize)]
+pub struct AvatarQuery {
+    #[serde(default)]
+    v: Option<String>,
+}
+
+/// Cache-Control for the avatar response. A versioned request (`?v=...`) is safe
+/// to cache forever - the URL changes when the image does - so it skips
+/// revalidation entirely. A bare request keeps LC-348's `no-cache` + ETag, so a
+/// not-yet-versioned URL still reflects an upload on the next request.
+fn cache_control(versioned: bool) -> &'static str {
+    if versioned {
+        "public, max-age=31536000, immutable"
+    } else {
+        "no-cache"
+    }
+}
+
 pub async fn get_avatar(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
+    Query(query): Query<AvatarQuery>,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
+    let versioned = query.v.is_some();
     // LC-701: an unknown id (a message author who is a bot or a since-deleted
     // user, e.g. surfaced in search results) must still resolve to an image, not
     // 404. `/avatars/{id}` is referenced unconditionally by chat rows, the voice
@@ -41,7 +65,7 @@ pub async fn get_avatar(
         .map_err(|_| AppError::NotFound)?;
     let etag = file_etag(&ext, &meta);
     if if_none_match(&headers, &etag) {
-        return Ok(not_modified(&etag));
+        return Ok(not_modified(&etag, versioned));
     }
     let bytes = tokio::fs::read(&path)
         .await
@@ -56,7 +80,7 @@ pub async fn get_avatar(
         StatusCode::OK,
         [
             (header::CONTENT_TYPE, mime.to_string()),
-            (header::CACHE_CONTROL, "no-cache".to_string()),
+            (header::CACHE_CONTROL, cache_control(versioned).to_string()),
             (header::ETAG, etag),
         ],
         bytes,
@@ -87,13 +111,15 @@ fn default_avatar(username: &str, headers: &HeaderMap) -> Response {
     // to the file branch, whose ETag differs, so the browser refetches.
     let etag = format!("\"d{:x}\"", hash_str(&svg));
     if if_none_match(headers, &etag) {
-        return not_modified(&etag);
+        return not_modified(&etag, false);
     }
     (
         StatusCode::OK,
         [
             (header::CONTENT_TYPE, "image/svg+xml".to_string()),
-            (header::CACHE_CONTROL, "no-cache".to_string()),
+            // Default SVG is username-derived, not file-versioned: always no-cache
+            // so a username change reflects immediately (LC-781 F11 keeps LC-348).
+            (header::CACHE_CONTROL, cache_control(false).to_string()),
             (header::ETAG, etag),
         ],
         svg,
@@ -122,11 +148,11 @@ fn if_none_match(headers: &HeaderMap, etag: &str) -> bool {
         .is_some_and(|v| v.split(',').any(|t| t.trim() == etag))
 }
 
-fn not_modified(etag: &str) -> Response {
+fn not_modified(etag: &str, versioned: bool) -> Response {
     (
         StatusCode::NOT_MODIFIED,
         [
-            (header::CACHE_CONTROL, "no-cache".to_string()),
+            (header::CACHE_CONTROL, cache_control(versioned).to_string()),
             (header::ETAG, etag.to_string()),
         ],
     )

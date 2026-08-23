@@ -7,7 +7,7 @@
   {% if !members.is_empty() %}
   <span class="mr-1">{{ "room-seen-by"|t }}</span>
   {% for m in members %}
-  <img src="/avatars/{{ m.user_id }}" alt="{{ m.label }}" title="{{ m.label }}" class="h-5 w-5 rounded-full object-cover ring-1 ring-surface-elevated -ml-1 first:ml-0">
+  <img src="{{ m.user_id|avatar_url }}" alt="{{ m.label }}" title="{{ m.label }}" class="h-5 w-5 rounded-full object-cover ring-1 ring-surface-elevated -ml-1 first:ml-0">
   {% endfor %}
   {% endif %}
 </div>
