@@ -163,6 +163,20 @@ pub mod filters {
     pub fn iso(ts: &str) -> askama::Result<String> {
         Ok(crate::views::room::to_iso_utc(ts))
     }
+
+    /// LC-781 (F11): `{{ user_id|avatar_url }}` -> the versioned,
+    /// immutable-cacheable avatar URL `/avatars/{id}?v={token}`. The token is the
+    /// avatar file's mtime (cached in `crate::avatar_version`), so a re-upload
+    /// changes it - busting the browser's immutable cache - while an unchanged
+    /// avatar costs no revalidation. A user with no custom avatar gets `?v=0`,
+    /// which is harmless: the route serves their default SVG `no-cache`.
+    pub fn avatar_url(user_id: impl AsRef<str>) -> askama::Result<String> {
+        let id = user_id.as_ref();
+        Ok(format!(
+            "/avatars/{id}?v={}",
+            crate::avatar_version::version_of(id)
+        ))
+    }
 }
 
 #[cfg(test)]

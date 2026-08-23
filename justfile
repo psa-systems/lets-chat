@@ -25,7 +25,7 @@ pre-commit: check test
 
 # Run all checks
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-ui-conventions check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
+check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-ui-conventions check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt
 
 # Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
 # browser assets and templates, and untokenized backgrounds on the
@@ -40,6 +40,12 @@ check-asset-color-tokens:
 [group('check')]
 check-file-pickers:
     nu ci-build/check-file-pickers.nu
+
+# Reject bare /avatars/{id} URLs in templates; render them versioned via the
+# avatar_url filter so the route can answer immutable (LC-781 F11).
+[group('check')]
+check-avatar-cache:
+    nu ci-build/check-avatar-cache.nu
 
 # Reject tables with no horizontal scroll wrapper; a clipping wrapper makes the
 # trailing columns unreachable on a narrow viewport (LC-737).

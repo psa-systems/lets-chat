@@ -29,7 +29,7 @@
         {# Inviter, resolved to a friendly name + avatar (LC-772 bug: was a UUID). #}
         <div class="mt-2 flex items-center gap-2">
           {% if card.inviter_avatar_ext.is_some() %}
-          <img src="/avatars/{{ card.inviter_id }}" alt="" class="h-6 w-6 shrink-0 rounded-full object-cover">
+          <img src="{{ card.inviter_id|avatar_url }}" alt="" class="h-6 w-6 shrink-0 rounded-full object-cover">
           {% else %}
           <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-xs font-semibold text-content">{{ card.inviter_initial() }}</div>
           {% endif %}

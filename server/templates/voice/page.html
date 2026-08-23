@@ -130,7 +130,7 @@
       <div class="lc-voice-lobby-avatars" data-lc-voice-preview-names>
         {% for p in participants %}
         <span class="lc-voice-lobby-chip" data-lc-voice-preview-name="{{ p.user_id }}" data-lc-label="{{ p.label }}">
-          <img class="lc-voice-lobby-avatar" src="/avatars/{{ p.user_id }}" alt="{{ p.label }}">
+          <img class="lc-voice-lobby-avatar" src="{{ p.user_id|avatar_url }}" alt="{{ p.label }}">
           <span class="lc-voice-lobby-name">{{ p.label }}</span>
         </span>
         {% endfor %}

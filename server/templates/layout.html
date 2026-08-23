@@ -82,7 +82,7 @@
              class="absolute inset-0 m-auto h-32 w-32 rounded-full object-cover">
         <div class="absolute bottom-4 right-4 h-32 w-44 overflow-hidden rounded-lg border border-white/20 bg-black shadow-lg">
           <video data-lc-local-video autoplay playsinline muted class="h-full w-full object-cover"></video>
-          <img data-lc-local-avatar src="/avatars/{{ user.id }}" alt="{{ user.display_label() }}"
+          <img data-lc-local-avatar src="{{ user.id|avatar_url }}" alt="{{ user.display_label() }}"
                class="absolute inset-0 m-auto h-14 w-14 rounded-full object-cover">
         </div>
         <div data-lc-call-status aria-live="polite" class="absolute left-1/2 top-6 -translate-x-1/2 max-w-[80vw] truncate rounded-full bg-black/60 px-4 py-1 text-sm text-white"></div>
