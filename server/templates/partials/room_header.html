@@ -38,7 +38,7 @@
        aria-label="{{ "members-open-label"|t }}"
        data-lc-tip="{{ "members-open-label"|t }}" data-lc-tip-pos="bottom">
       {% for mid in header_members %}
-      <img src="/avatars/{{ mid }}" alt="" loading="lazy" class="lc-member-av">
+      <img src="{{ mid|avatar_url }}" alt="" loading="lazy" class="lc-member-av">
       {% endfor %}
       {% if member_count > header_members.len() %}
       <span class="lc-member-more">+{{ member_count - header_members.len() }}</span>

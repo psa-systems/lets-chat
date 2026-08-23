@@ -325,6 +325,12 @@ To render an avatar inside a `{% for %}` loop, bind the row's fields to those na
 
 Never re-implement the avatar/badge markup inline. Presence (`avatar_status`) should be resolved with `routes::effective_status` so a disconnected user shows offline consistently with every other surface. Glyph-only badges that are not user avatars (the `@here`/`@channel` broadcast token, the `#group` token in the mention popover) legitimately render their own small glyph and do not use this partial.
 
+### Avatar URLs are versioned (LC-781 F11)
+
+Every avatar `<img>` renders its URL through the `avatar_url` Askama filter, never a bare literal: `src="{{ user_id|avatar_url }}"`, which emits `/avatars/{id}?v={token}`. The token is the avatar file's mtime (cached in `crate::avatar_version`, invalidated on upload/removal), so `routes::avatar` answers a versioned request `Cache-Control: public, max-age=31536000, immutable` and the browser skips the per-navigation revalidation a bare `/avatars/{id}` forces. A bare request keeps LC-348's `no-cache` + ETag; the generated default SVG stays `no-cache` even when versioned, because its content is username-derived, not file-versioned. `ci-build/check-avatar-cache.nu` (wired into `just check` and the Check workflow) fails on a literal bare `/avatars/` URL in a template. The one allowed literal is the settings avatar-preview element (`settings/page.html`), which already carries `?v=` and its own JS re-stamps it (LC-432).
+
+The tracked exclusion is the three client-side avatar URLs built in `server/assets/*.js` (`call.js` remote avatar, `voice.js` tile + lobby chips): they build `/avatars/{id}` from a WebSocket-delivered id with no token to render. LC-784 carries the version into those WS frames and extends the guard to the JS; until then those three are the only bare avatar URLs in the tree.
+
 ## Tooltips (LC-370)
 
 Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded in `base.html`) plus the `#lc-tooltip` rule in `main.css`. Drive a tooltip declaratively with attributes on the trigger - never hand-roll a positioned tooltip element, and prefer this over the native `title=` attribute (which is unstyled, theme-blind, and clipped by `overflow:auto` ancestors like the enclave rail).

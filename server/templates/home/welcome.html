@@ -142,7 +142,7 @@
               <a href="/room/{{ r.room_id }}" class="lc-home-row">
                 {# LC-707: avatar of the newest unread message's author - who is waiting. #}
                 {% if r.author_avatar_ext.is_some() %}
-                <img src="/avatars/{{ r.author_id }}" alt="" class="h-8 w-8 shrink-0 rounded-full object-cover">
+                <img src="{{ r.author_id|avatar_url }}" alt="" class="h-8 w-8 shrink-0 rounded-full object-cover">
                 {% else %}
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken font-semibold text-content">{% if let Some(c) = r.author_name.chars().next() %}{{ c }}{% else %}?{% endif %}</span>
                 {% endif %}
@@ -179,7 +179,7 @@
             <li>
               <a href="/dm/{{ r.peer_id }}" class="lc-home-row">
                 {% if r.avatar_ext.is_some() %}
-                <img src="/avatars/{{ r.peer_id }}" alt="" class="h-8 w-8 shrink-0 rounded-full object-cover">
+                <img src="{{ r.peer_id|avatar_url }}" alt="" class="h-8 w-8 shrink-0 rounded-full object-cover">
                 {% else %}
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken font-semibold text-content">{% if let Some(c) = r.username.chars().next() %}{{ c }}{% else %}?{% endif %}</span>
                 {% endif %}

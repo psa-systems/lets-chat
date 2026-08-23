@@ -13,7 +13,7 @@
   <div role="listbox" class="lc-search-list max-h-80 overflow-y-auto">
     {% for r in results %}
     <a href="/{{ r.context_kind }}/{{ r.context_id }}#msg-{{ r.message_id }}" role="option" id="lc-opt-msg-{{ r.message_id }}" aria-selected="false" class="lc-search-row">
-      <img src="/avatars/{{ r.author_id }}" alt="" loading="lazy" class="lc-search-avatar">
+      <img src="{{ r.author_id|avatar_url }}" alt="" loading="lazy" class="lc-search-avatar">
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-1.5 text-xs text-content-muted">
           <span class="font-medium text-content truncate">{{ r.author_name }}</span>
