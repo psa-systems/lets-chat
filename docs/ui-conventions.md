@@ -344,6 +344,12 @@ Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded 
 - **Accessibility:** the tooltip element is `aria-hidden`; it is decoration, not the accessible name. The trigger must carry its own accessible name. For an icon-only control add an explicit `aria-label`; a control with visible text already has one, so do not add a redundant `aria-label` (it would override the visible text). Do not leave a `title=` alongside `data-lc-tip` - it double-renders (native + styled).
 - Placement convention: vertical rails (the enclave switcher) use `data-lc-tip-pos="right"`; top bars (the room header) use `data-lc-tip-pos="bottom"`, so the tooltip opens away from the chrome edge.
 
+## Static asset URLs carry the version bust (LC-776)
+
+`/assets/*` answers a URL with a non-empty `?v=` with `Cache-Control: public, max-age=31536000, immutable`; a URL without one keeps the old revalidate-by-`Last-Modified` behaviour. Every reference the app emits therefore carries `?v=`: `{{ asset_version }}` in a template, `ASSET_VERSION` in `sw.js` (substituted server-side by `routes/push.rs`), and for a script that builds an asset URL at runtime (the lazy mermaid and LiveKit bundle loaders) the `data-lc-asset-version` attribute `base.html` puts on `<html>`.
+
+One family is deliberately unversioned: `favicon.svg`, `icon-192.png` and `icon-512.png`. `manifest.webmanifest` and `offline.html` are static files served straight off disk, so their `src` / `href` cannot interpolate the version; those three are requested bare everywhere and so never get the immutable header. `server/tests/lc776_asset_cache.rs` asserts the header behaviour and fails on any new unversioned reference outside its allowlist.
+
 ## Convention gates (LC-749)
 
 `ci-build/check-ui-conventions.nu` (`just check-ui-conventions`, and a step of the Check workflow) holds closed the classes that reopen the moment someone adds a file. Each is one pattern with its own allowlist, and each failure message names the convention and the issue that established it.
