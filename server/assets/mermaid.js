@@ -10,13 +10,19 @@
 (function () {
   'use strict';
 
+  // LC-776: /assets/* answers a `?v=` URL with a one-year immutable
+  // Cache-Control, so a URL built here has to carry the page's asset version
+  // or a rebuilt bundle is never picked up. base.html publishes it on <html>.
+  var ASSET_V = document.documentElement.getAttribute('data-lc-asset-version') || 'dev';
+  var BUNDLE_URL = '/assets/vendor/mermaid.min.js?v=' + encodeURIComponent(ASSET_V);
+
   var loading = null; // Promise<mermaid>, created on first need.
   function loadMermaid() {
     if (window.mermaid) return Promise.resolve(window.mermaid);
     if (loading) return loading;
     loading = new Promise(function (resolve, reject) {
       var s = document.createElement('script');
-      s.src = '/assets/vendor/mermaid.min.js';
+      s.src = BUNDLE_URL;
       s.onload = function () {
         window.mermaid ? resolve(window.mermaid) : reject(new Error('mermaid missing'));
       };

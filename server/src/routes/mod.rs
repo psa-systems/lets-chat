@@ -1,6 +1,6 @@
 use askama::Template;
 use axum::extract::{OriginalUri, State};
-use axum::http::StatusCode;
+use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::{
     extract::DefaultBodyLimit,
@@ -9,6 +9,7 @@ use axum::{
     Router,
 };
 use std::collections::HashMap;
+use tower::Layer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
@@ -1824,7 +1825,10 @@ pub fn build_router(state: AppState) -> Router {
     let router = router.merge(saas_auth::router());
 
     router
-        .nest_service("/assets", ServeDir::new("server/assets"))
+        .nest_service(
+            "/assets",
+            middleware::from_fn(cache_static_assets).layer(ServeDir::new("server/assets")),
+        )
         .fallback(handle_not_found)
         .layer(middleware::from_fn_with_state(
             state.clone(),
@@ -1861,6 +1865,37 @@ pub fn build_router(state: AppState) -> Router {
             crate::security_headers::set_security_headers,
         ))
         .with_state(state)
+}
+
+/// LC-776: `Cache-Control` for `/assets/*`. `ServeDir` sets only
+/// `Last-Modified`, so with no `Cache-Control` a browser falls back to
+/// heuristic freshness - near zero in a container whose asset mtimes are the
+/// CI checkout - and revalidates every reference on the next navigation. Those
+/// conditional GETs are nested INSIDE the layer stack, so each 304 still costs
+/// an `inject_user` query.
+///
+/// The header is claimed only for a URL carrying a non-empty `?v=`, which is
+/// what `asset_version` stamps on every reference the templates and scripts
+/// emit. A request without it is a URL the version bust does not cover (the
+/// static `manifest.webmanifest` icon list, `offline.html`'s favicon link),
+/// and pinning that for a year would strand it at a stale copy, so it keeps
+/// the existing revalidate-by-`Last-Modified` behaviour. Set only when absent
+/// so a future per-file exception can still choose its own value, and only on
+/// a success or a 304 so an error body is never cached.
+async fn cache_static_assets(req: axum::extract::Request, next: middleware::Next) -> Response {
+    let versioned = req.uri().query().is_some_and(|q| {
+        q.split('&')
+            .any(|p| p.strip_prefix("v=").is_some_and(|v| !v.is_empty()))
+    });
+    let mut res = next.run(req).await;
+    let cacheable = res.status().is_success() || res.status() == StatusCode::NOT_MODIFIED;
+    if versioned && cacheable && !res.headers().contains_key(header::CACHE_CONTROL) {
+        res.headers_mut().insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
+        );
+    }
+    res
 }
 
 /// Public diagnostic endpoint. Returns the build metadata baked in by
