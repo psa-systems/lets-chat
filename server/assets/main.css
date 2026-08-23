@@ -4493,9 +4493,13 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-voice-tile[data-screen] .lc-voice-screen-badge { display: inline-flex; }
 
 /* ---- Transcript drawer -------------------------------------------------- */
-/* Fixed right-hand drawer, used by BOTH the voice page and the 1:1 call modal.
-   On the voice page #lc-voice-root reserves space for it (below) so tiles are
-   never covered; over the fullscreen 1:1 modal it simply overlays the right. */
+/* Fixed right-hand drawer, used by the voice page, an in-room huddle, and the
+   1:1 call modal. The main content column (#main) reserves space for it (below)
+   so nothing inline - voice tiles, the huddle bar, the message list, the
+   composer - is ever covered (LC-791: a huddle lives in the room, not a
+   fullscreen modal, so the drawer used to sit on top of it). Over the
+   fullscreen 1:1 modal (#lc-call-root, outside #main) it still simply overlays
+   the right. */
 .lc-transcript {
     position: fixed;
     top: 0;
@@ -4512,16 +4516,16 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     color: var(--content);
     box-shadow: -8px 0 24px -12px rgba(0, 0, 0, 0.35);
     /* LC-416: slide in from the right rather than snapping, so opening the panel
-       reads as reserving space (paired with the #lc-voice-root padding
-       transition below) instead of squeezing the header. */
+       reads as reserving space (paired with the #main padding transition below)
+       instead of squeezing the header. */
     transform: translateX(0);
     transition: transform 0.2s ease, visibility 0.2s ease;
 }
 /* Off-canvas + non-interactive when closed (was display:none, which could not
    animate). visibility transitions discretely so the slide-out still shows. */
 .lc-transcript.hidden { transform: translateX(100%); visibility: hidden; }
-#lc-voice-root { transition: padding-right 0.2s ease; }
-body.lc-transcript-open #lc-voice-root { padding-right: 20rem; }
+#main { transition: padding-right 0.2s ease; }
+body.lc-transcript-open #main { padding-right: 20rem; }
 
 /* ---- LC-416: transcript empty state ------------------------------------- */
 /* Shown until the first caption line lands (#lc-caption-log is the OOB target;
@@ -4682,7 +4686,7 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
 @media (prefers-reduced-motion: reduce) {
     .lc-rec-core, .lc-transcript-rec, .lc-voice-speaking i,
     .lc-voice-tile[data-quality="reconnecting"] .lc-voice-quality { animation: none; }
-    .lc-transcript, #lc-voice-root { transition: none; }
+    .lc-transcript, #main { transition: none; }
 }
 
 /* ---- LC-409: mobile / responsive call pass ----------------------------- */
@@ -4728,8 +4732,8 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
 
     /* Transcript drawer becomes a bottom sheet: full width, anchored to the
        bottom, so it never covers the controls and respects the home-bar inset.
-       (The right-padding reservation on #lc-voice-root is dropped here.) */
-    body.lc-transcript-open #lc-voice-root { padding-right: 0; }
+       (The right-padding reservation on #main is dropped here.) */
+    body.lc-transcript-open #main { padding-right: 0; }
     .lc-transcript {
         top: auto;
         left: 0;
