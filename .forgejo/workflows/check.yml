@@ -164,3 +164,10 @@ jobs:
       # release (see the header comment for why it cannot run here).
       - name: Tests (server, standalone)
         run: cargo test -p lets-chat-server
+
+      # LC-785: the saas build ships (BUILD_MODE=saas) but CI only compiled it
+      # (Clippy/Build steps above) and never ran its tests, so `just test-saas`
+      # rotted red on main - two admin-surface tests assumed the standalone-only
+      # /admin routes. Run the saas suite here so it cannot silently break again.
+      - name: Tests (server, saas)
+        run: cargo test -p lets-chat-server --no-default-features --features saas
