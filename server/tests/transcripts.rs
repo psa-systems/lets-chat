@@ -1937,31 +1937,17 @@ async fn without_llm_display_equals_raw() {
     assert_eq!(segs[0].raw_text, None);
 }
 
-// ── LC-662: automatic post-call AI recap ──────────────────────────────────────
+// ── LC-792: no automatic post-call recap; summaries are on-demand only ────────
 
-/// Poll the room's messages for a recap posted by the `assistant` bot (the work
-/// is spawned from finalize, so race it rather than assume it has run).
-async fn wait_for_recap(s: &Setup, room_id: i64) -> Option<db::chat::RawMessage> {
-    for _ in 0..50 {
-        let msgs = db::chat::list_messages(&s.chat, room_id).await.unwrap();
-        if let Some(m) = msgs.into_iter().find(|m| m.body.contains("Call recap")) {
-            return Some(m);
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    }
-    None
-}
-
-/// When the room has opted the assistant in, ending a call auto-posts an AI
-/// recap (summary + action items) as the assistant bot, with a link back to the
-/// full transcript - no one has to open the page and click Summarize.
+/// LC-792: ending a call never auto-posts an AI recap into the room - not even
+/// with the assistant opted in AND an LLM configured. Summaries are on-demand
+/// only (the transcript page's Summarize action). Guards against the recap
+/// creeping back onto the finalize path.
 #[tokio::test]
-async fn auto_call_recap_posts_when_assistant_enabled() {
-    let s = setup_with_clients(
-        None,
-        with_llm("## Summary\nThe team planned the launch.\n\n## Action items\n- Order pizza"),
-    )
-    .await;
+async fn call_end_does_not_auto_post_recap() {
+    let s = setup_with_clients(None, with_llm("## Summary\nShould never be auto-posted.")).await;
+    // Opt the assistant in - the strongest case for the old auto-recap - so this
+    // proves removal, not just a gate that happened to be off.
     db::chat::set_room_assistant_enabled(&s.chat, s.dm_room, true)
         .await
         .unwrap();
@@ -1978,7 +1964,7 @@ async fn auto_call_recap_posts_when_assistant_enabled() {
         &s.app,
         &s.a_session,
         &format!("/call/transcript/{tid}/segment"),
-        Some("text=lets+plan+the+launch"),
+        Some("text=hello+there"),
     )
     .await;
     post(
@@ -1989,85 +1975,20 @@ async fn auto_call_recap_posts_when_assistant_enabled() {
     )
     .await;
 
-    let recap = wait_for_recap(&s, s.dm_room)
-        .await
-        .expect("recap was posted");
-    assert!(
-        recap.body.contains("The team planned the launch"),
-        "recap carries the summary: {}",
-        recap.body
-    );
-    assert!(
-        recap.body.contains(&format!("/transcripts/{tid}")),
-        "recap links the full transcript: {}",
-        recap.body
-    );
-    // Authored by the assistant bot, not the call starter.
-    let bot = db::auth::find_user_by_username(&s.state.auth, "assistant")
-        .await
-        .unwrap()
-        .expect("assistant bot exists after the recap");
-    assert_eq!(recap.user_id, bot.id, "recap is authored by the bot");
-
-    // The stored summary doubles as the dedupe marker.
-    let t = db::transcripts::get(&s.chat, tid).await.unwrap().unwrap();
-    assert!(t.summary.unwrap().contains("launch"), "summary persisted");
-
-    // Exactly one recap: finalize transitions once, so no double-post.
-    let msgs = db::chat::list_messages(&s.chat, s.dm_room).await.unwrap();
-    let count = msgs
-        .iter()
-        .filter(|m| m.body.contains("Call recap"))
-        .count();
-    assert_eq!(count, 1, "recap posted exactly once");
-}
-
-/// Without the per-room opt-in, no recap is posted even with an LLM configured.
-#[tokio::test]
-async fn auto_call_recap_skipped_when_assistant_disabled() {
-    let s = setup_with_clients(None, with_llm("## Summary\nShould never be posted.")).await;
-    // Note: assistant_enabled defaults off; we do not enable it here.
-
-    let (_, body) = post(
-        &s.app,
-        &s.a_session,
-        &format!("/call/{}/transcript/start", s.dm_room),
-        None,
-    )
-    .await;
-    let tid = parse_id(&body);
-    post(
-        &s.app,
-        &s.a_session,
-        &format!("/call/transcript/{tid}/segment"),
-        Some("text=hello"),
-    )
-    .await;
-    post(
-        &s.app,
-        &s.a_session,
-        &format!("/call/transcript/{tid}/end"),
-        None,
-    )
-    .await;
-
-    // Give the spawned task a chance to run and (correctly) no-op at the gate.
+    // Give any spawned work a chance to (not) run.
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
     let msgs = db::chat::list_messages(&s.chat, s.dm_room).await.unwrap();
     assert!(
         !msgs.iter().any(|m| m.body.contains("Call recap")),
-        "no recap without the opt-in"
+        "call end must not auto-post a recap"
     );
     let t = db::transcripts::get(&s.chat, tid).await.unwrap().unwrap();
-    assert!(
-        t.summary.is_none(),
-        "no summary generated without the opt-in"
-    );
+    assert!(t.summary.is_none(), "no summary is generated automatically");
 }
 
 /// LC-663: an `LlmClient` double that records the user content (the transcript
-/// text) it was handed, so the speaker roster + attributed lines the recap sends
-/// are observable without a live model.
+/// text) it was handed, so the speaker roster + attributed lines the summary
+/// sends are observable without a live model.
 #[derive(Default)]
 struct CapturingLlm {
     last_user: std::sync::Mutex<Option<String>>,
@@ -2081,36 +2002,22 @@ impl lets_chat::llm::LlmClient for CapturingLlm {
         _system: &str,
         user_content: &str,
     ) -> Result<String, lets_chat::llm::LlmError> {
-        // The live-caption correction pass (LC-629) also runs when an LLM is
-        // configured; pass those NEW lines through unchanged so segments keep
-        // their text, and capture only the summarize call.
-        if user_content.contains("NEW line to correct:") {
-            let line = user_content
-                .rsplit("NEW line to correct:\n")
-                .next()
-                .unwrap_or("")
-                .trim();
-            return Ok(line.to_string());
-        }
         *self.last_user.lock().unwrap() = Some(user_content.to_string());
         Ok(self.canned.clone())
     }
 }
 
-/// LC-663: the auto recap sends the model a `Participants:` roster and
+/// LC-663: the on-demand summary sends the model a `Participants:` roster and
 /// speaker-prefixed lines, so it can attribute decisions and action items to the
 /// people who spoke.
 #[tokio::test]
-async fn recap_sends_speaker_roster_and_attributed_lines() {
+async fn summary_sends_speaker_roster_and_attributed_lines() {
     let cap = Arc::new(CapturingLlm {
         canned: "## Summary\nThey decided.\n\n## Decisions\n- alice - ship Friday".to_string(),
         ..Default::default()
     });
     let llm: Arc<dyn lets_chat::llm::LlmClient> = cap.clone();
     let s = setup_with_clients(None, Some(llm)).await;
-    db::chat::set_room_assistant_enabled(&s.chat, s.dm_room, true)
-        .await
-        .unwrap();
 
     let (_, body) = post(
         &s.app,
@@ -2135,16 +2042,17 @@ async fn recap_sends_speaker_roster_and_attributed_lines() {
         Some("text=i+will+own+the+docs"),
     )
     .await;
-    post(
+
+    // The on-demand summary (the transcript page's Summarize action) is what now
+    // calls the model - there is no automatic recap.
+    let (st, _) = post(
         &s.app,
         &s.a_session,
-        &format!("/call/transcript/{tid}/end"),
+        &format!("/transcripts/{tid}/summary"),
         None,
     )
     .await;
-
-    // Wait for the recap to post, which means the model was called.
-    wait_for_recap(&s, s.dm_room).await.expect("recap posted");
+    assert_eq!(st, StatusCode::OK);
     let seen = cap
         .last_user
         .lock()
