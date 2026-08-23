@@ -12,7 +12,11 @@
 (function () {
   'use strict';
 
-  var SDK_URL = '/assets/vendor/livekit-client.umd.min.js';
+  // LC-776: /assets/* answers a `?v=` URL with a one-year immutable
+  // Cache-Control, so a URL built here has to carry the page's asset version
+  // or a rebuilt bundle is never picked up. base.html publishes it on <html>.
+  var ASSET_V = document.documentElement.getAttribute('data-lc-asset-version') || 'dev';
+  var SDK_URL = '/assets/vendor/livekit-client.umd.min.js?v=' + encodeURIComponent(ASSET_V);
   var sdkPromise = null;
   // Live connection: { roomId, room, canPublish } or null.
   var current = null;

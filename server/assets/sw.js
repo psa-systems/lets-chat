@@ -23,15 +23,22 @@
 const ASSET_VERSION = '__ASSET_VERSION__';
 const CACHE_NAME = 'lc-shell-' + ASSET_VERSION;
 
-// Versioned assets are requested by the page with `?v=<asset_version>`;
-// pre-cache them under the same query so the keys match a page fetch.
-// Unversioned entries (offline page, manifest) are requested as-is.
+// Pre-cache under the same URL the page (or the manifest) requests, so the
+// keys match a real fetch. LC-776 made that alignment load-bearing: `/assets/*`
+// answers a `?v=` URL with a one-year immutable Cache-Control, so a versioned
+// key here must be one something actually asks for.
+//
+// The icon family stays unversioned on purpose. `manifest.webmanifest` and
+// `offline.html` are static files served straight off disk, so their `src` /
+// `href` cannot carry `{{ asset_version }}`; the three files they point at are
+// therefore requested bare, and the server deliberately withholds the
+// immutable header from a URL with no `?v=`.
 const PRECACHE_URLS = [
-  '/assets/offline.html',
-  '/assets/manifest.webmanifest',
   '/assets/favicon.svg',
   '/assets/icon-192.png',
   '/assets/icon-512.png',
+  '/assets/offline.html?v=' + ASSET_VERSION,
+  '/assets/manifest.webmanifest?v=' + ASSET_VERSION,
   '/assets/tailwind-built.css?v=' + ASSET_VERSION,
   '/assets/main.css?v=' + ASSET_VERSION,
   '/assets/vendor/htmx.min.js?v=' + ASSET_VERSION,
@@ -40,7 +47,7 @@ const PRECACHE_URLS = [
   '/assets/tabs.js?v=' + ASSET_VERSION,
 ];
 
-const OFFLINE_URL = '/assets/offline.html';
+const OFFLINE_URL = '/assets/offline.html?v=' + ASSET_VERSION;
 
 // Message-create endpoints we queue when offline. DMs post to the same
 // /room/{id}/messages endpoint (a DM is a room of type "dm"). Threads use

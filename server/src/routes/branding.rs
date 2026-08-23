@@ -121,6 +121,7 @@ async fn serve_logo_for_scope(state: &AppState, scope: Scope) -> Result<Response
 /// inserted right before the closing `</head>` tag.
 ///
 /// Skipped entirely for:
+/// - `/assets/*` (LC-776) - a static file has no `<head>`.
 /// - HTMX requests (`HX-Request: true`) - those responses are
 ///   fragments with no `<head>`, and they are the high-frequency
 ///   path (every message send). Skipping them avoids the buffer +
@@ -133,6 +134,13 @@ pub async fn inject_branding_css(
     req: axum::extract::Request,
     next: Next,
 ) -> Response {
+    // LC-776: static files never carry a <head>, so the branding query on
+    // that path is pure waste. Mirrors the `/assets/` exemption
+    // `enforce_maintenance_mode` already has.
+    if req.uri().path().starts_with("/assets/") {
+        return next.run(req).await;
+    }
+
     // Fast path: HTMX fragment requests never carry a <head>, so
     // there is nothing to inject. Bail before touching the DB or
     // buffering the body.
