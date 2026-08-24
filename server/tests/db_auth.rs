@@ -67,6 +67,71 @@ async fn mark_email_verified_if_unset_is_idempotent() {
 }
 
 #[tokio::test]
+async fn sync_bunyip_display_name_mirrors_idp_over_local_and_skips_noops() {
+    // LC-762: an SSO user's display name is provisioned from the OIDC `name`
+    // claim, but the resolver returns an existing linked row untouched on
+    // re-login, so a name changed at the IdP stayed stale. The callback now
+    // mirrors the fresh claim. Bunyip is the authority for identity, so the IdP
+    // name wins - even over a display name the user edited locally.
+    let pool = setup_pool().await;
+    let user_id = lets_chat::db::auth::create_user_from_bunyip(
+        &pool,
+        "sso-user",
+        "sub-123",
+        Some("Old Name"),
+        Some("sso@example.com"),
+    )
+    .await
+    .expect("provision");
+
+    async fn read_display_name(pool: &SqlitePool, id: &str) -> Option<String> {
+        lets_chat::db::auth::find_user_by_id(pool, id)
+            .await
+            .expect("read")
+            .expect("user exists")
+            .display_name
+    }
+
+    // Provisioned with the first claim.
+    assert_eq!(
+        read_display_name(&pool, &user_id).await.as_deref(),
+        Some("Old Name")
+    );
+
+    // Re-login with the SAME name is a no-op: no write, no `updated_at` churn.
+    let n = lets_chat::db::auth::sync_bunyip_display_name(&pool, &user_id, "Old Name")
+        .await
+        .expect("sync");
+    assert_eq!(n, 0, "unchanged name writes no row");
+
+    // The IdP name changed: the next login mirrors it.
+    let n = lets_chat::db::auth::sync_bunyip_display_name(&pool, &user_id, "New Name")
+        .await
+        .expect("sync");
+    assert_eq!(n, 1, "changed name updates one row");
+    assert_eq!(
+        read_display_name(&pool, &user_id).await.as_deref(),
+        Some("New Name")
+    );
+
+    // Policy (LC-762): the IdP name wins even over a local settings edit.
+    sqlx::query("UPDATE users SET display_name = 'Custom Local' WHERE id = ?")
+        .bind(&user_id)
+        .execute(&pool)
+        .await
+        .expect("simulate a local display-name edit");
+    let n = lets_chat::db::auth::sync_bunyip_display_name(&pool, &user_id, "Directory Name")
+        .await
+        .expect("sync");
+    assert_eq!(n, 1, "a local edit does not shield the row from the IdP");
+    assert_eq!(
+        read_display_name(&pool, &user_id).await.as_deref(),
+        Some("Directory Name"),
+        "the IdP name wins over a local edit"
+    );
+}
+
+#[tokio::test]
 async fn test_create_user_duplicate_username_fails() {
     let pool = setup_pool().await;
     lets_chat::db::auth::create_user(&pool, "alice", "hash1")
