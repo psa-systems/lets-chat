@@ -4,7 +4,16 @@
    the same markdown render used in a room, so cited Sources links come through.
    The stage footer (LC-719) reflects the backend outcome: a low-confidence reply
    surfaces a prominent "Talk to a human" CTA, and a /human fallback that filed a
-   ticket shows a "we've filed this (ref #N)" card. #}
+   ticket shows a "we've filed this (ref #N)" card.
+
+   LC-795: the panel renders ONE page of bubbles; the sentinel below pulls the
+   previous page when it scrolls into view, and each fetched page brings the next
+   sentinel until the first turn is on screen. #}
+{% if let Some(u) = older_page_url.as_ref() %}
+{% let older_url = u %}
+{% let older_root = "#lc-support-thread" %}
+{% include "partials/older_sentinel.html" %}
+{% endif %}
 {% if empty %}
 {# LC-732: friendly welcome + tappable starter chips instead of a blank box. Each
    chip submits its own question (name="body") through the same /support endpoint;
@@ -27,59 +36,7 @@
 </div>
 {% else %}
 {% for m in messages %}
-<div class="lc-support-msg{% if m.mine %} lc-support-msg-mine{% endif %}">
-  {% if !m.mine %}
-  {# LC-732: bot avatar on the first message of a consecutive assistant run; a
-     spacer keeps grouped replies aligned under it. #}
-  {% if m.show_avatar %}
-  <span class="lc-support-avatar" aria-hidden="true">
-    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
-         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-    </svg>
-  </span>
-  {% else %}
-  <span class="lc-support-avatar lc-support-avatar-spacer" aria-hidden="true"></span>
-  {% endif %}
-  {% endif %}
-  <div class="lc-support-col">
-    {% if m.pending %}
-    {# LC-730: animated "working" state. Reuses the shared AI skeleton component
-       (lc-ai-skel / lc-skel-bar, LC-654) so it matches the other AI surfaces and
-       inherits the prefers-reduced-motion fallback. The label rotates through
-       staged wording client-side (base.html, keyed on data-since); the three
-       phrases are passed as data attributes so they stay translated server-side.
-       This bubble is replaced in place by the real answer via the WS push. #}
-    <div class="lc-support-bubble lc-support-thinking" data-lc-support-thinking
-         data-since="{{ m.pending_since }}"
-         data-search="{{ "support-thinking-search"|t }}"
-         data-read="{{ "support-thinking-read"|t }}"
-         data-write="{{ "support-thinking-write"|t }}">
-      <div class="lc-ai-skel" role="status" aria-live="polite">
-        <div class="lc-ai-skel-status">
-          <span class="lc-spinner" aria-hidden="true"></span>
-          <span class="lc-ai-pending-label" data-lc-thinking-label>{{ "support-thinking-search"|t }}</span>
-        </div>
-        <div class="lc-skel-block" aria-hidden="true">
-          <div class="lc-skel-bar" style="width:92%"></div>
-          <div class="lc-skel-bar" style="width:78%"></div>
-          <div class="lc-skel-bar lc-skel-gap" style="width:42%"></div>
-        </div>
-      </div>
-    </div>
-    {% else %}
-    <div class="lc-support-bubble lc-md">{{ m.body_html|safe }}</div>
-    {% endif %}
-    {% if !m.sources.is_empty() %}
-    <div class="lc-support-sources">
-      <span class="lc-support-sources-label">{{ "support-sources-label"|t }}</span>
-      {% for s in m.sources %}
-      <a class="lc-support-source" href="{{ s.url }}" target="_blank" rel="noopener noreferrer">{{ s.label }}</a>
-      {% endfor %}
-    </div>
-    {% endif %}
-  </div>
-</div>
+{% include "support/panel_bubble.html" %}
 {% endfor %}
 {% endif %}
 {% match stage %}
