@@ -58,15 +58,24 @@
   <div id="thread-summary-{{ parent.id }}" class="empty:hidden border-b border-border px-3 py-2 bg-surface-elevated"></div>
   {# LC-460: count divider labels the replies section so the root -> replies
      relationship is explicit. #}
-  {% if !replies.is_empty() %}
+  {# LC-797: the count is the WHOLE thread's, not the loaded page's, so paging
+     the panel does not make the label shrink. #}
+  {% if reply_count > 0 %}
   <div class="lc-thread-count">
     <span class="lc-thread-count-rule"></span>
-    <span class="lc-thread-count-label">{{ replies.len() }} {% if replies.len() == 1 %}{{ "room-reply-singular"|t }}{% else %}{{ "room-reply-plural"|t }}{% endif %}</span>
+    <span class="lc-thread-count-label">{{ reply_count }} {% if reply_count == 1 %}{{ "room-reply-singular"|t }}{% else %}{{ "room-reply-plural"|t }}{% endif %}</span>
     <span class="lc-thread-count-rule"></span>
   </div>
   {% endif %}
   {# LC-460: a left rail nests the replies under the root. #}
   <div id="thread-replies-{{ parent.id }}" class="lc-thread-replies flex-1 overflow-y-auto px-2 py-1">
+    {# LC-797: the panel renders one page; this sentinel pulls the previous page
+       when it scrolls into view, and each fetched page brings the next one. #}
+    {% if let Some(u) = older_page_url.as_ref() %}
+    {% let older_url = u %}
+    {% let older_root = older_scroll_root.as_str() %}
+    {% include "partials/older_sentinel.html" %}
+    {% endif %}
     {% for r in replies %}
     {% let message = r %}
     {% include "room/thread_reply_inner.html" %}

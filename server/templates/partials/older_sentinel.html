@@ -1,0 +1,19 @@
+{# LC-797: shared top-of-list "load older" sentinel. The caller sets
+   `older_url` (the endpoint returning the previous page) and `older_root` (the
+   CSS selector of the scroll container the list lives in).
+
+   The trigger is `intersect root:<container>`, NOT `revealed`. htmx's `revealed`
+   is driven by a listener on `window`, and scroll events do not bubble from an
+   element to `window`, so a `revealed` sentinel inside an `overflow-y-auto`
+   panel never fires (LC-799). `intersect` uses IntersectionObserver against the
+   real scroll container and therefore works in both cases.
+
+   `once` keeps a sentinel that stays on screen after the swap (a short page
+   that does not fill the container) from re-firing the same cursor. The
+   replacement fragment brings its own sentinel with the next cursor. #}
+<div
+  hx-get="{{ older_url }}"
+  hx-trigger="intersect once root:{{ older_root }}"
+  hx-swap="outerHTML"
+  class="py-2 text-center text-xs text-content-subtle"
+>{{ "room-load-older"|t }}</div>

@@ -291,8 +291,17 @@ pub async fn list_recent_messages(
     Ok(rows.into_iter().map(row_to_raw).collect())
 }
 
+/// LC-797: replies the thread panel renders per page. Matches the panel's
+/// visible height plus a scroll buffer; older pages arrive via the sentinel.
+pub const THREAD_REPLY_PAGE_LIMIT: i64 = 50;
+
 /// Replies in a thread, ordered chronologically. Excludes soft-deleted rows.
 /// Caller must verify access to the parent's room before calling.
+///
+/// LC-797: UNBOUNDED, and no longer on any render path. The only callers left
+/// are the two LLM digest paths (`routes::summary::summarize_thread` and
+/// `routes::thread_title`), which must read the whole thread to summarize it.
+/// Renders go through `list_thread_replies_page`.
 pub async fn list_thread_replies(
     pool: &sqlx::SqlitePool,
     parent_id: i64,
@@ -308,6 +317,67 @@ pub async fn list_thread_replies(
     .await?;
 
     Ok(rows.into_iter().map(row_to_raw).collect())
+}
+
+/// LC-797: cursor-paginated read of a thread's replies, the thread-panel
+/// counterpart of `list_messages_paginated`. Same visibility filter as
+/// `list_thread_replies`.
+///
+/// `before_id`: optional cursor; results are strictly older than this id.
+/// Returned in `id DESC` order so the caller walks backwards through the thread
+/// by feeding the oldest returned `id` back as the next `before_id`.
+pub async fn list_thread_replies_paginated(
+    pool: &sqlx::SqlitePool,
+    parent_id: i64,
+    before_id: Option<i64>,
+    limit: i64,
+) -> Result<Vec<RawMessage>, sqlx::Error> {
+    // Two branches for the same reason as `list_messages_paginated`: sqlx binds
+    // positionally, and `WHERE ? IS NULL OR id < ?` defeats the index.
+    let rows = if let Some(cursor) = before_id {
+        sqlx::query(
+            "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind, bridge_foreign_avatar \
+             FROM messages \
+             WHERE parent_id = ? AND id < ? AND deleted_at IS NULL AND quarantined = 0 \
+             ORDER BY id DESC LIMIT ?",
+        )
+        .bind(parent_id)
+        .bind(cursor)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query(
+            "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind, bridge_foreign_avatar \
+             FROM messages \
+             WHERE parent_id = ? AND deleted_at IS NULL AND quarantined = 0 \
+             ORDER BY id DESC LIMIT ?",
+        )
+        .bind(parent_id)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+    };
+
+    Ok(rows.into_iter().map(row_to_raw).collect())
+}
+
+/// LC-797: one render page of a thread's replies, returned oldest-first
+/// alongside whether still-older replies exist behind the page.
+///
+/// Reads `limit + 1` rows and reports the overflow as `has_older`, so the panel
+/// can decide whether to emit a load-older sentinel without a second COUNT.
+pub async fn list_thread_replies_page(
+    pool: &sqlx::SqlitePool,
+    parent_id: i64,
+    before_id: Option<i64>,
+    limit: i64,
+) -> Result<(Vec<RawMessage>, bool), sqlx::Error> {
+    let mut rows = list_thread_replies_paginated(pool, parent_id, before_id, limit + 1).await?;
+    let has_older = rows.len() as i64 > limit;
+    rows.truncate(limit as usize);
+    rows.reverse();
+    Ok((rows, has_older))
 }
 
 /// Reply count per top-level message in a room, returned as `(parent_id,
