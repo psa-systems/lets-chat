@@ -50,11 +50,16 @@
        `load` filter), so a bubble that starts open is not left blank. Live updates
        arrive via the SupportThreadChanged WS push (OOB into this id), so there is
        no polling. A closed bubble makes no requests and does not create the
-       backing DM until the user opens it. #}
+       backing DM until the user opens it.
+
+       LC-795: the jump-to-bottom is guarded on `event.target === this`. htmx
+       events bubble, so an unguarded handler also fires for the load-older
+       sentinel's swap inside this container and would yank the reader back to
+       the newest message the moment they reached older history. #}
     <div id="lc-support-thread" class="lc-support-thread" aria-live="polite"
          hx-get="/support/panel/thread" hx-swap="innerHTML"
          hx-trigger="lcopen, load[document.documentElement.getAttribute('data-lc-support-open')==='1']"
-         hx-on::after-settle="this.scrollTop = this.scrollHeight"></div>
+         hx-on::after-settle="if (event.target === this) this.scrollTop = this.scrollHeight"></div>
     {# LC-732: composer footer. "Talk to a human" is a quiet, secondary escalation
        link above the input (its own hx-post, so Enter in the input always Sends -
        the input form has a single submit, the embedded send icon-button). Send is
