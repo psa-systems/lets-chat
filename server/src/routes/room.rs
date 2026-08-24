@@ -452,18 +452,27 @@ pub async fn get_room(
             sysgroup_open: None,
             sysgroup_close: false,
             poll: if poll_ids.contains(&m.id) {
-                crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
-                    .await
-                    .ok()
-                    .flatten()
+                crate::views::room::optional_block(
+                    crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
+                        .await,
+                    m.id,
+                    "poll",
+                )
             } else {
                 None
             },
             follow_up: if followup_ids.contains(&m.id) {
-                crate::views::room::build_follow_up_view(&state.chat, &state.auth, m.id, &user.id)
-                    .await
-                    .ok()
-                    .flatten()
+                crate::views::room::optional_block(
+                    crate::views::room::build_follow_up_view(
+                        &state.chat,
+                        &state.auth,
+                        m.id,
+                        &user.id,
+                    )
+                    .await,
+                    m.id,
+                    "follow_up",
+                )
             } else {
                 None
             },
@@ -2543,19 +2552,17 @@ pub async fn patch_message(
         is_system: m.is_system,
         sysgroup_open: None,
         sysgroup_close: false,
-        poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id)
-            .await
-            .ok()
-            .flatten(),
-        follow_up: crate::views::room::build_follow_up_view(
-            &state.chat,
-            &state.auth,
+        poll: crate::views::room::optional_block(
+            crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &user.id).await,
             m.id,
-            &user.id,
-        )
-        .await
-        .ok()
-        .flatten(),
+            "poll",
+        ),
+        follow_up: crate::views::room::optional_block(
+            crate::views::room::build_follow_up_view(&state.chat, &state.auth, m.id, &user.id)
+                .await,
+            m.id,
+            "follow_up",
+        ),
         author_is_bot: meta.is_bot,
         actor: meta.actor.clone(),
     };
@@ -2706,18 +2713,27 @@ pub async fn get_thread_panel(
         sysgroup_open: None,
         sysgroup_close: false,
         poll: if poll_ids.contains(&parent.id) {
-            crate::views::room::build_poll_view(&state.chat, &state.auth, parent.id, &user.id)
-                .await
-                .ok()
-                .flatten()
+            crate::views::room::optional_block(
+                crate::views::room::build_poll_view(&state.chat, &state.auth, parent.id, &user.id)
+                    .await,
+                parent.id,
+                "poll",
+            )
         } else {
             None
         },
         follow_up: if followup_ids.contains(&parent.id) {
-            crate::views::room::build_follow_up_view(&state.chat, &state.auth, parent.id, &user.id)
-                .await
-                .ok()
-                .flatten()
+            crate::views::room::optional_block(
+                crate::views::room::build_follow_up_view(
+                    &state.chat,
+                    &state.auth,
+                    parent.id,
+                    &user.id,
+                )
+                .await,
+                parent.id,
+                "follow_up",
+            )
         } else {
             None
         },
@@ -2787,18 +2803,27 @@ pub async fn get_thread_panel(
             sysgroup_open: None,
             sysgroup_close: false,
             poll: if poll_ids.contains(&r_id) {
-                crate::views::room::build_poll_view(&state.chat, &state.auth, r_id, &user.id)
-                    .await
-                    .ok()
-                    .flatten()
+                crate::views::room::optional_block(
+                    crate::views::room::build_poll_view(&state.chat, &state.auth, r_id, &user.id)
+                        .await,
+                    r_id,
+                    "poll",
+                )
             } else {
                 None
             },
             follow_up: if followup_ids.contains(&r_id) {
-                crate::views::room::build_follow_up_view(&state.chat, &state.auth, r_id, &user.id)
-                    .await
-                    .ok()
-                    .flatten()
+                crate::views::room::optional_block(
+                    crate::views::room::build_follow_up_view(
+                        &state.chat,
+                        &state.auth,
+                        r_id,
+                        &user.id,
+                    )
+                    .await,
+                    r_id,
+                    "follow_up",
+                )
             } else {
                 None
             },

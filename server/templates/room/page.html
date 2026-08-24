@@ -34,7 +34,9 @@
     {% if huddle_enabled %}
     {% include "room/huddle.html" %}
     {% endif %}
-    <div id="typing" class="px-4 text-xs text-content-muted"></div>
+    {# LC-800: reserve one text-xs line so toggling the indicator does not
+       resize #messages and re-trigger auto_scroll's ResizeObserver. #}
+    <div id="typing" class="px-4 text-xs text-content-muted min-h-[1rem]"></div>
     {% if can_post %}
     {% include "room/composer.html" %}
     {% else %}

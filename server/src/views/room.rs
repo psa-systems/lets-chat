@@ -160,6 +160,25 @@ pub struct PollOptionView {
     pub voters: Vec<String>,
 }
 
+/// LC-798: best-effort attachment of an optional message block (poll,
+/// follow-up). One failed block must not blank a whole timeline for everyone
+/// in the room, so a failure degrades to "no block" - but it is logged at warn
+/// with the message id, because a block that silently stops rendering looks
+/// identical to a message that never had one.
+pub fn optional_block<T, E: std::fmt::Display>(
+    result: Result<Option<T>, E>,
+    message_id: i64,
+    what: &str,
+) -> Option<T> {
+    match result {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, message_id, block = what, "message block failed to build");
+            None
+        }
+    }
+}
+
 /// Assemble a [`PollView`] for `message_id` as seen by `viewer_id`, or
 /// `None` when the message is not a poll. Resolves voter display names from
 /// the auth pool for non-anonymous polls only.
@@ -939,6 +958,22 @@ pub fn strip_shortcode(s: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// LC-798: a failed block degrades to "no block" instead of propagating,
+    /// and an absent block stays distinguishable from a present one.
+    #[test]
+    fn optional_block_swallows_err_and_passes_ok_through() {
+        let failed: Result<Option<i32>, sqlx::Error> = Err(sqlx::Error::RowNotFound);
+        assert_eq!(optional_block(failed, 7, "poll"), None);
+        assert_eq!(
+            optional_block(Ok::<_, sqlx::Error>(Some(3)), 7, "poll"),
+            Some(3)
+        );
+        assert_eq!(
+            optional_block(Ok::<Option<i32>, sqlx::Error>(None), 7, "poll"),
+            None
+        );
+    }
 
     #[test]
     fn to_iso_utc_converts_sqlite_datetime() {
