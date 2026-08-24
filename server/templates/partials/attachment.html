@@ -30,12 +30,18 @@
        LC-537: alt is the author's text when set, else the filename.
        LC-660: when real alt text exists, also expose it as a hover `title` so
        sighted users benefit, not just screen readers. #}
+    {# LC-781 F7: lazy-load timeline images so an unbounded room does not fire
+       one request per image on open. Above-fold images still load eagerly (the
+       browser only defers offscreen lazy images). The box is capped by
+       max-w-sm/max-h-96 but has no stored intrinsic size, so exact width/height
+       are not emitted here (that needs a dimensions column on the attachment
+       model). #}
     {% if a.is_gif() %}
     <img src="{{ a.url }}" alt="{{ a.alt() }}"{% if a.has_alt() %} title="{{ a.alt() }}"{% endif %}
-         class="block max-w-sm max-h-96 rounded border border-border">
+         loading="lazy" class="block max-w-sm max-h-96 rounded border border-border">
     {% else %}
     <img src="{{ a.url }}?size=preview" alt="{{ a.alt() }}"{% if a.has_alt() %} title="{{ a.alt() }}"{% endif %}
-         class="block max-w-sm max-h-96 rounded border border-border">
+         loading="lazy" class="block max-w-sm max-h-96 rounded border border-border">
     {% endif %}
   </a>
   {# LC-660: alt-text state badge on the image corner. Editors get a details-based

@@ -2,7 +2,9 @@
 <a href="{{ url }}" target="_blank" rel="noopener noreferrer"
    class="mt-1 flex gap-3 max-w-md border border-border rounded p-2 hover:bg-surface">
   {% if let Some(img) = image_url %}
-  <img src="{{ img }}" alt="" class="h-16 w-16 rounded object-cover flex-none">
+  {# LC-781 F7: fixed 64x64 box (h-16 w-16), so exact width/height reserve the
+     space and the thumbnail lazy-loads with the preview card. #}
+  <img src="{{ img }}" alt="" loading="lazy" width="64" height="64" class="h-16 w-16 rounded object-cover flex-none">
   {% endif %}
   <div class="flex-1 min-w-0">
     {% if let Some(t) = title %}

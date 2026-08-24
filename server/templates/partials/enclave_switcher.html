@@ -20,7 +20,8 @@
        asserts it); otherwise LC-366's house glyph, so Home reads as a distinct
        affordance rather than a lettered tile. #}
     {% if let Some(logo) = e.logo_url %}
-    <img src="{{ logo }}" alt="{{ e.label }}"
+    {# LC-781 F7: fixed 32x32 box (w-8 h-8); exact dims + lazy. #}
+    <img src="{{ logo }}" alt="{{ e.label }}" loading="lazy" width="32" height="32"
          class="w-8 h-8 rounded-lg object-contain bg-surface-elevated p-0.5">
     {% else %}
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
@@ -62,7 +63,8 @@
      aria-label="{{ e.label }}" data-lc-tip="{{ e.label }}" data-lc-tip-pos="right"
      {% if e.active %}aria-current="page"{% endif %}>
     {% if let Some(logo) = e.logo_url %}
-    <img src="{{ logo }}" alt="{{ e.label }}"
+    {# LC-781 F7: fixed 32x32 box (w-8 h-8); exact dims + lazy. #}
+    <img src="{{ logo }}" alt="{{ e.label }}" loading="lazy" width="32" height="32"
          class="w-8 h-8 rounded-lg object-contain bg-surface-elevated p-0.5">
     {% else %}
     <span class="font-semibold">{{ e.initial }}</span>

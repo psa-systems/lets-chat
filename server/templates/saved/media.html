@@ -34,12 +34,14 @@
 {% else if a.is_image() %}
 <div class="mt-1 lc-img-attach">
   <a href="{{ a.url }}" data-lc-lightbox target="_blank" rel="noopener noreferrer" class="block">
+    {# LC-781 F7: lazy-load saved-media images (same rationale as the timeline
+       attachment partial). No stored intrinsic size, so no exact width/height. #}
     {% if a.is_gif() %}
     <img src="{{ a.url }}" alt="{{ a.alt() }}"{% if a.has_alt() %} title="{{ a.alt() }}"{% endif %}
-         class="block max-w-sm max-h-96 rounded border border-border">
+         loading="lazy" class="block max-w-sm max-h-96 rounded border border-border">
     {% else %}
     <img src="{{ a.url }}?size=preview" alt="{{ a.alt() }}"{% if a.has_alt() %} title="{{ a.alt() }}"{% endif %}
-         class="block max-w-sm max-h-96 rounded border border-border">
+         loading="lazy" class="block max-w-sm max-h-96 rounded border border-border">
     {% endif %}
   </a>
   {% if a.has_alt() %}
