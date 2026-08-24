@@ -1,0 +1,13 @@
+{# LC-795: one older page of support-panel bubbles. Replaces the sentinel that
+   fetched it (hx-swap="outerHTML"), so the next sentinel comes FIRST and this
+   page's bubbles follow in ascending order, landing directly above the ones
+   already on screen. No stage footer: the stage is derived from the LAST
+   assistant reply, which is always on the newest page. #}
+{% if let Some(u) = older_page_url.as_ref() %}
+{% let older_url = u %}
+{% let older_root = "#lc-support-thread" %}
+{% include "partials/older_sentinel.html" %}
+{% endif %}
+{% for m in messages %}
+{% include "support/panel_bubble.html" %}
+{% endfor %}

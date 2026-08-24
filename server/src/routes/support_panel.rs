@@ -31,9 +31,16 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/support/bubble", get(get_bubble))
         .route("/support/panel/thread", get(get_thread))
+        // LC-795: one older page of bubbles for the panel's load-older sentinel.
+        .route("/support/panel/thread/older", get(get_older_thread))
         .route("/support/panel/send", post(post_send))
         .route("/support/panel/ticket", post(post_ticket_details))
 }
+
+/// LC-795: bubbles the panel renders per page. Matches the thread panel's
+/// `THREAD_REPLY_PAGE_LIMIT`: the panel is short, and older pages arrive through
+/// the top-of-list sentinel, so nothing is out of reach.
+const PANEL_PAGE_LIMIT: i64 = 50;
 
 /// LC-724: substring that marks the "you added details" confirmation, so the
 /// panel derives the ticket-filed stage from it (kept next to the message it
@@ -182,6 +189,20 @@ struct PanelThreadView {
     messages: Vec<PanelMsg>,
     empty: bool,
     stage: Stage,
+    /// LC-795: the endpoint that returns the page before this one, or `None`
+    /// when this page already reaches the start of the conversation. `Some`
+    /// renders the top-of-list load-older sentinel.
+    older_page_url: Option<String>,
+}
+
+/// LC-795: one older page of bubbles, swapped in over the sentinel that fetched
+/// it. Carries no stage: the stage is derived from the LAST assistant reply,
+/// which is always on the newest page.
+#[derive(Template)]
+#[template(path = "support/panel_older.html")]
+struct PanelOlderView {
+    messages: Vec<PanelMsg>,
+    older_page_url: Option<String>,
 }
 
 /// True when the support assistant is usable for `user`: the LLM and embeddings
@@ -213,10 +234,34 @@ async fn get_bubble(
 /// bubbles plus the derived [`Stage`] affordance. Shared by the HTTP thread
 /// endpoint, the send response, and the WS OOB push, so all three render
 /// identically.
-async fn build_thread_view(state: &AppState, user: &User) -> Result<PanelThreadView, AppError> {
+///
+/// LC-795: reads ONE page of [`PANEL_PAGE_LIMIT`] messages. `before_id` is the
+/// load-older cursor; `None` is the newest page, which is what a fresh panel
+/// open renders. `older_page_url` on the result is `Some` exactly when the read
+/// saw a row behind the page, and is what renders the sentinel.
+async fn build_thread_view(
+    state: &AppState,
+    user: &User,
+    before_id: Option<i64>,
+) -> Result<PanelThreadView, AppError> {
     let bot = crate::routes::assistant::assistant_bot(state).await?;
     let room = help_docs::support_dm_room(state, user).await?;
-    let raw = db::chat::list_messages(&state.chat, room.id).await?;
+    // Read `limit + 1` rows: the overflow row is the "older messages exist"
+    // answer, without a second COUNT query.
+    let mut raw =
+        db::chat::list_messages_paginated(&state.chat, room.id, before_id, PANEL_PAGE_LIMIT + 1)
+            .await?;
+    let has_older = raw.len() as i64 > PANEL_PAGE_LIMIT;
+    raw.truncate(PANEL_PAGE_LIMIT as usize);
+    // `list_messages_paginated` returns newest-first; the panel renders oldest
+    // -> newest, like every other timeline.
+    raw.reverse();
+    // Taken BEFORE the participant filter, so the next cursor steps past a
+    // filtered-out row instead of re-reading it forever.
+    let older_page_url = has_older
+        .then(|| raw.first().map(|m| m.id))
+        .flatten()
+        .map(|cursor| format!("/support/panel/thread/older?before={cursor}"));
 
     // Stage from the last assistant reply and its timestamp (the waiting timer
     // needs the start instant). See [`derive_stage`] for the precedence.
@@ -267,25 +312,39 @@ async fn build_thread_view(state: &AppState, user: &User) -> Result<PanelThreadV
             show_avatar,
         });
     }
-    let empty = messages.is_empty();
+    // LC-795: only a conversation with nothing in it anywhere gets the welcome
+    // block. A page whose rows all filtered out still has history behind it.
+    let empty = messages.is_empty() && older_page_url.is_none();
     Ok(PanelThreadView {
         messages,
         empty,
         stage,
+        older_page_url,
     })
 }
 
 /// Render the thread partial for an HTTP response (fetch-on-open + send).
 async fn render_thread(state: &AppState, user: &User) -> Result<Html, AppError> {
-    html(&build_thread_view(state, user).await?)
+    html(&build_thread_view(state, user, None).await?)
 }
 
 /// LC-719: render the thread as an OOB fragment for a WS push. Wraps the same
 /// partial in the `#lc-support-thread` target so htmx's WS extension swaps it in
-/// place. Returns `None` on any error (the WS send task then sends nothing).
+/// place. Returns `None` on any error - the WS send task then sends nothing, so
+/// the failure is logged here at `warn` with its cause; a push that silently
+/// vanished would otherwise look exactly like "no update to send".
 pub(crate) async fn render_thread_oob(state: &AppState, user: &User) -> Option<String> {
-    let view = build_thread_view(state, user).await.ok()?;
-    let inner = crate::views::render_template(&view).ok()?;
+    let view = build_thread_view(state, user, None)
+        .await
+        .inspect_err(
+            |e| tracing::warn!(user = %user.id, error = %e, "support thread push: build failed"),
+        )
+        .ok()?;
+    let inner = crate::views::render_template(&view)
+        .inspect_err(
+            |e| tracing::warn!(user = %user.id, error = %e, "support thread push: render failed"),
+        )
+        .ok()?;
     Some(format!(
         "<div id=\"lc-support-thread\" hx-swap-oob=\"innerHTML\">{inner}</div>"
     ))
@@ -301,6 +360,31 @@ async fn get_thread(
         return Err(AppError::Forbidden);
     }
     render_thread(&state, &user).await
+}
+
+#[derive(serde::Deserialize)]
+struct OlderQuery {
+    before: Option<i64>,
+}
+
+/// `GET /support/panel/thread/older?before={id}` - LC-795: the page of bubbles
+/// OLDER than `before`, preceded by the next sentinel while history remains.
+/// The panel's top-of-list sentinel swaps this in over itself, so each fetched
+/// page carries the cursor for the one behind it until the first turn is on
+/// screen. Gated exactly like the panel itself.
+async fn get_older_thread(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::extract::Query(q): axum::extract::Query<OlderQuery>,
+) -> Result<Html, AppError> {
+    if !bubble_enabled(&state, &user).await {
+        return Err(AppError::Forbidden);
+    }
+    let view = build_thread_view(&state, &user, q.before).await?;
+    html(&PanelOlderView {
+        messages: view.messages,
+        older_page_url: view.older_page_url,
+    })
 }
 
 #[derive(serde::Deserialize)]
@@ -468,6 +552,7 @@ mod tests {
             }],
             empty: false,
             stage: Stage::Normal,
+            older_page_url: None,
         };
         let html = view.render().unwrap();
         assert!(
