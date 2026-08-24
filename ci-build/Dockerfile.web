@@ -48,13 +48,24 @@ RUN set -eux; \
       cargo chef cook --release --features standalone --recipe-path recipe.json -p lets-chat-server; \
     fi
 
+# css - Tailwind build plus first-party asset minification (LC-781 F8). The Bun
+# image already carries a minifier (used for tailwind-built.css); this stage
+# extends it to the hand-written `main.css` and every served first-party script,
+# writing each back to its own name so the template references and the service
+# worker precache list need no edit. Excluded: `sw.js` (compiled into the binary
+# via include_str! from the ORIGINAL source, not served from this dir) and the
+# `*.test.js` node-test files (not served, and they require('node:test')).
+# `vendor/*` is already minified and lives in a subdir the flat glob skips.
 FROM oven/bun:1 AS css
 WORKDIR /app/server
 COPY server/package.json server/bun.lock server/tailwind.config.js ./
 COPY server/assets ./assets
 COPY server/templates ./templates
 RUN bun install --frozen-lockfile \
-    && bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
+    && bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify \
+    && (cd assets \
+        && bun build main.css --minify --outdir . \
+        && bun build $(ls *.js | grep -vE 'test\.js$|^sw\.js$') --minify --outdir .)
 
 FROM chef AS builder
 ARG BUILD_MODE
@@ -67,7 +78,13 @@ ENV GIT_HASH=${GIT_HASH} \
 COPY . .
 COPY --from=cacher /app/target /app/target-cooked
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
-COPY --from=css /app/server/assets/tailwind-built.css server/assets/tailwind-built.css
+# LC-781 F8: pull the whole minified assets tree from the css stage (minified
+# main.css + first-party *.js + tailwind-built.css, with sw.js and images
+# passed through unchanged), overwriting the originals `COPY . .` brought in.
+# This must land before `cargo build` below so the release binary embeds the
+# original (unminified) sw.js via include_str! - which this stage left alone -
+# and ServeDir serves the minified rest from disk at runtime.
+COPY --from=css /app/server/assets server/assets
 # A BuildKit cache mount keeps the release target dir warm across `--build`
 # runs so a source edit recompiles only the changed crates instead of the
 # whole app crate every time (the dominant cost in local `just run`
