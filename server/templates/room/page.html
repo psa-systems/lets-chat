@@ -62,4 +62,35 @@
 {# LC-156: WS room subscription is handled declaratively by live.js via the
    data-lc-live-room attribute on the page root above. #}
 {% include "partials/auto_scroll.html" %}
+{# LC-805: never-silent guarantee for the room page's htmx controls. htmx does
+   not swap a non-2xx body, so a rejected action (reply quote, reactions, pin,
+   bookmark, ack, flag, thread/history/details panels, the overflow-menu
+   actions - message.html alone carries 21 hx-* controls) leaves the target
+   unchanged and the click looks like it did nothing. Toast it, mirroring the
+   admin-table idiom in admin/users.html: registered on document.body, no
+   stopPropagation, so it cooperates with the htmx:afterSwap contract in
+   layout.html.
+   Scope: only controls inside the room root ([data-lc-live-room]) - the room's
+   equivalent of admin's .lc-table - so the listener, which survives on the
+   persistent document.body after an hx-boost navigation, never fires for a
+   different page's controls. The composer is excluded because it already
+   surfaces its own failures through the .composer-error banner.
+   Registered once: hx-boost swaps #main (this block) on room-to-room navigation
+   and re-runs this script, so a window flag guards against stacking a second
+   listener (which would toast N times for one failure). #}
+<script>
+(function () {
+  if (window.__lcRoomErrToastWired) return;
+  window.__lcRoomErrToastWired = true;
+  function onErr(e) {
+    var el = (e.detail && e.detail.elt) || e.target;
+    if (!el || !el.closest) return;
+    if (!el.closest('[data-lc-live-room]')) return; // room controls only
+    if (el.closest('#composer')) return;            // composer has its own banner
+    if (window.__lcToast) window.__lcToast('err', "{{ "room-action-failed"|t }}");
+  }
+  document.body.addEventListener('htmx:responseError', onErr);
+  document.body.addEventListener('htmx:sendError', onErr);
+})();
+</script>
 {% endblock %}

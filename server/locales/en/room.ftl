@@ -607,3 +607,8 @@ room-details-pinned-yes = Yes
 room-details-pinned-no = No
 room-details-leave = Leave room
 room-details-leave-confirm = Leave this room? You'll need a new invite to rejoin.
+
+# LC-805: room page htmx error toast. Shown when any room control's request
+# fails; htmx does not swap a non-2xx body, so without this the click would look
+# like it did nothing. The composer keeps its own inline .composer-error banner.
+room-action-failed = That action could not be completed. Please try again.
