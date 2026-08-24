@@ -1344,9 +1344,11 @@ pub fn build_router(state: AppState) -> Router {
             "/room/{room_id}/thread/{message_id}",
             get(room::get_thread_panel),
         )
+        // LC-797: POST posts a reply; GET returns an older page of replies for
+        // the panel's load-older sentinel.
         .route(
             "/room/{room_id}/thread/{parent_id}/messages",
-            post(room::post_thread_reply),
+            post(room::post_thread_reply).get(room::get_thread_older_replies),
         )
         .route(
             "/room/{room_id}/thread/{parent_id}/follow",

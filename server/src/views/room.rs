@@ -1625,7 +1625,20 @@ pub struct FollowUpBlockFragment<'a> {
 pub struct ThreadPanelFragment<'a> {
     pub room: &'a Room,
     pub parent: &'a MessageView,
+    /// LC-797: the newest page of replies, not the whole thread.
     pub replies: &'a [MessageView],
+    /// LC-797: total replies in the thread, for the count divider. `replies`
+    /// is one page, so its length is the wrong number to label the section
+    /// with.
+    pub reply_count: i64,
+    /// LC-797: endpoint for the load-older sentinel, already carrying the
+    /// `before` cursor. `None` when this page reaches the start of the thread,
+    /// in which case no sentinel is emitted. Built in the handler because
+    /// Askama does not resolve template variables inside a `format!` argument.
+    pub older_page_url: Option<String>,
+    /// LC-797: CSS selector of the panel's reply scroll container, the
+    /// `intersect` root the sentinel observes.
+    pub older_scroll_root: String,
     /// LC-668: the AI-generated thread title, shown as the panel heading once the
     /// thread reaches the reply threshold. `None` before then.
     pub thread_title: Option<String>,
@@ -1638,6 +1651,19 @@ pub struct ThreadPanelFragment<'a> {
     /// LC-549: an operator embeddings endpoint is configured; drives
     /// `data-lc-embeddings` for the "Find related" and semantic-search gates.
     pub embeddings_available: bool,
+}
+
+/// LC-797: one older page of thread replies, swapped in place of the panel's
+/// load-older sentinel (`hx-swap="outerHTML"`). Emits the NEXT sentinel first
+/// so the chain continues until the thread's first reply is on screen.
+#[derive(Template)]
+#[template(path = "room/thread_older_replies.html")]
+pub struct ThreadOlderRepliesFragment<'a> {
+    pub replies: &'a [MessageView],
+    /// Endpoint for the NEXT sentinel, or `None` once history is exhausted.
+    pub older_page_url: Option<String>,
+    /// CSS selector of the panel's reply scroll container.
+    pub older_scroll_root: String,
 }
 
 /// LC-310: the thread Follow/Following toggle button, included by the thread
