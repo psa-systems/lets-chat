@@ -187,6 +187,26 @@ pub async fn get_callback(
         }
     }
 
+    // LC-762: bunyip is the authority for identity (see the role mirror and the
+    // email stamp above), so refresh the stored display name from the fresh
+    // `name` claim on every login. The resolver returns an existing linked row
+    // untouched, so a name changed at the IdP after the account was provisioned
+    // stayed stale forever otherwise. Best-effort, like the stamps above: a
+    // failure must not block a valid login, and a blank/absent claim is skipped
+    // so a login never blanks an existing name. The username is deliberately NOT
+    // synced - it is the mention handle, is uniqueness-constrained, and may carry
+    // a provisioning collision suffix.
+    if let Some(name) = userinfo
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if let Err(e) = db::auth::sync_bunyip_display_name(&state.auth, &user_id, name).await {
+            tracing::warn!(target: "bunyip_sso", error = %e, user_id = %user_id, "display_name sync failed");
+        }
+    }
+
     let trust_proxy = crate::auth::proxy_headers_trusted(&state.settings).await;
     let (ua, ip) = crate::auth::extract_session_origin(&headers, trust_proxy);
 
