@@ -1880,6 +1880,32 @@ pub async fn mark_email_verified_if_unset(
     Ok(res.rows_affected())
 }
 
+/// LC-762: refresh a Bunyip/OIDC user's stored display name from the fresh
+/// `name` claim on login. Bunyip is the authority for identity (the SSO callback
+/// already mirrors the admin role and stamps email-verified the same way), so
+/// the IdP name wins: a login mirrors the current claim, overwriting any local
+/// edit. Writes ONLY when the value actually differs, so an unchanged name - the
+/// common case, and every fresh provision, which already stored this name -
+/// costs no write and does not churn `updated_at`. Returns the number of rows
+/// updated (0 = already current). The caller passes a non-empty, trimmed name;
+/// an absent/blank claim is skipped there so a login never blanks a name.
+pub async fn sync_bunyip_display_name(
+    pool: &SqlitePool,
+    user_id: &str,
+    display_name: &str,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query(
+        "UPDATE users SET display_name = ?, updated_at = datetime('now') \
+         WHERE id = ? AND (display_name IS NULL OR display_name != ?)",
+    )
+    .bind(display_name)
+    .bind(user_id)
+    .bind(display_name)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
+}
+
 /// Overwrite a user's password hash. Used by the reset flow after a token
 /// has been validated. Callers should also delete every session for this
 /// user so any existing logged-in browser is force-signed-out.
