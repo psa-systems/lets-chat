@@ -609,3 +609,6 @@ room-details-pinned-yes = Sí
 room-details-pinned-no = No
 room-details-leave = Salir de la sala
 room-details-leave-confirm = ¿Salir de esta sala? Necesitarás una nueva invitación para volver a unirte.
+
+# LC-805: room page htmx error toast (mirrors en room-action-failed).
+room-action-failed = No se pudo completar esa accion. Intentalo de nuevo.
