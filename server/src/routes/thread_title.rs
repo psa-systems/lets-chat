@@ -71,6 +71,8 @@ pub async fn run_thread_title(
     }
 
     let mut msgs = vec![root];
+    // LC-797: deliberately the unbounded read. Titling is a digest, not a
+    // render; a title drawn from one page of a thread would misname the rest.
     msgs.extend(db::chat::list_thread_replies(&state.chat, parent_id).await?);
     let labels = summary::author_labels(state, &msgs).await?;
     let text = summary::build_prompt_text(&msgs, &labels);

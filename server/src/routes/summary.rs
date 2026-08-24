@@ -216,6 +216,9 @@ pub async fn summarize_thread(
         return Err(AppError::NotFound);
     }
     let mut msgs = vec![parent];
+    // LC-797: deliberately the unbounded read. This is a digest, not a render:
+    // a summary of a page of the thread would be wrong. The prompt builder caps
+    // the text it sends, so thread length bounds the query, not the LLM call.
     msgs.extend(db::chat::list_thread_replies(&state.chat, parent_id).await?);
 
     run_summary(
