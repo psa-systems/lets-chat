@@ -72,7 +72,9 @@
     {% include "room/thread_reply_inner.html" %}
     {% endfor %}
   </div>
-  <div id="thread-typing-{{ parent.id }}" class="px-3 text-xs text-content-muted"></div>
+  {# LC-802: min-h-[1rem] reserves the text-xs line so the OOB toggle does not
+     resize #thread-replies above it. Same fix as LC-800 on #typing. #}
+  <div id="thread-typing-{{ parent.id }}" class="px-3 text-xs text-content-muted min-h-[1rem]"></div>
   <form
     id="thread-composer-{{ parent.id }}"
     hx-post="/room/{{ room.id }}/thread/{{ parent.id }}/messages"
