@@ -289,6 +289,9 @@ room-forward-attribution = Forwarded from
 room-reply-singular = reply
 room-reply-plural = replies
 
+## Load-older sentinel
+room-load-older = Loading older messages...
+
 ## Moderators
 room-mods-title = Moderators
 room-mods-heading = Moderators

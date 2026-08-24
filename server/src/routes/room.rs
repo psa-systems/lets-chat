@@ -2632,12 +2632,21 @@ pub async fn get_thread_panel(
     if blocked_authors.contains(&parent.user_id) {
         return Err(AppError::NotFound);
     }
-    let raw_replies: Vec<_> = db::chat::list_thread_replies(&state.chat, message_id)
-        .await?
+    // LC-797: newest page only. `oldest_loaded` is taken BEFORE the block
+    // filter so the load-older cursor still steps past a blocked author's row
+    // instead of re-reading it forever.
+    let (raw_page, has_older) = db::chat::list_thread_replies_page(
+        &state.chat,
+        message_id,
+        None,
+        db::chat::THREAD_REPLY_PAGE_LIMIT,
+    )
+    .await?;
+    let oldest_loaded = raw_page.first().map(|r| r.id);
+    let raw_replies: Vec<_> = raw_page
         .into_iter()
         .filter(|r| !blocked_authors.contains(&r.user_id))
         .collect();
-    let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
     let parent_meta = super::resolve_msg_author(
         &state,
         &parent.user_id,
@@ -2652,13 +2661,13 @@ pub async fn get_thread_panel(
     )
     .await?;
 
-    // Bulk-load attachments for the parent and every reply in a single query.
-    let mut all_ids: Vec<i64> = raw_replies.iter().map(|r| r.id).collect();
-    all_ids.push(parent.id);
+    // LC-797: the parent's own loads. The replies bulk-load themselves inside
+    // `build_thread_reply_views`, which the load-older fragment shares.
+    let parent_ids = [parent.id];
     let mut attachments_by_message =
-        db::uploads::attachments_for_messages(&state.chat, &all_ids).await?;
+        db::uploads::attachments_for_messages(&state.chat, &parent_ids).await?;
     let mut mentions_by_message =
-        db::mentions::mentions_for_messages(&state.chat, &state.auth, &all_ids).await?;
+        db::mentions::mentions_for_messages(&state.chat, &state.auth, &parent_ids).await?;
     let custom_emojis =
         db::custom_emojis::refs_for_room_and_user(&state.chat, room_id, &user.id).await?;
     let channel_refs = super::channel_refs_for_room(&state, room_id, &user).await?;
@@ -2666,8 +2675,8 @@ pub async fn get_thread_panel(
         db::bookmarks::bookmarked_message_ids_in_room(&state.chat, &user.id, room_id).await?;
     // LC-66: polls among the parent + replies, so the loop builds poll views
     // only for actual polls.
-    let poll_ids = db::polls::poll_message_ids(&state.chat, &all_ids).await?;
-    let followup_ids = db::followups::followup_message_ids(&state.chat, &all_ids).await?;
+    let poll_ids = db::polls::poll_message_ids(&state.chat, &parent_ids).await?;
+    let followup_ids = db::followups::followup_message_ids(&state.chat, &parent_ids).await?;
 
     let parent_quote_preview = match parent.quote_id {
         Some(qid) => crate::views::room::build_quote_preview(&state.chat, &state.auth, qid).await?,
@@ -2741,13 +2750,97 @@ pub async fn get_thread_panel(
         actor: parent_meta.actor.clone(),
     };
 
-    let mut replies: Vec<MessageView> = Vec::with_capacity(raw_replies.len());
-    for r in raw_replies {
+    let replies = build_thread_reply_views(
+        &state,
+        &user,
+        room_id,
+        raw_replies,
+        &custom_emojis,
+        &channel_refs,
+    )
+    .await?;
+
+    // LC-310: whether the viewer follows this thread (drives the toggle).
+    let is_following =
+        db::thread_followers::is_following(&state.chat, &user.id, message_id).await?;
+    // LC-546: whether the viewer has muted this thread (drives the mute toggle).
+    let is_muted = db::thread_muters::is_muted(&state.chat, &user.id, message_id).await?;
+
+    // LC-668: the AI thread title (if generated), shown as the panel heading.
+    let thread_title = db::chat::get_thread_title(&state.chat, message_id).await?;
+    // LC-679/LC-702: audience-scoped AI gate for the thread panel (same as the
+    // room render).
+    let ai_flag_on = super::ai_gate::flag_on(&state).await;
+    let ai_allowed = super::ai_gate::allowed_in_room(&state, room.id, &user).await?;
+    let fragment = ThreadPanelFragment {
+        room: &room,
+        parent: &parent_view,
+        replies: &replies,
+        // LC-797: the count divider labels the WHOLE thread, not the loaded
+        // page, so it does not shrink now that the panel pages.
+        reply_count: db::chat::count_replies(&state.chat, message_id).await?,
+        // LC-797: only offer the load-older sentinel when there is something
+        // behind the page. `oldest_loaded` is None only for an empty thread,
+        // in which case `has_older` is false too.
+        older_page_url: older_page_url(room_id, message_id, has_older, oldest_loaded),
+        older_scroll_root: format!("#thread-replies-{message_id}"),
+        thread_title,
+        is_following,
+        is_muted,
+        llm_available: ai_flag_on && state.llm_available() && ai_allowed,
+        embeddings_available: ai_flag_on && state.embeddings_available() && ai_allowed,
+    };
+    html(&fragment)
+}
+
+/// LC-797: the load-older endpoint for the page whose oldest reply is
+/// `oldest_loaded`, or `None` when the page already reaches the start of the
+/// thread and no sentinel should be emitted.
+fn older_page_url(
+    room_id: i64,
+    parent_id: i64,
+    has_older: bool,
+    oldest_loaded: Option<i64>,
+) -> Option<String> {
+    if !has_older {
+        return None;
+    }
+    oldest_loaded
+        .map(|cursor| format!("/room/{room_id}/thread/{parent_id}/messages?before={cursor}"))
+}
+
+/// LC-797: build the reply rows for one page of a thread. Shared by the panel
+/// and by `get_thread_older_replies` so both surfaces emit identical markup;
+/// every per-row lookup is bulk-loaded for exactly the ids in `raw`, so the
+/// query count is constant in the page size rather than the thread's length.
+async fn build_thread_reply_views(
+    state: &AppState,
+    user: &User,
+    room_id: i64,
+    raw: Vec<db::chat::RawMessage>,
+    custom_emojis: &[crate::models::custom_emoji::EmojiRef],
+    channel_refs: &[crate::views::channel_complete::ChannelRef],
+) -> Result<Vec<MessageView>, AppError> {
+    let ids: Vec<i64> = raw.iter().map(|r| r.id).collect();
+    let mut attachments_by_message =
+        db::uploads::attachments_for_messages(&state.chat, &ids).await?;
+    let mut mentions_by_message =
+        db::mentions::mentions_for_messages(&state.chat, &state.auth, &ids).await?;
+    let bookmarked_ids =
+        db::bookmarks::bookmarked_message_ids_in_room(&state.chat, &user.id, room_id).await?;
+    // LC-66: polls among the replies, so the loop builds poll views only for
+    // actual polls.
+    let poll_ids = db::polls::poll_message_ids(&state.chat, &ids).await?;
+    let followup_ids = db::followups::followup_message_ids(&state.chat, &ids).await?;
+
+    let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
+    let mut replies: Vec<MessageView> = Vec::with_capacity(raw.len());
+    for r in raw {
         let meta = if let Some(entry) = author_cache.get(&r.user_id) {
             entry.clone()
         } else {
             let entry = super::resolve_msg_author(
-                &state,
+                state,
                 &r.user_id,
                 r.webhook_id,
                 r.email_inbox_id,
@@ -2777,11 +2870,18 @@ pub async fn get_thread_panel(
             created_at: r.created_at,
             edited_at: r.edited_at,
             body: r.body,
-            reactions: reaction_views_for(&state, r_id, &user.id, &custom_emojis).await?,
+            reactions: reaction_views_for(state, r_id, &user.id, custom_emojis).await?,
             can_edit: false,
             can_delete: false,
             viewer_id: user.id.clone(),
             seen_caption: None,
+            // LC-797: the panel groups nothing - no follow-up run, no day
+            // separator - so a reply row carries NO state from the row above
+            // it. That is what makes a page boundary invisible here and why
+            // the load-older fragment needs no out-of-band boundary re-render,
+            // unlike the timeline. Adding grouping (tracked in LC-806) means
+            // adding that re-render; `thread_page_boundary_row_is_identical`
+            // fails if it is added without one.
             is_follow_up: false,
             show_unread_divider: false,
             // LC-244: per-message render; the client inserts live day dividers.
@@ -2794,9 +2894,9 @@ pub async fn get_thread_panel(
             mentions,
             is_pinned: false,
             is_bookmarked: bookmarked_ids.contains(&r_id),
-            ack: super::build_ack_view(&state, r_id, &user.id).await?,
-            custom_emojis: custom_emojis.clone(),
-            channels: channel_refs.clone(),
+            ack: super::build_ack_view(state, r_id, &user.id).await?,
+            custom_emojis: custom_emojis.to_vec(),
+            channels: channel_refs.to_vec(),
             quote_preview: None,
             suppress_quote_preview: false,
             is_system: r.is_system,
@@ -2831,30 +2931,70 @@ pub async fn get_thread_panel(
             actor: meta.actor.clone(),
         });
     }
+    Ok(replies)
+}
 
-    // LC-310: whether the viewer follows this thread (drives the toggle).
-    let is_following =
-        db::thread_followers::is_following(&state.chat, &user.id, message_id).await?;
-    // LC-546: whether the viewer has muted this thread (drives the mute toggle).
-    let is_muted = db::thread_muters::is_muted(&state.chat, &user.id, message_id).await?;
+#[derive(Deserialize)]
+pub struct OlderRepliesQuery {
+    pub before: Option<i64>,
+}
 
-    // LC-668: the AI thread title (if generated), shown as the panel heading.
-    let thread_title = db::chat::get_thread_title(&state.chat, message_id).await?;
-    // LC-679/LC-702: audience-scoped AI gate for the thread panel (same as the
-    // room render).
-    let ai_flag_on = super::ai_gate::flag_on(&state).await;
-    let ai_allowed = super::ai_gate::allowed_in_room(&state, room.id, &user).await?;
-    let fragment = ThreadPanelFragment {
-        room: &room,
-        parent: &parent_view,
+/// GET /room/{room_id}/thread/{parent_id}/messages?before={id} - LC-797: one
+/// page of a thread's replies OLDER than `before`, as the same reply rows the
+/// panel renders, preceded by the next sentinel while history remains. The
+/// panel's top-of-list sentinel swaps this in via outerHTML.
+pub async fn get_thread_older_replies(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((room_id, parent_id)): Path<(i64, i64)>,
+    axum::extract::Query(q): axum::extract::Query<OlderRepliesQuery>,
+) -> Result<Html, AppError> {
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+    let parent = db::chat::get_message(&state.chat, parent_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if parent.room_id != room_id || parent.parent_id.is_some() {
+        return Err(AppError::NotFound);
+    }
+    let blocked_authors = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+    if blocked_authors.contains(&parent.user_id) {
+        return Err(AppError::NotFound);
+    }
+
+    let (raw_page, has_older) = db::chat::list_thread_replies_page(
+        &state.chat,
+        parent_id,
+        q.before,
+        db::chat::THREAD_REPLY_PAGE_LIMIT,
+    )
+    .await?;
+    let oldest_loaded = raw_page.first().map(|r| r.id);
+    let raw_replies: Vec<_> = raw_page
+        .into_iter()
+        .filter(|r| !blocked_authors.contains(&r.user_id))
+        .collect();
+
+    let custom_emojis =
+        db::custom_emojis::refs_for_room_and_user(&state.chat, room_id, &user.id).await?;
+    let channel_refs = super::channel_refs_for_room(&state, room_id, &user).await?;
+    let replies = build_thread_reply_views(
+        &state,
+        &user,
+        room_id,
+        raw_replies,
+        &custom_emojis,
+        &channel_refs,
+    )
+    .await?;
+
+    html(&crate::views::room::ThreadOlderRepliesFragment {
         replies: &replies,
-        thread_title,
-        is_following,
-        is_muted,
-        llm_available: ai_flag_on && state.llm_available() && ai_allowed,
-        embeddings_available: ai_flag_on && state.embeddings_available() && ai_allowed,
-    };
-    html(&fragment)
+        older_page_url: older_page_url(room_id, parent_id, has_older, oldest_loaded),
+        older_scroll_root: format!("#thread-replies-{parent_id}"),
+    })
 }
 
 /// POST /room/{room_id}/thread/{parent_id}/follow - subscribe to a thread's

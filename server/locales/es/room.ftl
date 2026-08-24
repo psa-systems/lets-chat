@@ -288,6 +288,9 @@ room-forward-attribution = Reenviado de
 room-reply-singular = respuesta
 room-reply-plural = respuestas
 
+## Load-older sentinel
+room-load-older = Cargando mensajes anteriores...
+
 ## Moderators
 room-mods-title = Moderadores
 room-mods-heading = Moderadores
