@@ -331,3 +331,193 @@ async fn add_details_enriches_the_ticket_and_files_it() {
         ticket.body
     );
 }
+
+/// The `before=` cursor on the panel's load-older sentinel, or `None` when the
+/// fragment carries no sentinel (i.e. it is the oldest page).
+fn older_cursor(html: &str) -> Option<String> {
+    const MARKER: &str = "hx-get=\"/support/panel/thread/older?before=";
+    let start = html.find(MARKER)? + MARKER.len();
+    let rest = &html[start..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+fn bubble_count(html: &str) -> usize {
+    html.matches("class=\"lc-support-msg").count()
+}
+
+// LC-795: the panel renders one bounded page and can still reach the whole
+// conversation. Seeds more than two pages into the support DM, opens the panel,
+// follows the sentinel back to the oldest page, and asserts the oldest turn is
+// reachable and that the last page stops offering one.
+#[tokio::test]
+async fn panel_pages_back_to_the_oldest_turn() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+    let (uid, session) = member_session(&auth).await;
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
+    let app: Router = routes::build_router(state(auth.clone(), chat.clone(), settings, true));
+
+    // One send bootstraps the assistant bot and the backing DM; its echo is the
+    // oldest message in the room.
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/support/panel/send")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::from("body=the+very+first+question"))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+
+    let bot = db::auth::find_user_by_username(&auth, "assistant")
+        .await
+        .unwrap()
+        .expect("assistant bot created");
+    let dm = db::chat::find_dm_room(&chat, &bot.id, &uid)
+        .await
+        .unwrap()
+        .expect("support DM room created");
+
+    // Seed well past two pages (the panel renders 50 per page), alternating the
+    // two participants so both bubble shapes are paged.
+    for i in 0..120 {
+        let (author, body) = if i % 2 == 0 {
+            (&uid, format!("question number {i}"))
+        } else {
+            (&bot.id, format!("answer number {i}"))
+        };
+        db::chat::insert_message(&chat, dm.id, author, &body)
+            .await
+            .unwrap();
+    }
+
+    // A fresh panel open renders the NEWEST page: bounded, ending at the last
+    // turn, with a sentinel for the history behind it.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/support/panel/thread")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::empty())
+        .unwrap();
+    let first = body_string(app.clone().oneshot(req).await.unwrap()).await;
+    assert!(
+        first.contains("answer number 119"),
+        "the newest turn is on the first page, got: {first}"
+    );
+    assert!(
+        !first.contains("the very first question"),
+        "the oldest turn is NOT on the first page (it would mean an unbounded read), got: {first}"
+    );
+    assert_eq!(
+        bubble_count(&first),
+        50,
+        "the panel renders exactly one page of bubbles"
+    );
+
+    // Follow the sentinel back until a fragment stops offering one. Each hop is
+    // the request htmx makes when the sentinel scrolls into view.
+    let mut cursor = older_cursor(&first).expect("first page offers a load-older sentinel");
+    let mut pages = 1;
+    let mut oldest;
+    loop {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/support/panel/thread/older?before={cursor}"))
+            .header(header::COOKIE, format!("session={session}"))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        oldest = body_string(res).await;
+        pages += 1;
+        assert!(
+            pages <= 10,
+            "paging terminates; a cursor that stops advancing would loop forever"
+        );
+        // An older page is bubbles only: the stage footer and the welcome block
+        // belong to the newest page.
+        assert!(
+            !oldest.contains("lc-support-stage") && !oldest.contains("lc-support-welcome"),
+            "an older page carries bubbles only, got: {oldest}"
+        );
+        match older_cursor(&oldest) {
+            Some(next) => cursor = next,
+            None => break,
+        }
+    }
+
+    assert!(
+        pages >= 3,
+        "more than two pages were seeded, so more than two were walked, got {pages}"
+    );
+    assert!(
+        oldest.contains("the very first question"),
+        "the oldest turn is reachable through the sentinel, got: {oldest}"
+    );
+    assert!(
+        older_cursor(&oldest).is_none(),
+        "the last page offers no further sentinel, got: {oldest}"
+    );
+}
+
+// LC-795: a conversation that fits in one page gets no sentinel at all, so the
+// affordance appears when, and only when, there is older history.
+#[tokio::test]
+async fn short_conversation_renders_no_sentinel() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+    let (_uid, session) = member_session(&auth).await;
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
+    let app: Router = routes::build_router(state(auth.clone(), chat.clone(), settings, true));
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/support/panel/send")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::from("body=one+short+question"))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/support/panel/thread")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::empty())
+        .unwrap();
+    let thread = body_string(app.clone().oneshot(req).await.unwrap()).await;
+    assert!(
+        thread.contains("one short question"),
+        "the whole conversation is on the page, got: {thread}"
+    );
+    assert!(
+        older_cursor(&thread).is_none(),
+        "no sentinel when nothing is older, got: {thread}"
+    );
+
+    // The fragment route is gated exactly like the panel: a signed-out caller
+    // gets no bubbles.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/support/panel/thread/older?before=1")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_ne!(
+        res.status(),
+        StatusCode::OK,
+        "the load-older fragment requires a session"
+    );
+}
