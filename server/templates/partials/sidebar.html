@@ -309,20 +309,12 @@
   {# LC-368: the former footer account/utility group (Settings, theme, shortcuts,
      sign out, admin/moderate) moved into the account menu opened from the
      profile header (partials/sidebar_self.html), removing the footer clutter.
-     LC-576: in the prototype the sidebar foot is a single "Invite people" action
-     (.sb-foot) - Profile / Shortcuts / Settings live in the RAIL instead, so
-     they are in enclave_switcher.html, not here. Inviting is a manager action
-     (invites are issued from the enclave settings member search), so this is
-     gated the same way and links there. #}
-  {% if let Some(eid) = sidebar_current_enclave %}
-  {% for e in switcher %}{% if e.active %}{% if e.can_manage %}
-  <a href="/enclave/{{ eid }}/settings#members" class="lc-sidebar-foot">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-      <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z"/>
-      <path d="M15.75 6.75a.75.75 0 00-1.5 0v1.5h-1.5a.75.75 0 000 1.5h1.5v1.5a.75.75 0 001.5 0v-1.5h1.5a.75.75 0 000-1.5h-1.5v-1.5z"/>
-    </svg>
-    <span>{{ "sidebar-invite-people"|t }}</span>
-  </a>
-  {% endif %}{% endif %}{% endfor %}
-  {% endif %}
+     LC-808: the sidebar-foot "Invite people" link was removed. It only linked to
+     Settings -> Members (a full-page jump into the same enclave-invite backend),
+     duplicating the room-header and member-panel "Invite people" buttons that
+     open the inline invite drawer (enclave/invite_panel.html) right beside it -
+     same label, worse behaviour. Inviting now lives on those two in-context
+     controls; the enclave landing reaches it via Settings -> Members. The
+     general "People" search tab above (/users/search -> DM) is a different thing
+     (message anyone in the workspace), not an invite, and is unaffected. #}
 </aside>
