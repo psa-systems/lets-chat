@@ -115,6 +115,28 @@ async fn service_worker_keeps_push_and_outbox_handlers() {
     assert!(body.contains("lc-outbox"), "outbox IndexedDB queue present");
 }
 
+// LC-781 F9: every session must install the service worker - for the offline
+// shell, the `/assets/` cacheFirst handling, and the offline outbox - not only
+// users who opted into Web Push. `outbox.js` is loaded on every page (see
+// `login_page_has_pwa_head_wiring`) and registers the worker gated ONLY on
+// `'serviceWorker' in navigator`, never on Notification / push permission. This
+// guards against a refactor re-coupling the registration to push (the F9
+// defect). The finding was in fact already satisfied by this line-wrapped
+// `.register` call, which the original audit's single-line grep did not see.
+#[test]
+fn outbox_registers_service_worker_independently_of_push() {
+    const OUTBOX_JS: &str = include_str!("../assets/outbox.js");
+    assert!(
+        OUTBOX_JS.contains(".register('/sw.js'"),
+        "outbox.js must register the service worker",
+    );
+    assert!(
+        !OUTBOX_JS.contains("Notification"),
+        "the outbox service-worker registration must stay independent of \
+         Notification / push permission so every session gets the offline shell",
+    );
+}
+
 #[tokio::test]
 async fn login_page_has_pwa_head_wiring() {
     let app = app().await;
