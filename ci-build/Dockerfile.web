@@ -56,6 +56,19 @@ RUN set -eux; \
 # via include_str! from the ORIGINAL source, not served from this dir) and the
 # `*.test.js` node-test files (not served, and they require('node:test')).
 # `vendor/*` is already minified and lives in a subdir the flat glob skips.
+#
+# LC-812: `--format=cjs` is required, not cosmetic. `bun build` defaults to ESM
+# output, so any file exposing `module.exports` (media-constraints.js and
+# mute-state.js expose it for `node --test`) is emitted with a top-level
+# `export default ...`. Those files load as CLASSIC scripts in base.html, where
+# `export` is a SyntaxError - the script never runs, its `window.LetsChat*`
+# global is never set, and the first capture path crashes on join. CJS output
+# keeps the original eager IIFE (global still assigned) and the guarded
+# `module.exports` (skipped in the browser), with no `export`. The trailing grep
+# is a build-time backstop: fail loudly if a served script ever ships a
+# top-level `export`/`import` statement again rather than shipping a broken join
+# to prod. The regex anchors on a statement boundary so a `/export?...` URL
+# string in a script body is not a false positive.
 FROM oven/bun:1 AS css
 WORKDIR /app/server
 COPY server/package.json server/bun.lock server/tailwind.config.js ./
@@ -65,7 +78,11 @@ RUN bun install --frozen-lockfile \
     && bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify \
     && (cd assets \
         && bun build main.css --minify --outdir . \
-        && bun build $(ls *.js | grep -vE 'test\.js$|^sw\.js$') --minify --outdir .)
+        && bun build $(ls *.js | grep -vE 'test\.js$|^sw\.js$') --minify --format=cjs --outdir . \
+        && if grep -lE '(^|[;}])(export[ {*]|import[ {*"'"'"'])' $(ls *.js | grep -vE 'test\.js$|^sw\.js$'); then \
+             echo 'ERROR: a served script contains a top-level export/import statement (LC-812); classic <script> load will SyntaxError' >&2; \
+             exit 1; \
+           fi)
 
 FROM chef AS builder
 ARG BUILD_MODE
