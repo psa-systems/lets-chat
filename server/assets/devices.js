@@ -150,7 +150,10 @@
     video.playsInline = true;
     try { video.srcObject = stream; } catch (e) { return stream; }
     var play = video.play();
-    if (play && play.catch) play.catch(function () {});
+    if (play && play.catch) play.catch(function () {
+      /* Muted, detached probe video: an autoplay rejection is expected and
+         does not affect the frame sampling below. */
+    });
     var frames = 0, start = 0, stopped = false;
     function stop() {
       stopped = true;
@@ -175,7 +178,10 @@
   function dropBlur(track) {
     try {
       var p = track.applyConstraints({ advanced: [{ backgroundBlur: false }] });
-      if (p && p.catch) p.catch(function () {});
+      if (p && p.catch) p.catch(function () {
+        /* If the browser refuses to drop the effect the blur just stays on,
+           which is preferable to throwing out of the perf guard. */
+      });
     } catch (e) { /* the effect just stays on; better than throwing */ }
     if (window.__lcToast) {
       window.__lcToast('info', window.__lcS('deviceBlurSlow',
