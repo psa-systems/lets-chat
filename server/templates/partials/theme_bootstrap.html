@@ -1,0 +1,81 @@
+  {# LC-191/LC-192/LC-541: no-flash theme bootstrap, two axes. Synchronous +
+     BEFORE the stylesheets so `data-theme` (palette) and `data-mode`
+     (light/dark/hc-light/hc-dark) are both set before CSS loads (no
+     flash-of-wrong-theme). Source order per axis: the `lc-mode` / `lc-palette`
+     cookie (kept in sync with users.theme_mode / users.theme_palette by the
+     locale middleware), else localStorage (set by the picker), else the OS for
+     mode (palette has no OS signal; unset/unknown falls back to blue-harbor).
+     Explicit mode values (light/dark/hc-light/hc-dark) pass through; "system"/
+     unset resolves prefers-color-scheme, upgraded to high-contrast when
+     prefers-contrast:more. Keeps <meta theme-color> in step and re-resolves on
+     OS color-scheme / contrast changes while on system. #}
+  <script>
+    (function () {
+      var d = document.documentElement;
+      var META = { light: "#f8fafc", dark: "#0f172a", "hc-light": "#ffffff", "hc-dark": "#000000" };
+      var EXPLICIT = { light: 1, dark: 1, "hc-light": 1, "hc-dark": 1 };
+      var PALETTES = { "blue-harbor": 1, "cobalt": 1, "ink-ice": 1, "arctic": 1, "deep-sea": 1, "royal-navy": 1, "amethyst": 1 };
+      // LC-569: UI scale. Applied as a root rem scale via html[data-scale].
+      var SCALES = { compact: 1, "default": 1, large: 1, xl: 1 };
+      function cookie(n) {
+        var m = document.cookie.match("(?:^|; )" + n + "=([^;]*)");
+        return m ? decodeURIComponent(m[1]) : null;
+      }
+      function readPref(name) {
+        var p = cookie(name);
+        if (!p) { try { p = localStorage.getItem(name); } catch (e) {} }
+        return p;
+      }
+      function resolveMode(p) {
+        if (EXPLICIT[p]) return p;
+        var dark = matchMedia("(prefers-color-scheme: dark)").matches;
+        var hc = matchMedia("(prefers-contrast: more)").matches;
+        if (hc) return dark ? "hc-dark" : "hc-light";
+        return dark ? "dark" : "light";
+      }
+      function resolvePalette(p) { return PALETTES[p] ? p : "blue-harbor"; }
+      function resolveScale(p) { return SCALES[p] ? p : "default"; }
+      function applyMode(p) {
+        var t = resolveMode(p);
+        d.setAttribute("data-mode", t);
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute("content", META[t] || META.light);
+      }
+      function applyPalette(p) { d.setAttribute("data-theme", resolvePalette(p)); }
+      function applyScale(p) { d.setAttribute("data-scale", resolveScale(p)); }
+      applyMode(readPref("lc-mode"));
+      applyPalette(readPref("lc-palette"));
+      applyScale(readPref("lc-scale"));
+      function onSystemChange() {
+        var p = readPref("lc-mode");
+        if (!EXPLICIT[p]) applyMode(p); // only follow the OS while on system/unset
+      }
+      try {
+        matchMedia("(prefers-color-scheme: dark)").addEventListener("change", onSystemChange);
+        matchMedia("(prefers-contrast: more)").addEventListener("change", onSystemChange);
+      } catch (e) {}
+      // Used by the Settings appearance picker to apply instantly + remember
+      // the choice on this device (the form POST persists it server-side).
+      window.__lcSetMode = function (p) {
+        try { if (p) localStorage.setItem("lc-mode", p); else localStorage.removeItem("lc-mode"); } catch (e) {}
+        applyMode(p);
+      };
+      // LC-541: one-time compat for a device whose only saved preference is the
+      // pre-rename `lc-theme` value (localStorage or a stale cookie predating
+      // the lc-mode/lc-palette split). Must run after __lcSetMode exists so it
+      // can both persist the migrated value under the new key and repaint.
+      if (!readPref("lc-mode")) {
+        var legacy = readPref("lc-theme");
+        if (legacy) window.__lcSetMode(EXPLICIT[legacy] ? legacy : "");
+      }
+      window.__lcSetPalette = function (p) {
+        try { if (p) localStorage.setItem("lc-palette", p); else localStorage.removeItem("lc-palette"); } catch (e) {}
+        applyPalette(p);
+      };
+      // LC-569: applied instantly by the appearance picker; the form POST persists it.
+      window.__lcSetScale = function (p) {
+        try { if (p) localStorage.setItem("lc-scale", p); else localStorage.removeItem("lc-scale"); } catch (e) {}
+        applyScale(p);
+      };
+    })();
+  </script>
