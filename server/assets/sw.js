@@ -210,7 +210,14 @@ async function handleMessagePost(event) {
     });
     await broadcastState();
     if (self.registration.sync) {
-      try { await self.registration.sync.register('lc-outbox'); } catch (e2) {}
+      // Background Sync is best-effort: if registration fails the page's own
+      // `online` handler still drains the outbox. Log it, so an outbox that
+      // only flushes while a tab is open is not mistaken for a working one.
+      try {
+        await self.registration.sync.register('lc-outbox');
+      } catch (e2) {
+        try { console.warn('[lc-sw] Background Sync registration failed; outbox drains on the next online event', e2); } catch (e3) {}
+      }
     }
     return new Response('{"queued":true}', {
       status: 200,

@@ -54,7 +54,11 @@
         if (j && typeof j.sttServer === 'boolean') sttServer = j.sttServer;
         disableIfUnsupported();
       })
-      .catch(function () {});
+      .catch(function (e) {
+        // The /call/config fetch failed: sttServer keeps its default, which may
+        // pick the wrong engine. Proceed, but do not do it silently.
+        try { console.warn('lets-chat: transcription config fetch failed; using defaults', e); } catch (e2) {}
+      });
   }
 
   // ---- UI state ---------------------------------------------------------
@@ -111,7 +115,11 @@
       setTimeout(function () { btn.textContent = label; }, 1500);
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(blob).then(flash).catch(function () {});
+      navigator.clipboard.writeText(blob).then(flash).catch(function (e) {
+        // Copy failed: the button keeps its normal label, so a failed copy
+        // would otherwise look identical to a successful one.
+        try { console.warn('lets-chat: transcript copy to clipboard failed', e); } catch (e2) {}
+      });
     } else {
       try {
         var ta = document.createElement('textarea');
@@ -171,7 +179,11 @@
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
       credentials: 'same-origin'
-    }).catch(function () {});
+    }).catch(function (e) {
+      // A dropped segment POST loses that piece of the transcript; log it so
+      // the gap is explainable rather than silent.
+      try { console.warn('lets-chat: transcript segment POST failed', e); } catch (e2) {}
+    });
   }
 
   // ---- local mic capture ------------------------------------------------
@@ -367,7 +379,11 @@
       fetch('/call/transcript/' + id + '/end', {
         method: 'POST',
         credentials: 'same-origin'
-      }).catch(function () {});
+      }).catch(function (e) {
+        // A failed /end leaves the transcript open server-side; log it so the
+        // orphaned session is traceable.
+        try { console.warn('lets-chat: transcript end failed; may stay open server-side', e); } catch (e2) {}
+      });
     }
   }
 
