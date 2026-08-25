@@ -31,4 +31,8 @@ pub struct HovercardFragment {
     pub local_time: Option<String>,
     /// Render the "Message" link to /dm/{user_id}.
     pub can_message: bool,
+    /// LC-809: true when this card is the viewer's own profile. Swaps the
+    /// "Message" action for an "Edit profile" link, so the display-name control
+    /// is reachable straight from your own name/avatar in the main UI.
+    pub is_self: bool,
 }

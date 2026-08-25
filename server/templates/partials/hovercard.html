@@ -43,6 +43,10 @@
   {% endfor %}
 </ul>
 {% endif %}
-{% if can_message %}
+{% if is_self %}
+{# LC-809: your own card. Link straight to the display-name control (the profile
+   section of settings) so "how do I change my name" is answered in place. #}
+<a href="/settings#profile" class="btn btn-primary mt-3 w-full">{{ "hovercard-edit-profile"|t }}</a>
+{% else if can_message %}
 <a href="/dm/{{ user_id }}" class="btn btn-primary mt-3 w-full">{{ "hovercard-message"|t }}</a>
 {% endif %}

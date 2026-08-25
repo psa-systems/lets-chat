@@ -95,6 +95,8 @@ attachment-alt-draft = Redactar con IA
 ## Profile hovercard (LC-298)
 hovercard-message = Mensaje
 hovercard-local-time = Hora local
+# LC-809: tu propia tarjeta enlaza al control del nombre visible.
+hovercard-edit-profile = Editar perfil
 
 ## Broadcast count
 partials-broadcast-notify-prefix = Esto notificará a
