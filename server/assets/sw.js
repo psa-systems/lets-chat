@@ -28,15 +28,13 @@ const CACHE_NAME = 'lc-shell-' + ASSET_VERSION;
 // answers a `?v=` URL with a one-year immutable Cache-Control, so a versioned
 // key here must be one something actually asks for.
 //
-// The icon family stays unversioned on purpose. `manifest.webmanifest` and
-// `offline.html` are static files served straight off disk, so their `src` /
-// `href` cannot carry `{{ asset_version }}`; the three files they point at are
-// therefore requested bare, and the server deliberately withholds the
-// immutable header from a URL with no `?v=`.
+// LC-794: `manifest.webmanifest` and `offline.html` are now served from routes
+// that substitute the asset version, so the icon family they point at carries
+// `?v=` too and is covered by the same immutable cache as everything else here.
 const PRECACHE_URLS = [
-  '/assets/favicon.svg',
-  '/assets/icon-192.png',
-  '/assets/icon-512.png',
+  '/assets/favicon.svg?v=' + ASSET_VERSION,
+  '/assets/icon-192.png?v=' + ASSET_VERSION,
+  '/assets/icon-512.png?v=' + ASSET_VERSION,
   '/assets/offline.html?v=' + ASSET_VERSION,
   '/assets/manifest.webmanifest?v=' + ASSET_VERSION,
   '/assets/tailwind-built.css?v=' + ASSET_VERSION,

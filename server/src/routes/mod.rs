@@ -9,7 +9,6 @@ use axum::{
     Router,
 };
 use std::collections::HashMap;
-use tower::Layer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
@@ -32,6 +31,7 @@ mod admin;
 pub(crate) mod ai_gate;
 mod api;
 mod api_tokens;
+mod assets;
 pub(crate) mod assistant;
 mod auth;
 mod automations;
@@ -1832,11 +1832,21 @@ pub fn build_router(state: AppState) -> Router {
     #[cfg(feature = "saas")]
     let router = router.merge(saas_auth::router());
 
+    // LC-794: manifest.webmanifest and offline.html are served from routes that
+    // substitute `__ASSET_VERSION__` so their icon / favicon references carry
+    // `?v=`; every other file under /assets is still served straight off disk.
+    // Axum 0.8 panics on a `route` that overlaps a `nest_service`, so the two
+    // handlers and the on-disk assets share one sub-router whose fallback is the
+    // ServeDir. `cache_static_assets` layers the whole sub-router, so it adds
+    // the immutable header to the handlers and the static files alike.
+    let assets = Router::new()
+        .route("/manifest.webmanifest", get(assets::get_manifest))
+        .route("/offline.html", get(assets::get_offline))
+        .fallback_service(ServeDir::new("server/assets"))
+        .layer(middleware::from_fn(cache_static_assets));
+
     router
-        .nest_service(
-            "/assets",
-            middleware::from_fn(cache_static_assets).layer(ServeDir::new("server/assets")),
-        )
+        .nest("/assets", assets)
         .fallback(handle_not_found)
         .layer(middleware::from_fn_with_state(
             state.clone(),
@@ -1888,10 +1898,11 @@ pub fn build_router(state: AppState) -> Router {
 ///
 /// The header is claimed only for a URL carrying a non-empty `?v=`, which is
 /// what `asset_version` stamps on every reference the templates and scripts
-/// emit. A request without it is a URL the version bust does not cover (the
-/// static `manifest.webmanifest` icon list, `offline.html`'s favicon link),
-/// and pinning that for a year would strand it at a stale copy, so it keeps
-/// the existing revalidate-by-`Last-Modified` behaviour. Set only when absent
+/// emit (LC-794 extended that to the icon family, now that `manifest.webmanifest`
+/// and `offline.html` are version-substituted routes rather than bare files).
+/// A request without it is a URL the version bust does not cover, and pinning
+/// that for a year would strand it at a stale copy, so it keeps the existing
+/// revalidate-by-`Last-Modified` behaviour. Set only when absent
 /// so a future per-file exception can still choose its own value, and only on
 /// a success or a 304 so an error body is never cached.
 async fn cache_static_assets(req: axum::extract::Request, next: middleware::Next) -> Response {
