@@ -95,6 +95,8 @@ attachment-alt-draft = Auto-draft
 ## Profile hovercard (LC-298)
 hovercard-message = Message
 hovercard-local-time = Local time
+# LC-809: your own card links to the display-name control.
+hovercard-edit-profile = Edit profile
 
 ## Broadcast count
 partials-broadcast-notify-prefix = This will notify
