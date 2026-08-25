@@ -218,6 +218,13 @@
         </svg>
       </button>
     </div>
+    {# LC-765: transcription is per-client local capture - each browser only
+       transcribes its own microphone, and the server has no tap on remote
+       tracks. Shown while a session is active (the drawer is only revealed
+       then), so a one-speaker transcript reads as a design boundary rather than
+       a broken feature. Static: no per-participant "who is transcribing" signal
+       exists to gate it on, and it is true for every viewer of their own mic. #}
+    <div class="px-3 pb-1 text-xs text-content-muted">{{ "voice-transcript-local-only"|t }}</div>
     {# LC-590: server-STT failure indicator. The /audio route now answers non-2xx
        once its retries are exhausted (it used to answer 200 with an empty body,
        which read as "you were silent"), and transcribe.js reveals this line.

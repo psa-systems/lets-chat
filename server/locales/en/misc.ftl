@@ -167,6 +167,10 @@ voice-transcript-empty-title = No transcript yet
 voice-transcript-empty-sub = Spoken audio will appear here once transcription is on.
 # LC-590: shown in the drawer when a clip fails server-side transcription.
 voice-transcript-clip-failed = Some audio could not be transcribed. Captions may be incomplete.
+# LC-765: transcription is per-client local capture (each browser transcribes
+# only its own mic), so a transcript is complete only if every participant turns
+# it on. Say so plainly so a one-speaker transcript reads as a boundary, not a bug.
+voice-transcript-local-only = Only your microphone is being transcribed. For the whole call, each participant turns on Transcribe.
 voice-in-call = In call
 # LC-493: ad-hoc huddles (group text rooms).
 huddle-label = Huddle
