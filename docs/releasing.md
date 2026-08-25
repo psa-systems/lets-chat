@@ -24,9 +24,9 @@ Operator overrides, all optional: `LETS_CHAT_UPDATE_REGISTRY_URL` (registry root
 
 Tagging is automated and **semver, branch-driven**:
 
-1. `just create-release <major|minor|hotfix>` bumps the workspace version, commits `Release vX.Y.Z` on a `release/vX.Y.Z` branch, and opens a PR via `fj`.
-2. On merge, `create-release.yml` tags the merge commit and creates a Forgejo Release whose body is an **auto-generated `git log --oneline` between the previous tag and HEAD**.
-3. The `v*` tag triggers `publish-release.yml` (desktop artifacts).
+1. `just create-release <major|minor|hotfix>` (from `common/common.just`, LC-761) bumps the `[workspace.package]` version, syncs `Cargo.lock`, commits `Release vX.Y.Z` on a `release/vX.Y.Z` branch, and opens a PR via `fj`.
+2. On merge, `.forgejo/workflows/create-release.yml` calls the reusable `psa-systems/common/.forgejo/workflows/create-release.yml`, which tags the merge commit and creates a Forgejo Release. The body is **one line per pull request merged to main since the previous tag** (`git log --oneline --first-parent`, with each `Merge pull request '<title>' (#N)` rewritten to `<title> (#N)`). This replaced the former private copy whose plain `git log --oneline` double-listed every PR as both its merge commit and the branch-side commits it already contained (the v0.3.0 eight-lines-for-four-PRs bug).
+3. The `v*` tag triggers `publish-release.yml` (desktop artifacts), unchanged.
 
 As of this writing **no tag has been cut** (the repo is at `v0.1.0`, the seed version). The machinery is built and dormant.
 
