@@ -142,6 +142,7 @@ pub async fn get_hovercard(
         links,
         local_time,
         can_message,
+        is_self,
     };
     html(&fragment)
 }

@@ -262,6 +262,9 @@ settings-avatar-formats = PNG, JPEG, or WebP. Max 1 MiB.
 settings-avatar-err-size = Image must be under 1 MiB.
 settings-avatar-err-type = Unsupported format - use PNG, JPEG, or WebP.
 settings-display-name = Display name
+# LC-809: name the scope so this reads as the everywhere name, distinct from a
+# per-room nickname.
+settings-display-name-help = Shown everywhere, in every room. A per-room nickname (set from a room's Preferences) overrides it in that one room.
 settings-email = Email
 settings-email-help = Used only for password reset. Leave blank to remove.
 settings-email-verified = Verified
