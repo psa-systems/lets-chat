@@ -82,6 +82,10 @@ js-device-dialog-title = Dispositivos de llamada
 js-device-close = Cerrar
 js-device-permission-hint = Permite el acceso al micrófono o la cámara para ver los nombres de los dispositivos.
 js-device-show-names = Mostrar nombres de dispositivos
+# LC-768: interruptor de desenfoque de fondo en el selector de dispositivos de
+# llamada, y el aviso cuando se desactiva para proteger la fluidez.
+js-device-blur = Difuminar mi fondo
+js-device-blur-slow = Se desactivó el desenfoque de fondo para mantener el vídeo fluido.
 
 js-voice-you = Tú
 js-voice-waiting = Esperando a que se unan otros...
