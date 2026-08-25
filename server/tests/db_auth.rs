@@ -787,3 +787,178 @@ async fn test_mark_email_verified_if_unset_requires_matching_email() {
         .unwrap()
         .is_none());
 }
+
+// ── LC-766: deliberate chat handles ────────────────────────────────────────
+
+use lets_chat::db::auth::{
+    change_username, confirm_username, create_user, find_user_by_id, ChangeHandleError,
+};
+
+#[tokio::test]
+async fn change_username_updates_handle_and_reserves_old() {
+    let pool = setup_pool().await;
+    let id = create_user(&pool, "dave", "").await.unwrap();
+
+    let change = change_username(&pool, &id, "david", true, true)
+        .await
+        .expect("change succeeds");
+    assert_eq!(change.old, "dave");
+    assert_eq!(change.new, "david");
+
+    // The row now carries the new handle under the same id, and the change
+    // confirmed the handle.
+    let rec = find_user_by_id(&pool, &id).await.unwrap().unwrap();
+    assert_eq!(rec.username, "david");
+    assert!(
+        rec.username_confirmed_at.is_some(),
+        "a change confirms the handle"
+    );
+
+    // The released handle is reserved: a different account cannot claim it.
+    let other = create_user(&pool, "erin", "").await.unwrap();
+    let err = change_username(&pool, &other, "dave", true, false)
+        .await
+        .expect_err("reserved handle refused");
+    assert!(matches!(err, ChangeHandleError::Reserved));
+}
+
+#[tokio::test]
+async fn change_username_rejects_case_insensitive_duplicate() {
+    let pool = setup_pool().await;
+    let _alice = create_user(&pool, "alice", "").await.unwrap();
+    let bob = create_user(&pool, "bob", "").await.unwrap();
+
+    let err = change_username(&pool, &bob, "ALICE", true, false)
+        .await
+        .expect_err("case-insensitive duplicate refused");
+    assert!(matches!(err, ChangeHandleError::Taken));
+}
+
+#[tokio::test]
+async fn change_username_enforces_cooldown_but_admin_is_exempt() {
+    let pool = setup_pool().await;
+    let id = create_user(&pool, "gwen", "").await.unwrap();
+
+    // First change stamps the cooldown.
+    change_username(&pool, &id, "gwen2", true, true)
+        .await
+        .expect("first change");
+
+    // A second change inside the window is refused while cooldown is enforced.
+    let err = change_username(&pool, &id, "gwen3", true, true)
+        .await
+        .expect_err("second change refused");
+    assert!(matches!(err, ChangeHandleError::Cooldown { .. }));
+
+    // The admin path (enforce_cooldown = false) bypasses the window.
+    let change = change_username(&pool, &id, "gwen3", true, false)
+        .await
+        .expect("admin bypass");
+    assert_eq!(change.new, "gwen3");
+}
+
+#[tokio::test]
+async fn released_handle_is_reserved_from_others_but_reclaimable_by_owner() {
+    let pool = setup_pool().await;
+    let a = create_user(&pool, "nova", "").await.unwrap();
+    change_username(&pool, &a, "nebula", true, true)
+        .await
+        .expect("nova -> nebula");
+
+    // Another account cannot grab the released handle.
+    let b = create_user(&pool, "orbit", "").await.unwrap();
+    assert!(matches!(
+        change_username(&pool, &b, "nova", true, false)
+            .await
+            .expect_err("reserved"),
+        ChangeHandleError::Reserved
+    ));
+
+    // The previous owner can reclaim it (no-cooldown path to sidestep their own
+    // window, as the admin/first-entry callers do).
+    let change = change_username(&pool, &a, "nova", true, false)
+        .await
+        .expect("owner reclaims nova");
+    assert_eq!(change.new, "nova");
+}
+
+#[tokio::test]
+async fn confirm_username_marks_first_entry_once() {
+    let pool = setup_pool().await;
+    // The SSO provisioning path (not the legacy create_user) leaves the handle
+    // unconfirmed, which is what fires the first-entry gate.
+    let id = lets_chat::db::auth::create_user_from_bunyip(&pool, "pip", "sub-pip", None, None)
+        .await
+        .unwrap();
+
+    // A freshly provisioned user is unconfirmed, so the gate prompts.
+    let rec = find_user_by_id(&pool, &id).await.unwrap().unwrap();
+    assert!(rec.username_confirmed_at.is_none());
+
+    // Accepting the derived handle confirms it.
+    confirm_username(&pool, &id).await.unwrap();
+    let first = find_user_by_id(&pool, &id)
+        .await
+        .unwrap()
+        .unwrap()
+        .username_confirmed_at
+        .expect("now confirmed");
+
+    // Idempotent: confirming again does not churn the timestamp.
+    confirm_username(&pool, &id).await.unwrap();
+    let second = find_user_by_id(&pool, &id)
+        .await
+        .unwrap()
+        .unwrap()
+        .username_confirmed_at
+        .unwrap();
+    assert_eq!(first, second);
+}
+
+#[tokio::test]
+async fn mention_resolves_to_same_user_after_handle_change() {
+    let auth = common::auth_pool().await;
+    let chat = common::chat_pool().await;
+
+    // Mentions are stored by user id, not by handle.
+    let id = create_user(&auth, "quinn", "").await.unwrap();
+    // Insert a mention row directly. FOREIGN KEYS is per-connection, so the
+    // pragma and the insert must run on the SAME acquired connection (a fresh
+    // pool connection re-enables it); dropping the guard afterwards returns the
+    // connection so the pool-based reads below can proceed.
+    {
+        let mut conn = chat.acquire().await.unwrap();
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(conn.as_mut())
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO mentions (message_id, room_id, mentioned_user_id, author_user_id) \
+             VALUES (1, 1, ?, 'author')",
+        )
+        .bind(&id)
+        .execute(conn.as_mut())
+        .await
+        .unwrap();
+    }
+
+    let before = lets_chat::db::mentions::mentions_for_messages(&chat, &auth, &[1])
+        .await
+        .unwrap();
+    assert_eq!(before[&1][0].username, "quinn");
+    assert_eq!(before[&1][0].user_id, id);
+
+    // After the change, the stored mention still resolves to the same user,
+    // now under the new handle.
+    change_username(&auth, &id, "quincy", true, true)
+        .await
+        .unwrap();
+    let after = lets_chat::db::mentions::mentions_for_messages(&chat, &auth, &[1])
+        .await
+        .unwrap();
+    assert_eq!(after[&1][0].user_id, id, "same user id");
+    assert_eq!(
+        after[&1][0].username, "quincy",
+        "resolves to the new handle"
+    );
+}
