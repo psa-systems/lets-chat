@@ -98,6 +98,10 @@ pub struct RoomInfoPage<'a> {
     /// LC-321: the viewer's current nickname in this room, pre-filling the
     /// form. `None` when they have not set one.
     pub nick_value: Option<String>,
+    /// LC-809: the room's name, so the per-room nickname control names the room
+    /// it applies to (making its scope unambiguous versus the global display
+    /// name).
+    pub nick_room_name: String,
 }
 
 /// LC-321: per-room nickname section, returned by `POST /room/{id}/nickname`
@@ -109,6 +113,8 @@ pub struct RoomInfoPage<'a> {
 pub struct RoomNicknameFragment {
     pub nick_room_id: i64,
     pub nick_value: Option<String>,
+    /// LC-809: room name, so the swapped-in section keeps naming its room.
+    pub nick_room_name: String,
 }
 
 /// Inline edit form for the wiki, swapped into `#wiki-content` via

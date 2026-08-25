@@ -163,7 +163,7 @@ room-info-files-other = Otros
 room-info-files-empty = Aun no se han subido archivos en esta sala.
 
 # LC-321: apodo por sala (pestaña Docs)
-room-nickname-heading = Tu apodo en esta sala
+room-nickname-heading = Tu apodo en
 room-nickname-help = Se muestra en tus mensajes de esta sala en lugar de tu nombre visible. Solo se aplica aquí.
 room-nickname-placeholder = p. ej. Capitán
 room-nickname-clear = Borrar

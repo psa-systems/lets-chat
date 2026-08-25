@@ -164,7 +164,7 @@ room-info-files-other = Other
 room-info-files-empty = No files uploaded in this room yet.
 
 # LC-321: per-room nickname (docs tab)
-room-nickname-heading = Your nickname in this room
+room-nickname-heading = Your nickname in
 room-nickname-help = Shown on your messages in this room instead of your display name. Only applies here.
 room-nickname-placeholder = e.g. Captain
 room-nickname-clear = Clear

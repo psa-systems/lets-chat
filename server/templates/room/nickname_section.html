@@ -10,7 +10,9 @@
         hx-disabled-elt="find button[type=submit]"
         class="lc-set-form">
     <div class="lc-set-field lc-set-field--narrow">
-      <label class="lc-set-label" for="lc-room-nickname">{{ "room-nickname-heading"|t }}</label>
+      {# LC-809: name the room so this control's scope is unambiguous next to the
+         global display name. #}
+      <label class="lc-set-label" for="lc-room-nickname">{{ "room-nickname-heading"|t }} <span class="font-semibold">#{{ nick_room_name }}</span></label>
       <input id="lc-room-nickname"
              class="input"
              type="text"
