@@ -4,7 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ "maintenance-page-title"|t }} - Let's Chat</title>
+  {# LC-759: resolve the mode before paint (shared with base.html) and load the
+     design tokens from main.css, so this standalone page renders in the user's
+     mode with the tokens its `bg-surface`/`text-content` utilities depend on. #}
+  {% include "partials/theme_bootstrap.html" %}
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">
+  <link rel="stylesheet" href="/assets/main.css?v={{ asset_version }}">
 </head>
 <body class="bg-surface text-content min-h-screen flex items-center justify-center p-6">
   <section class="lc-page-narrow text-center">
