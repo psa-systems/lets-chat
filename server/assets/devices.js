@@ -20,6 +20,14 @@
     videoinput: 'lc.dev.videoinput',
     audiooutput: 'lc.dev.audiooutput',
   };
+  // LC-768: background-blur preference. A single boolean stored the same way as
+  // the device pins, so it is remembered across calls for this browser.
+  var BLUR_KEY = 'lc.dev.videoblur';
+  // Delivered-frame-rate floor: if a blurred stream stays under this for
+  // BLUR_FPS_WINDOW ms, blur is dropped and the user told, rather than shipping
+  // a stuttering call.
+  var BLUR_FPS_FLOOR = 12;
+  var BLUR_FPS_WINDOW = 4000;
   var KIND_LABEL = {
     audioinput: window.__lcS('deviceMicrophone', 'Microphone'),
     videoinput: window.__lcS('deviceCamera', 'Camera'),
@@ -38,6 +46,9 @@
   // <select> so it matches across browsers instead of the OS default arrow.
   var CHEVRON = '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-4 w-4"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" clip-rule="evenodd"/></svg>';
   var CLOSE_ICON = '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-5 w-5"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>';
+  // LC-768: sparkle glyph for the background-blur row, matching the icon-labelled
+  // device rows.
+  var BLUR_ICON = '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-5 w-5"><path d="M10 1.5c.32 0 .6.2.71.5l1.2 3.24 3.24 1.2a.75.75 0 010 1.41l-3.24 1.2-1.2 3.24a.75.75 0 01-1.42 0l-1.2-3.24-3.24-1.2a.75.75 0 010-1.41l3.24-1.2 1.2-3.24c.11-.3.39-.5.71-.5z"/><path d="M15 12.5c.28 0 .53.17.63.44l.62 1.66 1.66.62a.68.68 0 010 1.26l-1.66.62-.62 1.66a.68.68 0 01-1.26 0l-.62-1.66-1.66-.62a.68.68 0 010-1.26l1.66-.62.62-1.66c.1-.27.35-.44.63-.44z"/></svg>';
 
   function get(kind) {
     try { return localStorage.getItem(KEYS[kind]) || ''; } catch (e) { return ''; }
@@ -47,6 +58,26 @@
       if (id) localStorage.setItem(KEYS[kind], id);
       else localStorage.removeItem(KEYS[kind]);
     } catch (e) { /* private mode / storage disabled: selection is session-only */ }
+  }
+  // LC-768: blur preference, persisted like the device pins.
+  function getBlur() {
+    try { return localStorage.getItem(BLUR_KEY) === '1'; } catch (e) { return false; }
+  }
+  function setBlur(on) {
+    try {
+      if (on) localStorage.setItem(BLUR_KEY, '1');
+      else localStorage.removeItem(BLUR_KEY);
+    } catch (e) { /* private mode / storage disabled: session-only */ }
+  }
+  // Feature-detect the browser's own background segmentation. Detected at
+  // acquisition time, never by user agent, so a client that cannot do it gets
+  // no blur constraint and the picker hides the toggle.
+  function blurSupported() {
+    try {
+      return !!(navigator.mediaDevices
+        && navigator.mediaDevices.getSupportedConstraints
+        && navigator.mediaDevices.getSupportedConstraints().backgroundBlur);
+    } catch (e) { return false; }
   }
 
   // ---- constraints --------------------------------------------------
@@ -59,9 +90,13 @@
   function audioConstraint() {
     return window.LetsChatMedia.audio(get('audioinput'));
   }
-  function videoConstraint() {
-    var id = get('videoinput');
-    return id ? { deviceId: { exact: id } } : true;
+  // LC-768: the camera constraint honors the pinned device and, when the user
+  // has asked for it and the browser supports it, requests background blur. Pass
+  // `usePin === false` for the unplugged-device retry so it drops only the pin,
+  // keeping the (advisory) blur request so a restored camera stays blurred.
+  function videoConstraint(usePin) {
+    var id = usePin === false ? '' : get('videoinput');
+    return window.LetsChatMedia.video(id, { blur: getBlur(), blurSupported: blurSupported() });
   }
 
   function available() {
@@ -76,23 +111,76 @@
   // with plain defaults so the call still connects on whatever is available.
   function getUserMedia(withVideo) {
     if (!available()) return Promise.reject(new Error('getUserMedia unavailable'));
-    var c = { audio: audioConstraint(), video: withVideo ? videoConstraint() : false };
+    var c = { audio: audioConstraint(), video: withVideo ? videoConstraint(true) : false };
     return navigator.mediaDevices.getUserMedia(c).catch(function (err) {
       if (isPinError(err)) {
-        return navigator.mediaDevices.getUserMedia({ audio: window.LetsChatMedia.audio(), video: !!withVideo });
+        return navigator.mediaDevices.getUserMedia({
+          audio: window.LetsChatMedia.audio(),
+          video: withVideo ? videoConstraint(false) : false,
+        });
       }
       throw err;
-    });
+    }).then(guardBlurStream);
   }
 
   // Camera-only acquisition (camera toggle, screen-share restore). Same
-  // unplugged-device fallback as getUserMedia.
+  // unplugged-device fallback as getUserMedia, and the same blur treatment, so a
+  // camera restored after a screen-share is blurred exactly like the call path.
   function getCamera() {
     if (!available()) return Promise.reject(new Error('getUserMedia unavailable'));
-    return navigator.mediaDevices.getUserMedia({ video: videoConstraint() }).catch(function (err) {
-      if (isPinError(err)) return navigator.mediaDevices.getUserMedia({ video: true });
+    return navigator.mediaDevices.getUserMedia({ video: videoConstraint(true) }).catch(function (err) {
+      if (isPinError(err)) return navigator.mediaDevices.getUserMedia({ video: videoConstraint(false) });
       throw err;
-    });
+    }).then(guardBlurStream);
+  }
+
+  // ---- blur performance guard ---------------------------------------
+  // Watch delivered frames on a blurred stream; if the rate stays under the
+  // floor for a sustained window, drop the blur effect on the live track and
+  // tell the user, rather than letting the call stutter. Best-effort: where
+  // requestVideoFrameCallback is absent the stream still plays, just
+  // unmonitored. Returns the stream so it can sit in a promise chain.
+  function guardBlurStream(stream) {
+    if (!stream || !getBlur() || !blurSupported()) return stream;
+    var track = stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+    if (!track) return stream;
+    var video = document.createElement('video');
+    if (typeof video.requestVideoFrameCallback !== 'function') return stream;
+    video.muted = true;
+    video.playsInline = true;
+    try { video.srcObject = stream; } catch (e) { return stream; }
+    var play = video.play();
+    if (play && play.catch) play.catch(function () {});
+    var frames = 0, start = 0, stopped = false;
+    function stop() {
+      stopped = true;
+      try { video.pause(); video.srcObject = null; } catch (e) {}
+    }
+    track.addEventListener('ended', stop);
+    function onFrame(now) {
+      if (stopped || track.readyState === 'ended') { stop(); return; }
+      if (!start) start = now;
+      frames++;
+      var elapsed = now - start;
+      if (elapsed >= BLUR_FPS_WINDOW) {
+        if ((frames * 1000) / elapsed < BLUR_FPS_FLOOR) { dropBlur(track); stop(); return; }
+        frames = 0; start = now; // reset the window and keep watching
+      }
+      video.requestVideoFrameCallback(onFrame);
+    }
+    video.requestVideoFrameCallback(onFrame);
+    return stream;
+  }
+
+  function dropBlur(track) {
+    try {
+      var p = track.applyConstraints({ advanced: [{ backgroundBlur: false }] });
+      if (p && p.catch) p.catch(function () {});
+    } catch (e) { /* the effect just stays on; better than throwing */ }
+    if (window.__lcToast) {
+      window.__lcToast('info', window.__lcS('deviceBlurSlow',
+        'Background blur was turned off to keep your video smooth.'));
+    }
   }
 
   // ---- speaker routing ----------------------------------------------
@@ -186,6 +274,35 @@
     return row;
   }
 
+  // LC-768: the background-blur toggle. Rendered only when the browser supports
+  // the effect (feature-detected), so an unsupported client sees no inert
+  // control. Reuses the [icon] [control] row shape of the device pickers; the
+  // native checkbox carries its own accessible name.
+  function blurRow() {
+    var row = document.createElement('div');
+    row.className = 'flex items-center gap-2.5';
+    var icon = document.createElement('span');
+    icon.className = 'shrink-0 text-content-muted';
+    var title = window.__lcS('deviceBlur', 'Blur my background');
+    icon.setAttribute('title', title);
+    icon.innerHTML = BLUR_ICON;
+    var label = document.createElement('label');
+    label.className = 'flex flex-1 cursor-pointer items-center justify-between gap-2 text-sm text-content';
+    var text = document.createElement('span');
+    text.textContent = title;
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'h-4 w-4 rounded border border-border bg-surface-sunken text-accent focus:outline-none focus:ring-2 focus:ring-ring';
+    cb.checked = getBlur();
+    cb.setAttribute('aria-label', title);
+    cb.addEventListener('change', function () { setBlur(cb.checked); });
+    label.appendChild(text);
+    label.appendChild(cb);
+    row.appendChild(icon);
+    row.appendChild(label);
+    return row;
+  }
+
   function closePicker() {
     if (!openOverlay) return;
     if (deviceChangeBound && navigator.mediaDevices) {
@@ -209,6 +326,11 @@
       var built = buildSelect(kind, devices);
       if (built.count === 0 && kind !== 'audioinput') return;  // no devices of this kind: hide row
       fields.appendChild(built.row);
+      // LC-768: the blur toggle sits directly under the camera row, and only
+      // when there is a camera to blur and the browser can do the processing.
+      if (kind === 'videoinput' && built.count > 0 && blurSupported()) {
+        fields.appendChild(blurRow());
+      }
     });
     var hint = card.querySelector('[data-perm-hint]');
     hint.style.display = labelsHidden(devices) ? '' : 'none';
