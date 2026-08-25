@@ -73,6 +73,13 @@ pub struct UserRecord {
     pub profile_links: Option<String>,
     /// LC-533: IANA timezone name for the profile "local time" line, or NULL.
     pub timezone: Option<String>,
+    /// LC-766: when the user confirmed their chat handle (accepted the derived
+    /// one or picked their own). NULL means still derived and unconfirmed, which
+    /// fires the first-entry handle prompt.
+    pub username_confirmed_at: Option<String>,
+    /// LC-766: timestamp of the last deliberate handle change, feeding the
+    /// per-account change cooldown. NULL when never changed.
+    pub username_changed_at: Option<String>,
 }
 
 /// Public user info safe to send to the client.
@@ -125,6 +132,11 @@ pub struct User {
     pub profile_links: Option<String>,
     /// LC-533: IANA timezone name for the "local time" line, or None.
     pub timezone: Option<String>,
+    /// LC-766: NULL means the handle is still the derived value and unconfirmed,
+    /// which fires the first-entry prompt gate. A timestamp means it was picked
+    /// or accepted. Kept on the public projection only so the login gate can read
+    /// it off the injected `User`; it is not identity data.
+    pub username_confirmed_at: Option<String>,
     /// LC-88: true when Do Not Disturb is currently active (manual pause or a
     /// schedule window). Computed at projection time from the record's DND
     /// columns against the wall clock; surfaces the "do not disturb" badge.
@@ -244,6 +256,50 @@ fn mute_active(muted_until: Option<&str>, now: chrono::DateTime<chrono::Utc>) ->
     }
 }
 
+/// LC-766: maximum handle length, mirroring the `sanitize_username` truncation
+/// in the SSO provisioning path.
+pub const MAX_USERNAME_CHARS: usize = 64;
+
+/// LC-766: characters allowed in a chat handle. Kept in one place so the SSO
+/// provisioning sanitizer and the user-facing handle editor agree on exactly
+/// what a valid handle is: letters, digits, and `_ - .`.
+pub fn handle_char_allowed(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '_' | '-' | '.')
+}
+
+/// LC-766: coerce an arbitrary string into a valid handle (drop disallowed
+/// characters, fall back to `user`, truncate). This is the lenient provisioning
+/// path used at SSO signup, where there is no human to correct a bad value.
+pub fn sanitize_handle(s: &str) -> String {
+    let mut out: String = s.chars().filter(|c| handle_char_allowed(*c)).collect();
+    if out.is_empty() {
+        out.push_str("user");
+    }
+    out.truncate(MAX_USERNAME_CHARS);
+    out
+}
+
+/// LC-766: strict validation for a human-entered handle. Unlike
+/// `sanitize_handle` this never silently rewrites the value; it rejects a
+/// malformed handle with a message so the user sees exactly why, per the
+/// acceptance criteria. Returns the trimmed handle on success.
+pub fn validate_handle(input: &str) -> Result<String, String> {
+    let t = input.trim();
+    if t.is_empty() {
+        return Err("Enter a handle.".to_string());
+    }
+    if t.chars().count() > MAX_USERNAME_CHARS {
+        return Err(format!("Handle exceeds {MAX_USERNAME_CHARS} characters."));
+    }
+    if t.chars().any(|c| !handle_char_allowed(c)) {
+        return Err(
+            "Handles can contain only letters, numbers, and the symbols _ - . (no spaces)."
+                .to_string(),
+        );
+    }
+    Ok(t.to_string())
+}
+
 /// LC-533: write-path caps for the profile extras. Enforced by the settings
 /// handler; the hovercard trusts the stored value.
 pub const MAX_PRONOUNS_CHARS: usize = 40;
@@ -345,6 +401,7 @@ impl From<UserRecord> for User {
             pronouns: r.pronouns,
             profile_links: r.profile_links,
             timezone: r.timezone,
+            username_confirmed_at: r.username_confirmed_at,
             dnd_active,
         }
     }
@@ -400,6 +457,40 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         assert!(validate_profile_links(&many).is_err());
+    }
+
+    // LC-766 handle validation.
+    use super::{sanitize_handle, validate_handle, MAX_USERNAME_CHARS};
+
+    #[test]
+    fn valid_handle_is_returned_trimmed() {
+        assert_eq!(
+            validate_handle("  Ada_Lovelace-1.0 ").unwrap(),
+            "Ada_Lovelace-1.0"
+        );
+    }
+
+    #[test]
+    fn malformed_handle_is_rejected_not_silently_sanitized() {
+        // A space or other disallowed character is refused with a message,
+        // rather than being quietly stripped into a different handle.
+        assert!(validate_handle("ada lovelace").is_err());
+        assert!(validate_handle("bad/slash").is_err());
+        assert!(validate_handle("emoji😀").is_err());
+        assert!(validate_handle("   ").is_err());
+        let long = "a".repeat(MAX_USERNAME_CHARS + 1);
+        assert!(validate_handle(&long).is_err());
+    }
+
+    #[test]
+    fn sanitize_handle_coerces_for_the_provisioning_path() {
+        // The SSO path has no human to correct a bad value, so it strips instead.
+        assert_eq!(sanitize_handle("ada lovelace!"), "adalovelace");
+        assert_eq!(sanitize_handle("***"), "user");
+        assert_eq!(
+            sanitize_handle(&"z".repeat(80)).chars().count(),
+            MAX_USERNAME_CHARS
+        );
     }
 
     #[test]
@@ -464,6 +555,7 @@ mod theme_tests {
             pronouns: None,
             profile_links: None,
             timezone: None,
+            username_confirmed_at: Some(String::new()),
             dnd_active: false,
         }
     }
