@@ -1650,6 +1650,12 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/users/{user_id}/block", post(users::post_block))
         .route("/users/{user_id}/unblock", post(users::post_unblock))
+        // LC-766: first-entry handle prompt. Reachable in every build; the gate
+        // (enforce_handle_confirmed) redirects an unconfirmed user here.
+        .route(
+            "/welcome/handle",
+            get(settings::get_welcome_handle).post(settings::post_welcome_handle),
+        )
         .route(
             "/settings",
             get(settings::get_settings).post(settings::post_settings),
@@ -1836,6 +1842,10 @@ pub fn build_router(state: AppState) -> Router {
             state.clone(),
             enforce_maintenance_mode,
         ))
+        // LC-766: first-entry handle gate. Sits alongside the maintenance gate
+        // (both run after `inject_user` populates the session `User`) and
+        // redirects an unconfirmed handle to the prompt.
+        .layer(middleware::from_fn(crate::auth::enforce_handle_confirmed))
         // LC-96: branding CSS-var injection runs OUTSIDE the
         // enforcement gates so 503 / 2FA-redirect responses also
         // pick up the brand colors. Runs INSIDE `inject_user` so

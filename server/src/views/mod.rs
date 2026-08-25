@@ -54,6 +54,7 @@ pub mod translate;
 pub mod users;
 pub mod voice;
 pub mod webhooks;
+pub mod welcome;
 pub mod ws_fragments;
 
 use askama::Template;

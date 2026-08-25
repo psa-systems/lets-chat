@@ -260,6 +260,17 @@ settings-display-name = Nombre visible
 # LC-809: indica el alcance para que se lea como el nombre global, distinto de un
 # apodo por sala.
 settings-display-name-help = Se muestra en todas partes, en cada sala. Un apodo por sala (configurado en las Preferencias de una sala) lo reemplaza solo en esa sala.
+# LC-766: identificador editable
+settings-handle = Identificador
+settings-handle-help = Solo letras, números y _ - . Puedes cambiarlo una vez cada 30 días.
+settings-handle-locked = Podrás cambiar tu identificador de nuevo el
+# LC-766: elección del identificador en el primer acceso
+welcome-handle-title = Elige tu identificador
+welcome-handle-heading = Elige tu identificador
+welcome-handle-intro = Es el nombre con el que otros te ven y te mencionan. Hemos sugerido uno a partir de tu cuenta; consérvalo o elige el tuyo.
+welcome-handle-label = Identificador
+welcome-handle-help = Solo letras, números y _ - .
+welcome-handle-submit = Continuar
 settings-email = Correo electrónico
 settings-email-help = Se usa solo para restablecer la contraseña. Déjalo en blanco para eliminarlo.
 settings-email-verified = Verificado
