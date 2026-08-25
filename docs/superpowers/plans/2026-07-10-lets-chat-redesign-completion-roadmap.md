@@ -1,5 +1,7 @@
 # Let's Chat Redesign - Completion Roadmap (preliminary)
 
+> **Archived plan (LC-760):** `docs/superpowers/plans/` is an archive. This document records the state and reasoning as of its date (2026-07-10) for LC-553; it is not a live tracker. Issue status is read from YouTrack, not from this file. The live UI conventions are in `docs/ui-conventions.md`.
+
 Date: 2026-07-10
 Status: Preliminary roadmap. Each genuinely-remaining item gets its own spec/plan at kickoff.
 Tracking: LC-553 (the active LC-UI-01..12 follow-up epic). See ticket-hygiene notes for LC-541 / LC-364 / LC-566.
@@ -18,20 +20,22 @@ An earlier "LC-541 six-phase P2-P6 pixel-match program" was drafted before LC-36
 
 Verified each LC-UI tail ticket against its merged PR and the code on `origin/main` (`14103395`).
 
-| Ticket | LC-UI | Was | Now | Finding |
-| --- | --- | --- | --- | --- |
-| LC-554 | 01 tokens | Done | Done | Blue Harbor semantic tokens. |
-| LC-555 | 02 components | To do | To do (effectively done) | All requested classes exist in `tailwind.css` @layer components; `.alert` adoption broad (28 boxes, PR #534). `.lc-toolbar` / `.lc-empty-wrap` are unused dead CSS. Adopt-or-close. |
-| LC-556 | 03 feeds/webhooks/email | Done | Done | Migrated to the settings-card shell. |
-| LC-557 | 04 empty/error states | Done | Done | Empty-state residuals tokenized (PR #530). |
-| LC-558 | 05 timeline polish | To do | To do | Only the edit-form token fix landed. Subjective hierarchy/hover/mention-highlight polish genuinely unstarted. |
-| LC-559 | 06 composer | Done | Done | Composer lifted onto elevated card (PR #529). |
-| LC-560 | 07 sidebar/rail | To do | To do | Navy sidebar + rail token remap done (`f604320e`) + pre-existing LC-365/366/367. One real gap: `.lc-rail-tile` has no `:focus-visible`. |
-| LC-561 | 08 admin | To do | To do | Status chips done (PR #531). Shared admin page-header (title/description/action/filters) never built - `admin_layout.html` is title-only. |
-| LC-562 | 09 width/layout | Done | Done | `.lc-page-*` helpers. |
-| LC-563 | 10 typography | Done | Done | Keep system UI font; personality via tokens. |
-| LC-564 | 11 landing/login/welcome | To do | **Done (flipped)** | Verified fully done: entry surfaces token-built, errors via `.alert` (PR #532). Stale state corrected 2026-07-10. |
-| LC-565 | 12 a11y regression | To do | To do | Focus ring + phantom-token fix (PR #533), 28 alerts (#534), 44px coarse-pointer rule (#535). Remaining: `.lc-cbtn` omitted from #535's selector (still 40px); dense-row 44x44 pending device QA. |
+The per-ticket status columns this table once carried were removed (LC-760): live state is read from YouTrack, not restated here. What remains is the durable finding for each ticket as of this date.
+
+| Ticket | LC-UI | Finding |
+| --- | --- | --- |
+| LC-554 | 01 tokens | Blue Harbor semantic tokens. |
+| LC-555 | 02 components | All requested classes exist in `tailwind.css` @layer components; `.alert` adoption broad (28 boxes, PR #534). `.lc-toolbar` / `.lc-empty` are unused dead CSS. Adopt-or-close. |
+| LC-556 | 03 feeds/webhooks/email | Migrated to the settings-card shell. |
+| LC-557 | 04 empty/error states | Empty-state residuals tokenized (PR #530). |
+| LC-558 | 05 timeline polish | Only the edit-form token fix landed. Subjective hierarchy/hover/mention-highlight polish genuinely unstarted. |
+| LC-559 | 06 composer | Composer lifted onto elevated card (PR #529). |
+| LC-560 | 07 sidebar/rail | Navy sidebar + rail token remap done (`f604320e`) + pre-existing LC-365/366/367. One real gap: `.lc-rail-tile` has no `:focus-visible`. |
+| LC-561 | 08 admin | Status chips done (PR #531). Shared admin page-header (title/description/action/filters) never built - `admin_layout.html` is title-only. |
+| LC-562 | 09 width/layout | `.lc-page-*` helpers. |
+| LC-563 | 10 typography | Keep system UI font; personality via tokens. |
+| LC-564 | 11 landing/login/welcome | Verified fully done: entry surfaces token-built, errors via `.alert` (PR #532). Stale state corrected 2026-07-10. |
+| LC-565 | 12 a11y regression | Focus ring + phantom-token fix (PR #533), 28 alerts (#534), 44px coarse-pointer rule (#535). Remaining: `.lc-cbtn` omitted from #535's selector (still 40px); dense-row 44x44 pending device QA. |
 
 Comments recording the above were posted to LC-555 / LC-561 / LC-565; LC-564 was flipped to Done.
 
@@ -65,8 +69,8 @@ Small and concrete. Each is its own spec/plan at kickoff.
 - ACs: call buttons are >=44px on coarse pointers; dense-row decision recorded.
 
 ### R5. LC-555 - adopt or close the dead helpers
-- Scope: `.lc-toolbar` and `.lc-empty-wrap` have zero adoption; `.lc-action-row` only in the dev gallery.
-- Approach: prefer adopting them via R1 (admin header uses `.lc-action-row`/`.lc-toolbar`) and empty-state partials (`.lc-empty-wrap`), then close LC-555 as satisfied. If not adopted, close as satisfied anyway (the literal "classes exist" AC is met).
+- Scope: `.lc-toolbar` and `.lc-empty` have zero adoption; `.lc-action-row` only in the dev gallery.
+- Approach: prefer adopting them via R1 (admin header uses `.lc-action-row`/`.lc-toolbar`) and the empty-state partial (`.lc-empty` via `partials/empty_state.html`), then close LC-555 as satisfied. If not adopted, close as satisfied anyway (the literal "classes exist" AC is met).
 - ACs: either the helpers have a real usage, or LC-555 is closed with a note.
 
 ### R6. The Details panel - the one genuine mockup delta (needs a decision)
