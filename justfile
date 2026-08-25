@@ -1,4 +1,42 @@
-# List available recipes
+# psa-systems/common adoption (LC-761): the pre-commit hook, the release recipes,
+# the hook installer, and the justfile guards all come from common/common.just.
+# Configure them through the variables below rather than shadowing the shared
+# recipes; common/README.md is the authority for every variable here. After a
+# fresh clone run `git submodule update --init` so the import resolves.
+app := "lets-chat"
+
+# This repo has no compose.dev.yml, so the containerized pre-commit checks run in
+# the org rust-builder image (the same one ./dev/cargo uses) via `docker run`.
+pre_commit_mode := "docker"
+dev_image := "ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie"
+
+# The shared hook runs one clippy/compile/test pass in a container. This repo's
+# full matrix (standalone + SaaS server, desktop, both clippy passes, fmt, and
+# the convention guards) runs on the host as the existing `check` recipe via the
+# prepare seam, on the warm ./dev/cargo volume. Because that pass already covers
+# clippy and the compile, both container passes are gated off (PC-30) so the hook
+# does not redundantly cold-recompile them; the container is left to run fmt plus
+# the standalone server test suite (the one step `check` does not cover).
+pre_commit_prepare := "check"
+pre_commit_clippy := "false"
+pre_commit_compile := "false"
+# --jobs 2 caps parallel linking: the ~50 test binaries each statically link the
+# full dep graph, and 8-way `ld` OOMs a swapless host (SIGTERM).
+test_args := "-p lets-chat-server --jobs 2"
+
+# The root Cargo.toml is a virtual workspace and the single version lives at
+# [workspace.package] version, so create-release edits it there.
+release_layout := "virtual-workspace"
+
+# Let this repo's own recipes (check, test, run, build, dev-clean, ...) override
+# the same-named ones common.just also defines. Required for the local `default`
+# too, since it collides with common's.
+set allow-duplicate-recipes := true
+
+import 'common/common.just'
+
+# List available recipes. Keep FIRST: just picks the default recipe by source
+# order and never selects an imported one.
 default:
     @just --list
 
@@ -6,22 +44,6 @@ default:
 # report its exact version. .git is excluded from the Docker context, so the
 # args must be computed on the host and forwarded.
 docker_version_args := '--build-arg GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" --build-arg GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"'
-
-# Install the git pre-commit hook (run once per fresh clone). Writes a stub at .git/hooks/pre-commit that execs `just pre-commit`. Bypass with `git commit --no-verify`.
-[group('setup')]
-install-hooks:
-    #!/usr/bin/env nu
-    let hook = ".git/hooks/pre-commit"
-    # Remove first so a leftover symlink from an older install does not get
-    # written through to its target file. `try` swallows the not-found case.
-    try { rm $hook }
-    "#!/usr/bin/env sh\nexec just pre-commit\n" | save $hook
-    ^chmod +x $hook
-    print $"Wrote ($hook) -> just pre-commit"
-
-# Run the workspace checks + tests via the existing `./dev/cargo` Docker wrapper. Aggregates `just check` (fmt + standalone/saas server checks + desktop + clippy) and `just test` (server tests, standalone), so a green run mirrors the in-repo `dev/cargo`-based check pipeline.
-[group('check')]
-pre-commit: check test
 
 # Run all checks
 [group('check')]
@@ -473,89 +495,3 @@ dev-clean-all: dev-clean
     }
     docker buildx prune --force
     print "dev-clean-all: done"
-
-# ── Release ──────────────────────────────────────────────────────────────
-
-# Create a release: bump major (vx.0.0), minor (v0.x.0), or hotfix (v0.0.x), push branch, and open the release PR via fj.
-# After the PR is merged, the create-release workflow creates the tag and release automatically.
-[group: 'release']
-create-release bump:
-    #!/usr/bin/env nu
-    let bump = "{{ bump }}"
-
-    # Abort if there are uncommitted changes
-    let status = git status --porcelain | str trim
-    if ($status | is-not-empty) {
-        print $"(ansi red)Working tree is dirty. Please stash or commit your changes first.(ansi reset)"
-        exit 1
-    }
-
-    # Switch to main if not already there
-    let branch = git branch --show-current | str trim
-    if $branch != "main" {
-        print $"Switching from ($branch) to main..."
-        git checkout main
-    }
-
-    # Pull latest changes
-    git pull --rebase origin main
-
-    # Calculate next version
-    let current = (open Cargo.toml | get workspace.package.version | split row "." | each { into int })
-    let next = match $bump {
-        "major" => [$"($current.0 + 1)" "0" "0"],
-        "minor" => [$"($current.0)" $"($current.1 + 1)" "0"],
-        "hotfix" => [$"($current.0)" $"($current.1)" $"($current.2 + 1)"],
-        _ => { print $"(ansi red)Usage: just create-release <major|minor|hotfix>(ansi reset)"; exit 1 }
-    }
-    let bare = ($next | str join ".")
-    let tag = $"v($bare)"
-    let release_branch = $"release/($tag)"
-
-    # Create release branch, bump version, and commit
-    git checkout -b $release_branch
-    open Cargo.toml | update workspace.package.version $bare | to toml | collect | save --force Cargo.toml
-    git add Cargo.toml
-    git commit --signoff --message $"Release ($tag)"
-
-    # Push release branch
-    git push --set-upstream origin $release_branch
-
-    # Open the release PR via fj. Body lives in a tempfile so the
-    # changelog can grow later without inline escaping pain.
-    let body_file = (mktemp --tmpdir --suffix .md)
-    [
-        $"Automated release PR for ($tag)."
-        ""
-        $"After merge, `.forgejo/workflows/create-release.yml` tags and publishes ($tag) to the Generic Packages registry."
-    ] | str join "\n" | save --force $body_file
-    let fj_result = (^fj --host dev.a8n.run pr create $"Release ($tag)" --body-file $body_file | complete)
-    rm $body_file
-    if $fj_result.exit_code != 0 {
-        print $"(ansi red)fj pr create failed(ansi reset)"
-        print $fj_result.stderr
-        exit 1
-    }
-
-    # `fj pr create` prints `created pull request #N: <title>` on success.
-    # Parse the number out and build the PR URL from `origin`.
-    let pr_num = (
-        $fj_result.stdout
-        | str trim
-        | parse --regex 'created pull request #(?P<num>\d+)'
-        | get num.0?
-    )
-    let remote = (git remote get-url origin | str trim)
-    let base_url = if ($remote | str starts-with "ssh://") {
-        $remote | str replace "ssh://git@" "https://" | str replace "git.a8n.run" "dev.a8n.run" | str replace ".git" ""
-    } else {
-        $remote | str replace --regex "git@([^:]+):" "https://$1/" | str replace "git.a8n.run" "dev.a8n.run" | str replace ".git" ""
-    }
-    print $"(ansi green)Pushed ($release_branch)(ansi reset)"
-    if ($pr_num | is-not-empty) {
-        print $"PR: ($base_url)/pulls/($pr_num)"
-    } else {
-        # fj output format drifted; fall back to whatever it said.
-        print $"fj output: ($fj_result.stdout | str trim)"
-    }
-    print $"After merging, the create-release workflow will tag and release ($tag) automatically."
