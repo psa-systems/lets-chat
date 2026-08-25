@@ -18,9 +18,9 @@
   <link id="lc-favicon" rel="icon" href="/branding/favicon?v={{ asset_version }}">
   <link rel="manifest" href="/assets/manifest.webmanifest?v={{ asset_version }}">
   <meta name="theme-color" content="#2563eb">
-  {# Unversioned on purpose: the static manifest.webmanifest points at the same
-     file bare, and matching it keeps one cache entry. See sw.js PRECACHE_URLS. #}
-  <link rel="apple-touch-icon" href="/assets/icon-192.png">
+  {# LC-794: version-busted to match the manifest, which now serves the same
+     icon with `?v=`, so the two share one immutable cache entry. #}
+  <link rel="apple-touch-icon" href="/assets/icon-192.png?v={{ asset_version }}">
   {# LC-191/LC-192/LC-541: no-flash theme bootstrap, two axes. Synchronous +
      BEFORE the stylesheets so `data-theme` (palette) and `data-mode`
      (light/dark/hc-light/hc-dark) are both set before CSS loads (no
