@@ -134,6 +134,14 @@ jobs:
         # ci-build/check-ui-conventions.nu and LC-749.
         run: nu ci-build/check-ui-conventions.nu
 
+      - name: Browser-asset tests
+        # LC-774: the PWA / browser JS carries node:test suites (sw.js precache
+        # failure logging, the device picker, media constraints, mute state).
+        # Node's built-in runner, no dependency; mirrors `just test-js`. Placed
+        # with the other fast guards so a JS regression fails before the long
+        # cargo build. Node ships in the opensuse-dev runner image, like nu.
+        run: node --test 'server/assets/**/*.test.js'
+
       - name: Cache Rust build
         uses: https://github.com/Swatinem/rust-cache@v2
         with:
