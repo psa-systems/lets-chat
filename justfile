@@ -10,14 +10,16 @@ app := "lets-chat"
 pre_commit_mode := "docker"
 dev_image := "ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie"
 
-# The shared hook runs a single clippy/compile/test pass. This repo's full matrix
-# (standalone + SaaS server, desktop, both clippy passes, fmt, and the convention
-# guards) runs on the host as the existing `check` recipe first, via this seam;
-# the container pass below then adds the standalone server test suite.
+# The shared hook runs one clippy/compile/test pass in a container. This repo's
+# full matrix (standalone + SaaS server, desktop, both clippy passes, fmt, and
+# the convention guards) runs on the host as the existing `check` recipe via the
+# prepare seam, on the warm ./dev/cargo volume. Because that pass already covers
+# clippy and the compile, both container passes are gated off (PC-30) so the hook
+# does not redundantly cold-recompile them; the container is left to run fmt plus
+# the standalone server test suite (the one step `check` does not cover).
 pre_commit_prepare := "check"
-compile_step := "check"
-compile_args := "-p lets-chat-server --all-targets"
-clippy_args := "-p lets-chat-server --all-targets -- -D warnings"
+pre_commit_clippy := "false"
+pre_commit_compile := "false"
 # --jobs 2 caps parallel linking: the ~50 test binaries each statically link the
 # full dep graph, and 8-way `ld` OOMs a swapless host (SIGTERM).
 test_args := "-p lets-chat-server --jobs 2"
