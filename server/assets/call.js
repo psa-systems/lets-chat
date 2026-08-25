@@ -207,7 +207,10 @@
         if (lv.srcObject !== localStream) lv.srcObject = localStream;
         lv.style.display = '';
         var pr = lv.play && lv.play();
-        if (pr && typeof pr.catch === 'function') pr.catch(function () {});
+        if (pr && typeof pr.catch === 'function') pr.catch(function () {
+          /* Autoplay rejection on a muted element is the expected case on some
+             browsers; the preview still renders its frames, nothing to report. */
+        });
       } else {
         lv.srcObject = null;
         lv.style.display = 'none';
