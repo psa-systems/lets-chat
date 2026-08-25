@@ -159,16 +159,31 @@ async fn failed_delivery_reschedules_with_backoff() {
     assert_eq!(stats.retried, 1, "5xx schedules a retry");
     assert_eq!(stats.delivered, 0);
 
-    // Still pending, attempt bumped, scheduled in the future (not due now).
-    let due_now = owh::due_deliveries(&chat, 100).await.unwrap();
-    assert!(due_now.is_empty(), "rescheduled past now");
-    let any: (i64, Option<String>) =
-        sqlx::query_as("SELECT attempt, delivered_at FROM outgoing_webhook_deliveries LIMIT 1")
-            .fetch_one(&chat)
-            .await
-            .unwrap();
-    assert_eq!(any.0, 1, "attempt incremented");
-    assert!(any.1.is_none(), "not delivered");
+    // Still pending, attempt bumped, and rescheduled into the future.
+    //
+    // LC-811: asserting `due_deliveries().is_empty()` here raced. The first
+    // backoff is 1s (`BACKOFF_SECS[0]`), so `reschedule` sets `scheduled_at =
+    // datetime('now', '+1 seconds')`, and `due_deliveries` filters
+    // `scheduled_at <= datetime('now')` - both second-resolution. If the tick
+    // crossed a wall-clock second, `now+1 <= now+1` read as due and the test
+    // failed. Assert the monotonic invariant instead: `scheduled_at` and
+    // `created_at` both defaulted to `datetime('now')` at enqueue, and the
+    // reschedule pushes `scheduled_at` to at least enqueue_second + 1, so it is
+    // strictly greater than `created_at` regardless of any boundary crossing.
+    let (attempt, delivered_at, scheduled_at, created_at): (i64, Option<String>, String, String) =
+        sqlx::query_as(
+            "SELECT attempt, delivered_at, scheduled_at, created_at \
+             FROM outgoing_webhook_deliveries LIMIT 1",
+        )
+        .fetch_one(&chat)
+        .await
+        .unwrap();
+    assert_eq!(attempt, 1, "attempt incremented");
+    assert!(delivered_at.is_none(), "not delivered");
+    assert!(
+        scheduled_at > created_at,
+        "reschedule pushed scheduled_at past creation (created {created_at}, scheduled {scheduled_at})"
+    );
 }
 
 #[tokio::test]
