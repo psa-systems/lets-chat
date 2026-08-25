@@ -100,9 +100,10 @@ async fn versioned_asset_is_immutable_for_a_year() {
 
 #[tokio::test]
 async fn unversioned_asset_is_not_pinned() {
-    // manifest.webmanifest and the icons it names are static files whose own
-    // contents cannot carry the version, so they must NOT get the immutable
-    // header or a rebuilt icon would be stranded for a year.
+    // A bare URL (no `?v=`) must NOT get the immutable header, or a rebuilt file
+    // would be stranded at a stale copy for a year. The app now version-busts
+    // the icons (LC-794), but the withhold-on-bare invariant still holds for any
+    // reference that arrives without a version.
     let app = app().await;
     let resp = get(&app, "/assets/icon-192.png").await;
     assert_eq!(resp.status(), StatusCode::OK);
@@ -126,22 +127,71 @@ async fn missing_asset_is_never_cached() {
     assert_eq!(cache_control(&resp), None);
 }
 
+async fn body_string(resp: axum::response::Response) -> String {
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .expect("read body");
+    String::from_utf8(bytes.to_vec()).expect("utf-8 body")
+}
+
+#[tokio::test]
+async fn manifest_is_version_substituted_and_immutable() {
+    // LC-794: the manifest is served from a route that substitutes the asset
+    // version, so its icon `src` values carry `?v=` and the whole response is
+    // immutable-cacheable like every other versioned asset.
+    let app = app().await;
+    let resp = get(&app, "/assets/manifest.webmanifest?v=testver").await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(cache_control(&resp), Some(IMMUTABLE));
+    let body = body_string(resp).await;
+    assert!(
+        !body.contains("__ASSET_VERSION__"),
+        "token left unsubstituted"
+    );
+    for icon in [
+        "/assets/favicon.svg?v=testver",
+        "/assets/icon-192.png?v=testver",
+        "/assets/icon-512.png?v=testver",
+        "/assets/icon-maskable-512.png?v=testver",
+    ] {
+        assert!(
+            body.contains(icon),
+            "manifest missing versioned icon {icon}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn offline_page_is_version_substituted_and_immutable() {
+    // LC-794: same treatment for the service worker's navigation fallback, so
+    // its favicon `href` carries the version.
+    let app = app().await;
+    let resp = get(&app, "/assets/offline.html?v=testver").await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(cache_control(&resp), Some(IMMUTABLE));
+    let body = body_string(resp).await;
+    assert!(
+        !body.contains("__ASSET_VERSION__"),
+        "token left unsubstituted"
+    );
+    assert!(
+        body.contains("/assets/favicon.svg?v=testver"),
+        "offline page missing versioned favicon"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Shape guard: every runtime /assets/ URL carries the version bust.
 // ---------------------------------------------------------------------------
 
 /// URLs deliberately left unversioned, keyed by the file that emits them.
 ///
-/// `manifest.webmanifest` and `offline.html` are static files served straight
-/// off disk, so their `src` / `href` cannot interpolate `asset_version`; the
-/// three icon files they point at are therefore requested bare everywhere, and
-/// the server withholds the immutable header from them. The dev theme gallery
-/// carries no `asset_version` field at all (see its own header comment).
+/// LC-794 closed the icon-family hole: `manifest.webmanifest` and `offline.html`
+/// are now served from routes that substitute the asset version, so `base.html`
+/// and `sw.js` version-bust the icons too. What remains is the dev theme gallery
+/// (no `asset_version` field at all, see its own header comment) and the web-push
+/// payload icon (built with no request context; see its row below).
 const UNVERSIONED_ALLOWED: &[(&str, &str)] = &[
-    ("templates/base.html", "/assets/icon-192.png"),
-    ("assets/sw.js", "/assets/favicon.svg"),
-    ("assets/sw.js", "/assets/icon-192.png"),
-    ("assets/sw.js", "/assets/icon-512.png"),
     ("templates/dev/theme_gallery.html", "/assets/main.css"),
     (
         "templates/dev/theme_gallery.html",
