@@ -482,7 +482,11 @@
         var lossRatio = (dLost + dRecv) > 0 ? dLost / (dLost + dRecv) : 0;
         var degraded = lossRatio > 0.03 || (rtt != null && rtt > 0.35);
         setQuality(uid, degraded ? 'degraded' : 'good');
-      }).catch(function () {});
+      }).catch(function (e) {
+        // getStats failed on this poll: the quality dot freezes at its last
+        // value, so log rather than let it look like a steady connection.
+        try { console.warn('[lc-call mesh] quality poll getStats failed', e); } catch (e2) {}
+      });
     });
   }
   function startQuality() {
