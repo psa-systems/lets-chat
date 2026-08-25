@@ -1,5 +1,7 @@
 # Let's Chat Redesign P1 (Foundation) Implementation Plan
 
+> **Archived plan (LC-760):** `docs/superpowers/plans/` is an archive. This document records what was decided and done for LC-541 at its date (2026-07-09); it is not a live spec, and some of what it instructs was later changed. The live UI conventions are in `docs/ui-conventions.md`. Where a step here was superseded, an inline note points to what replaced it.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a six-palette theme system (each in light/dark/hc-light/hc-dark) with a live picker to Let's Chat, on the clean orthogonal `data-theme`(palette) + `data-mode`(mode) model, without redesigning any product surface.
@@ -967,6 +969,8 @@ Create `server/templates/dev/theme_gallery.html`. For each palette x mode, rende
 {% endfor %}{% endfor %}
 ```
 
+> **Superseded (LC-744):** the `.lc-table-row` / `.lc-table-cell` sub-classes shown here were later removed as a duplicate declaration (see Task 12 below). The live contract is bare `<th>` / `<td>` inside `.lc-table`, styled by descendant selectors in `server/assets/main.css` and documented in `docs/ui-conventions.md`. `ci-build/check-ui-conventions.nu` now rejects the sub-class names in templates and both stylesheets.
+
 - [ ] **Step 3: Build + verify all 24 combos**
 
 Run: `just build-css` then `just dev-web-local`, open `/dev/theme-gallery`.
@@ -1010,6 +1014,8 @@ In `@layer components` add (tokenized, matches the mockup table look):
 .lc-table-row:hover { background:var(--surface-sunken); }
 .lc-table-cell { padding:.5rem .75rem; }
 ```
+
+> **Superseded (LC-744):** the `.lc-table-head` / `.lc-table-row` / `.lc-table-cell` sub-classes above were removed from `server/assets/tailwind.css`, because `server/assets/main.css` redeclared `.lc-table` with descendant selectors and `base.html` loads it second, so the sub-classes styled nothing outside the dev gallery. Do NOT re-add them: `ci-build/check-ui-conventions.nu`'s `no-superseded-component-classes` rule rejects those names in the templates and both stylesheets. The live contract is bare `<th>` / `<td>` inside `.lc-table`, documented in `docs/ui-conventions.md`.
 
 - [ ] **Step 2: Retune existing component classes to the mockup**
 
