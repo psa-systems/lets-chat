@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}{{ "welcome-handle-title"|t }} - Let's Chat{% endblock %}
+
+{% block body %}
+<main class="min-h-screen flex items-center justify-center p-6">
+  <div class="card lc-page-narrow space-y-4 p-6">
+    {% if brand_logo %}
+    <div class="flex justify-center">
+      <img src="/branding/logo?v={{ asset_version }}" alt="Logo"
+           class="max-h-16 max-w-full object-contain">
+    </div>
+    {% endif %}
+    <h1 class="lc-display text-center">
+      {% if !brand_heading.is_empty() %}{{ brand_heading }}{% else %}{{ "welcome-handle-heading"|t }}{% endif %}
+    </h1>
+    <p class="text-sm text-content-muted">{{ "welcome-handle-intro"|t }}</p>
+    {% if let Some(err) = error %}
+    <div class="alert alert-danger" role="alert">{{ err }}</div>
+    {% endif %}
+    <form method="post" action="/welcome/handle" class="space-y-3">
+      <div class="lc-set-field">
+        <label class="lc-set-label" for="lc-welcome-handle">{{ "welcome-handle-label"|t }}</label>
+        <div class="flex items-center gap-1">
+          <span class="text-content-muted" aria-hidden="true">@</span>
+          <input id="lc-welcome-handle" class="input flex-1" type="text" name="username"
+                 value="{{ handle }}" maxlength="64" autofocus autocomplete="off"
+                 spellcheck="false" required aria-required="true" aria-describedby="lc-welcome-handle-help">
+        </div>
+        <p id="lc-welcome-handle-help" class="lc-set-help">{{ "welcome-handle-help"|t }}</p>
+      </div>
+      <button type="submit" class="btn btn-primary w-full">{{ "welcome-handle-submit"|t }}</button>
+    </form>
+  </div>
+</main>
+{% endblock %}

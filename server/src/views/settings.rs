@@ -92,6 +92,13 @@ pub struct UserSettingsPage<'a> {
     /// LC-487: the user's canned responses (saved replies), name-ordered.
     /// `target` carries the body; `description` the optional help line.
     pub canned_responses: Vec<crate::db::slash::CustomCommand>,
+    /// LC-766: false while the handle is on its per-account change cooldown, so
+    /// the editor disables the field and explains when it frees up. Always true
+    /// for admins (cooldown-exempt).
+    pub handle_editable: bool,
+    /// LC-766: the date (YYYY-MM-DD) the handle may next change, shown only when
+    /// `handle_editable` is false. Empty when editable.
+    pub handle_available_on: String,
 }
 
 /// LC-426: reusable feedback fragment returned by the settings form handlers

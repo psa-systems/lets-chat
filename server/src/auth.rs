@@ -386,6 +386,39 @@ pub async fn enforce_maintenance_mode(
         .into_response()
 }
 
+/// LC-766: first-entry handle gate. A newly provisioned user whose handle is
+/// still the derived value (`username_confirmed_at IS NULL`) is redirected to
+/// the handle prompt on every authenticated page until they confirm one.
+///
+/// Runs inside `inject_user` (so the session `User` is already in extensions)
+/// and only acts when such a User is present: unauthenticated requests and the
+/// bearer-token API (which carries no injected `User`) pass straight through.
+/// The prompt page, its submit, sign-out, and the infra endpoints are exempt so
+/// the gate never traps the user in a redirect loop.
+pub async fn enforce_handle_confirmed(req: axum::extract::Request, next: Next) -> Response {
+    let path = req.uri().path();
+    let exempt = path.starts_with("/assets/")
+        || path.starts_with("/avatars/")
+        || path == "/login"
+        || path == "/logout"
+        || path.starts_with("/auth/bunyip/")
+        || path.starts_with("/welcome/")
+        || path == "/version"
+        || path == "/healthz"
+        || path == "/readyz";
+    if exempt {
+        return next.run(req).await;
+    }
+    if let Some(u) = req.extensions().get::<User>() {
+        // Bots authenticate only via API tokens and never browse the cookie
+        // surface, so a bot identity is never gated.
+        if !u.is_bot && u.username_confirmed_at.is_none() {
+            return Redirect::to("/welcome/handle").into_response();
+        }
+    }
+    next.run(req).await
+}
+
 /// Extractor for routes that may render either a public or authed page.
 pub struct OptionalUser(pub Option<User>);
 

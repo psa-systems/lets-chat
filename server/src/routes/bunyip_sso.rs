@@ -481,15 +481,10 @@ async fn pick_username(
 }
 
 fn sanitize_username(s: &str) -> String {
-    let mut out: String = s
-        .chars()
-        .filter(|c| c.is_alphanumeric() || matches!(*c, '_' | '-' | '.'))
-        .collect();
-    if out.is_empty() {
-        out.push_str("user");
-    }
-    out.truncate(64);
-    out
+    // LC-766: the provisioning sanitizer and the user-facing handle editor now
+    // share one definition of a valid handle so a derived handle can never be
+    // something the editor would later reject.
+    crate::models::user::sanitize_handle(s)
 }
 
 /// LC-413: mirror Bunyip's platform role onto the lets-chat row.

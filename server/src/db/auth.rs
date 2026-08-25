@@ -23,9 +23,13 @@ pub async fn create_user(
     // Synthesize a unique bunyip_sub placeholder so multiple test users in
     // one pool do not collide on the UNIQUE constraint added in 0031.
     let placeholder = format!("test-{id}");
+    // LC-766: this is the legacy/test provisioning path; unlike the SSO path
+    // (`create_user_from_bunyip`), the users it makes stand in for established
+    // accounts, so stamp the handle as confirmed. Leaving it NULL would trip the
+    // first-entry handle gate on every fixture user.
     sqlx::query(
-        "INSERT INTO users (id, username, password_hash, bunyip_sub, last_active_at) \
-         VALUES (?, ?, '', ?, datetime('now'))",
+        "INSERT INTO users (id, username, password_hash, bunyip_sub, last_active_at, username_confirmed_at) \
+         VALUES (?, ?, '', ?, datetime('now'), datetime('now'))",
     )
     .bind(&id)
     .bind(username)
@@ -68,7 +72,8 @@ pub async fn list_bots(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Error
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, home_landing, density, \
-         pronouns, profile_links, timezone \
+         pronouns, profile_links, timezone, \
+         username_confirmed_at, username_changed_at \
          FROM users WHERE is_bot = 1 ORDER BY created_at DESC",
     )
     .fetch_all(pool)
@@ -92,7 +97,8 @@ pub async fn find_user_by_username(
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, home_landing, density, \
-         pronouns, profile_links, timezone \
+         pronouns, profile_links, timezone, \
+         username_confirmed_at, username_changed_at \
          FROM users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
@@ -118,7 +124,8 @@ pub async fn find_user_by_id(
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, home_landing, density, \
-         pronouns, profile_links, timezone \
+         pronouns, profile_links, timezone, \
+         username_confirmed_at, username_changed_at \
          FROM users WHERE id = ?",
     )
     .bind(user_id)
@@ -175,6 +182,8 @@ fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
         pronouns: r.get("pronouns"),
         profile_links: r.get("profile_links"),
         timezone: r.get("timezone"),
+        username_confirmed_at: r.get("username_confirmed_at"),
+        username_changed_at: r.get("username_changed_at"),
     }
 }
 
@@ -802,7 +811,8 @@ pub async fn get_user_by_session(
          u.last_ws_seen_at, u.last_digest_sent_at, \
          u.dnd_schedule_json, u.dnd_paused_until, u.email, \
          u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale, u.theme_mode, u.theme_palette, u.theme_scale, u.home_landing, u.density, \
-         u.pronouns, u.profile_links, u.timezone \
+         u.pronouns, u.profile_links, u.timezone, \
+         u.username_confirmed_at, u.username_changed_at \
          FROM sessions s \
          JOIN users u ON u.id = s.user_id \
          WHERE s.id = ? AND s.expires_at > datetime('now')",
@@ -927,7 +937,8 @@ pub async fn list_users(pool: &SqlitePool) -> Result<Vec<UserRecord>, sqlx::Erro
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, home_landing, density, \
-         pronouns, profile_links, timezone \
+         pronouns, profile_links, timezone, \
+         username_confirmed_at, username_changed_at \
          FROM users ORDER BY created_at ASC",
     )
     .fetch_all(pool)
@@ -1521,7 +1532,8 @@ pub async fn search_users(
          last_ws_seen_at, last_digest_sent_at, \
          dnd_schedule_json, dnd_paused_until, email, \
          totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, home_landing, density, \
-         pronouns, profile_links, timezone \
+         pronouns, profile_links, timezone, \
+         username_confirmed_at, username_changed_at \
          FROM users \
          WHERE is_banned = 0 \
            AND (is_profile_public = 1 OR id = ?) \
@@ -1939,7 +1951,8 @@ pub async fn list_blocked_users(
          u.last_ws_seen_at, u.last_digest_sent_at, \
          u.dnd_schedule_json, u.dnd_paused_until, u.email, \
          u.totp_secret_encrypted, u.totp_nonce, u.totp_enabled, u.totp_recovery_hashes, u.is_bot, u.locale, u.theme_mode, u.theme_palette, u.theme_scale, u.home_landing, u.density, \
-         u.pronouns, u.profile_links, u.timezone \
+         u.pronouns, u.profile_links, u.timezone, \
+         u.username_confirmed_at, u.username_changed_at \
          FROM user_blocks b \
          JOIN users u ON u.id = b.blocked_id \
          WHERE b.blocker_id = ? \
@@ -2058,6 +2071,213 @@ pub async fn username_exists(pool: &SqlitePool, username: &str) -> Result<bool, 
         .fetch_one(pool)
         .await?;
     Ok(n > 0)
+}
+
+// ── LC-766: deliberate chat handles ────────────────────────────────────────
+
+/// A released handle stays reserved for its previous owner for this many days,
+/// so a mention or link against the old handle cannot resolve to someone else.
+pub const HANDLE_RESERVATION_DAYS: i64 = 30;
+/// A non-admin account may change its handle at most once per this many days,
+/// so handle churn cannot be used to evade moderation.
+pub const HANDLE_COOLDOWN_DAYS: i64 = 30;
+
+/// The old/new handle pair from a successful change, for the caller to log and
+/// broadcast the identity-changed event.
+#[derive(Debug, Clone)]
+pub struct HandleChange {
+    pub old: String,
+    pub new: String,
+}
+
+/// Why a handle change was refused. The route maps each to a specific message.
+#[derive(Debug)]
+pub enum ChangeHandleError {
+    /// Already in use by another live account (case-insensitive).
+    Taken,
+    /// Reserved by another account after their own recent change.
+    Reserved,
+    /// This account changed its handle too recently; free again on this date.
+    Cooldown {
+        available_on: String,
+    },
+    Db(sqlx::Error),
+}
+
+impl From<sqlx::Error> for ChangeHandleError {
+    fn from(e: sqlx::Error) -> Self {
+        ChangeHandleError::Db(e)
+    }
+}
+
+/// LC-766: record that the user has confirmed their handle (accepted the
+/// derived value or picked one), so the first-entry prompt stops firing. Idempotent:
+/// only stamps the first confirmation, leaving an existing timestamp untouched.
+pub async fn confirm_username(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users \
+            SET username_confirmed_at = COALESCE(username_confirmed_at, datetime('now')) \
+          WHERE id = ?",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// LC-766: the date (YYYY-MM-DD HH:MM:SS) on which this account may next change
+/// its handle, or None when it is free to change now. Admins are never on
+/// cooldown; the caller passes `admin_exempt` for that.
+pub async fn handle_change_available_on(
+    pool: &SqlitePool,
+    user_id: &str,
+    admin_exempt: bool,
+) -> Result<Option<String>, sqlx::Error> {
+    if admin_exempt {
+        return Ok(None);
+    }
+    let until: Option<String> = sqlx::query_scalar(
+        "SELECT CASE \
+             WHEN username_changed_at IS NOT NULL \
+              AND datetime(username_changed_at, ?) > datetime('now') \
+             THEN datetime(username_changed_at, ?) ELSE NULL END \
+           FROM users WHERE id = ?",
+    )
+    .bind(format!("+{HANDLE_COOLDOWN_DAYS} days"))
+    .bind(format!("+{HANDLE_COOLDOWN_DAYS} days"))
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+    Ok(until)
+}
+
+/// LC-766: change a user's handle, atomically enforcing availability, the
+/// per-account cooldown, and the reservation of the released handle.
+///
+/// - `reserve_old` reserves the previous handle for this user for
+///   `HANDLE_RESERVATION_DAYS` and stamps the change against the cooldown. The
+///   settings editor passes true; the first-entry pick passes false, because
+///   the initial choice is not a "change" and the derived handle it replaces
+///   was never anyone's.
+/// - `enforce_cooldown` refuses a change made inside the window. Admins pass
+///   false.
+///
+/// Returns the old/new pair on success, or a typed refusal. A concurrent claim
+/// that slips past the pre-checks is caught as the UNIQUE violation on the
+/// UPDATE and surfaced as `Taken`.
+pub async fn change_username(
+    pool: &SqlitePool,
+    user_id: &str,
+    new_username: &str,
+    reserve_old: bool,
+    enforce_cooldown: bool,
+) -> Result<HandleChange, ChangeHandleError> {
+    let mut tx = pool.begin().await?;
+
+    // Housekeeping: drop reservations whose window has passed so they neither
+    // block a claim nor accumulate.
+    sqlx::query("DELETE FROM reserved_usernames WHERE reserved_until <= datetime('now')")
+        .execute(&mut *tx)
+        .await?;
+
+    let old: String = sqlx::query_scalar("SELECT username FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+    let case_only = old.eq_ignore_ascii_case(new_username);
+
+    // Cooldown gate (skipped for admins). A case-only correction of one's own
+    // handle is still a change for cooldown purposes.
+    if enforce_cooldown {
+        let until: Option<String> = sqlx::query_scalar(
+            "SELECT CASE \
+                 WHEN username_changed_at IS NOT NULL \
+                  AND datetime(username_changed_at, ?) > datetime('now') \
+                 THEN datetime(username_changed_at, ?) ELSE NULL END \
+               FROM users WHERE id = ?",
+        )
+        .bind(format!("+{HANDLE_COOLDOWN_DAYS} days"))
+        .bind(format!("+{HANDLE_COOLDOWN_DAYS} days"))
+        .bind(user_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if let Some(available_on) = until {
+            return Err(ChangeHandleError::Cooldown { available_on });
+        }
+    }
+
+    // Taken by another live account?
+    let taken: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM users WHERE username = ? COLLATE NOCASE AND id != ?",
+    )
+    .bind(new_username)
+    .bind(user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if taken > 0 {
+        return Err(ChangeHandleError::Taken);
+    }
+
+    // Reserved by a different account (still within its window)?
+    let reserved_by: Option<String> = sqlx::query_scalar(
+        "SELECT user_id FROM reserved_usernames \
+          WHERE username = ? COLLATE NOCASE AND reserved_until > datetime('now')",
+    )
+    .bind(new_username)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if matches!(reserved_by, Some(ref uid) if uid != user_id) {
+        return Err(ChangeHandleError::Reserved);
+    }
+
+    // Reserve the released handle for this user, unless the change is case-only
+    // (there is nothing distinct to hold).
+    if reserve_old && !case_only {
+        sqlx::query(
+            "INSERT OR REPLACE INTO reserved_usernames (username, user_id, reserved_until) \
+             VALUES (?, ?, datetime('now', ?))",
+        )
+        .bind(&old)
+        .bind(user_id)
+        .bind(format!("+{HANDLE_RESERVATION_DAYS} days"))
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    // Reclaiming a handle this same user had previously released: drop that
+    // reservation so it does not linger.
+    sqlx::query("DELETE FROM reserved_usernames WHERE username = ? COLLATE NOCASE AND user_id = ?")
+        .bind(new_username)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
+    let res = sqlx::query(
+        "UPDATE users SET username = ?, \
+            username_confirmed_at = datetime('now'), \
+            username_changed_at = CASE WHEN ? THEN datetime('now') ELSE username_changed_at END, \
+            updated_at = datetime('now') \
+          WHERE id = ?",
+    )
+    .bind(new_username)
+    .bind(reserve_old)
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await;
+    if let Err(e) = res {
+        if matches!(&e, sqlx::Error::Database(d) if d.is_unique_violation()) {
+            return Err(ChangeHandleError::Taken);
+        }
+        return Err(ChangeHandleError::Db(e));
+    }
+
+    tx.commit().await?;
+    Ok(HandleChange {
+        old,
+        new: new_username.to_string(),
+    })
 }
 
 // ── LC-587: suspicious-login approval + known-device tracking ──────────────
