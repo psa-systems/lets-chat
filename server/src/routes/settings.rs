@@ -13,6 +13,7 @@ use crate::version;
 use crate::views::settings::{
     BlockedListPage, BlockedUserView, LocaleOption, SessionView, UserSettingsPage,
 };
+use crate::views::welcome::WelcomeHandlePage;
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
@@ -239,6 +240,17 @@ pub async fn get_settings(
     let canned_responses = db::slash::list_canned_for_user(&state.chat, &user.id).await?;
     let avatar_version = avatar_cache_key(&user, &state.asset_version).await;
 
+    // LC-766: is the handle free to change now, or still on its cooldown? Admins
+    // are exempt. The date drives the "again on ..." help line when locked.
+    let handle_cooldown_until =
+        db::auth::handle_change_available_on(&state.auth, &user.id, user.role == "admin").await?;
+    let handle_editable = handle_cooldown_until.is_none();
+    let handle_available_on = handle_cooldown_until
+        .as_deref()
+        .and_then(|s| s.split(' ').next())
+        .unwrap_or("")
+        .to_string();
+
     let page = UserSettingsPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -279,6 +291,8 @@ pub async fn get_settings(
         personal_emojis,
         emoji_max_kib: crate::routes::custom_emojis::MAX_EMOJI_BYTES / 1024,
         canned_responses,
+        handle_editable,
+        handle_available_on,
     };
     html(&page)
 }
@@ -883,6 +897,8 @@ pub async fn post_profile(
     let mut avatar_bytes: Option<Vec<u8>> = None;
     let mut email_present = false;
     let mut email: Option<String> = None;
+    // LC-766: the chat handle, edited alongside display name in the same form.
+    let mut username_field: Option<String> = None;
     let mut avatar_saved = false; // LC-426: drives the "picture updated" message
 
     while let Some(field) = multipart
@@ -908,6 +924,15 @@ pub async fn post_profile(
                 } else {
                     Some(trimmed.to_string())
                 };
+            }
+            // LC-766: the chat handle. Captured here; validated + applied after
+            // the loop so a handle refusal never half-writes the other fields.
+            "username" => {
+                let v = field
+                    .text()
+                    .await
+                    .map_err(|e| AppError::BadRequest(format!("username: {e}")))?;
+                username_field = Some(v);
             }
             "bio" => {
                 let v = field
@@ -1015,6 +1040,42 @@ pub async fn post_profile(
         }
     }
 
+    // LC-766: apply a handle change first, so a refusal (taken / reserved /
+    // cooldown / malformed) returns before any other field is written. An
+    // unchanged handle is a no-op that never burns the cooldown.
+    if let Some(raw) = username_field {
+        let handle = match crate::models::user::validate_handle(&raw) {
+            Ok(h) => h,
+            Err(msg) => return Ok(settings_error(&headers, &msg)),
+        };
+        if handle != user.username {
+            let admin = user.role == "admin";
+            match db::auth::change_username(&state.auth, &user.id, &handle, true, !admin).await {
+                Ok(change) => emit_handle_changed(&state, &user.id, &change),
+                Err(db::auth::ChangeHandleError::Taken) => {
+                    return Ok(settings_error(
+                        &headers,
+                        &format!("The handle @{handle} is already taken."),
+                    ));
+                }
+                Err(db::auth::ChangeHandleError::Reserved) => {
+                    return Ok(settings_error(
+                        &headers,
+                        &format!("The handle @{handle} is reserved right now. Choose another."),
+                    ));
+                }
+                Err(db::auth::ChangeHandleError::Cooldown { available_on }) => {
+                    let date = available_on.split(' ').next().unwrap_or(&available_on);
+                    return Ok(settings_error(
+                        &headers,
+                        &format!("You can change your handle again on {date}."),
+                    ));
+                }
+                Err(db::auth::ChangeHandleError::Db(e)) => return Err(e.into()),
+            }
+        }
+    }
+
     db::auth::update_user_profile(
         &state.auth,
         &user.id,
@@ -1098,6 +1159,121 @@ pub async fn post_profile(
     }
     // LC-347: flash "Saved." on the full-page (no-JS) return.
     Ok(Redirect::to("/settings?saved=1").into_response())
+}
+
+/// LC-766: the identity-changed seam. Let's Chat owns the chat handle; Bunyip
+/// has no handle concept, so there is nothing to mirror back. We emit a
+/// structured event so a future Bunyip reconcile (or an audit) can observe every
+/// change, and refresh the user's own tabs so their sidebar shows the new handle
+/// at once.
+fn emit_handle_changed(state: &AppState, user_id: &str, change: &db::auth::HandleChange) {
+    tracing::info!(
+        target: "identity_changed",
+        user_id,
+        old_handle = %change.old,
+        new_handle = %change.new,
+        "chat handle changed",
+    );
+    state.hub.broadcast_to_user(
+        user_id,
+        &ChatEvent::UserProfileChanged {
+            user_id: user_id.to_string(),
+        },
+    );
+}
+
+/// Render the first-entry handle prompt, pre-filled with `handle` and carrying
+/// an optional validation `error`.
+async fn render_welcome_handle(
+    state: &AppState,
+    handle: &str,
+    error: Option<&str>,
+) -> Result<Html, AppError> {
+    let branding = db::branding::resolve(&state.chat, db::branding::Scope::Global).await?;
+    let page = WelcomeHandlePage {
+        asset_version: &state.asset_version,
+        handle,
+        error,
+        brand_logo: branding.logo_upload_id.is_some(),
+        brand_heading: branding.login_heading,
+    };
+    html(&page)
+}
+
+/// GET /welcome/handle - the first-entry prompt (LC-766). A user who already
+/// confirmed a handle is bounced home; the gate never sends them here.
+pub async fn get_welcome_handle(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+) -> Result<Response, AppError> {
+    if user.username_confirmed_at.is_some() {
+        return Ok(Redirect::to("/").into_response());
+    }
+    Ok(render_welcome_handle(&state, &user.username, None)
+        .await?
+        .into_response())
+}
+
+#[derive(Deserialize)]
+pub struct WelcomeHandleForm {
+    pub username: String,
+}
+
+/// POST /welcome/handle - validate + record the chosen handle, then release the
+/// gate by sending the user home (LC-766). The first-entry pick is not a
+/// "change": it starts no cooldown and reserves no handle (the derived value it
+/// replaces was never anyone's).
+pub async fn post_welcome_handle(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    axum::Form(form): axum::Form<WelcomeHandleForm>,
+) -> Result<Response, AppError> {
+    if user.username_confirmed_at.is_some() {
+        return Ok(Redirect::to("/").into_response());
+    }
+    let handle = match crate::models::user::validate_handle(&form.username) {
+        Ok(h) => h,
+        Err(msg) => {
+            return Ok(render_welcome_handle(&state, &form.username, Some(&msg))
+                .await?
+                .into_response());
+        }
+    };
+    // Accepting the derived handle unchanged: just record the confirmation.
+    if handle == user.username {
+        db::auth::confirm_username(&state.auth, &user.id).await?;
+        return Ok(Redirect::to("/").into_response());
+    }
+    match db::auth::change_username(&state.auth, &user.id, &handle, false, false).await {
+        Ok(change) => {
+            emit_handle_changed(&state, &user.id, &change);
+            Ok(Redirect::to("/").into_response())
+        }
+        Err(db::auth::ChangeHandleError::Taken) => {
+            Ok(
+                render_welcome_handle(&state, &handle, Some("That handle is already taken."))
+                    .await?
+                    .into_response(),
+            )
+        }
+        Err(db::auth::ChangeHandleError::Reserved) => Ok(render_welcome_handle(
+            &state,
+            &handle,
+            Some("That handle is reserved right now. Choose another."),
+        )
+        .await?
+        .into_response()),
+        // First entry passes enforce_cooldown = false, so this arm is unreachable
+        // in practice; treat it defensively as a generic retry rather than panic.
+        Err(db::auth::ChangeHandleError::Cooldown { .. }) => Ok(render_welcome_handle(
+            &state,
+            &handle,
+            Some("That handle is not available. Choose another."),
+        )
+        .await?
+        .into_response()),
+        Err(db::auth::ChangeHandleError::Db(e)) => Err(e.into()),
+    }
 }
 
 pub async fn get_blocked_list(

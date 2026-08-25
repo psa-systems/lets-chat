@@ -265,6 +265,17 @@ settings-display-name = Display name
 # LC-809: name the scope so this reads as the everywhere name, distinct from a
 # per-room nickname.
 settings-display-name-help = Shown everywhere, in every room. A per-room nickname (set from a room's Preferences) overrides it in that one room.
+# LC-766: editable chat handle
+settings-handle = Handle
+settings-handle-help = Letters, numbers, and _ - . only. You can change it once every 30 days.
+settings-handle-locked = You can change your handle again on
+# LC-766: first-entry handle prompt
+welcome-handle-title = Choose your handle
+welcome-handle-heading = Choose your handle
+welcome-handle-intro = This is the name others see and mention you by. We have suggested one from your account; keep it or pick your own.
+welcome-handle-label = Handle
+welcome-handle-help = Letters, numbers, and _ - . only.
+welcome-handle-submit = Continue
 settings-email = Email
 settings-email-help = Used only for password reset. Leave blank to remove.
 settings-email-verified = Verified
