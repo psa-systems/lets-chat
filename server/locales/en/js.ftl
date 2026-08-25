@@ -85,6 +85,10 @@ js-device-dialog-title = Call devices
 js-device-close = Close
 js-device-permission-hint = Allow microphone or camera access to see device names.
 js-device-show-names = Show device names
+# LC-768: background-blur toggle in the call devices picker, and the toast shown
+# when blur is dropped to protect frame rate.
+js-device-blur = Blur my background
+js-device-blur-slow = Background blur was turned off to keep your video smooth.
 
 js-voice-you = You
 js-voice-waiting = Waiting for others to join...

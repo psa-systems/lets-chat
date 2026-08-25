@@ -8,6 +8,10 @@
 // the boolean `audio: true` form, but not reliably once the constraint is an
 // object (e.g. a pinned deviceId), so we set all three explicitly.
 //
+// LC-768 added the `video` builder here too, so the camera constraint (pinned
+// device + optional background blur) is built the same requestable, testable
+// way as the mic constraint.
+//
 // Loaded before devices.js in base.html and attached to window.LetsChatMedia.
 // Also exported via module.exports so media_constraints.test.js can assert the
 // shape under `node --test` without a browser.
@@ -28,7 +32,24 @@
     return c;
   }
 
-  var api = { audio: audio };
+  // LC-768: build the WebRTC `video` constraint. A pinned deviceId is an exact
+  // constraint (same loud-failure contract as audio). Background blur is
+  // requested only when the caller both wants it and has feature-detected the
+  // browser's own segmentation (`getSupportedConstraints().backgroundBlur`), and
+  // even then it is advisory - NOT `{ exact: true }` - so a client that ignores
+  // it returns a plain working stream instead of throwing, and no black or
+  // broken stream is ever published. With neither a pin nor blur this returns
+  // the bare `true` the callers used before, unchanged.
+  function video(deviceId, opts) {
+    opts = opts || {};
+    var c = {};
+    if (deviceId) c.deviceId = { exact: deviceId };
+    if (opts.blur && opts.blurSupported) c.backgroundBlur = true;
+    if (!c.deviceId && !('backgroundBlur' in c)) return true;
+    return c;
+  }
+
+  var api = { audio: audio, video: video };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.LetsChatMedia = api;
 })(typeof window !== 'undefined' ? window : null);
