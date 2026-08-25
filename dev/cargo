@@ -8,8 +8,15 @@
 # `ci-build/Dockerfile.web` and the desktop Dockerfiles.
 #
 # Volumes cache the cargo registry, the git checkout cache, and the build
-# target directory across invocations so rebuilds are incremental. The
-# rustup volume is intentionally NOT shared with the image's baked rustup
+# target directory across invocations so rebuilds are incremental. The three
+# volume names are namespaced by the invoking uid (LC-773): two builds started
+# by different host users on the same machine (e.g. an agent workdir under uid
+# 1000 and the Forgejo runner under uid 10002) each get their own volumes, so a
+# concurrent build cannot chown the shared target out from under the other
+# mid-compile and fail it with "Permission denied (os error 13)" under
+# /cargo-target. The cost is per uid: the first build a given uid runs after
+# this change rebuilds its dependency graph once (expected, not a regression).
+# The rustup volume is intentionally NOT shared with the image's baked rustup
 # state - the image already provides rustfmt and clippy, so this wrapper
 # does not install components and does not need a persistent rustup home.
 set -euo pipefail
@@ -23,20 +30,27 @@ BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 HOST_UID=$(id -u)
 HOST_GID=$(id -g)
 
+# LC-773: namespace the cache/target volumes by the invoking uid so a build by
+# another host user on the same machine mounts different volumes and cannot
+# corrupt this one's cargo state. dev/cargo-desktop MUST use the same
+# expression, so a same-uid desktop build still shares these compiled deps.
+vol_prefix="lets-chat-rewrite-${HOST_UID}"
+
 # The container starts as root so it can chown the named volumes to the host
-# user on first use. Docker initialises new named volumes with the image-path
-# ownership (root:root in rust:slim), which then blocks cargo from writing the
-# registry/target/rustup paths once we drop privileges. The chown loop is
-# idempotent: subsequent runs see the volumes already owned by the host user
-# and skip the recursive walk. After ownership is sorted we use setpriv to
-# exec cargo as the host user so Cargo.lock and any other files written into
-# the /work bind mount land with the right ownership on the host.
+# user on FIRST use: Docker initialises a new named volume with the image-path
+# ownership (root:root in rust:slim), which would block cargo from writing the
+# registry/target paths once we drop privileges. Since LC-773 the volumes are
+# per-uid, so this is no longer a cross-user handover - it only repairs a
+# freshly-created root-owned volume. The loop is idempotent: a volume already
+# owned by the host user skips the recursive walk. After ownership is sorted we
+# use setpriv to exec cargo as the host user so Cargo.lock and any other files
+# written into the /work bind mount land with the right ownership on the host.
 docker run --rm --init \
     -v "$PWD:/work" \
     -w /work \
-    -v lets-chat-rewrite-cargo-registry:/usr/local/cargo/registry \
-    -v lets-chat-rewrite-cargo-git:/usr/local/cargo/git \
-    -v lets-chat-rewrite-target:/cargo-target \
+    -v "${vol_prefix}-cargo-registry:/usr/local/cargo/registry" \
+    -v "${vol_prefix}-cargo-git:/usr/local/cargo/git" \
+    -v "${vol_prefix}-target:/cargo-target" \
     -e CARGO_HOME=/usr/local/cargo \
     -e CARGO_TARGET_DIR=/cargo-target \
     -e "HOST_UID=$HOST_UID" \

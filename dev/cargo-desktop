@@ -7,11 +7,15 @@
 # Image tag must stay aligned with `ci-build/Dockerfile.desktop-linux`.
 #
 # Cargo registry and target volumes are shared with dev/cargo so a build
-# triggered by either wrapper picks up the other's compiled deps. As in
-# dev/cargo, the container starts as root just long enough to chown the
-# named volumes to the host user, then drops to the host uid/gid via
-# setpriv before invoking cargo, so files cargo writes into the /work bind
-# mount (eg. Cargo.lock) land with the right ownership on the host.
+# triggered by either wrapper picks up the other's compiled deps. LC-773
+# namespaces those volumes by the invoking uid, so that sharing holds within
+# one host user; a build by a different uid on the same machine mounts its own
+# volumes and cannot corrupt this one's cargo state. As in dev/cargo, the
+# container starts as root just long enough to chown a freshly-created
+# root-owned volume to the host user (no longer a cross-user handover), then
+# drops to the host uid/gid via setpriv before invoking cargo, so files cargo
+# writes into the /work bind mount (eg. Cargo.lock) land with the right
+# ownership on the host.
 #
 # When invoked with `cargo run` from a graphical session the wrapper also
 # forwards the X11 / Wayland display, the LETS_CHAT_SERVER_URL env, and
@@ -67,12 +71,17 @@ EXTRA_ARGS+=(
     -e "HOST_GID=$HOST_GID"
 )
 
+# LC-773: namespace the cache/target volumes by the invoking uid. Must match
+# dev/cargo's expression exactly so a same-uid build through either wrapper
+# shares the compiled deps, while a build by another uid mounts its own volumes.
+vol_prefix="lets-chat-rewrite-${HOST_UID}"
+
 docker run --rm --init \
     -v "$PWD:/work" \
     -w /work \
-    -v lets-chat-rewrite-cargo-registry:/usr/local/cargo/registry \
-    -v lets-chat-rewrite-cargo-git:/usr/local/cargo/git \
-    -v lets-chat-rewrite-target:/cargo-target \
+    -v "${vol_prefix}-cargo-registry:/usr/local/cargo/registry" \
+    -v "${vol_prefix}-cargo-git:/usr/local/cargo/git" \
+    -v "${vol_prefix}-target:/cargo-target" \
     -e CARGO_HOME=/usr/local/cargo \
     -e CARGO_TARGET_DIR=/cargo-target \
     "${EXTRA_ARGS[@]}" \
