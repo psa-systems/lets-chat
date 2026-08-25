@@ -311,3 +311,36 @@ async fn wiki_at_cap_accepted() {
         .unwrap();
     assert_eq!(stored.as_deref().map(str::len), Some(64_000));
 }
+
+#[tokio::test]
+async fn nickname_section_names_its_room() {
+    // LC-809: the per-room nickname control names the room it applies to, so its
+    // scope is unambiguous next to the global display name.
+    let t = app().await;
+    let room = db::chat::get_room(&t.chat, 1)
+        .await
+        .unwrap()
+        .expect("room 1 exists");
+
+    // The POST response (the swapped-in section) names the room.
+    let (status, body) = req(
+        &t.app,
+        &t.member_session,
+        Method::POST,
+        "/room/1/nickname",
+        "nickname=Cap",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert!(
+        body.contains(&format!("#{}", room.name)),
+        "nickname section should name its room: {body}"
+    );
+
+    // The Preferences tab on the info page names it too.
+    let (_, info) = req(&t.app, &t.member_session, Method::GET, "/room/1/info", "").await;
+    assert!(
+        info.contains(&format!("#{}", room.name)),
+        "info-page nickname section should name its room: {info}"
+    );
+}

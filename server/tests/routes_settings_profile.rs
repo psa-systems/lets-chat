@@ -250,3 +250,28 @@ async fn oversized_avatar_hx_returns_error_fragment_not_413() {
     assert!(html.contains("lc-status--err"), "no error fragment: {html}");
     assert!(html.contains("1 MiB"), "no size reason shown: {html}");
 }
+
+#[tokio::test]
+async fn settings_display_name_states_its_scope() {
+    // LC-809: the global display-name control is labeled so its scope is
+    // unambiguous (everywhere), distinct from a per-room nickname.
+    let s = setup().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/settings")
+        .header(header::COOKIE, format!("session={}", s.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = s.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(
+        body.contains("Shown everywhere"),
+        "display-name scope help missing: {body}"
+    );
+    let _ = s.auth;
+    let _ = s.user_id;
+}

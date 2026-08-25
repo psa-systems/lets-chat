@@ -210,6 +210,31 @@ async fn own_card_has_no_message_link() {
 }
 
 #[tokio::test]
+async fn own_card_offers_edit_profile_link() {
+    // LC-809: the display-name control is reachable straight from your own
+    // name/avatar in the main UI. The self card swaps Message for Edit profile.
+    let s = setup().await;
+    let (status, body) = hovercard(&s.app, Some(&s.member_session), &s.member_id).await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert!(
+        body.contains("/settings#profile"),
+        "self card should link to the profile settings: {body}"
+    );
+}
+
+#[tokio::test]
+async fn other_card_has_no_edit_profile_link() {
+    // LC-809: only your own card offers the edit-profile shortcut.
+    let s = setup().await;
+    let (status, body) = hovercard(&s.app, Some(&s.member_session), &s.public_id).await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert!(
+        !body.contains("/settings#profile"),
+        "another user's card must not offer edit-profile: {body}"
+    );
+}
+
+#[tokio::test]
 async fn unknown_user_is_not_found() {
     let s = setup().await;
     let (status, _) = hovercard(&s.app, Some(&s.member_session), "does-not-exist").await;
