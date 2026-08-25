@@ -257,6 +257,9 @@ settings-avatar-formats = PNG, JPEG o WebP. Máximo 1 MiB.
 settings-avatar-err-size = La imagen debe pesar menos de 1 MiB.
 settings-avatar-err-type = Formato no admitido: usa PNG, JPEG o WebP.
 settings-display-name = Nombre visible
+# LC-809: indica el alcance para que se lea como el nombre global, distinto de un
+# apodo por sala.
+settings-display-name-help = Se muestra en todas partes, en cada sala. Un apodo por sala (configurado en las Preferencias de una sala) lo reemplaza solo en esa sala.
 settings-email = Correo electrónico
 settings-email-help = Se usa solo para restablecer la contraseña. Déjalo en blanco para eliminarlo.
 settings-email-verified = Verificado

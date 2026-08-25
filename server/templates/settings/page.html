@@ -106,6 +106,9 @@
             <div class="lc-set-field lc-set-field--narrow">
               <label class="lc-set-label" for="lc-display-name">{{ "settings-display-name"|t }}</label>
               <input id="lc-display-name" class="input" type="text" name="display_name" maxlength="64" value="{% if let Some(n) = user.display_name.as_ref() %}{{ n }}{% endif %}">
+              {# LC-809: state the scope so this reads as the everywhere name,
+                 distinct from a per-room nickname. #}
+              <p class="lc-set-help">{{ "settings-display-name-help"|t }}</p>
             </div>
             <div class="lc-set-field lc-set-field--narrow">
               <label class="lc-set-label" for="lc-email">{{ "settings-email"|t }}</label>

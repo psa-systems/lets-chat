@@ -280,6 +280,7 @@ pub async fn get_page(
         asset_version: &state.asset_version,
         nick_room_id: room_id,
         nick_value,
+        nick_room_name: room.name.clone(),
     })
 }
 
@@ -319,6 +320,13 @@ pub async fn post_nickname(
             })?;
     }
     let nick_value = db::room_nicknames::get(&state.chat, room_id, &user.id).await?;
+    // LC-809: the swapped-in section keeps naming its room, so re-resolve the
+    // room name (the info page passes it from the loaded room; this fragment
+    // path did not load one).
+    let nick_room_name = db::chat::get_room(&state.chat, room_id)
+        .await?
+        .map(|r| r.name)
+        .unwrap_or_default();
     // LC-454: swap the #room-nickname section in place AND append a toast so the
     // save is never silent (mirrors the settings save-feedback pattern). The
     // section partial stays toast-free so a fresh page load does not emit one.
@@ -326,6 +334,7 @@ pub async fn post_nickname(
     let frag = html(&RoomNicknameFragment {
         nick_room_id: room_id,
         nick_value,
+        nick_room_name,
     })?;
     let msg = crate::i18n::translate_current(if saved {
         "room-nickname-saved"
