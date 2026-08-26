@@ -55,6 +55,24 @@
   // clamped (shorter) heights.
   processCollapse(messages);
 
+  // LC-819: expanding a call-events group (details.lc-sysgroup) that sits near
+  // the bottom reveals its rows below the fold, so the toggle looked like it did
+  // nothing - the revealed content was simply off-screen. On open, scroll the
+  // group into view (block:nearest, so a group taller than the viewport keeps
+  // its summary at the top rather than jumping to the last row). The `toggle`
+  // event does not bubble, hence the capture-phase document listener.
+  function onSysgroupToggle(e) {
+    var d = e.target;
+    if (!d || !d.classList || !d.classList.contains('lc-sysgroup') || !d.open) return;
+    // rAF so the browser has laid out the newly-revealed rows before we measure.
+    requestAnimationFrame(function () {
+      try { d.scrollIntoView({ block: 'nearest' }); } catch (err) {
+        try { d.scrollIntoView(); } catch (e2) {}
+      }
+    });
+  }
+  document.addEventListener('toggle', onSysgroupToggle, true);
+
   // LC-242: jump-to-latest pill. Shown only when the viewer is scrolled up;
   // counts messages that arrive live while they read history. Localized
   // one/many forms ride as data attributes (the count is client-side dynamic,
@@ -280,6 +298,7 @@
     document.body.removeEventListener('htmx:afterSwap', followIfPinned);
     document.body.removeEventListener('htmx:afterSwap', onAfterSwapCollapse);
     document.body.removeEventListener('htmx:oobAfterSwap', onOob);
+    document.removeEventListener('toggle', onSysgroupToggle, true);
     if (pill) pill.removeEventListener('click', jumpToLatest);
     if (unreadPill) unreadPill.removeEventListener('click', jumpToUnread);
     if (ro) ro.disconnect();
