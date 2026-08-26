@@ -44,7 +44,12 @@
   // read data-attributes off `el`). Insertion order is the match order.
   function bindControls(map) {
     var selectors = Object.keys(map);
-    document.body.addEventListener('click', function (e) {
+    // LC-822: via the shared delegation so the handler also fires inside a
+    // pop-out window the huddle dock has been moved into.
+    var reg = window.LetsChatDelegate
+      ? window.LetsChatDelegate.onClick
+      : function (fn) { document.body.addEventListener('click', fn); };
+    reg(function (e) {
       var t = e.target;
       if (!t || !t.closest) return;
       for (var i = 0; i < selectors.length; i++) {

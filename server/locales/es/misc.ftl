@@ -183,6 +183,9 @@ huddle-empty = Aun no hay nadie en el huddle.
 huddle-collapse = Contraer o expandir el huddle
 huddle-lobby-one = esta en el huddle
 huddle-lobby-other = en el huddle
+# LC-822: sacar el huddle a su propia ventana (huddle_popout.js cambia la
+# etiqueta a "Traer de vuelta" mientras esta fuera).
+huddle-popout = Sacar
 # LC-494: plano de control del escenario (oradores vs oyentes + pedir la palabra).
 stage-label = Escenario
 stage-join = Unirse al escenario

@@ -421,7 +421,12 @@
   }
 
   // ---- toggle button ----------------------------------------------------
-  document.addEventListener('click', function (e) {
+  // LC-822: both click delegations go through the shared registry so the
+  // huddle dock's transcription controls still work inside a pop-out window.
+  var regClick = window.LetsChatDelegate
+    ? window.LetsChatDelegate.onClick
+    : function (fn) { document.addEventListener('click', fn); };
+  regClick(function (e) {
     var t = e.target.closest && e.target.closest('[data-lc-transcribe-toggle]');
     if (!t) return;
     if (transcriptId == null) startSession(t); else endSession();
@@ -497,7 +502,7 @@
   }, true);
 
   // ---- transcript drawer controls (LC-402) ------------------------------
-  document.addEventListener('click', function (e) {
+  regClick(function (e) {
     if (!e.target.closest) return;
     if (e.target.closest('[data-lc-transcript-close]')) { showPanel(false); return; }
     if (e.target.closest('[data-lc-jump-live]')) { scrollToLive(); return; }

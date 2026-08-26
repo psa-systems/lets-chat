@@ -1,3 +1,34 @@
+// LC-822: document-agnostic click delegation. The huddle dock can be MOVED into
+// a Document Picture-in-Picture window (huddle_popout.js), and a listener on
+// this page's `document` never sees clicks from that window's document. Modules
+// whose controls live in the dock (voice/call controls, device picker,
+// transcription toggles) register their delegated handler here instead; it is
+// attached to this document now and to any document the dock is later moved
+// into, so the same `e.target.closest(...)` handlers keep working unchanged.
+// Lives in live.js because it is the first script base.html loads.
+(function () {
+  'use strict';
+  var handlers = [];
+  var docs = [];
+  function attach(doc) {
+    if (!doc || docs.indexOf(doc) !== -1) return;
+    docs.push(doc);
+    handlers.forEach(function (h) { doc.addEventListener('click', h); });
+  }
+  function detach(doc) {
+    var i = docs.indexOf(doc);
+    if (i === -1) return;
+    docs.splice(i, 1);
+    handlers.forEach(function (h) { try { doc.removeEventListener('click', h); } catch (e) {} });
+  }
+  function onClick(handler) {
+    handlers.push(handler);
+    docs.forEach(function (d) { d.addEventListener('click', handler); });
+  }
+  attach(document);
+  window.LetsChatDelegate = { onClick: onClick, attach: attach, detach: detach };
+})();
+
 // LC-156: declarative live-update subscription.
 //
 // A page opts into WebSocket room updates by putting `data-lc-live-room="<id>"`

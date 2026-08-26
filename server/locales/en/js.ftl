@@ -122,3 +122,9 @@ js-ai-retry = Retry
 # LC-655: after Accepting a writing-assistant rewrite, an inline Undo restores the draft.
 js-compose-applied = Applied to your message
 js-compose-undo = Undo
+# LC-822: huddle pop-out (huddle_popout.js): button label in each state, the
+# placeholder left in the room, and the note on another room's dock.
+js-huddle-pop-out = Pop out
+js-huddle-bring-back = Bring back
+js-huddle-popped-out = Huddle is popped out
+js-huddle-busy = You are in a huddle in another room
