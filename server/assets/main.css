@@ -4435,6 +4435,71 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     font-size: 0.75rem;
 }
 
+/* ---- LC-822 / LC-823: pop-out ------------------------------------------ */
+/* The live dock moved out of the room foot. Two hosts: a Document
+   Picture-in-Picture window (Chromium; the dock fills it) or an in-page
+   floating panel (fixed over the chat, draggable by its bar, corner-resizable
+   via native CSS resize). Both are size containers so the grid sizes a lone
+   tile from the host's height (cqh); the in-dock height (LC-820) is parked at
+   an effectively-unbounded value so the host is the only size that matters. */
+.lc-huddle--popout,
+.lc-huddle--float {
+    display: flex;
+    flex-direction: column;
+    container-type: size;
+    --lc-huddle-h: 9999px;
+}
+.lc-huddle--popout { position: fixed; inset: 0; border: 0; border-radius: 0; }
+.lc-huddle--float {
+    position: fixed;
+    right: 1rem;
+    bottom: 5rem;
+    z-index: 45;
+    width: 26rem;
+    height: 18rem;
+    min-width: 16rem;
+    min-height: 8rem;
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
+    resize: both;
+    overflow: hidden;
+}
+.lc-huddle--float .lc-huddle-bar { cursor: move; }
+.lc-huddle--dragging { user-select: none; }
+/* The participant area fills the host and the tiles follow its height (the
+   bar takes ~4.5rem). Selectors carry the .lc-huddle class so they outrank the
+   in-dock LC-820 sizing rules whatever their source order. */
+.lc-huddle.lc-huddle--popout [data-lc-voice-grid],
+.lc-huddle.lc-huddle--float [data-lc-voice-grid] {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    align-content: center;
+}
+.lc-huddle.lc-huddle--popout [data-lc-voice-grid]:not(:has(.lc-voice-tile[data-screen])),
+.lc-huddle.lc-huddle--float [data-lc-voice-grid]:not(:has(.lc-voice-tile[data-screen])) {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), calc((100cqh - 4.5rem) * 16 / 9)));
+}
+.lc-huddle.lc-huddle--popout [data-lc-voice-grid]:has(.lc-voice-waiting):not(:has(.lc-voice-tile[data-screen])),
+.lc-huddle.lc-huddle--float [data-lc-voice-grid]:has(.lc-voice-waiting):not(:has(.lc-voice-tile[data-screen])) {
+    grid-template-columns: minmax(0, calc((100cqh - 4.5rem) * 16 / 9));
+}
+.lc-huddle.lc-huddle--popout [data-lc-voice-grid]:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen],
+.lc-huddle.lc-huddle--float [data-lc-voice-grid]:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
+    max-height: calc(100cqh - 4.5rem);
+}
+/* Nothing to collapse or drag-resize while popped out: the host is the size. */
+.lc-huddle--popout .lc-huddle-collapse,
+.lc-huddle--float .lc-huddle-collapse,
+.lc-huddle--popout .lc-huddle-resize,
+.lc-huddle--float .lc-huddle-resize { display: none; }
+/* Another room's dock while a huddle is live elsewhere (one session per tab):
+   Join is disabled and a note links to the live huddle's room. */
+[data-lc-huddle-busy] [data-lc-voice-join] { opacity: 0.5; cursor: not-allowed; }
+
 /* ---- Pre-join lobby (LC-416 follow-up) ---------------------------------- */
 /* Shown before joining: previews who is already here as avatar chips, with a
    heading + primary Join CTA, or an empty state. voice.js hides the whole

@@ -405,7 +405,12 @@
 
   // Single delegated listener: any control marked [data-lc-open-devices]
   // opens the picker, surviving htmx swaps that re-render the buttons.
-  document.body.addEventListener('click', function (e) {
+  // LC-822: registered through the shared delegation so the huddle dock's
+  // devices button still works after the dock is moved into a pop-out window.
+  var regClick = window.LetsChatDelegate
+    ? window.LetsChatDelegate.onClick
+    : function (fn) { document.body.addEventListener('click', fn); };
+  regClick(function (e) {
     if (e.target && e.target.closest && e.target.closest('[data-lc-open-devices]')) {
       e.preventDefault();
       openPicker();

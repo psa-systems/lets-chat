@@ -187,6 +187,9 @@ huddle-collapse = Collapse or expand huddle
 huddle-resize = Drag to resize the huddle (arrow keys also work; double-click to reset)
 huddle-lobby-one = is in the huddle
 huddle-lobby-other = in the huddle
+# LC-822: pop the live huddle out into its own window (huddle_popout.js flips
+# the label to "Bring back" while it is out).
+huddle-popout = Pop out
 # LC-494: stage control plane (speakers vs listeners + request-to-speak).
 stage-label = Stage
 stage-join = Join stage
