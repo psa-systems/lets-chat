@@ -316,6 +316,7 @@
     toggle(q('[data-lc-voice-camera]'), on);
     toggle(q('[data-lc-voice-screen]'), on);
     toggle(q('[data-lc-voice-leave]'), on);
+    toggle(q('[data-lc-huddle-popout]'), on);       // LC-822 pop-out
     toggle(q('[data-lc-transcribe-toggle]'), on); // LC-393 Phase 2
     toggle(q('[data-lc-voice-sep]'), on);              // LC-402 control grouping
     toggle(q('[data-lc-transcript-panel-toggle]'), on); // LC-402 transcript drawer
@@ -862,6 +863,7 @@
       showJoinedUi(false);
       window.__lcSessionRoom = null;
       try { document.dispatchEvent(new CustomEvent('lc:rtc-session-ended', { detail: { surface: 'voice' } })); } catch (e) {}
+      releasePopout(); // LC-823
       return;
     }
     selfMuted = false;
@@ -895,6 +897,7 @@
     // finalizes, being sole-participant).
     window.__lcSessionRoom = null;
     try { document.dispatchEvent(new CustomEvent('lc:rtc-session-ended', { detail: { surface: 'voice' } })); } catch (e) {}
+    releasePopout(); // LC-823
   }
 
   // LC-626: tell transcribe.js our mic state so it stops/resumes its own
@@ -1300,6 +1303,16 @@
 
   function scan() {
     var el = document.querySelector('[data-lc-voice-root]');
+    // LC-823: while the huddle is popped out its root lives outside #main (in a
+    // pop-out window or a floating panel), so a page swap must not read the
+    // page's own dock as "a different voice page" and leave. Keep the live
+    // binding; the controller dresses the page's dock instead (a bring-back
+    // placeholder for this room, a busy note for another).
+    var pop = window.LetsChatHuddlePopout;
+    if (pop && pop.isPopped() && root && joined) {
+      if (el && el !== root) pop.adoptPageDock(el);
+      return;
+    }
     if (el) {
       bindRoot(el);
     } else if (root) {
@@ -1307,6 +1320,19 @@
       root = null;
       cfg = null;
     }
+  }
+
+  // LC-823: after leaving, hand the dock back from the pop-out. The controller
+  // re-docks it into this room's placeholder when we are on that page, else
+  // drops the element; either way rebind from the page so a later Join targets
+  // the room being viewed, not the detached old root.
+  function releasePopout() {
+    var pop = window.LetsChatHuddlePopout;
+    if (!pop || !pop.isPopped()) return;
+    pop.release();
+    root = null;
+    cfg = null;
+    scan();
   }
 
   // LC-616: delegated control-bar dispatch via the shared binder (rtc_common.js).
