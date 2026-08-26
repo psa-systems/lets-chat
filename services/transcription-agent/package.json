@@ -1,0 +1,22 @@
+{
+  "name": "lets-chat-transcription-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LC-810 stage 3: sidecar LiveKit agent that transcribes every SFU participant by posting per-track clips to lets-chat.",
+  "module": "src/agent.ts",
+  "scripts": {
+    "start": "bun run src/agent.ts start",
+    "dev": "bun run src/agent.ts dev",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "dependencies": {
+    "@livekit/agents": "^0.7.0",
+    "@livekit/rtc-node": "^0.13.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.5.0"
+  }
+}
