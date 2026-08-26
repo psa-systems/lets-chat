@@ -327,6 +327,48 @@ fn bearer(headers: &HeaderMap) -> Option<&str> {
         .filter(|s| !s.is_empty())
 }
 
+/// LC-814: dispatch is attempted only for an SFU-huddle call - any non-DM room,
+/// which rides the LiveKit SFU when LiveKit is configured - and only when the
+/// agent is fully configured. A DM is always the 1:1 mesh, so there is no SFU to
+/// tap; it keeps its per-client capture.
+fn should_dispatch_agent(room_type: &str, dispatch_ready: bool) -> bool {
+    dispatch_ready && room_type != "dm"
+}
+
+/// LC-814 (LC-810 stage 2): best-effort dispatch of the transcription agent for
+/// a newly-opened SFU-huddle session. Spawned so it never blocks or fails
+/// `start`; on any error the call simply degrades to the existing per-client
+/// capture (and the LC-765 notice). The agent reads the transcript id + callback
+/// base from the job metadata and posts per-track clips back to the LC-813
+/// `agent-clip` route.
+fn maybe_dispatch_agent(state: &AppState, room: &Room, transcript_id: i64) {
+    if !should_dispatch_agent(&room.room_type, crate::livekit::transcribe_dispatch_ready()) {
+        return;
+    }
+    let Some(cfg) = crate::livekit::LiveKitConfig::from_env() else {
+        return;
+    };
+    let room_name = crate::livekit::room_name(crate::livekit::Surface::Huddle, room.id);
+    let metadata = json!({
+        "transcript_id": transcript_id,
+        "base_url": state.base_url,
+    })
+    .to_string();
+    tokio::spawn(async move {
+        let now = chrono::Utc::now().timestamp().max(0) as u64;
+        match crate::livekit::dispatch_transcription_agent(&cfg, &room_name, metadata, now).await {
+            Ok(()) => {
+                tracing::info!(room = %room_name, transcript_id, "transcription agent dispatched")
+            }
+            Err(e) => tracing::warn!(
+                room = %room_name,
+                error = %e,
+                "transcription agent dispatch failed; falling back to per-client capture"
+            ),
+        }
+    });
+}
+
 /// POST /call/{room_id}/transcript/start
 /// Open (or join) the call's transcription session and notify both members.
 pub async fn start(
@@ -336,6 +378,12 @@ pub async fn start(
 ) -> Result<Json<Value>, AppError> {
     let room = fetch_call_room(&state, room_id).await?;
     require_participant(&state, &user, &room).await?;
+    // LC-814: dispatch the agent only when THIS call opens a NEW session, not
+    // when a later joiner re-hits start (which returns the already-open one), so
+    // the SFU room gets exactly one agent.
+    let is_new_session = db::transcripts::open_session_for_room(&state.chat, room_id)
+        .await?
+        .is_none();
     let session = db::transcripts::start_session(&state.chat, room_id, &user.id).await?;
     let by = label_for(&state, &user.id).await;
     let tid = session.id;
@@ -346,6 +394,9 @@ pub async fn start(
         started_by_name: by.clone(),
     })
     .await;
+    if is_new_session {
+        maybe_dispatch_agent(&state, &room, tid);
+    }
     Ok(Json(json!({ "transcript_id": tid })))
 }
 
@@ -1315,5 +1366,22 @@ mod agent_token_tests {
         assert!(agent_token_ok(Some("s3cr3t"), Some("s3cr3t")));
         assert!(!agent_token_ok(Some("s3cr3t"), Some("wrong")));
         assert!(!agent_token_ok(Some("s3cr3t"), None)); // missing bearer
+    }
+}
+
+#[cfg(test)]
+mod dispatch_tests {
+    use super::should_dispatch_agent;
+
+    #[test]
+    fn dispatch_only_for_non_dm_and_when_ready() {
+        // LC-814: an SFU huddle (any non-DM) with the agent configured -> dispatch.
+        assert!(should_dispatch_agent("public", true));
+        assert!(should_dispatch_agent("enclave", true));
+        // A DM is always the 1:1 mesh: never dispatch.
+        assert!(!should_dispatch_agent("dm", true));
+        // Agent not configured: never dispatch, whatever the room.
+        assert!(!should_dispatch_agent("public", false));
+        assert!(!should_dispatch_agent("dm", false));
     }
 }
