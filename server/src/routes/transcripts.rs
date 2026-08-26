@@ -235,8 +235,7 @@ async fn record_and_broadcast(
 /// LiveKit participant. `stt` is passed in (not re-fetched) so each caller keeps
 /// its own "not configured" ordering, and the caller builds the
 /// [`crate::stt::SttRequest`] (it owns the clip bytes + the language hint, which
-/// differ by path). See the design at
-/// `docs/superpowers/specs/2026-08-25-lets-chat-sfu-server-transcription-design.md`.
+/// differ by path). Design notes: LC-810.
 async fn ingest_clip(
     state: &AppState,
     room: &Room,
