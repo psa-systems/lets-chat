@@ -1757,6 +1757,10 @@ pub fn build_router(state: AppState) -> Router {
         // LC-393: call transcription (Phase 1, DM calls).
         .route("/call/{room_id}/transcript/start", post(transcripts::start))
         .route(
+            "/call/{room_id}/transcript/active",
+            get(transcripts::active),
+        )
+        .route(
             "/call/transcript/{transcript_id}/segment",
             post(transcripts::segment),
         )
