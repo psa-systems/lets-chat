@@ -4085,6 +4085,15 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
    would win over the .hidden utility the call JS toggles (cf. LC-391). */
 .lc-cbtn.hidden { display: none; }
 
+/* LC-743 routed link-styled buttons through .btn, whose `display: inline-flex`
+   sits after the base `[hidden]` rule at equal specificity and so overrode it:
+   a `.btn` carrying the boolean `hidden` attribute rendered anyway (e.g. the
+   per-message "Show more" fold toggle, which is hidden until auto_scroll.html
+   reveals it only for overflowing bodies - it was showing under every message
+   and doing nothing). `.btn[hidden]` (0,2,0) beats `.btn` (0,1,0) regardless of
+   source order, restoring the attribute's intent for every button variant. */
+.btn[hidden] { display: none; }
+
 /* ---- LC-416: icon + collapsible label control buttons ------------------- */
 .lc-cbtn-ico {
     display: inline-flex;
