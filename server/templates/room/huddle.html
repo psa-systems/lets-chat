@@ -16,6 +16,15 @@
      data-ice-servers="{{ ice_servers }}"
      data-lc-huddle-sfu="{% if huddle_sfu %}1{% else %}0{% endif %}"
      class="lc-huddle hidden border-t border-border bg-surface-sunken">
+  {# LC-820: drag handle on the dock's top edge. Dragging (or the arrow keys,
+     ARIA window-splitter pattern) sets the participant area's height, which the
+     tiles scale with; double-click resets. live.js owns the behaviour and
+     persists the height per room. CSS hides it while collapsed or audio-only
+     (chips have nothing to grow). #}
+  <div data-lc-huddle-resize role="separator" aria-orientation="horizontal" tabindex="0"
+       aria-label="{{ "huddle-resize"|t }}" data-lc-tip="{{ "huddle-resize"|t }}" data-lc-tip-pos="top"
+       aria-valuemin="120" aria-valuemax="224" aria-valuenow="224"
+       class="lc-huddle-resize"></div>
   <div class="lc-huddle-bar flex items-center gap-2 px-4 py-1.5">
     {# LC-700: collapse the huddle to a minimal bar (controls + participant
        chips) so the message timeline stays primary. Toggled by live.js, which
@@ -97,5 +106,7 @@
     </div>
   </div>
 
-  <div data-lc-voice-grid class="lc-voice-grid lc-voice-grid--hidden max-h-56 overflow-y-auto px-4 pb-3"></div>
+  {# LC-820: the height cap lives in CSS (var(--lc-huddle-h), default 14rem) so
+     the resize handle above can drive it; was the fixed max-h-56 utility. #}
+  <div data-lc-voice-grid class="lc-voice-grid lc-voice-grid--hidden overflow-y-auto px-4 pb-3"></div>
 </div>
