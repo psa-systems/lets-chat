@@ -59,6 +59,30 @@ docker run --rm \
   lets-chat-transcription-agent
 ```
 
+## Enable it alongside lets-chat
+
+Prerequisites on the app: LiveKit configured (`LETS_CHAT_LIVEKIT_URL` / `_API_KEY` /
+`_API_SECRET`) and server-side STT configured (`LETS_CHAT_STT_URL`). Without both,
+lets-chat falls back to per-client capture and the agent does nothing.
+
+1. Set `LETS_CHAT_TRANSCRIBE_AGENT_TOKEN` on the app (any strong random string). It
+   authenticates the agent's callbacks (LC-813). Optionally set
+   `LETS_CHAT_TRANSCRIBE_AGENT_NAME` (default `transcriber`).
+2. Give the agent the SAME token and name, plus the LiveKit credentials. A mismatch
+   on either makes dispatch silently miss. The callback base URL and transcript id
+   arrive per dispatch, so they are not env.
+3. Run it beside the app with the overlay:
+
+   ```
+   docker compose -f compose.yml -f compose.transcription-agent.yml up --detach
+   ```
+
+   The overlay's `${VAR:?}` guards fail fast if a required value is unset.
+
+Rotating the token: change `LETS_CHAT_TRANSCRIBE_AGENT_TOKEN` on BOTH the app and the
+agent to the same new value, then restart both. While they disagree the app rejects
+every clip with 401, so server-side capture stops and per-client capture carries on.
+
 ## What is tested here vs at staging
 
 Unit-tested (`bun test`, no LiveKit): WAV encoding, the per-participant clipper
@@ -71,5 +95,5 @@ it cannot be exercised without one.
 
 ## Design
 
-See `docs/superpowers/specs/2026-08-25-lets-chat-sfu-server-transcription-design.md`
-and the LC-810 stage tickets (LC-813 ingest, LC-814 dispatch, this = LC-815).
+The design rationale and the stage breakdown live on the LC-810 epic and its
+stage tickets (LC-813 ingest, LC-814 dispatch, this = LC-815).

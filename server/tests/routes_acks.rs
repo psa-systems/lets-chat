@@ -28,7 +28,7 @@ async fn app() -> TestApp {
     let alice = db::auth::create_user(&auth, "alice", "h").await.unwrap();
     let bob = db::auth::create_user(&auth, "bob", "h").await.unwrap();
     // Promote alice to admin so backfill_general_membership runs and both users
-    // get General-enclave access (see CLAUDE.md test-harness note).
+    // get General-enclave access (see internal/CLAUDE.md test-harness note).
     sqlx::query("UPDATE users SET role='admin' WHERE id=?")
         .bind(&alice)
         .execute(&auth)

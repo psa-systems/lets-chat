@@ -1,7 +1,7 @@
 //! LC-207: admin bridge-avatar cache diagnostic page.
 //!
 //! The `/admin/bridges/avatars` surface is standalone-only (the whole
-//! `routes::admin` module is). File-scope feature gate per CLAUDE.md
+//! `routes::admin` module is). File-scope feature gate per internal/CLAUDE.md
 //! Phase-24 category 3 so saas mode does not compile / run these.
 #![cfg(feature = "standalone")]
 

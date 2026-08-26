@@ -6,7 +6,8 @@
 #   docker compose -f compose.yml -f compose.transcription-agent.yml up
 #
 # The `${VAR:?}` guards make compose fail fast with a clear message if the
-# overlay is enabled without the required values. See docs/deploy-runbook.md.
+# overlay is enabled without the required values. See
+# services/transcription-agent/README.md.
 
 services:
 
