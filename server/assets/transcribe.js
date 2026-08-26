@@ -1,15 +1,23 @@
 // LC-393: call transcription (1:1 DM calls + enclave voice channels).
 //
 // Call media is peer-to-peer - the server never sees the audio - so each
-// participant's browser captures its OWN microphone. There are two engines,
-// chosen by server config (/call/config -> sttServer):
-//  - browser (default): the Web Speech API (SpeechRecognition) transcribes
-//    locally and POSTs final text.
+// participant's browser captures its OWN microphone. There are two engines:
+//  - browser: the Web Speech API (SpeechRecognition) transcribes locally and
+//    POSTs final text. Near-instant (results stream as you speak), but only
+//    Chromium browsers have it and it sends audio to the browser vendor's cloud.
 //  - server (Phase 3): MediaRecorder captures short audio clips and POSTs them
 //    to /audio; the server forwards each to the operator's STT endpoint. This
-//    is browser-agnostic (Firefox/Safari) and keeps audio off third-party clouds.
-// Either way speaker attribution is automatic: a segment's speaker is whoever's
-// browser produced it.
+//    is browser-agnostic (Firefox/Safari) and keeps audio off third-party
+//    clouds, but is clip-batched so captions lag several seconds.
+// Engine choice is HYBRID and per-client (not the old global sttServer flag):
+// prefer the browser engine whenever this browser has SpeechRecognition, so
+// capable browsers keep the low-latency experience, and fall back to the server
+// engine only when it does not (or when the browser engine errors at runtime,
+// e.g. its cloud is unreachable) so those clients still get captions instead of
+// nothing. `sttServer` (from /call/config) now just says whether that server
+// fallback is available. Either way speaker attribution is automatic: a
+// segment's speaker is whoever's browser produced it, so a call can mix engines
+// across participants and they all append to the one transcript.
 //
 // Lifecycle: the toggle button POSTs /start; the server opens a session and
 // broadcasts TranscriptStarted to BOTH members (consent banner + each client
@@ -47,6 +55,10 @@
   var sttStream = null;    // mic stream for MediaRecorder
   var sttRecorder = null;
   var sttTimer = null;
+  // Sticky within a capture: set when the browser engine failed at runtime (its
+  // cloud recognizer was unreachable/blocked) and we fell back to the server
+  // engine, so we don't keep retrying the dead browser engine. Reset on stop.
+  var serverFallback = false;
   function loadConfig() {
     fetch('/call/config', { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -197,19 +209,28 @@
     try { console.log.apply(console, ['[lc-call transcribe]'].concat([].slice.call(arguments))); } catch (e) {}
   }
 
+  // Hybrid engine choice, evaluated per client. Prefer the browser engine (SR)
+  // whenever this browser has it, because it is near-instant. Use the server
+  // engine only when SR is absent (Firefox/Safari) and the operator configured
+  // server STT, or once the browser engine has failed at runtime (serverFallback).
+  function useServerEngine() { return (!SR && sttServer) || serverFallback; }
   function startLocalCapture() {
     if (capturing) return;
     // LC-626: a muted session opens no mic. Unmuting resumes capture via the
     // lc:mic-muted handler (which re-calls this once a session is live).
     if (micMuted) return;
-    dbg('startLocalCapture: acquiring mic', sttServer ? 'server-engine' : 'browser-engine');
-    if (sttServer) startServerCapture(); else startBrowserCapture();
+    var server = useServerEngine();
+    dbg('startLocalCapture: acquiring mic', server ? 'server-engine' : 'browser-engine');
+    if (server) startServerCapture(); else startBrowserCapture();
   }
   function stopLocalCapture() {
-    dbg('stopLocalCapture: releasing mic', sttServer ? 'server-engine' : 'browser-engine');
+    dbg('stopLocalCapture: releasing mic', useServerEngine() ? 'server-engine' : 'browser-engine');
     stopBrowserCapture();
     stopServerCapture();
     capturing = false;
+    // Re-arm the browser engine for the next capture; a fresh mic (or a recovered
+    // network) deserves another shot at the low-latency path.
+    serverFallback = false;
   }
 
   // Browser engine: Web Speech API, final results posted as text (Phase 1/2).
@@ -229,10 +250,21 @@
       }
     };
     // 'no-speech' / 'aborted' fire routinely; onend below restarts so a long
-    // silence doesn't permanently stop capture.
-    recog.onerror = function () {};
+    // silence doesn't permanently stop capture. But 'network' /
+    // 'service-not-allowed' mean the browser's cloud recognizer is unreachable
+    // or disabled: it will never produce text this session, so fall back to the
+    // server engine when the operator has one, rather than capture nothing.
+    recog.onerror = function (ev) {
+      var err = ev && ev.error;
+      if ((err === 'network' || err === 'service-not-allowed') && sttServer && MR && !serverFallback) {
+        serverFallback = true;
+        dbg('browser engine error (' + err + '); falling back to server engine');
+        stopBrowserCapture();   // clears onend + nulls recog, so it will not restart
+        startServerCapture();   // capturing stays true; begins clip capture
+      }
+    };
     recog.onend = function () {
-      if (capturing) { try { recog.start(); } catch (e) {} }
+      if (capturing && !serverFallback) { try { recog.start(); } catch (e) {} }
     };
     capturing = true;
     try { recog.start(); } catch (e) { capturing = false; }
@@ -331,9 +363,10 @@
     // LC-597: remember when the session was opened from a stage, so losing the
     // floor can stop the capture. Cleared on any end.
     stageRoom = (toggleEl && toggleEl.hasAttribute('data-lc-stage-transcribe')) ? room : null;
-    // The browser engine needs SpeechRecognition; the server engine needs
-    // MediaRecorder. Block only when the engine we'd actually use is missing.
-    var ok = sttServer ? !!MR : !!SR;
+    // Block only when NEITHER engine is available: the browser engine (SR, our
+    // preference) or the server engine (MediaRecorder) as the fallback when the
+    // operator has configured server STT.
+    var ok = !!SR || (sttServer && !!MR);
     if (!ok) {
       var msg = (toggleEl && toggleEl.getAttribute('data-lc-unsupported')) ||
         'Live transcription is not supported in this browser.';
@@ -478,10 +511,11 @@
   });
 
   // ---- call lifecycle ---------------------------------------------------
-  // Disable every transcription toggle when the engine we'd use is unavailable:
-  // the server engine needs MediaRecorder, the browser engine SpeechRecognition.
+  // Disable every transcription toggle only when NEITHER engine is available:
+  // the browser engine (SpeechRecognition, preferred) or the server engine
+  // (MediaRecorder) as the fallback when the operator has configured server STT.
   function disableIfUnsupported() {
-    var supported = sttServer ? !!MR : !!SR;
+    var supported = !!SR || (sttServer && !!MR);
     var toggles = document.querySelectorAll('[data-lc-transcribe-toggle]');
     for (var i = 0; i < toggles.length; i++) {
       toggles[i].disabled = !supported;
