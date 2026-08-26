@@ -226,6 +226,107 @@ async fn record_and_broadcast(
     Ok(())
 }
 
+/// LC-813: the shared core of the two clip-ingest paths - the browser's own-mic
+/// `audio` route and the trusted server-capture `agent_clip` route. Runs one
+/// audio clip through STT under the existing load caps and records the result as
+/// an attributed segment + live caption. The caller has already resolved the
+/// room, the active session, and the SPEAKER the clip belongs to: the browser
+/// path's speaker is the authenticated poster; the agent path's is the track's
+/// LiveKit participant. `stt` is passed in (not re-fetched) so each caller keeps
+/// its own "not configured" ordering, and the caller builds the
+/// [`crate::stt::SttRequest`] (it owns the clip bytes + the language hint, which
+/// differ by path). See the design at
+/// `docs/superpowers/specs/2026-08-25-lets-chat-sfu-server-transcription-design.md`.
+async fn ingest_clip(
+    state: &AppState,
+    room: &Room,
+    transcript_id: i64,
+    speaker: &User,
+    stt: &dyn crate::stt::SttClient,
+    req: crate::stt::SttRequest,
+) -> Result<(), AppError> {
+    // LC-592: live captions are the heaviest producer (one clip per 5 seconds
+    // per speaker), so they are rate-limited alongside stored attachments.
+    if !crate::stt_load::try_admit(&state.rate_limits, room.id) {
+        tracing::info!(room_id = room.id, "stt rate limited; dropping clip");
+        return Err(AppError::TooManyRequests(
+            "transcription rate limit".into(),
+            60,
+        ));
+    }
+    // LC-592: concurrency. This SHEDS rather than waits - a caption is
+    // latency-bound and worthless once late, and the next clip is 5 seconds
+    // away, so queueing would deliver stale captions AND hold the engine longer.
+    let Ok(_permit) = crate::stt_load::permits().try_acquire() else {
+        tracing::info!(room_id = room.id, "stt at capacity; dropping clip");
+        return Err(AppError::TooManyRequests("transcription is busy".into(), 5));
+    };
+    let result = match crate::stt::transcribe_with_retry(stt, req).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, "stt transcription failed after retries; dropping clip");
+            return Err(AppError::Internal("transcription failed".into()));
+        }
+    };
+    // LC-591: store the real spoken length from the engine's segment timings so
+    // the WebVTT export can use it instead of a synthetic cue duration.
+    record_and_broadcast(
+        state,
+        room,
+        transcript_id,
+        speaker,
+        &result.text,
+        result.duration_ms(),
+    )
+    .await
+}
+
+/// LC-813: the operator secret shared with the transcription agent, or `None`
+/// when unset (the whole server-capture path is then inert). Read from the
+/// environment on each call, matching the `livekit::available()` posture.
+fn transcribe_agent_token() -> Option<String> {
+    std::env::var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN")
+        .ok()
+        .filter(|s| !s.is_empty())
+}
+
+/// LC-813: constant-time byte-equality, so a timing side channel cannot recover
+/// the configured agent token one byte at a time. A length mismatch
+/// short-circuits (a token's length is not the secret).
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// LC-813: the agent-clip trust decision, factored out of env + HTTP so it is
+/// unit-tested without process env or a live request. `configured` is the
+/// operator secret (`None`/empty = feature off, so no token can ever match);
+/// `presented` is the caller's bearer token.
+fn agent_token_ok(configured: Option<&str>, presented: Option<&str>) -> bool {
+    match (configured, presented) {
+        (Some(c), Some(p)) if !c.is_empty() => ct_eq(c.as_bytes(), p.as_bytes()),
+        _ => false,
+    }
+}
+
+/// LC-813: extract a `Bearer <token>` from the Authorization header (scheme
+/// case-insensitive per RFC 7235), mirroring the API-token extractor.
+fn bearer(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split_once(' '))
+        .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
+        .map(|(_, rest)| rest.trim())
+        .filter(|s| !s.is_empty())
+}
+
 /// POST /call/{room_id}/transcript/start
 /// Open (or join) the call's transcription session and notify both members.
 pub async fn start(
@@ -312,55 +413,87 @@ pub async fn audio(
     // LC-591: hint the engine with the speaker's preferred locale (the clip is
     // this user's own mic). Rooms carry no locale, so the user's is the signal;
     // None lets the engine autodetect.
-    let language = user.locale.as_deref();
-    // LC-590: retry transient failures, and on exhaustion answer non-2xx so the
-    // client can show a caption-failed indicator. Pre-LC-590 this returned 200
-    // with an empty body, which is indistinguishable from "you were silent" -
-    // the operator saw a log line and the user saw nothing at all.
     //
-    // The clip is still dropped: a call caption is live text, so there is
-    // nothing useful to replay by the time three attempts have failed. The
-    // capture loop keeps running, so recovery is automatic on the next clip.
-    // LC-592: live captions are the heaviest producer (one clip per 5 seconds
-    // per speaker), so they are rate-limited alongside stored attachments.
-    if !crate::stt_load::try_admit(&state.rate_limits, room.id) {
-        tracing::info!(room_id = room.id, "stt rate limited; dropping clip");
-        return Err(AppError::TooManyRequests(
-            "transcription rate limit".into(),
-            60,
-        ));
-    }
-    // LC-592: concurrency. Unlike the voice-message path this does NOT wait for
-    // a permit - it SHEDS. A caption is latency-bound and worthless once it
-    // arrives late, and the next clip is already 5 seconds away, so queueing
-    // behind a batch of long voice notes would deliver stale captions AND hold
-    // the engine longer. Dropping now surfaces as LC-590's caption warning and
-    // recovers on the next clip.
-    let Ok(_permit) = crate::stt_load::permits().try_acquire() else {
-        tracing::info!(room_id = room.id, "stt at capacity; dropping clip");
-        return Err(AppError::TooManyRequests("transcription is busy".into(), 5));
+    // LC-590: `ingest_clip` retries transient failures and answers non-2xx on
+    // exhaustion so the client can show a caption-failed indicator; the clip is
+    // still dropped (a call caption is live text, nothing useful to replay), and
+    // the capture loop recovers on the next clip. LC-813: the STT call + load
+    // caps + record/broadcast are shared with the server-capture `agent_clip`
+    // path via `ingest_clip`.
+    let req = crate::stt::SttRequest::new(body.to_vec(), content_type)
+        .with_language(user.locale.as_deref())
+        .with_timeout_secs(crate::stt::LIVE_CLIP_TIMEOUT_SECS);
+    ingest_clip(&state, &room, transcript_id, &user, stt.as_ref(), req).await?;
+    Ok(Html(String::new()))
+}
+
+/// POST /call/transcript/{id}/agent-clip
+/// LC-813 (LC-810 stage 1): the trusted server-capture ingest. A sidecar
+/// transcription agent (see the LC-810 design) subscribes to each SFU
+/// participant's audio track and POSTs per-track clips here, attributed to the
+/// track's participant - not to the caller. This is a service-to-service route:
+/// it carries no session, authenticates on a shared bearer token, and is inert
+/// (404) when that token is unset, so the whole path is dark by default.
+pub async fn agent_clip(
+    State(state): State<AppState>,
+    Path(transcript_id): Path<i64>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Result<Html, AppError> {
+    // Trust boundary. No configured token means the feature is off, so answer as
+    // if the route did not exist rather than advertise an unconfigured surface.
+    let Some(configured) = transcribe_agent_token() else {
+        return Err(AppError::NotFound);
     };
+    if !agent_token_ok(Some(&configured), bearer(&headers)) {
+        return Err(AppError::Unauthorized);
+    }
+    // The speaker is the track's LiveKit participant (identity == user id),
+    // carried explicitly by the agent.
+    let speaker_id = headers
+        .get("x-speaker-id")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| AppError::BadRequest("missing X-Speaker-Id".into()))?;
+    let session = db::transcripts::get(&state.chat, transcript_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    // Defense in depth against a leaked token: resolve the speaker and require
+    // that they are a live participant of THIS transcript's room, so a
+    // compromised agent cannot forge words from an arbitrary user or room.
+    let speaker: User = db::auth::find_user_by_id(&state.auth, speaker_id)
+        .await?
+        .ok_or(AppError::Forbidden)?
+        .into();
+    require_participant(&state, &speaker, &room).await?;
+    let Some(stt) = state.stt_client.clone() else {
+        return Err(AppError::BadRequest(
+            "server-side transcription is not configured".into(),
+        ));
+    };
+    // Late clip after the session closed, or an empty body: drop silently.
+    if session.status != "active" || body.is_empty() {
+        return Ok(Html(String::new()));
+    }
+    let content_type = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("audio/webm")
+        .to_string();
+    // The agent may hint a per-track language via X-Language; otherwise fall back
+    // to the speaker's preferred locale, mirroring the browser path.
+    let x_language = headers
+        .get("x-language")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let language = x_language.or(speaker.locale.as_deref());
     let req = crate::stt::SttRequest::new(body.to_vec(), content_type)
         .with_language(language)
         .with_timeout_secs(crate::stt::LIVE_CLIP_TIMEOUT_SECS);
-    let result = match crate::stt::transcribe_with_retry(stt.as_ref(), req).await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!(error = %e, "stt transcription failed after retries; dropping clip");
-            return Err(AppError::Internal("transcription failed".into()));
-        }
-    };
-    // LC-591: store the real spoken length from the engine's segment timings so
-    // the WebVTT export can use it instead of a synthetic cue duration.
-    record_and_broadcast(
-        &state,
-        &room,
-        transcript_id,
-        &user,
-        &result.text,
-        result.duration_ms(),
-    )
-    .await?;
+    ingest_clip(&state, &room, transcript_id, &speaker, stt.as_ref(), req).await?;
     Ok(Html(String::new()))
 }
 
@@ -1154,4 +1287,33 @@ fn build_vtt(lines: &[(f64, String, String, i64)]) -> String {
         ));
     }
     out
+}
+
+#[cfg(test)]
+mod agent_token_tests {
+    use super::{agent_token_ok, ct_eq};
+
+    #[test]
+    fn ct_eq_matches_only_identical_bytes() {
+        assert!(ct_eq(b"secret", b"secret"));
+        assert!(!ct_eq(b"secret", b"secreu"));
+        assert!(!ct_eq(b"secret", b"secre")); // length mismatch
+        assert!(ct_eq(b"", b""));
+    }
+
+    #[test]
+    fn unconfigured_token_makes_the_gate_inert() {
+        // LC-813 AC(d): with no operator secret, no presented token can pass -
+        // the route is dark regardless of what a caller sends.
+        assert!(!agent_token_ok(None, Some("anything")));
+        assert!(!agent_token_ok(None, None));
+        assert!(!agent_token_ok(Some(""), Some("")));
+    }
+
+    #[test]
+    fn configured_token_accepts_only_the_exact_secret() {
+        assert!(agent_token_ok(Some("s3cr3t"), Some("s3cr3t")));
+        assert!(!agent_token_ok(Some("s3cr3t"), Some("wrong")));
+        assert!(!agent_token_ok(Some("s3cr3t"), None)); // missing bearer
+    }
 }
