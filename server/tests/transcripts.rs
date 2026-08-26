@@ -308,6 +308,59 @@ async fn member_starts_session_outsider_and_non_huddle_participant_forbidden() {
     assert_eq!(st4, StatusCode::FORBIDDEN);
 }
 
+/// A late joiner learns of an already-open session via GET .../transcript/active
+/// so it can adopt it and auto-start its own capture. Null before any session,
+/// the open id after, and non-participants are forbidden.
+#[tokio::test]
+async fn active_reports_the_open_session_to_a_participant() {
+    let s = setup().await;
+
+    // Nothing open yet -> null.
+    let (st, body) = get(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/active", s.dm_room),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "member may query active: {body}");
+    let v: serde_json::Value = serde_json::from_str(&body).expect("json");
+    assert!(v["transcript_id"].is_null(), "no session open yet: {body}");
+
+    // One member starts; the other sees the same session id.
+    let (st, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let tid = parse_id(&body);
+
+    let (st, body) = get(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/active", s.dm_room),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let v: serde_json::Value = serde_json::from_str(&body).expect("json");
+    assert_eq!(
+        v["transcript_id"].as_i64(),
+        Some(tid),
+        "late joiner sees the open session: {body}"
+    );
+
+    // A non-participant may not probe the call.
+    let (st, _) = get(
+        &s.app,
+        &s.outsider_session,
+        &format!("/call/{}/transcript/active", s.dm_room),
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN, "non-participant is forbidden");
+}
+
 #[tokio::test]
 async fn voice_channel_participant_transcribes_nonparticipant_forbidden() {
     let s = setup().await;

@@ -168,9 +168,10 @@ voice-transcript-empty-sub = El audio hablado aparecerá aquí cuando la transcr
 # LC-590: shown in the drawer when a clip fails server-side transcription.
 voice-transcript-clip-failed = No se pudo transcribir parte del audio. Los subtítulos pueden estar incompletos.
 # LC-765: la transcripción es captura local por cliente (cada navegador
-# transcribe solo su propio micrófono), así que una transcripción está completa
-# solo si cada participante la activa. Dilo claramente.
-voice-transcript-local-only = Solo se transcribe tu micrófono. Para toda la llamada, cada participante activa Transcribir.
+# transcribe solo su propio micrófono, en ese dispositivo). Activarla ahora la
+# activa automáticamente para todos en la llamada, incluidos los que se unen más
+# tarde, así que la Transcripción de una persona cubre toda la llamada.
+voice-transcript-local-only = Solo se transcribe tu propio micrófono, en tu dispositivo. Activar Transcribir lo activa automáticamente para todos en la llamada, incluidas las personas que se unan más tarde.
 voice-in-call = En llamada
 # LC-493: huddles ad-hoc (salas de texto de grupo).
 huddle-label = Huddle
