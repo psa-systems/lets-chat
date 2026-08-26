@@ -244,6 +244,48 @@
     var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
     return t ? t.querySelector('[data-lc-voice-video]') : null;
   }
+
+  // LC-818: bind a peer's tile to a stream that renders the RIGHT video track.
+  // A <video> plays the first video track of its stream. After a screen-share
+  // swap that took the addTrack fallback (replaceTrack rejected, common for
+  // getDisplayMedia tracks), the peer's remote stream holds the old camera
+  // track FIRST (muted, then ended) and the screen track second, so the tile
+  // froze on the last camera frame. Re-assigning the same stream object is a
+  // no-op, so derive a stream of the audio tracks plus the newest live, unmuted
+  // video track (falling back to any live one) and bind that. Idempotent: when
+  // the tile already renders exactly those tracks nothing is touched, so the
+  // steady state never re-binds (no flicker) and a plain camera toggle still
+  // goes through the mute/unmute path as before.
+  function bindRemoteVideo(userId) {
+    var p = peers[userId];
+    var v = tileVideo(userId);
+    if (!p || !v) return;
+    var src = p.remoteStream;
+    if (!src) { updateTileMedia(userId); return; }
+    var vids = src.getVideoTracks();
+    var chosen = null;
+    for (var i = vids.length - 1; i >= 0 && !chosen; i--) {
+      if (vids[i].readyState === 'live' && !vids[i].muted) chosen = vids[i];
+    }
+    for (var j = vids.length - 1; j >= 0 && !chosen; j--) {
+      if (vids[j].readyState === 'live') chosen = vids[j];
+    }
+    var aud = src.getAudioTracks();
+    var cur = v.srcObject;
+    var curVids = cur ? cur.getVideoTracks() : [];
+    var curAud = cur ? cur.getAudioTracks() : [];
+    var same = !!cur &&
+      curVids.length === (chosen ? 1 : 0) && (!chosen || curVids[0] === chosen) &&
+      curAud.length === aud.length && aud.every(function (a, k) { return curAud[k] === a; });
+    if (!same) {
+      var tracks = aud.slice();
+      if (chosen) tracks.push(chosen);
+      v.srcObject = new MediaStream(tracks);
+      // LC-144: route this peer's audio to the user's pinned speaker.
+      if (window.LetsChatDevices) window.LetsChatDevices.applySpeaker(v);
+    }
+    updateTileMedia(userId);
+  }
   function removeTile(userId) {
     var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
     if (t) t.remove();
@@ -541,20 +583,23 @@
       if (ev.candidate) voiceSend('ice', userId, JSON.stringify(ev.candidate));
     };
     pc.ontrack = function (ev) {
-      var v = tileVideo(userId);
-      if (v && ev.streams && ev.streams[0]) {
-        v.srcObject = ev.streams[0];
-        // LC-144: route this peer's audio to the user's pinned speaker.
-        if (window.LetsChatDevices) window.LetsChatDevices.applySpeaker(v);
-        ev.streams[0].onaddtrack = function () { updateTileMedia(userId); };
-        ev.streams[0].onremovetrack = function () { updateTileMedia(userId); };
+      // LC-818: keep the peer's remote stream on the peer record and let
+      // bindRemoteVideo pick which of its video tracks the tile renders.
+      var stream = ev.streams && ev.streams[0];
+      if (stream) {
+        p.remoteStream = stream;
+        stream.onaddtrack = function () { bindRemoteVideo(userId); };
+        stream.onremovetrack = function () { bindRemoteVideo(userId); };
+      } else if (ev.track) {
+        if (!p.remoteStream) p.remoteStream = new MediaStream();
+        try { p.remoteStream.addTrack(ev.track); } catch (e) {}
       }
       if (ev.track) {
-        ev.track.onmute = function () { updateTileMedia(userId); };
-        ev.track.onunmute = function () { updateTileMedia(userId); };
-        ev.track.onended = function () { updateTileMedia(userId); };
+        ev.track.onmute = function () { bindRemoteVideo(userId); };
+        ev.track.onunmute = function () { bindRemoteVideo(userId); };
+        ev.track.onended = function () { bindRemoteVideo(userId); };
       }
-      updateTileMedia(userId);
+      bindRemoteVideo(userId);
     };
     pc.onnegotiationneeded = function () {
       p.makingOffer = true;
@@ -1082,6 +1127,14 @@
           try { camera.stop(); } catch (e) {}
           try { localStream.removeTrack(camera); } catch (e) {}
         }
+        // LC-818: re-bind the self tile now that the camera is gone. The
+        // re-bind above ran while the camera was still the stream's FIRST
+        // video track - the one a <video> renders - so the sharer's own tile
+        // froze on the last camera frame instead of showing the share.
+        if (!localStream) return;
+        var sv2 = tileVideo(cfg.selfId);
+        if (sv2) { sv2.srcObject = null; sv2.srcObject = localStream; }
+        updateTileMedia(cfg.selfId);
       });
     }).catch(function (e) {
       // User-cancel from the picker lands here too; nothing to undo.
