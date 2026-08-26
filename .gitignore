@@ -49,10 +49,11 @@ data/
 .superpowers/
 
 # =============================================================================
-# Internal (LC-521): team-only material relocated out of the public tree.
-# Holds the relocated audit report, build-history plans/specs, the internal
-# CLAUDE.md, and internal-only compose variants. Kept on disk for the team,
-# never published.
+# Internal (LC-521, LC-518): team-only material relocated out of the public
+# tree. Holds the relocated audit report, build-history plans/specs, the
+# internal CLAUDE.md, the team-host deploy runbook, and internal-only compose
+# variants. Kept on disk for the team, never published. Build-history docs
+# belong here, NOT under docs/ - docs/ is the published surface.
 # =============================================================================
 /internal/
 
