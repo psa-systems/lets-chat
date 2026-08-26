@@ -98,6 +98,12 @@
   // `sub`), so tiles key on the same id the mesh path uses.
   function idOf(participant) { return participant && participant.identity; }
 
+  // LC-814: the server may dispatch a hidden transcription agent into the SFU
+  // room (see the LC-810 design). It joins only to subscribe to audio and must
+  // never appear in the roster, so identities under the reserved `agent-` prefix
+  // (livekit::AGENT_IDENTITY_PREFIX) get no tile. Kept distinct from user ids.
+  function isAgent(id) { return typeof id === 'string' && id.indexOf('agent-') === 0; }
+
   function attachTrack(hooks, participant, track) {
     var uid = idOf(participant);
     if (!uid) return;
@@ -145,6 +151,7 @@
     // A remote joined / left: mirror onto the tile grid so the roster matches
     // the mesh path (where VoiceJoined/VoiceLeft drive the same tiles).
     room.on(LK.RoomEvent.ParticipantConnected, function (p) {
+      if (isAgent(idOf(p))) return;
       hooks.addTile(idOf(p), p.name || idOf(p));
     });
     room.on(LK.RoomEvent.ParticipantDisconnected, function (p) {
@@ -183,6 +190,7 @@
     // Seed tiles for participants already in the room at connect time; the
     // events above only fire for later changes.
     room.remoteParticipants.forEach(function (p) {
+      if (isAgent(idOf(p))) return;
       hooks.addTile(idOf(p), p.name || idOf(p));
     });
 
