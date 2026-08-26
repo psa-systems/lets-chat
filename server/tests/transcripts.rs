@@ -63,6 +63,34 @@ async fn post_raw(
     (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
+/// LC-813: POST a server-capture clip as the transcription agent would - no
+/// session cookie, a bearer token, and an explicit `X-Speaker-Id`.
+async fn post_agent(
+    app: &Router,
+    uri: &str,
+    token: Option<&str>,
+    speaker_id: Option<&str>,
+    body: &[u8],
+) -> (StatusCode, String) {
+    let mut req = Request::builder()
+        .method(Method::POST)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "audio/webm");
+    if let Some(t) = token {
+        req = req.header(header::AUTHORIZATION, format!("Bearer {t}"));
+    }
+    if let Some(s) = speaker_id {
+        req = req.header("X-Speaker-Id", s);
+    }
+    let req = req.body(Body::from(body.to_vec())).unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
 async fn get(app: &Router, sess: &str, uri: &str) -> (StatusCode, String) {
     let req = Request::builder()
         .method(Method::GET)
@@ -87,6 +115,9 @@ struct Setup {
     b_session: String,
     b_id: String,
     outsider_session: String,
+    /// LC-813: carol's user id, for asserting the agent-clip route rejects a
+    /// speaker who exists but is not a live participant of the call.
+    outsider_id: String,
     dm_room: i64,
     public_room: i64,
     voice_room: i64,
@@ -213,6 +244,7 @@ async fn setup_with_clients(
         b_session,
         b_id: b,
         outsider_session,
+        outsider_id: outsider,
         dm_room,
         public_room,
         voice_room,
@@ -630,6 +662,93 @@ async fn server_stt_audio_records_segment() {
     )
     .await;
     assert_eq!(st, StatusCode::FORBIDDEN);
+}
+
+/// LC-813 (LC-810 stage 1): the shared agent-clip token for these tests. Set on
+/// the process env (the route reads it there); every agent test writes the same
+/// value, so concurrent writes in the parallel binary are benign.
+const AGENT_TOKEN: &str = "test-agent-secret";
+
+async fn open_voice_session(s: &Setup) -> i64 {
+    let (conn, _rx, _) = s.hub.connect(&s.b_id, "bob");
+    s.hub.voice_join(conn, s.voice_room);
+    let (_, body) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/start", s.voice_room),
+        None,
+    )
+    .await;
+    parse_id(&body)
+}
+
+#[tokio::test]
+async fn agent_clip_attributes_segment_to_named_speaker() {
+    // The server-capture path posts a clip attributed to the track's participant
+    // (bob), with NO caller session - the segment is bob's, not the poster's.
+    std::env::set_var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN", AGENT_TOKEN);
+    let mock: Arc<dyn lets_chat::stt::SttClient> =
+        Arc::new(lets_chat::stt::MockSttClient::text("agent heard bob"));
+    let s = setup_with_stt(Some(mock)).await;
+    let tid = open_voice_session(&s).await;
+
+    let (st, _) = post_agent(
+        &s.app,
+        &format!("/call/transcript/{tid}/agent-clip"),
+        Some(AGENT_TOKEN),
+        Some(&s.b_id),
+        b"fake-track-audio",
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs.len(), 1);
+    assert_eq!(segs[0].text, "agent heard bob");
+    assert_eq!(
+        segs[0].user_id, s.b_id,
+        "attributed to the named speaker, not the caller"
+    );
+}
+
+#[tokio::test]
+async fn agent_clip_rejects_missing_or_wrong_token() {
+    std::env::set_var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN", AGENT_TOKEN);
+    let mock: Arc<dyn lets_chat::stt::SttClient> =
+        Arc::new(lets_chat::stt::MockSttClient::text("nope"));
+    let s = setup_with_stt(Some(mock)).await;
+    let tid = open_voice_session(&s).await;
+    let uri = format!("/call/transcript/{tid}/agent-clip");
+
+    let (st, _) = post_agent(&s.app, &uri, Some("wrong-secret"), Some(&s.b_id), b"a").await;
+    assert_eq!(st, StatusCode::UNAUTHORIZED, "wrong token rejected");
+    let (st, _) = post_agent(&s.app, &uri, None, Some(&s.b_id), b"a").await;
+    assert_eq!(st, StatusCode::UNAUTHORIZED, "no token rejected");
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert!(segs.is_empty(), "no segment stored for a rejected token");
+}
+
+#[tokio::test]
+async fn agent_clip_rejects_speaker_outside_the_room() {
+    // Defense in depth: even with a valid token, the named speaker must be a live
+    // participant of THIS call, so a leaked token cannot forge an arbitrary user.
+    std::env::set_var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN", AGENT_TOKEN);
+    let mock: Arc<dyn lets_chat::stt::SttClient> =
+        Arc::new(lets_chat::stt::MockSttClient::text("forged"));
+    let s = setup_with_stt(Some(mock)).await;
+    let tid = open_voice_session(&s).await;
+
+    // Carol exists but never joined the voice channel.
+    let (st, _) = post_agent(
+        &s.app,
+        &format!("/call/transcript/{tid}/agent-clip"),
+        Some(AGENT_TOKEN),
+        Some(&s.outsider_id),
+        b"forged-audio",
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert!(segs.is_empty(), "no segment stored for a non-participant");
 }
 
 #[tokio::test]
