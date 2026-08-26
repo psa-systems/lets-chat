@@ -181,6 +181,9 @@ huddle-in-call = En el huddle
 huddle-empty = Aun no hay nadie en el huddle.
 # LC-700: collapse/expand the huddle dock (one label for both states).
 huddle-collapse = Contraer o expandir el huddle
+# LC-820: el tirador de la parte superior del dock (tambien con teclado: las
+# flechas cambian el tamano, Inicio/Fin minimo/maximo, Escape restablece).
+huddle-resize = Arrastra para cambiar el tamano del huddle (las flechas tambien funcionan; doble clic para restablecer)
 huddle-lobby-one = esta en el huddle
 huddle-lobby-other = en el huddle
 # LC-494: plano de control del escenario (oradores vs oyentes + pedir la palabra).
