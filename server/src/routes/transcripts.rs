@@ -192,6 +192,45 @@ async fn broadcast_to_members(
 /// line rather than a corrected transcript and added its latency to every
 /// caption. The LLM now only powers the post-call summary / brief (batch), which
 /// is what the transcript AI was for; live capture stays verbatim.
+/// How far back [`is_echo_of`] looks for another participant's caption. Covers
+/// the speaker-to-mic round trip plus the slower engine's clip length (5s) with
+/// a little slack; longer would start matching genuine agreement.
+const ECHO_WINDOW_SECS: u32 = 8;
+
+/// Captions shorter than this many words are never treated as echoes: "yeah",
+/// "ok sure" are routinely said back and forth for real, and dropping one costs
+/// more than a stray duplicate.
+const ECHO_MIN_WORDS: usize = 3;
+
+/// Lowercased words with punctuation stripped, so "Let's ship it!" and
+/// "let s ship it" compare equal whichever engine produced them.
+fn caption_words(text: &str) -> Vec<String> {
+    text.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn contains_seq(hay: &[String], needle: &[String]) -> bool {
+    !needle.is_empty()
+        && needle.len() <= hay.len()
+        && hay.windows(needle.len()).any(|w| w == needle)
+}
+
+/// Is `candidate` an echo of something in `recent` (other participants' recent
+/// captions)? True when, normalised, it has at least [`ECHO_MIN_WORDS`] words
+/// and equals, or is a contiguous run inside, one of them. Deliberately one
+/// directional: a caption that says MORE than the other person did carries this
+/// speaker's own words and is kept.
+fn is_echo_of(candidate: &str, recent: &[String]) -> bool {
+    let c = caption_words(candidate);
+    if c.len() < ECHO_MIN_WORDS {
+        return false;
+    }
+    recent.iter().any(|r| contains_seq(&caption_words(r), &c))
+}
+
 async fn record_and_broadcast(
     state: &AppState,
     room: &Room,
@@ -202,6 +241,27 @@ async fn record_and_broadcast(
 ) -> Result<(), AppError> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
+        return Ok(());
+    }
+    // Echo de-dupe: every client transcribes its own mic, and that mic also
+    // hears the other participants through the speakers (the browser engine
+    // taps the device directly, so our echoCancellation constraint never
+    // reaches it). Their words then arrive a moment later under THIS user's
+    // name. A caption that just repeats what someone else said within the
+    // window is that bleed-through, so drop it instead of mis-attributing it.
+    let recent = db::transcripts::recent_texts_by_others(
+        &state.chat,
+        transcript_id,
+        &user.id,
+        ECHO_WINDOW_SECS,
+    )
+    .await?;
+    if is_echo_of(trimmed, &recent) {
+        tracing::debug!(
+            transcript_id,
+            user = %user.id,
+            "dropping caption that echoes another participant"
+        );
         return Ok(());
     }
     db::transcripts::append_segment(
@@ -1401,5 +1461,63 @@ mod dispatch_tests {
         // Agent not configured: never dispatch, whatever the room.
         assert!(!should_dispatch_agent("public", false));
         assert!(!should_dispatch_agent("dm", false));
+    }
+}
+
+#[cfg(test)]
+mod echo_tests {
+    use super::is_echo_of;
+
+    fn v(s: &[&str]) -> Vec<String> {
+        s.iter().map(|x| x.to_string()).collect()
+    }
+
+    #[test]
+    fn exact_repeat_of_another_speaker_is_an_echo() {
+        assert!(is_echo_of(
+            "Let's ship the transcription fix today.",
+            &v(&["let's ship the transcription fix today"])
+        ));
+    }
+
+    #[test]
+    fn case_and_punctuation_do_not_matter() {
+        assert!(is_echo_of(
+            "LET US SHIP, the fix!",
+            &v(&["let us ship the fix"])
+        ));
+    }
+
+    #[test]
+    fn a_fragment_of_what_they_said_is_an_echo() {
+        // The bleed-through is a degraded copy: often only the middle of the
+        // phrase is recognised.
+        assert!(is_echo_of(
+            "ship the transcription fix",
+            &v(&["okay let us ship the transcription fix today"])
+        ));
+    }
+
+    #[test]
+    fn short_interjections_are_never_dropped() {
+        assert!(!is_echo_of("yeah", &v(&["yeah"])));
+        assert!(!is_echo_of("ok sure", &v(&["ok sure"])));
+    }
+
+    #[test]
+    fn saying_more_than_they_did_is_the_speakers_own_words() {
+        assert!(!is_echo_of(
+            "ship the fix today and then deploy it",
+            &v(&["ship the fix today"])
+        ));
+    }
+
+    #[test]
+    fn different_text_is_not_an_echo() {
+        assert!(!is_echo_of(
+            "what time is the meeting",
+            &v(&["let us ship the fix today"])
+        ));
+        assert!(!is_echo_of("let us ship the fix today", &[]));
     }
 }
