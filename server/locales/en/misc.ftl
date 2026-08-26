@@ -182,6 +182,9 @@ huddle-in-call = In huddle
 huddle-empty = No one's in the huddle yet.
 # LC-700: collapse/expand the huddle dock (one label for both states).
 huddle-collapse = Collapse or expand huddle
+# LC-820: the drag handle on the dock's top edge (also keyboard: arrow keys
+# resize, Home/End min/max, Escape resets; double-click resets).
+huddle-resize = Drag to resize the huddle (arrow keys also work; double-click to reset)
 huddle-lobby-one = is in the huddle
 huddle-lobby-other = in the huddle
 # LC-494: stage control plane (speakers vs listeners + request-to-speak).

@@ -343,6 +343,101 @@
     lcApplyHuddleCollapsed(root, collapsed);
     try { localStorage.setItem(lcHuddleKey(root), collapsed ? '1' : '0'); } catch (e) { /* storage off */ }
   });
+  // LC-820: user-resizable dock. The handle ([data-lc-huddle-resize]) on the
+  // dock's top edge drives --lc-huddle-h on the root (the participant area's
+  // max-height; the tile size derives from it in main.css). Pointer drag (mouse
+  // + touch via pointer events), arrow keys on the focused handle (ARIA window
+  // splitter), double-click to reset to the CSS default. Clamped between a
+  // usable minimum and 70% of the viewport so the timeline always stays
+  // visible; the choice persists per room like the collapse state.
+  var LC_HUDDLE_MIN_H = 120;
+  var LC_HUDDLE_STEP = 24;
+  function lcHuddleHeightKey(root) {
+    return 'lc-huddle-height:' + (root.getAttribute('data-room-id') || '');
+  }
+  function lcHuddleMaxH() {
+    return Math.max(LC_HUDDLE_MIN_H, Math.floor(window.innerHeight * 0.7));
+  }
+  function lcHuddleClamp(h) {
+    return Math.min(lcHuddleMaxH(), Math.max(LC_HUDDLE_MIN_H, Math.round(h)));
+  }
+  // Current effective height: the explicit property if set, else the computed
+  // default from the stylesheet (so the first drag starts from where it is).
+  function lcHuddleCurrentH(root) {
+    var v = parseFloat(root.style.getPropertyValue('--lc-huddle-h'));
+    if (v > 0) return v;
+    var grid = root.querySelector('[data-lc-voice-grid]');
+    var c = grid ? parseFloat(getComputedStyle(grid).maxHeight) : NaN;
+    return c > 0 ? c : 224;
+  }
+  function lcHuddleSyncAria(root) {
+    var h = root.querySelector('[data-lc-huddle-resize]');
+    if (!h) return;
+    h.setAttribute('aria-valuemin', String(LC_HUDDLE_MIN_H));
+    h.setAttribute('aria-valuemax', String(lcHuddleMaxH()));
+    h.setAttribute('aria-valuenow', String(Math.round(lcHuddleCurrentH(root))));
+  }
+  function lcApplyHuddleHeight(root, h, persist) {
+    if (h == null) {
+      root.style.removeProperty('--lc-huddle-h');
+      if (persist) { try { localStorage.removeItem(lcHuddleHeightKey(root)); } catch (e) { /* storage off */ } }
+    } else {
+      h = lcHuddleClamp(h);
+      root.style.setProperty('--lc-huddle-h', h + 'px');
+      if (persist) { try { localStorage.setItem(lcHuddleHeightKey(root), String(h)); } catch (e) { /* storage off */ } }
+    }
+    lcHuddleSyncAria(root);
+  }
+  document.body.addEventListener('pointerdown', function (evt) {
+    var handle = evt.target.closest && evt.target.closest('[data-lc-huddle-resize]');
+    if (!handle || evt.button !== 0) return;
+    var root = handle.closest('[data-lc-huddle]');
+    if (!root) return;
+    evt.preventDefault();
+    var startY = evt.clientY;
+    var startH = lcHuddleCurrentH(root);
+    var moved = false;
+    root.classList.add('lc-huddle--resizing');
+    try { handle.setPointerCapture(evt.pointerId); } catch (e) { /* unsupported */ }
+    function onMove(e) {
+      moved = true;
+      // The handle is on the TOP edge: dragging up grows the dock.
+      lcApplyHuddleHeight(root, startH + (startY - e.clientY), false);
+    }
+    function onUp() {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onUp);
+      root.classList.remove('lc-huddle--resizing');
+      if (moved) lcApplyHuddleHeight(root, lcHuddleCurrentH(root), true);
+    }
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
+  });
+  document.body.addEventListener('dblclick', function (evt) {
+    var handle = evt.target.closest && evt.target.closest('[data-lc-huddle-resize]');
+    var root = handle && handle.closest('[data-lc-huddle]');
+    if (root) lcApplyHuddleHeight(root, null, true);
+  });
+  document.body.addEventListener('keydown', function (evt) {
+    var handle = evt.target.closest && evt.target.closest('[data-lc-huddle-resize]');
+    var root = handle && handle.closest('[data-lc-huddle]');
+    if (!root) return;
+    var cur = lcHuddleCurrentH(root);
+    var step = evt.shiftKey ? LC_HUDDLE_STEP * 4 : LC_HUDDLE_STEP;
+    var next = null;
+    // Up = taller dock (matches the drag direction), Down = shorter.
+    if (evt.key === 'ArrowUp') next = cur + step;
+    else if (evt.key === 'ArrowDown') next = cur - step;
+    else if (evt.key === 'Home') next = LC_HUDDLE_MIN_H;
+    else if (evt.key === 'End') next = lcHuddleMaxH();
+    else if (evt.key === 'Escape' || evt.key === 'Backspace') { evt.preventDefault(); lcApplyHuddleHeight(root, null, true); return; }
+    if (next == null) return;
+    evt.preventDefault();
+    lcApplyHuddleHeight(root, next, true);
+  });
+
   function lcRestoreHuddle(scope) {
     var root = scope && scope.querySelectorAll ? scope : document;
     var roots = root.querySelectorAll('[data-lc-huddle]');
@@ -350,6 +445,11 @@
       var v = null;
       try { v = localStorage.getItem(lcHuddleKey(r)); } catch (e) { v = null; }
       if (v === '1') lcApplyHuddleCollapsed(r, true);
+      // LC-820: restore the dock height (re-clamped, in case the viewport is
+      // smaller than when it was saved); otherwise just sync the ARIA range.
+      var h = null;
+      try { h = parseFloat(localStorage.getItem(lcHuddleHeightKey(r))); } catch (e) { h = null; }
+      if (h > 0) lcApplyHuddleHeight(r, h, false); else lcHuddleSyncAria(r);
     });
   }
   lcRestoreHuddle(document);

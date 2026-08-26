@@ -4331,6 +4331,56 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     .lc-huddle [data-lc-voice-grid] { transition: max-height 0.2s ease; }
 }
 
+/* ---- LC-820: user-resizable dock height --------------------------------
+   The participant area's height is a custom property on the root
+   (--lc-huddle-h, default 14rem = the old max-h-56 cap) that live.js sets from
+   the drag handle. The tile column max is derived from that height (16/9 minus
+   the grid's bottom padding) so a lone camera tile fills the dock exactly and
+   dragging the dock taller makes the video bigger, not just the scroll area.
+   With several tiles auto-fit still packs as many columns as fit; extra rows
+   scroll as before. The screen-share stage tile is capped the same way. */
+.lc-huddle [data-lc-voice-grid] { max-height: var(--lc-huddle-h, 14rem); }
+.lc-huddle [data-lc-voice-grid]:not(:has(.lc-voice-tile[data-screen])) {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), calc((var(--lc-huddle-h, 14rem) - 0.75rem) * 16 / 9)));
+}
+.lc-huddle [data-lc-voice-grid]:has(.lc-voice-waiting):not(:has(.lc-voice-tile[data-screen])) {
+    grid-template-columns: minmax(0, calc((var(--lc-huddle-h, 14rem) - 0.75rem) * 16 / 9));
+}
+.lc-huddle [data-lc-voice-grid]:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
+    max-height: calc(var(--lc-huddle-h, 14rem) - 0.75rem);
+}
+/* The handle straddles the dock's top border: a thin hit area with a centered
+   grip pill that lights up on hover / focus / while dragging. touch-action:none
+   so a finger drag resizes instead of scrolling the page. */
+.lc-huddle-resize {
+    position: relative;
+    z-index: 1;
+    height: 8px;
+    margin-top: -4px;
+    cursor: row-resize;
+    touch-action: none;
+}
+.lc-huddle-resize::before {
+    content: '';
+    display: block;
+    width: 2.5rem;
+    height: 3px;
+    margin: 2px auto 0;
+    border-radius: 9999px;
+    background: var(--border);
+}
+.lc-huddle-resize:hover::before,
+.lc-huddle-resize:focus-visible::before,
+.lc-huddle--resizing .lc-huddle-resize::before { background: var(--accent); }
+.lc-huddle-resize:focus-visible { outline: none; }
+/* No handle while collapsed (nothing to size) or audio-only (chips do not grow). */
+.lc-huddle--collapsed .lc-huddle-resize,
+.lc-huddle:not(:has([data-media="video"], [data-screen])) .lc-huddle-resize { display: none; }
+/* Live drag: no max-height transition (it would lag the pointer) and no text
+   selection from the pointer sweeping the timeline. */
+.lc-huddle--resizing { user-select: none; }
+.lc-huddle--resizing [data-lc-voice-grid] { transition: none; }
+
 /* Audio-only (no tile carries a live camera or a screen-share pin): lay the
    in-call grid out as a wrapping row of compact chips. Reuses the live tile DOM
    (speaking ring, mute badge, YOU pill) - only the geometry changes. */
