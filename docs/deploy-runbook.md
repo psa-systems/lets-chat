@@ -117,6 +117,24 @@ Prod smoke test:
 - Update the tracking ticket (e.g. LC-585 / LC-620) with env + version + result.
 - Prod `:latest` is never used; only staging follows it.
 
+## Optional: server-side call transcription (agent)
+
+By default each browser transcribes only its own mic, so a call transcript is complete only if every participant turns on Transcribe (LC-765). The optional transcription agent (LC-810) fixes this for SFU huddles: a sidecar that joins the LiveKit room, captures every participant's audio, and posts it to the app, so one person starting transcription captures the whole call.
+
+Prerequisites: LiveKit configured on the app (`LETS_CHAT_LIVEKIT_URL` / `_API_KEY` / `_API_SECRET`) and server-side STT configured (`LETS_CHAT_STT_URL`). Without both, the app falls back to per-client capture and the agent does nothing.
+
+Enable it:
+
+1. Set a shared secret on the app: `LETS_CHAT_TRANSCRIBE_AGENT_TOKEN` (any strong random string). This authenticates the agent's callbacks (LC-813). Optionally set `LETS_CHAT_TRANSCRIBE_AGENT_NAME` (default `transcriber`).
+2. Give the agent the SAME values plus the LiveKit credentials. The token and the agent name MUST match the app's, or dispatch silently misses. The agent takes the callback base URL and transcript id from each dispatch (no extra env).
+3. Run the agent alongside the app via the overlay:
+   ```nushell
+   docker compose -f compose.yml -f compose.transcription-agent.yml up --detach
+   ```
+   The overlay's `${VAR:?}` guards fail fast if a required value is unset. Full env table + run/Docker details: `services/transcription-agent/README.md`.
+
+Rotate the token: change `LETS_CHAT_TRANSCRIBE_AGENT_TOKEN` on BOTH the app and the agent (same value), then restart both. A mismatch makes the app reject every clip with 401 (server-side capture stops; per-client capture still works).
+
 ## Rollback
 
 Prod (pinned): repoint `compose-variables.yml` to the previous good `:vX.Y.(Z-1)`, merge, `git pull --ff-only`, `docker compose pull`, `just app-restart`.
