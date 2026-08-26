@@ -529,6 +529,26 @@
   // call is sole-participant, so its end finalizes the shared transcript for
   // everyone; a voice/huddle end only stops OUR capture, because the session
   // continues for whoever is still on the line.
+  // Late-joiner catch-up. TranscriptStarted is a one-shot broadcast, so a client
+  // that joins a call already being transcribed never receives it and would
+  // never start capturing its own mic. On joining, ask whether a session is open
+  // for this room and, if so, adopt it exactly as the bus 'started' event would
+  // (set the id, show the banner + toggle, start our own capture). Guarded so it
+  // never double-starts if a real bus event and this response race.
+  function adoptActiveSession(room) {
+    if (transcriptId != null || room == null) return;
+    fetch('/call/' + room + '/transcript/active', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || j.transcript_id == null || transcriptId != null) return;
+        transcriptId = parseInt(j.transcript_id, 10);
+        showBanner(true);
+        setToggle(true);
+        startLocalCapture();
+      })
+      .catch(function () {});
+  }
+
   document.addEventListener('lc:rtc-session-ended', function (e) {
     var surface = e && e.detail && e.detail.surface;
     if (surface === 'call') {
@@ -541,11 +561,13 @@
       setToggle(false);
     }
   });
-  document.addEventListener('lc:rtc-session-started', function () {
+  document.addEventListener('lc:rtc-session-started', function (e) {
     // LC-626: a fresh RTC session starts unmuted (mirrors voice.js selfMuted),
     // so clear any mute carried over from a previous call before capture begins.
     micMuted = false;
     disableIfUnsupported();
+    // Auto-join an already-open transcription session (late-joiner catch-up).
+    adoptActiveSession((e && e.detail && e.detail.room) || window.__lcSessionRoom);
   });
 
   // LC-626: mute/unmute the local transcription capture in lockstep with the

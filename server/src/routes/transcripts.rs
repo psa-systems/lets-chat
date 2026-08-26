@@ -399,6 +399,25 @@ pub async fn start(
     Ok(Json(json!({ "transcript_id": tid })))
 }
 
+/// GET /call/{room_id}/transcript/active
+/// Whether a transcription session is already open for this call. The
+/// TranscriptStarted broadcast only reaches members present when it fired, so a
+/// client that joins the call afterwards calls this to adopt the open session
+/// and auto-start its own capture (so one person's Transcribe covers late
+/// joiners too). Participant-gated; `{transcript_id: null}` when nothing is open.
+pub async fn active(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+) -> Result<Json<Value>, AppError> {
+    let room = fetch_call_room(&state, room_id).await?;
+    require_participant(&state, &user, &room).await?;
+    let tid = db::transcripts::open_session_for_room(&state.chat, room_id)
+        .await?
+        .map(|s| s.id);
+    Ok(Json(json!({ "transcript_id": tid })))
+}
+
 #[derive(Deserialize)]
 pub struct SegmentForm {
     pub text: String,
