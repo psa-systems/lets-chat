@@ -117,6 +117,24 @@ Prod smoke test:
 - Update the tracking ticket (e.g. LC-585 / LC-620) with env + version + result.
 - Prod `:latest` is never used; only staging follows it.
 
+## Call transcription: server-side STT engine (speaches)
+
+Call transcription has two engines, chosen per-deploy by whether server-side STT is configured (`/call/config` returns `sttServer: <LETS_CHAT_STT_URL is set>`):
+
+- Browser engine (default, no STT configured): the browser's built-in Web Speech API transcribes each participant's own mic. It works only in Chromium browsers and ships the call audio to the browser vendor's cloud (Google) to transcribe; Firefox/Safari have no engine and the Transcribe toggle greys out. Fragile: when that free endpoint or Chrome's support changes, transcription silently stops ("does not pick up at all").
+- Server engine (STT configured): the browser records short clips and POSTs them to the app, which forwards each to a self-hosted STT endpoint. Browser-agnostic, keeps audio on your own infra, consistent Whisper quality, and it is a prerequisite for the transcription agent (next section).
+
+Setting `LETS_CHAT_STT_URL` flips every participant to the server engine. Staging (c-01) self-hosts a `speaches` (faster-whisper, OpenAI-compatible) sidecar for this. It is defined in `server/c-01/lets-chat-psa/compose-variables.yml` (not the shared template, so prod does not run it), private-network only, CPU int8. App env: `LETS_CHAT_STT_URL: http://lets-chat-psa-speaches:8000/v1/audio/transcriptions` and `LETS_CHAT_STT_MODEL: Systran/faster-whisper-small` (the model id must match the speaches `PRELOAD_MODELS`).
+
+Bring it up on c-01 (docker repo, `server/c-01/lets-chat-psa`):
+
+1. Create the model-cache bind dir on the host FIRST. `just resources-create` makes the Docker volume object but NOT the underlying directory, and a bind mount fails on a missing dir (`failed to mount local volume ... no such file or directory`): `mkdir /srv/d1/c-01/data/lets-chat-psa/speaches-cache` (prefix `sudo` if the parent is root-owned).
+2. `just resources-create` then `just app-restart`. The restart brings up `lets-chat-psa-speaches` and restarts the app with STT wired.
+3. First boot pulls the model (~0.5 GB) into the cache volume: `^docker logs --follow lets-chat-psa-speaches` and wait for the download to finish and the server to listen on 8000. Later restarts reuse the cached weights.
+4. Verify: start Transcribe on a call; captions should appear for every participant regardless of browser. `sttServer: true` at `https://chat.a8n.systems/call/config` confirms the server engine is active.
+
+Tuning: `LETS_CHAT_STT_MODEL` trades speed for accuracy on the shared CPU box (`Systran/faster-whisper-base` faster, `...-small` balanced default, `...-medium` more accurate but slower). Change it on both the app env and the speaches `PRELOAD_MODELS`, then `just app-restart`. To enable STT on another host (e.g. prod nc-01), add the same `speaches` service, app env, and `resources.yml` volume to that host's config.
+
 ## Optional: server-side call transcription (agent)
 
 By default each browser transcribes only its own mic, so a call transcript is complete only if every participant turns on Transcribe (LC-765). The optional transcription agent (LC-810) fixes this for SFU huddles: a sidecar that joins the LiveKit room, captures every participant's audio, and posts it to the app, so one person starting transcription captures the whole call.
@@ -150,6 +168,8 @@ Staging (`:latest`): revert or re-tag `:latest` upstream, or temporarily pin c-0
 | SSO `sso_error=internal` | App-level defect, NOT version drift | Check logs: `docker compose logs --tail 200 | find "resolve_or_provision_user"` |
 | SSO `sso_error=identity_conflict` | The user's verified email belongs to a local account linked to a different Bunyip subject (usually a rotated `sub`), or to a banned/bot row. Never relinked automatically: that was the LC-698 takeover primitive | Confirm the row is the same person, then Admin -> Users -> "Unlink SSO" on it. That clears `bunyip_sub`, signs them out everywhere, and is written to the mod log; their next sign-in links the new subject |
 | Prod down after restart | New image absent when old container removed | `docker compose pull` succeeded? Fix pin, pull, restart |
+| Call transcription "does not pick up at all" | No server STT: `LETS_CHAT_STT_URL` unset, so the app falls back to the Chromium-only Web Speech API, which fails on other browsers or when Google's endpoint changes | Wire a self-hosted STT endpoint (speaches); see "Call transcription: server-side STT engine" above |
+| `speaches` fails to start: `failed to mount local volume ... no such file or directory` | The bind-volume host dir was never created; `just resources-create` makes the volume object but not the directory | `mkdir /srv/d1/<host>/data/lets-chat-psa/speaches-cache` (sudo if needed) then `just app-restart` |
 
 ### Log grep (Nushell)
 
