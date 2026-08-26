@@ -97,6 +97,28 @@
 
     {# isolated destructive action #}
     <div class="lc-callbar-group lc-callbar-group--end">
+      {# LC-825: floating reactions (see room/huddle.html for the same control). #}
+      <span class="lc-react-wrap hidden" data-lc-react-wrap>
+        <button type="button" data-lc-voice-react aria-haspopup="true" aria-expanded="false"
+                aria-label="{{ "voice-react"|t }}" data-lc-tip="{{ "voice-react"|t }}" data-lc-tip-pos="bottom" class="lc-cbtn">
+          <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/></svg></span>
+          <span class="lc-cbtn-label">{{ "voice-react"|t }}</span>
+        </button>
+        <div data-lc-react-tray role="toolbar" aria-label="{{ "voice-react-tray"|t }}" hidden class="card lc-react-tray">
+          <div class="lc-react-row" data-lc-react-row>
+            <button type="button" data-lc-react-emoji="👍" class="lc-emoji-cell" tabindex="-1">👍</button>
+            <button type="button" data-lc-react-emoji="🎉" class="lc-emoji-cell" tabindex="-1">🎉</button>
+            <button type="button" data-lc-react-emoji="❤️" class="lc-emoji-cell" tabindex="-1">❤️</button>
+            <button type="button" data-lc-react-emoji="😂" class="lc-emoji-cell" tabindex="-1">😂</button>
+            <button type="button" data-lc-react-emoji="😮" class="lc-emoji-cell" tabindex="-1">😮</button>
+            <button type="button" data-lc-react-emoji="😢" class="lc-emoji-cell" tabindex="-1">😢</button>
+            <button type="button" data-lc-react-emoji="🤔" class="lc-emoji-cell" tabindex="-1">🤔</button>
+            <button type="button" data-lc-react-emoji="👏" class="lc-emoji-cell" tabindex="-1">👏</button>
+            <button type="button" data-lc-react-more aria-label="{{ "voice-react-more"|t }}" data-lc-tip="{{ "voice-react-more"|t }}" data-lc-tip-pos="bottom" class="lc-emoji-cell lc-react-more" tabindex="-1">+</button>
+          </div>
+          <div data-lc-react-picker-slot></div>
+        </div>
+      </span>
       <button type="button" data-lc-voice-leave
               aria-label="{{ "voice-leave"|t }}" data-lc-tip="{{ "voice-leave"|t }}" data-lc-tip-pos="bottom"
               class="hidden lc-cbtn lc-cbtn--leave">
@@ -145,7 +167,13 @@
 
   {# LC-408: hidden via a class (not inline display) so the screen-share stage
      CSS can switch the container to a flex layout when a tile is pinned. #}
-  <div data-lc-voice-grid class="lc-voice-grid lc-voice-grid--hidden flex-1 overflow-y-auto p-4"></div>
+  {# LC-825: stage wrapper = grid + the floating-reaction layer over it (pointer-
+     events: none) + the polite live region for incoming reactions. #}
+  <div class="lc-voice-stage flex-1 min-h-0" data-lc-voice-stage>
+    <div data-lc-voice-grid class="lc-voice-grid lc-voice-grid--hidden flex-1 overflow-y-auto p-4"></div>
+    <div data-lc-react-layer class="lc-react-layer" aria-hidden="true"></div>
+  </div>
+  <div data-lc-react-live class="sr-only" aria-live="polite" aria-atomic="true"></div>
 </div>
 {# LC-156: WS room subscription handled declaratively by live.js via the
    data-lc-live-room attribute on the voice root above. #}

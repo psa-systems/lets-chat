@@ -102,6 +102,11 @@ pub enum RateLimitKind {
     /// LC-592: per-room cap on STT submissions. Keyed by room_id, so one busy
     /// room cannot consume the whole server-wide allowance.
     SttRoom,
+    /// LC-825: per-user cap on floating call reactions (`voice_reaction` WS
+    /// frames). Keyed by the sender's user_id. A burst should feel free, so the
+    /// cap is generous and over-limit reactions are dropped silently (no error
+    /// frame) rather than refused loudly.
+    CallReaction,
 }
 
 impl RateLimitKind {
@@ -123,6 +128,7 @@ impl RateLimitKind {
             RateLimitKind::NewMemberPost => "newm",
             RateLimitKind::SttGlobal => "sttg",
             RateLimitKind::SttRoom => "sttr",
+            RateLimitKind::CallReaction => "rxn",
         }
     }
 }

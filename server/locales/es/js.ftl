@@ -125,3 +125,7 @@ js-huddle-pop-out = Sacar
 js-huddle-bring-back = Traer de vuelta
 js-huddle-popped-out = El huddle esta en su propia ventana
 js-huddle-busy = Estas en un huddle en otra sala
+# LC-825: anuncios para lectores de pantalla de las reacciones entrantes en una
+# llamada, agrupados y limitados por call_reactions.js.
+js-react-announce = %name% reacciono %emoji%
+js-react-announce-many = %name% y %n% mas reaccionaron %emoji%

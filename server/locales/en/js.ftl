@@ -128,3 +128,7 @@ js-huddle-pop-out = Pop out
 js-huddle-bring-back = Bring back
 js-huddle-popped-out = Huddle is popped out
 js-huddle-busy = You are in a huddle in another room
+# LC-825: polite screen-reader announcements for incoming call reactions,
+# throttled and coalesced by call_reactions.js.
+js-react-announce = %name% reacted %emoji%
+js-react-announce-many = %name% and %n% others reacted %emoji%

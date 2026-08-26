@@ -317,6 +317,10 @@
     toggle(q('[data-lc-voice-screen]'), on);
     toggle(q('[data-lc-voice-leave]'), on);
     toggle(q('[data-lc-huddle-popout]'), on);       // LC-822 pop-out
+    toggle(q('[data-lc-react-wrap]'), on);          // LC-825 reactions
+    // LC-825: leaving tears the reaction layer down (no floats or badges linger
+    // into the lobby, and nothing leaks into the next call).
+    if (!on && window.LetsChatCallReactions) window.LetsChatCallReactions.reset(root);
     toggle(q('[data-lc-transcribe-toggle]'), on); // LC-393 Phase 2
     toggle(q('[data-lc-voice-sep]'), on);              // LC-402 control grouping
     toggle(q('[data-lc-transcript-panel-toggle]'), on); // LC-402 transcript drawer
@@ -1270,6 +1274,13 @@
       return;
     }
     if (!joined) return;
+    if (kind === 'reaction') { // LC-825: an ephemeral floating reaction
+      // Name via the roster (the same resolution the tiles use), falling back
+      // to the display label the frame carries - never the raw id.
+      var reactName = participants[userId] || username;
+      if (window.LetsChatCallReactions) window.LetsChatCallReactions.receive(root, userId, reactName, payload || '');
+      return;
+    }
     if (kind === 'offer') onOffer(userId, username, payload);
     else if (kind === 'answer') onAnswer(userId, payload);
     else if (kind === 'ice') onIce(userId, payload);
