@@ -1764,6 +1764,12 @@ pub fn build_router(state: AppState) -> Router {
             "/call/transcript/{transcript_id}/audio",
             post(transcripts::audio),
         )
+        // LC-813 (LC-810 stage 1): trusted server-capture ingest for the sidecar
+        // transcription agent. Token-authenticated, inert when unconfigured.
+        .route(
+            "/call/transcript/{transcript_id}/agent-clip",
+            post(transcripts::agent_clip),
+        )
         .route(
             "/call/transcript/{transcript_id}/end",
             post(transcripts::end),
