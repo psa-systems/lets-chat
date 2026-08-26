@@ -1,0 +1,41 @@
+---
+
+# LC-816: unit tests for the transcription agent (services/transcription-agent).
+#
+# The agent is a Node/TypeScript LiveKit Agents worker run on bun. The check
+# runner (RUNS_ON_OPENSUSE_DEV_LATEST) carries node/nu/cargo but not bun, and the
+# repo's ./dev/bun wrapper bind-mounts (which does not work on this runner - the
+# docker daemon is on the host, the runner in a container). So, like the desktop
+# build, the work happens inside docker: `docker buildx build --target test`
+# runs `bun test` in the agent's Dockerfile test stage and fails the build (and
+# thus this job) on any test failure. Path-filtered so it only fires on agent
+# changes and never gates unrelated PRs.
+name: Agent check
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "services/transcription-agent/**"
+      - ".forgejo/workflows/agent-check.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "services/transcription-agent/**"
+      - ".forgejo/workflows/agent-check.yml"
+
+jobs:
+  agent-test:
+    name: transcription agent (bun test)
+    # Base image: the tests run inside `docker buildx`, so the runner itself
+    # needs only docker, not bun.
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
+
+    steps:
+      - name: Clone the repository
+        uses: https://code.forgejo.org/actions/checkout@v5
+
+      - name: Bun unit tests (in the agent's Dockerfile test stage)
+        run: docker buildx build --target test -f services/transcription-agent/Dockerfile services/transcription-agent

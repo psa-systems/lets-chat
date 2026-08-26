@@ -1,12 +1,27 @@
-# LC-815: the sidecar transcription agent (LC-810 stage 3). A LiveKit Agents
-# worker; runs on bun (the toolchain the rest of the repo already uses).
+# LC-815/LC-816: the sidecar transcription agent (LC-810 stage 3/4). A LiveKit
+# Agents worker; runs on bun (the toolchain the rest of the repo already uses).
+
+# Production dependencies only.
 FROM oven/bun:1 AS deps
 WORKDIR /app
 COPY package.json ./
 # No lockfile is committed for this leaf service; resolve at build time.
 RUN bun install --production
 
-FROM oven/bun:1
+# LC-816: unit tests, run in CI via `docker buildx build --target test` (the CI
+# runner has no bun; work happens inside docker, like the desktop build). The
+# tests import only local modules - not the LiveKit SDK - so no install is
+# needed here, and a failing `bun test` fails the image build.
+FROM oven/bun:1 AS test
+WORKDIR /app
+COPY package.json tsconfig.json ./
+COPY src ./src
+COPY test ./test
+RUN bun test
+
+# Runtime. This is the LAST stage, so a plain `docker build` (and the compose
+# overlay) produces the runtime image WITHOUT running the test stage.
+FROM oven/bun:1 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
