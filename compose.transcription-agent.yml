@@ -1,0 +1,28 @@
+---
+# LC-810: optional overlay running the server-side transcription agent (LC-815)
+# alongside the app. It is OFF by default; enable it explicitly, once LiveKit and
+# the shared agent token are configured on the app:
+#
+#   docker compose -f compose.yml -f compose.transcription-agent.yml up
+#
+# The `${VAR:?}` guards make compose fail fast with a clear message if the
+# overlay is enabled without the required values. See docs/deploy-runbook.md.
+
+services:
+
+  transcription-agent:
+    build:
+      context: ./services/transcription-agent
+    container_name: dev-lets-chat-transcription-agent-${USER}
+    restart: unless-stopped
+    # Same LiveKit credentials the app uses, plus the shared callback token. The
+    # token MUST equal the app's LETS_CHAT_TRANSCRIBE_AGENT_TOKEN, and the name
+    # MUST equal the app's LETS_CHAT_TRANSCRIBE_AGENT_NAME, or dispatch misses.
+    environment:
+      LIVEKIT_URL: ${LETS_CHAT_LIVEKIT_URL:?set LETS_CHAT_LIVEKIT_URL to enable the agent}
+      LIVEKIT_API_KEY: ${LETS_CHAT_LIVEKIT_API_KEY:?set LETS_CHAT_LIVEKIT_API_KEY to enable the agent}
+      LIVEKIT_API_SECRET: ${LETS_CHAT_LIVEKIT_API_SECRET:?set LETS_CHAT_LIVEKIT_API_SECRET to enable the agent}
+      LETS_CHAT_TRANSCRIBE_AGENT_TOKEN: ${LETS_CHAT_TRANSCRIBE_AGENT_TOKEN:?set LETS_CHAT_TRANSCRIBE_AGENT_TOKEN (must match the app)}
+      LETS_CHAT_TRANSCRIBE_AGENT_NAME: ${LETS_CHAT_TRANSCRIBE_AGENT_NAME:-transcriber}
+    depends_on:
+      - app
