@@ -361,6 +361,71 @@ async fn active_reports_the_open_session_to_a_participant() {
     assert_eq!(st, StatusCode::FORBIDDEN, "non-participant is forbidden");
 }
 
+/// Echo de-dupe: a member's mic hears another participant through the speakers
+/// and posts a near-identical caption a moment later. It is dropped rather than
+/// attributed to the wrong speaker; a genuine short reply is always kept.
+#[tokio::test]
+async fn echoed_caption_from_another_member_is_dropped() {
+    let s = setup().await;
+    let (st, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let tid = parse_id(&body);
+    let seg = format!("/call/transcript/{tid}/segment");
+
+    // A speaks; B's mic echoes the same phrase (different case + punctuation).
+    let (st, _) = post(
+        &s.app,
+        &s.a_session,
+        &seg,
+        Some("text=let+us+ship+the+transcription+fix+today"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &seg,
+        Some("text=Let+us+ship+the+transcription+fix+today."),
+    )
+    .await;
+    assert_eq!(
+        st,
+        StatusCode::OK,
+        "an echo is dropped silently, not an error"
+    );
+
+    // Both say "yes": too short to be treated as an echo, so both are kept.
+    let (st, _) = post(&s.app, &s.a_session, &seg, Some("text=yes")).await;
+    assert_eq!(st, StatusCode::OK);
+    let (st, _) = post(&s.app, &s.b_session, &seg, Some("text=yes")).await;
+    assert_eq!(st, StatusCode::OK);
+
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    let got: Vec<(String, String)> = segs
+        .iter()
+        .map(|g| (g.user_id.clone(), g.text.clone()))
+        .collect();
+    assert_eq!(
+        segs.len(),
+        3,
+        "echo dropped, both short replies kept: {got:?}"
+    );
+    assert_eq!(segs[0].text, "let us ship the transcription fix today");
+    assert_ne!(
+        segs[0].user_id, s.b_id,
+        "the phrase stays with its real speaker"
+    );
+    assert_eq!(segs[1].text, "yes");
+    assert_eq!(segs[2].text, "yes");
+    assert_ne!(segs[1].user_id, segs[2].user_id, "one 'yes' per speaker");
+}
+
 #[tokio::test]
 async fn voice_channel_participant_transcribes_nonparticipant_forbidden() {
     let s = setup().await;
