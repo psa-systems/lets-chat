@@ -1,7 +1,7 @@
 //! LC-78: admin bridges UI - registration, listing, plain remove.
 //!
 //! The `/admin/bridges` surface is standalone-only (mirrors /admin/bots).
-//! File-scope feature gate per CLAUDE.md Phase-24 category 3 so saas mode
+//! File-scope feature gate per internal/CLAUDE.md Phase-24 category 3 so saas mode
 //! does not compile / run these.
 #![cfg(feature = "standalone")]
 

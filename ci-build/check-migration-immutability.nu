@@ -11,7 +11,7 @@
 #
 #   migration <version> was previously applied but has been modified
 #
-# Committed migrations are therefore immutable (CLAUDE.md / LC-212): the only
+# Committed migrations are therefore immutable (internal/CLAUDE.md / LC-212): the only
 # safe change is a NEW migration file with the next index. This gate fails any
 # PR (and push to main) that Modifies (M), Renames (R), or Deletes (D) a
 # migration relative to the merge-base with the base ref. Adding new migration

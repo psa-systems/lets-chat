@@ -10,7 +10,7 @@
 //! right side-effect (the FTS DELETE trigger from migration 0045).
 //!
 //! Tests use the drift-immune common::chat_pool() helper (the new
-//! prescribed pattern per CLAUDE.md test-maintenance).
+//! prescribed pattern per internal/CLAUDE.md test-maintenance).
 
 mod common;
 

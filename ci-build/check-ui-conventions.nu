@@ -503,7 +503,7 @@ def rules [] {
         {
             id: "no-em-dash"
             pending: null
-            fix: "U+2014 (em dash) is banned repo-wide: use a hyphen, a colon, parentheses, or a period and a new sentence (CLAUDE.md style rules, folded into this job by LC-749)"
+            fix: "U+2014 (em dash) is banned repo-wide: use a hyphen, a colon, parentheses, or a period and a new sentence (internal/CLAUDE.md style rules, folded into this job by LC-749)"
             check: {|| scan-lines (tracked-text-files) $EM_DASH }
         }
     ]
