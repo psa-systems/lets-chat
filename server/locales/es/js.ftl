@@ -119,3 +119,9 @@ js-ai-retry = Reintentar
 # LC-655: after Accepting a writing-assistant rewrite, an inline Undo restores the draft.
 js-compose-applied = Aplicado a tu mensaje
 js-compose-undo = Deshacer
+# LC-822: huddle en ventana aparte (huddle_popout.js): etiqueta del boton en
+# cada estado, el marcador que queda en la sala y la nota en el dock de otra sala.
+js-huddle-pop-out = Sacar
+js-huddle-bring-back = Traer de vuelta
+js-huddle-popped-out = El huddle esta en su propia ventana
+js-huddle-busy = Estas en un huddle en otra sala
