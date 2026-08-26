@@ -195,6 +195,32 @@ pub async fn list_segments(pool: &SqlitePool, transcript_id: i64) -> sqlx::Resul
         .collect())
 }
 
+/// Texts of the segments OTHER speakers (not `exclude_user`) recorded in the
+/// last `within_secs` seconds of a session, newest first. Powers the echo
+/// de-dupe in the routes layer: a caption that merely repeats what another
+/// participant just said is that participant's voice bleeding through this
+/// client's speakers into its mic. `spoken_at` is lexically ordered text in
+/// [`NOW_MS`] format, so the cutoff compares as a string.
+pub async fn recent_texts_by_others(
+    pool: &SqlitePool,
+    transcript_id: i64,
+    exclude_user: &str,
+    within_secs: u32,
+) -> sqlx::Result<Vec<String>> {
+    let rows = sqlx::query(
+        "SELECT text FROM transcript_segments \
+         WHERE transcript_id = ? AND user_id != ? \
+           AND spoken_at >= strftime('%Y-%m-%d %H:%M:%f', 'now', ?) \
+         ORDER BY id DESC LIMIT 20",
+    )
+    .bind(transcript_id)
+    .bind(exclude_user)
+    .bind(format!("-{within_secs} seconds"))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|row| row.get("text")).collect())
+}
+
 /// A transcript joined with its room, for the archive list.
 #[derive(Debug, Clone)]
 pub struct TranscriptListRow {
