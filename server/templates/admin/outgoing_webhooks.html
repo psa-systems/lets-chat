@@ -92,7 +92,7 @@
           <div class="inline-flex flex-wrap justify-end items-center gap-1">
             <a href="/admin/outgoing-webhooks/{{ w.id }}/deliveries" class="btn btn-sm btn-ghost">{{ "admin-webhooks-history"|t }}</a>
             <form method="post" action="/admin/outgoing-webhooks/{{ w.id }}/rotate"
-                  onsubmit="return confirm('{{ "admin-webhooks-rotate-confirm"|t }}')">
+                  data-lc-confirm="{{ "admin-webhooks-rotate-confirm"|t }}" onsubmit="return confirm(this.getAttribute('data-lc-confirm'))">
               <button type="submit" class="btn btn-sm btn-ghost">{{ "admin-webhooks-rotate"|t }}</button>
             </form>
             <form method="post" action="/admin/outgoing-webhooks/{{ w.id }}/toggle">
@@ -100,7 +100,7 @@
               <button type="submit" class="btn btn-sm btn-secondary">{% if w.disabled %}{{ "admin-webhooks-enable"|t }}{% else %}{{ "admin-webhooks-disable"|t }}{% endif %}</button>
             </form>
             <form method="post" action="/admin/outgoing-webhooks/{{ w.id }}/delete"
-                  onsubmit="return confirm('{{ "admin-webhooks-delete-confirm"|t }}')">
+                  data-lc-confirm="{{ "admin-webhooks-delete-confirm"|t }}" onsubmit="return confirm(this.getAttribute('data-lc-confirm'))">
               <button type="submit" class="btn btn-sm btn-danger-outline">{{ "admin-webhooks-delete"|t }}</button>
             </form>
           </div>
