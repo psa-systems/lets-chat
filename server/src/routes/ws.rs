@@ -1158,9 +1158,14 @@ pub async fn render_new_message_or_bump(
 /// `voted_by_me` highlighting correct). Returns None if the message is not
 /// a poll.
 async fn render_poll(state: &AppState, message_id: i64, user_id: &str) -> Option<String> {
-    let view = crate::views::room::build_poll_view(&state.chat, &state.auth, message_id, user_id)
-        .await
-        .ok()??;
+    // LC-803: "not a poll" (no fragment) and "loading the poll failed" were one
+    // `None`; the failure is now logged via optional_block, then the early
+    // return keeps the no-fragment behaviour.
+    let view = crate::views::room::optional_block(
+        crate::views::room::build_poll_view(&state.chat, &state.auth, message_id, user_id).await,
+        message_id,
+        "poll",
+    )?;
     crate::views::room::PollUpdateFragment { poll: &view }
         .render()
         .ok()
@@ -1168,10 +1173,12 @@ async fn render_poll(state: &AppState, message_id: i64, user_id: &str) -> Option
 
 /// LC-527: re-render a follow-up checklist (`#followup-{id}`) for one recipient.
 async fn render_follow_up(state: &AppState, message_id: i64, user_id: &str) -> Option<String> {
-    let view =
+    let view = crate::views::room::optional_block(
         crate::views::room::build_follow_up_view(&state.chat, &state.auth, message_id, user_id)
-            .await
-            .ok()??;
+            .await,
+        message_id,
+        "follow_up",
+    )?;
     crate::views::room::FollowUpUpdateFragment { follow_up: &view }
         .render()
         .ok()
@@ -1382,19 +1389,23 @@ async fn render_new_message(
         is_system: message.is_system,
         sysgroup_open: None,
         sysgroup_close: false,
-        poll: crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
-            .await
-            .ok()
-            .flatten(),
-        follow_up: crate::views::room::build_follow_up_view(
-            &state.chat,
-            &state.auth,
+        poll: crate::views::room::optional_block(
+            crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
+                .await,
             message.id,
-            &viewer.id,
-        )
-        .await
-        .ok()
-        .flatten(),
+            "poll",
+        ),
+        follow_up: crate::views::room::optional_block(
+            crate::views::room::build_follow_up_view(
+                &state.chat,
+                &state.auth,
+                message.id,
+                &viewer.id,
+            )
+            .await,
+            message.id,
+            "follow_up",
+        ),
         author_is_bot,
         actor,
     };
@@ -1562,19 +1573,17 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
         is_system: m.is_system,
         sysgroup_open: None,
         sysgroup_close: false,
-        poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id)
-            .await
-            .ok()
-            .flatten(),
-        follow_up: crate::views::room::build_follow_up_view(
-            &state.chat,
-            &state.auth,
+        poll: crate::views::room::optional_block(
+            crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id).await,
             m.id,
-            &viewer.id,
-        )
-        .await
-        .ok()
-        .flatten(),
+            "poll",
+        ),
+        follow_up: crate::views::room::optional_block(
+            crate::views::room::build_follow_up_view(&state.chat, &state.auth, m.id, &viewer.id)
+                .await,
+            m.id,
+            "follow_up",
+        ),
         author_is_bot: meta.is_bot,
         actor: meta.actor.clone(),
     };
@@ -1694,19 +1703,23 @@ async fn render_thread_reply(
         is_system: message.is_system,
         sysgroup_open: None,
         sysgroup_close: false,
-        poll: crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
-            .await
-            .ok()
-            .flatten(),
-        follow_up: crate::views::room::build_follow_up_view(
-            &state.chat,
-            &state.auth,
+        poll: crate::views::room::optional_block(
+            crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
+                .await,
             message.id,
-            &viewer.id,
-        )
-        .await
-        .ok()
-        .flatten(),
+            "poll",
+        ),
+        follow_up: crate::views::room::optional_block(
+            crate::views::room::build_follow_up_view(
+                &state.chat,
+                &state.auth,
+                message.id,
+                &viewer.id,
+            )
+            .await,
+            message.id,
+            "follow_up",
+        ),
         author_is_bot: meta.is_bot,
         actor: meta.actor.clone(),
     };
