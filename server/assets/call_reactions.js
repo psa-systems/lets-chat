@@ -267,6 +267,9 @@
     el.style.setProperty('--lc-dur', (3000 + Math.random() * 1000).toFixed(0) + 'ms');
     el.style.setProperty('--lc-delay', (Math.random() * 150).toFixed(0) + 'ms');
     el.style.setProperty('--lc-rot', ((Math.random() * 16) - 8).toFixed(1) + 'deg');
+    // LC-828: how much the glyph swells by the top of its rise (1.5x-1.9x),
+    // randomised so a burst is not a row of identical balloons.
+    el.style.setProperty('--lc-grow', (1.5 + Math.random() * 0.4).toFixed(2));
     var done = false;
     function rm() { if (done) return; done = true; if (el.parentNode) el.parentNode.removeChild(el); }
     el.addEventListener('animationend', function (ev) { if (ev.target === el) rm(); });

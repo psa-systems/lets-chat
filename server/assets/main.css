@@ -4540,12 +4540,19 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     text-shadow: 0 1px 2px var(--surface), 0 0 8px var(--surface);
     animation: lc-react-sway calc(var(--lc-dur, 3500ms) / 3) ease-in-out var(--lc-delay, 0ms) infinite alternate;
 }
+/* LC-828: after the entry pop the emoji keeps GROWING as it rises, to
+   --lc-grow (1.5-1.9, randomised per float by call_reactions.js) by the top,
+   so the float reads as swelling toward the viewer rather than holding one
+   size; the fade over the last third is unchanged. Still transform + opacity
+   only. The bottom-anchored translate uses `top` as the origin so a bigger
+   glyph grows up and out from where it is, not down into the tiles below. */
+.lc-react-float { transform-origin: 50% 100%; }
 @keyframes lc-react-rise {
     0%   { transform: translate(-50%, 0) scale(0.6) rotate(0deg); opacity: 0; }
     8%   { transform: translate(-50%, -6%) scale(1.18) rotate(var(--lc-rot, 0deg)); opacity: 1; }
     16%  { transform: translate(-50%, -12%) scale(1) rotate(var(--lc-rot, 0deg)); opacity: 1; }
-    66%  { opacity: 1; }
-    100% { transform: translate(-50%, calc(-100cqh + 3rem)) scale(0.95) rotate(var(--lc-rot, 0deg)); opacity: 0; }
+    66%  { transform: translate(-50%, calc((-100cqh + 3rem) * 0.62)) scale(calc(1 + (var(--lc-grow, 1.7) - 1) * 0.7)) rotate(var(--lc-rot, 0deg)); opacity: 1; }
+    100% { transform: translate(-50%, calc(-100cqh + 3rem)) scale(var(--lc-grow, 1.7)) rotate(var(--lc-rot, 0deg)); opacity: 0; }
 }
 @keyframes lc-react-sway {
     from { transform: translateX(calc(-1 * var(--lc-amp, 24px))); }
