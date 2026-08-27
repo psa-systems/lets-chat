@@ -43,3 +43,8 @@ features = ["full"]
 
 [profile.dev]
 debug = "line-tables-only"
+
+# LC-763: the symbol table is 24.8% of the desktop binary the self-updater pulls
+# (19,771,520 -> 14,864,472 bytes). Cost: release backtraces lose function names.
+[profile.release]
+strip = true
