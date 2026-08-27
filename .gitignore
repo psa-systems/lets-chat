@@ -3,8 +3,8 @@
 ################################################################################
 
 # Local desktop release binaries produced by `just build-desktop*`. CI publishes
-# the same artifacts to the Forgejo Generic Packages registry referenced by
-# LETS_CHAT_UPDATE_URL; locally they are throw-away build outputs.
+# the same artifacts to Forgejo Generic Packages and to the container registry
+# the updater pulls from; locally they are throw-away build outputs.
 artifacts/
 
 # =============================================================================

@@ -1,18 +1,22 @@
 ---
 
-# Publish lets-chat-desktop release artifacts to Forgejo Generic Packages.
+# Publish lets-chat-desktop release artifacts.
 #
 # Fires on `v*` tag pushes. For each release this workflow:
-#   1. Cross-builds the Linux x86_64 and Windows x86_64 desktop binaries
-#      from the existing ci-build/Dockerfile.desktop-{linux,windows} images.
-#   2. Generates `latest.json`, a small manifest that the desktop self-updater
-#      reads to discover the newest version and per-platform download URLs.
-#   3. Uploads everything to the Forgejo Generic Packages API at
+#   1. Cross-builds the Linux x86_64 and Windows x86_64 desktop binaries from
+#      the ci-build/Dockerfile.desktop-{linux-bundles,windows} images, with the
+#      update coordinates resolved below compiled into them.
+#   2. Generates `latest.json` and uploads it, the binaries and the Linux
+#      bundles to the Forgejo Generic Packages API at
 #      /api/packages/{owner}/generic/{package}/{version}/{filename}. Binaries
 #      land under the tag version (eg. /v0.2.0/lets-chat-desktop-linux-x86_64);
-#      the manifest lands under the fixed pseudo-version `latest`
-#      (/latest/latest.json), which the updater fetches on `--check-update`
-#      and during the GUI startup background check.
+#      the manifest lands under the fixed pseudo-version `latest`. This is the
+#      hand-download path; the updater has not read `latest.json` since LC-733.
+#   3. Pushes each binary to the container registry as an OCI artifact under
+#      two tags: `latest-{os}-x86_64`, which is what the shipped self-updater
+#      resolves, and `{version}-{os}-x86_64`, the rollback target. LC-831: the
+#      updater has pulled its release over the OCI distribution API since
+#      LC-733 and nothing published those tags, so every check answered 404.
 #
 # The manifest pseudo-version is overwritten every release; Generic Packages
 # rejects duplicate files, so each upload is preceded by a best-effort DELETE
@@ -93,20 +97,53 @@ jobs:
           print $"Publishing version ($tag)"
           $"version=($tag)\n" | save --append $env.GITHUB_OUTPUT
 
+      # LC-831: one definition, two consumers. The desktop builds below compile
+      # these values in (desktop/src/update.rs reads both through option_env!)
+      # and the OCI push step publishes to them, so the shipped client cannot
+      # poll a coordinate the release never writes. Deriving both from
+      # PACKAGE_OWNER / PACKAGE_NAME is LC-594's safeguard, which until now fed
+      # LETS_CHAT_UPDATE_BASE_URL, a name no Rust source reads.
+      - name: Resolve update registry coordinates
+        shell: nu {0}
+        run: |
+          # The registry root is the Forgejo host itself: it serves the
+          # container registry under /v2/. UPDATE_REGISTRY_HOST is the same
+          # value without the scheme, which is the form an image reference
+          # takes.
+          let host = ($env.GITHUB_SERVER_URL | url parse | get host)
+          let repository = $"($env.PACKAGE_OWNER)/($env.PACKAGE_NAME)"
+          $"UPDATE_REGISTRY_URL=($env.GITHUB_SERVER_URL)\n" | save --append $env.GITHUB_ENV
+          $"UPDATE_REGISTRY_HOST=($host)\n" | save --append $env.GITHUB_ENV
+          $"UPDATE_REPOSITORY=($repository)\n" | save --append $env.GITHUB_ENV
+          print $"LETS_CHAT_UPDATE_REGISTRY_URL=($env.GITHUB_SERVER_URL)"
+          print $"LETS_CHAT_UPDATE_REPOSITORY=($repository)"
+
       - name: Build Linux x86_64 binary + bundles
         shell: nu {0}
         run: |
           let jobs = ((sys cpu | length) / 2 | into int)
           print $"CARGO_BUILD_JOBS=($jobs)"
-          let update_base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
-          print $"LETS_CHAT_UPDATE_BASE_URL=($update_base)"
+          # LC-214: inject build provenance. `.dockerignore` excludes `.git/`,
+          # so build.rs cannot fall back to `git` inside the container and the
+          # release binary would otherwise report GIT_HASH=unknown, unlike the
+          # one build-desktop-linux.yml produces from the same Dockerfile.
+          let git_hash = (^git rev-parse --short=12 HEAD | str trim)
+          let git_version = (^git describe --tags --always --dirty | str trim)
+          let build_date = (date now | format date "%Y-%m-%dT%H:%M:%SZ")
+          print $"GIT_HASH=($git_hash)"
+          print $"GIT_VERSION=($git_version)"
+          print $"BUILD_DATE=($build_date)"
           (
             ^docker buildx build
               --build-arg $"CARGO_BUILD_JOBS=($jobs)"
-              # LC-594: compile in the update source derived from the same
-              # PACKAGE_OWNER this workflow uploads to, so the shipped default
-              # cannot point at an org we no longer publish under.
-              --build-arg $"LETS_CHAT_UPDATE_BASE_URL=($update_base)"
+              --build-arg $"GIT_HASH=($git_hash)"
+              --build-arg $"GIT_VERSION=($git_version)"
+              --build-arg $"BUILD_DATE=($build_date)"
+              # LC-594 / LC-831: compile in the coordinates the OCI push step
+              # below publishes to, so the shipped default cannot drift from
+              # where releases actually land.
+              --build-arg $"LETS_CHAT_UPDATE_REGISTRY_URL=($env.UPDATE_REGISTRY_URL)"
+              --build-arg $"LETS_CHAT_UPDATE_REPOSITORY=($env.UPDATE_REPOSITORY)"
               --tag lets-chat-desktop-linux:publish
               --load
               -f ci-build/Dockerfile.desktop-linux-bundles
@@ -142,12 +179,19 @@ jobs:
         run: |
           let jobs = ((sys cpu | length) / 2 | into int)
           print $"CARGO_BUILD_JOBS=($jobs)"
-          let update_base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
+          # LC-214 provenance and LC-594 / LC-831 update coordinates: see the
+          # Linux build step for both.
+          let git_hash = (^git rev-parse --short=12 HEAD | str trim)
+          let git_version = (^git describe --tags --always --dirty | str trim)
+          let build_date = (date now | format date "%Y-%m-%dT%H:%M:%SZ")
           (
             ^docker buildx build
               --build-arg $"CARGO_BUILD_JOBS=($jobs)"
-              # LC-594: see the Linux build step.
-              --build-arg $"LETS_CHAT_UPDATE_BASE_URL=($update_base)"
+              --build-arg $"GIT_HASH=($git_hash)"
+              --build-arg $"GIT_VERSION=($git_version)"
+              --build-arg $"BUILD_DATE=($build_date)"
+              --build-arg $"LETS_CHAT_UPDATE_REGISTRY_URL=($env.UPDATE_REGISTRY_URL)"
+              --build-arg $"LETS_CHAT_UPDATE_REPOSITORY=($env.UPDATE_REPOSITORY)"
               --tag lets-chat-desktop-windows:publish
               --load
               -f ci-build/Dockerfile.desktop-windows
@@ -239,11 +283,66 @@ jobs:
               )
           }
 
+      # LC-831: the self-updater resolves
+      # {registry}/v2/{repository}/manifests/{tag} and installs the single layer
+      # that manifest names, so the release has to publish that exact shape.
+      # oras packs an OCI artifact manifest with an empty config, one layer
+      # holding the binary, and the release version on the manifest's
+      # org.opencontainers.image.version annotation - the three things
+      # desktop/src/oci.rs `parse_artifact` reads.
+      #
+      # Deliberately ordered after the Generic Packages upload: that path is the
+      # proven one, and a registry that refuses an artifact manifest must not
+      # take the hand-download artifacts down with it.
+      - name: Push desktop binaries to the container registry
+        shell: nu {0}
+        env:
+          FORGEJO_TOKEN: ${{ secrets.PSA_SYSTEMS_PRIVATE_PACKAGE_PAT }}
+        run: |
+          let version = "${{ steps.version.outputs.version }}"
+          let repo = $"($env.UPDATE_REGISTRY_HOST)/($env.UPDATE_REPOSITORY)"
+          # The `latest-*` tags are spelled out because they are a contract with
+          # the shipped client: desktop/src/update.rs names the same strings, and
+          # ci-build/check-update-injection.nu fails the build if the two lists
+          # stop matching. The version-stamped tag is the rollback target and
+          # points at the same manifest.
+          let artifacts = [
+              { file: "lets-chat-desktop-linux-x86_64",       tag: "latest-linux-x86_64",   version_tag: $"($version)-linux-x86_64" }
+              { file: "lets-chat-desktop-windows-x86_64.exe", tag: "latest-windows-x86_64", version_tag: $"($version)-windows-x86_64" }
+          ]
+          for a in $artifacts {
+              for tag in [$a.tag, $a.version_tag] {
+                  print $"Pushing artifacts/($a.file) to ($repo):($tag)"
+                  # oras runs from its own image: the runner installs no tooling
+                  # (LC-647). The binary goes in with `docker cp` rather than a
+                  # bind mount because this job runs inside a container whose
+                  # docker daemon is the host's, so `--volume $PWD/...` would
+                  # mount a host path that does not exist - the same constraint
+                  # that keeps check.yml off ./dev/cargo-desktop.
+                  let container = (
+                    ^docker create ghcr.io/oras-project/oras:v1.2.0
+                      push
+                      --username $env.PACKAGE_OWNER
+                      --password $env.FORGEJO_TOKEN
+                      --artifact-type application/vnd.lets-chat.desktop.binary
+                      --annotation $"org.opencontainers.image.version=($version)"
+                      $"($repo):($tag)"
+                      $"($a.file):application/octet-stream"
+                  )
+                  ^docker cp $"artifacts/($a.file)" $"($container):/workspace/($a.file)"
+                  ^docker start --attach $container
+                  ^docker rm $container
+              }
+          }
+
       - name: Print release summary
         shell: nu {0}
         run: |
           let version = "${{ steps.version.outputs.version }}"
           let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
+          let repo = $"($env.UPDATE_REGISTRY_HOST)/($env.UPDATE_REPOSITORY)"
+          print $"Update artifact: ($repo):latest-linux-x86_64 (rollback: ($repo):($version)-linux-x86_64)"
+          print $"Update artifact: ($repo):latest-windows-x86_64 (rollback: ($repo):($version)-windows-x86_64)"
           print $"Manifest:        ($base)/latest/latest.json"
           print $"Linux binary:    ($base)/($version)/lets-chat-desktop-linux-x86_64"
           print $"Linux .deb:      ($base)/($version)/lets-chat-desktop-linux-amd64.deb"
