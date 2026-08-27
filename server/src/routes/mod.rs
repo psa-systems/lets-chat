@@ -618,19 +618,19 @@ pub(crate) async fn load_message_view_for_viewer(
         is_system: m.is_system,
         sysgroup_open: None,
         sysgroup_close: false,
-        poll: crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id)
-            .await
-            .ok()
-            .flatten(),
-        follow_up: crate::views::room::build_follow_up_view(
-            &state.chat,
-            &state.auth,
+        // LC-803: a block that fails to build is logged (optional_block), never
+        // silently rendered as "no block".
+        poll: crate::views::room::optional_block(
+            crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id).await,
             m.id,
-            &viewer.id,
-        )
-        .await
-        .ok()
-        .flatten(),
+            "poll",
+        ),
+        follow_up: crate::views::room::optional_block(
+            crate::views::room::build_follow_up_view(&state.chat, &state.auth, m.id, &viewer.id)
+                .await,
+            m.id,
+            "follow_up",
+        ),
         author_is_bot: meta.is_bot,
         actor: meta.actor.clone(),
     })
