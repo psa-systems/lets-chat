@@ -20,8 +20,10 @@ Endpoints:
 
 There is no login form and no consent: this is a stub, and it authenticates a
 single fixed identity (override with MOCK_SSO_SUB / MOCK_SSO_EMAIL /
-MOCK_SSO_USERNAME). The `sub` is stable across restarts so repeated boots reuse
-the same account instead of provisioning a new one each time.
+MOCK_SSO_USERNAME / MOCK_SSO_ROLE). The `sub` is stable across restarts so
+repeated boots reuse the same account instead of provisioning a new one each
+time, and the identity claims `bunyip_role: admin` so it lands on (and keeps)
+the DEV-300 SETUP_DEFAULT_ADMIN account.
 
 PKCE: the client sends code_challenge/code_challenge_method=S256. The mock
 accepts and does NOT verify the verifier - it is a local-dev stub, not a
@@ -49,6 +51,12 @@ KID = "mock-dev-1"
 SUB = os.environ.get("MOCK_SSO_SUB", "mock-dev-user-1")
 EMAIL = os.environ.get("MOCK_SSO_EMAIL", "dev@example.test")
 USERNAME = os.environ.get("MOCK_SSO_USERNAME", "devuser")
+# DEV-300: the `bunyip_role` claim. mirror_bunyip_admin_role (LC-413) makes the
+# OP the source of truth for the lets-chat role on EVERY login, so without an
+# `admin` claim here the SETUP_DEFAULT_ADMIN seed is demoted the moment it is
+# adopted. The primary identity is the dev admin; cookie-seeded extras below
+# stay ordinary users so role-gated UI is still testable.
+ROLE = os.environ.get("MOCK_SSO_ROLE", "admin")
 
 DISCOVERY = {
     "issuer": ISSUER,
@@ -127,8 +135,12 @@ def _ident_from_cookie(cookie_header: str) -> dict:
             "email": u + "@example.test",
             "username": u,
             "name": u.replace("-", " ").title(),
+            "role": "subscriber",
         }
-    return {"sub": SUB, "email": EMAIL, "username": USERNAME, "name": USERNAME}
+    return {
+        "sub": SUB, "email": EMAIL, "username": USERNAME, "name": USERNAME,
+        "role": ROLE,
+    }
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -158,6 +170,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             token = auth[7:] if auth.startswith("Bearer ") else ""
             ident = TOKENS.get(token) or {
                 "sub": SUB, "email": EMAIL, "username": USERNAME, "name": USERNAME,
+                "role": ROLE,
             }
             self._json(
                 {
@@ -218,6 +231,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         aud = (form.get("client_id") or [""])[0] or entry["aud"]
         ident = entry.get("ident") or {
             "sub": SUB, "email": EMAIL, "username": USERNAME, "name": USERNAME,
+            "role": ROLE,
         }
         now = int(time.time())
         claims = {
@@ -228,6 +242,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             "email_verified": True,
             "preferred_username": ident["username"],
             "name": ident["name"],
+            "bunyip_role": ident.get("role", ROLE),
             "iat": now,
             "exp": now + 3600,
         }
