@@ -1,79 +1,77 @@
 #!/usr/bin/env nu
 
-# Guard the catalog strings interpolated into an inline confirm() (LC-753).
+# Guard: confirmation text is attribute text, never a JavaScript string literal
+# (LC-753, LC-771).
 #
 # Askama escapes every `{{ }}` through askama_escape, which maps `'` to
-# `&#x27;`. The HTML parser decodes that back to a bare `'` before the handler
-# attribute is compiled as JavaScript, so an apostrophe in the string ends the
-# JS literal early and the handler never compiles. The dialog then never
-# appears and the destructive action runs on the first click, silently:
-# `admin-webhooks-rotate-confirm` rotated a live webhook secret that way.
+# `&#x27;`. The HTML parser decodes that back to a bare `'` before an event
+# handler attribute is compiled as JavaScript, so any apostrophe interpolated
+# into `onclick="return confirm('...')"` ends the JS literal early and the
+# handler never compiles. The dialog then never appears and the destructive
+# action runs on the first click, silently. LC-753 saw it from catalog strings
+# (`admin-webhooks-rotate-confirm`); LC-771 from runtime data (a member display
+# name such as O'Brien in the enclave transfer and kick confirmations).
 #
-# The rule: a catalog value interpolated into an inline `confirm('...')`
-# carries neither `'` (ends the literal) nor `\` (escapes the next character),
-# in any locale. The guard reads both inputs the bug needs (the template site
-# and the catalog value), so a bad string added on either side fails here. A
-# `"` is safe: the HTML parser decodes `&quot;` after the attribute is
-# tokenized, and a double quote inside a single-quoted JS literal is just text.
+# The rule: a template never builds a JS string out of text. The text lives in
+# a `data-lc-confirm` attribute on the element that carries the handler, and
+# the handler reads it back: `confirm(this.getAttribute('data-lc-confirm'))`.
+# Attribute text is decoded by the HTML parser and handed to JavaScript as a
+# value, so it never meets the JS parser and any character round-trips. With
+# no template building a literal, no catalog or runtime value can end one, so
+# this rule subsumes the LC-753 catalog scan it replaces.
 
-# `onclick="return confirm('...')"` / `onsubmit=...`; capture the JS literal.
-const CALL = "\\bon(?:click|submit)=\"[^\"]*?confirm\\(\u{27}(?<arg>[^\u{27}]*)\u{27}\\)"
+# The one accepted call shape.
+const CANON = "confirm(this.getAttribute('data-lc-confirm'))"
 
-# The unterminated shape: a confirm('...) whose literal does not close on the
-# line. `confirm(this.getAttribute('data-lc-confirm'))` is not this shape and is
-# apostrophe-safe anyway: attribute text never reaches the JS parser.
-const CALL_OPEN = "\\bon(?:click|submit)=\"[^\"]*?confirm\\(\u{27}"
+# A `confirm(` whose argument opens a JS string literal, anywhere in a template
+# (handler attributes and inline scripts alike).
+const LITERAL = "confirm\\(\\s*[\u{27}\"`]"
 
-# `{{ "some-key"|t }}` inside that literal.
-const KEY = "\\{\\{\\s*\"(?<key>[a-zA-Z0-9_-]+)\"\\s*\\|\\s*t\\s*\\}\\}"
+# An inline event handler that calls `confirm(` at all.
+const HANDLER = "\\bon[a-z]+=\"[^\"]*confirm\\("
 
-# `key = value` in a Fluent catalog; comments and blank lines do not match.
-const ENTRY = "^(?<key>[a-zA-Z][a-zA-Z0-9_-]*)\\s*=\\s*(?<value>.*)$"
+# The attribute the canonical call reads.
+const ATTR = "data-lc-confirm=\""
 
-# The characters that change how the JS literal parses.
-const BREAKERS = "[\u{27}\\\\]"
-
-def catalog-entries [] {
-    let files = (glob server/locales/**/*.ftl | sort)
-    if ($files | is-empty) {
-        print --stderr "No catalogs found under server/locales/"
-        exit 1
-    }
-    $files | each {|file|
-        open --raw $file
-        | decode utf-8
-        | lines
-        | enumerate
-        | each {|row|
-            $row.item | parse --regex $ENTRY | each {|e|
-                {key: $e.key, value: $e.value, file: $file, line: ($row.index + 1)}
-            }
-        }
-        | flatten
-    } | flatten
+# The line an element's opening tag starts on: the nearest line at or above
+# `i` that begins with `<tag`. Attributes of a multi-line tag sit on the lines
+# between that one and `i`.
+def element-start [lines: list<string>, i: int] {
+    let starts = (
+        $lines | first ($i + 1) | enumerate
+        | where {|r| $r.item =~ "^\\s*<[a-zA-Z]" }
+        | get index
+    )
+    if ($starts | is-empty) { 0 } else { $starts | last }
 }
 
-# Every catalog key interpolated into an inline confirm(), with its site.
-def confirm-sites [files: list<string>] {
-    $files | each {|file|
-        open --raw $file
-        | decode utf-8
-        | lines
-        | enumerate
-        | each {|row|
-            let calls = ($row.item | parse --regex $CALL)
-            if (($calls | is-empty) and ($row.item =~ $CALL_OPEN)) {
-                {file: $file, line: ($row.index + 1), key: null}
-            } else {
-                $calls | each {|call|
-                    $call.arg | parse --regex $KEY | each {|k|
-                        {file: $file, line: ($row.index + 1), key: $k.key}
-                    }
-                } | flatten
-            }
-        }
-        | flatten
-    } | flatten
+def scan [file: string] {
+    let lines = (open --raw $file | decode utf-8 | lines)
+    let rows = ($lines | enumerate)
+
+    let literals = (
+        $rows | where {|r| $r.item =~ $LITERAL }
+        | each {|r| $"($file):($r.index + 1)" }
+    )
+    let handlers = (
+        $rows
+        | where {|r| ($r.item =~ $HANDLER) and (not ($r.item | str contains $CANON)) }
+        | each {|r| $"($file):($r.index + 1)" }
+    )
+    let canon = ($rows | where {|r| $r.item | str contains $CANON })
+    let orphans = (
+        $canon | each {|r|
+            let start = (element-start $lines $r.index)
+            let element = ($lines | skip $start | first ($r.index - $start + 1) | str join " ")
+            if ($element | str contains $ATTR) { null } else { $"($file):($r.index + 1)" }
+        } | compact
+    )
+    {
+        literals: $literals,
+        handlers: $handlers,
+        orphans: $orphans,
+        canon: ($canon | length),
+    }
 }
 
 def main [] {
@@ -83,49 +81,31 @@ def main [] {
         exit 1
     }
 
-    let entries = (catalog-entries)
-    let sites = (confirm-sites $files)
+    let results = ($files | each {|f| scan $f })
+    let literals = ($results | get literals | flatten)
+    let handlers = ($results | get handlers | flatten)
+    let orphans = ($results | get orphans | flatten)
+    let canon = ($results | get canon | math sum)
 
-    let unreadable = (
-        $sites | where {|s| $s.key == null } | each {|s| $"($s.file):($s.line)" }
-    )
-    if ($unreadable | is-not-empty) {
-        print --stderr "confirm() call whose JS string literal does not close on the same line; keep the call on one line so this guard can read its keys:"
-        for u in $unreadable { print --stderr $"  ($u)" }
+    if ($literals | is-not-empty) {
+        print --stderr "confirm() called with a JS string literal; askama escapes an apostrophe in the text, the HTML parser hands the bare character to the JS compiler, and the confirmation silently never runs. Put the text in data-lc-confirm on the same element and call confirm(this.getAttribute('data-lc-confirm')):"
+        for p in $literals { print --stderr $"  ($p)" }
+        exit 1
+    }
+    if ($handlers | is-not-empty) {
+        print --stderr "inline handler calls confirm() with something other than this.getAttribute('data-lc-confirm'); the confirmation text must be attribute text on the same element:"
+        for p in $handlers { print --stderr $"  ($p)" }
+        exit 1
+    }
+    if ($orphans | is-not-empty) {
+        print --stderr "confirm(this.getAttribute('data-lc-confirm')) on an element with no data-lc-confirm attribute; the dialog would show 'null'. Put the attribute on the same element as the handler:"
+        for p in $orphans { print --stderr $"  ($p)" }
+        exit 1
+    }
+    if $canon == 0 {
+        print --stderr "No confirm(this.getAttribute('data-lc-confirm')) call sites found under server/templates/; the guard would pass vacuously."
         exit 1
     }
 
-    let used = ($sites | where {|s| $s.key != null })
-    if ($used | is-empty) {
-        print --stderr "No confirm() call sites found under server/templates/; the guard would pass vacuously."
-        exit 1
-    }
-
-    let missing = (
-        $used
-        | where {|s| ($entries | where key == $s.key | is-empty) }
-        | each {|s| $"($s.file):($s.line): ($s.key)" }
-        | uniq
-    )
-    if ($missing | is-not-empty) {
-        print --stderr "confirm() interpolates a key that no catalog under server/locales/ defines:"
-        for m in $missing { print --stderr $"  ($m)" }
-        exit 1
-    }
-
-    let problems = (
-        $used | each {|s|
-            $entries
-            | where {|e| ($e.key == $s.key) and ($e.value =~ $BREAKERS) }
-            | each {|e| $"($e.file):($e.line): ($e.key) -- used at ($s.file):($s.line)" }
-        } | flatten | uniq | sort
-    )
-
-    if ($problems | is-not-empty) {
-        print --stderr "Apostrophe or backslash in a catalog value interpolated into an inline confirm('...'); askama escapes it, the HTML parser hands the bare character to the JS compiler, and the confirmation silently never runs. Reword the string without it:"
-        for p in $problems { print --stderr $"  ($p)" }
-        exit 1
-    }
-
-    print $"confirm\(\) strings OK: ($used | get key | uniq | length) keys across ($used | length) call sites, checked against ($entries | length) catalog entries."
+    print $"confirm\(\) call sites OK: ($canon) attribute-backed sites across ($files | length) templates, no JS string literals."
 }

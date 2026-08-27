@@ -83,7 +83,7 @@
           <td class="lc-table-actions">
             {% if !w.revoked %}
             <form method="post" action="/room/{{ room.id }}/webhooks/{{ w.id }}/revoke" class="inline">
-              <button type="submit" class="btn btn-sm btn-danger-outline" onclick="return confirm('{{ "room-table-revoke-confirm"|t }}')">{{ "room-table-revoke"|t }}</button>
+              <button type="submit" class="btn btn-sm btn-danger-outline" data-lc-confirm="{{ "room-table-revoke-confirm"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))">{{ "room-table-revoke"|t }}</button>
             </form>
             {% else %}
             <span class="text-content-subtle">-</span>

@@ -162,7 +162,7 @@
               {# Associated with the sibling form below (forms can't nest); works
                  with htmx and as a plain submit. #}
               <button type="submit" form="lc-avatar-del-form" class="btn btn-ghost btn-sm text-danger lc-set-actions-end"
-                      onclick="return confirm('{{ "settings-remove-avatar-confirm"|t }}');">{{ "settings-remove-avatar"|t }}</button>
+                      data-lc-confirm="{{ "settings-remove-avatar-confirm"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))">{{ "settings-remove-avatar"|t }}</button>
               {% endif %}
             </div>
           </form>
@@ -587,7 +587,7 @@
               <form method="post" action="/settings/sessions/{{ s.id }}/revoke"
                     hx-post="/settings/sessions/{{ s.id }}/revoke" hx-target="closest .lc-set-session"
                     hx-swap="outerHTML" hx-disabled-elt="find button">
-                <button type="submit" class="btn btn-sm btn-danger-outline" onclick="return confirm('{{ "settings-session-revoke-confirm"|t }}')">{{ "action-revoke"|t }}</button>
+                <button type="submit" class="btn btn-sm btn-danger-outline" data-lc-confirm="{{ "settings-session-revoke-confirm"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))">{{ "action-revoke"|t }}</button>
               </form>
               {% endif %}
             </div>
@@ -647,7 +647,7 @@
               <input id="lc-del-confirm" class="input border-danger-border" type="text" name="confirm_phrase" required aria-required="true" autocomplete="off">
             </div>
             <div class="lc-set-actions">
-              <button type="submit" class="btn btn-danger" data-lc-working="{{ "settings-deleting"|t }}" onclick="return confirm('{{ "settings-delete-account-confirm-js"|t }}');"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span data-lc-btn-label>{{ "settings-delete-account-button"|t }}</span></button>
+              <button type="submit" class="btn btn-danger" data-lc-working="{{ "settings-deleting"|t }}" data-lc-confirm="{{ "settings-delete-account-confirm-js"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span data-lc-btn-label>{{ "settings-delete-account-button"|t }}</span></button>
             </div>
           </form>
         </div>
@@ -684,7 +684,7 @@
               <span class="font-mono text-sm flex-1 truncate">:{{ e.shortcode }}:</span>
               <form method="post" action="/settings/emojis/{{ e.id }}/delete">
                 <button type="submit" class="btn btn-sm btn-danger-outline"
-                        onclick="return confirm('{{ "settings-emoji-delete-confirm"|t }}')">{{ "settings-emoji-delete"|t }}</button>
+                        data-lc-confirm="{{ "settings-emoji-delete-confirm"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))">{{ "settings-emoji-delete"|t }}</button>
               </form>
             </li>
             {% endfor %}
@@ -739,7 +739,7 @@
               </div>
               <form method="post" action="/settings/canned/{{ c.id }}/delete" class="shrink-0">
                 <button type="submit" class="btn btn-sm btn-danger-outline"
-                        onclick="return confirm('{{ "settings-canned-delete-confirm"|t }}')">{{ "settings-canned-delete"|t }}</button>
+                        data-lc-confirm="{{ "settings-canned-delete-confirm"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))">{{ "settings-canned-delete"|t }}</button>
               </form>
             </li>
             {% endfor %}
