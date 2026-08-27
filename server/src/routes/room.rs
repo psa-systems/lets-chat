@@ -2757,6 +2757,7 @@ pub async fn get_thread_panel(
         raw_replies,
         &custom_emojis,
         &channel_refs,
+        None,
     )
     .await?;
 
@@ -2813,6 +2814,12 @@ fn older_page_url(
 /// and by `get_thread_older_replies` so both surfaces emit identical markup;
 /// every per-row lookup is bulk-loaded for exactly the ids in `raw`, so the
 /// query count is constant in the page size rather than the thread's length.
+///
+/// LC-806: rows GROUP the way the timeline's do. `prior` is the `(user_id,
+/// created_at)` of the reply directly before `raw[0]`, when the caller knows it
+/// (the boundary re-render does); `None` means "start of a page", so the first
+/// row renders as a header with a day label exactly like the timeline's first
+/// row, and the load-older fragment fixes the join up out of band.
 async fn build_thread_reply_views(
     state: &AppState,
     user: &User,
@@ -2820,6 +2827,7 @@ async fn build_thread_reply_views(
     raw: Vec<db::chat::RawMessage>,
     custom_emojis: &[crate::models::custom_emoji::EmojiRef],
     channel_refs: &[crate::views::channel_complete::ChannelRef],
+    prior: Option<(String, String)>,
 ) -> Result<Vec<MessageView>, AppError> {
     let ids: Vec<i64> = raw.iter().map(|r| r.id).collect();
     let mut attachments_by_message =
@@ -2835,7 +2843,27 @@ async fn build_thread_reply_views(
 
     let mut author_cache: HashMap<String, super::AuthorMeta> = HashMap::new();
     let mut replies: Vec<MessageView> = Vec::with_capacity(raw.len());
+    // LC-806: the same predecessor tracking the timeline render keeps
+    // (`build_message_views`): author + time for the follow-up predicate, the
+    // UTC day for the separator. Seeded from `prior` so a boundary re-render
+    // groups against the page below it rather than restarting.
+    let mut prev: Option<(String, String)> = prior;
+    let mut prev_day: Option<String> = prev
+        .as_ref()
+        .map(|(_, at)| at.get(..10).unwrap_or("").to_string());
     for r in raw {
+        let is_follow_up = db::chat::is_follow_up_of(
+            prev.as_ref().map(|(u, t)| (u.as_str(), t.as_str())),
+            (&r.user_id, &r.created_at),
+        );
+        prev = Some((r.user_id.clone(), r.created_at.clone()));
+        let cur_day = r.created_at.get(..10).unwrap_or("").to_string();
+        let day_label = if prev_day.as_deref() != Some(cur_day.as_str()) {
+            Some(crate::views::room::day_label_for(&r.created_at))
+        } else {
+            None
+        };
+        prev_day = Some(cur_day);
         let meta = if let Some(entry) = author_cache.get(&r.user_id) {
             entry.clone()
         } else {
@@ -2875,17 +2903,13 @@ async fn build_thread_reply_views(
             can_delete: false,
             viewer_id: user.id.clone(),
             seen_caption: None,
-            // LC-797: the panel groups nothing - no follow-up run, no day
-            // separator - so a reply row carries NO state from the row above
-            // it. That is what makes a page boundary invisible here and why
-            // the load-older fragment needs no out-of-band boundary re-render,
-            // unlike the timeline. Adding grouping (tracked in LC-806) means
-            // adding that re-render; `thread_page_boundary_row_is_identical`
-            // fails if it is added without one.
-            is_follow_up: false,
+            // LC-806: a reply row now DOES carry state from the row above it
+            // (follow-up run + day separator, the timeline's rules), so a page
+            // boundary is visible and `get_thread_older_replies` re-renders the
+            // boundary row out of band against its new predecessor.
+            is_follow_up,
             show_unread_divider: false,
-            // LC-244: per-message render; the client inserts live day dividers.
-            day_label: None,
+            day_label,
             shame_enabled: false,
             shame_hidden: None,
             reply_count: 0,
@@ -2987,11 +3011,40 @@ pub async fn get_thread_older_replies(
         raw_replies,
         &custom_emojis,
         &channel_refs,
+        None,
     )
     .await?;
 
+    // LC-806: the page's LAST reply becomes the predecessor of the row that was
+    // the oldest on screen (`before`), which rendered as a page-start header.
+    // Re-render that row out of band against its new predecessor so a same-
+    // author run collapses across the join and a day label that is no longer
+    // the first of its day goes away - the timeline's older-page fragment does
+    // the same. Skipped when the page came back empty (nothing changed above
+    // it) or when `before` is not a visible reply of this thread.
+    let boundary = match (q.before, replies.last()) {
+        (Some(before_id), Some(last)) => {
+            match db::chat::thread_reply_raw(&state.chat, parent_id, before_id).await? {
+                Some(raw) if !blocked_authors.contains(&raw.user_id) => build_thread_reply_views(
+                    &state,
+                    &user,
+                    room_id,
+                    vec![raw],
+                    &custom_emojis,
+                    &channel_refs,
+                    Some((last.user_id.clone(), last.created_at.clone())),
+                )
+                .await?
+                .pop(),
+                _ => None,
+            }
+        }
+        _ => None,
+    };
+
     html(&crate::views::room::ThreadOlderRepliesFragment {
         replies: &replies,
+        boundary: boundary.as_ref(),
         older_page_url: older_page_url(room_id, parent_id, has_older, oldest_loaded),
         older_scroll_root: format!("#thread-replies-{parent_id}"),
     })

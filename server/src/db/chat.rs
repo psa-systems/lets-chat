@@ -380,6 +380,48 @@ pub async fn list_thread_replies_page(
     Ok((rows, has_older))
 }
 
+/// LC-806: the `(user_id, created_at)` of the visible reply immediately older
+/// than `before_id` in a thread, i.e. the predecessor a live-appended reply
+/// groups against (`is_follow_up_of`). `None` when it is the thread's first
+/// reply. Same visibility filter as the page reads.
+pub async fn thread_reply_prior(
+    pool: &sqlx::SqlitePool,
+    parent_id: i64,
+    before_id: i64,
+) -> Result<Option<(String, String)>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT user_id, created_at FROM messages \
+         WHERE parent_id = ? AND id < ? AND deleted_at IS NULL AND quarantined = 0 \
+         ORDER BY id DESC LIMIT 1",
+    )
+    .bind(parent_id)
+    .bind(before_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| (r.get("user_id"), r.get("created_at"))))
+}
+
+/// LC-806: one visible reply of a thread by id, as the same `RawMessage` the
+/// page reads produce, so the load-older fragment can re-render the on-screen
+/// boundary row against its new predecessor. `None` when `id` is not a visible
+/// reply of `parent_id`.
+pub async fn thread_reply_raw(
+    pool: &sqlx::SqlitePool,
+    parent_id: i64,
+    id: i64,
+) -> Result<Option<RawMessage>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, room_id, user_id, body, created_at, edited_at, parent_id, quote_id, is_system, webhook_id, email_inbox_id, bridge_id, bridge_foreign_name, bridge_kind, bridge_foreign_avatar \
+         FROM messages \
+         WHERE parent_id = ? AND id = ? AND deleted_at IS NULL AND quarantined = 0",
+    )
+    .bind(parent_id)
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(row_to_raw))
+}
+
 /// Reply count per top-level message in a room, returned as `(parent_id,
 /// reply_count)`. Used to render the "N replies" pill under each message.
 pub async fn count_replies_for_room(

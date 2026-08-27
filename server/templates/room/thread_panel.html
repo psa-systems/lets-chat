@@ -51,6 +51,7 @@
   <div class="border-b border-border px-2 py-2 bg-surface">
     {% let parent_message = parent %}
     {% let message = parent_message %}
+    {% let row_oob = false %}
     {% include "room/thread_reply_inner.html" %}
   </div>
   {# LC-484: AI summary result swaps in here (empty until the Summarize button
@@ -78,6 +79,7 @@
     {% endif %}
     {% for r in replies %}
     {% let message = r %}
+    {% let row_oob = false %}
     {% include "room/thread_reply_inner.html" %}
     {% endfor %}
   </div>

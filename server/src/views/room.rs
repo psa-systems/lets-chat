@@ -1660,6 +1660,10 @@ pub struct ThreadPanelFragment<'a> {
 #[template(path = "room/thread_older_replies.html")]
 pub struct ThreadOlderRepliesFragment<'a> {
     pub replies: &'a [MessageView],
+    /// LC-806: the row that was the oldest on screen, re-rendered against the
+    /// page's last reply as its new predecessor and swapped in out of band, so
+    /// grouping is right across the page join. `None` when the page is empty.
+    pub boundary: Option<&'a MessageView>,
     /// Endpoint for the NEXT sentinel, or `None` once history is exhausted.
     pub older_page_url: Option<String>,
     /// CSS selector of the panel's reply scroll container.

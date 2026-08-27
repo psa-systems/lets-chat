@@ -49,6 +49,11 @@ struct Setup {
     parent: i64,
     /// Reply ids in insertion order (oldest first).
     replies: Vec<i64>,
+    /// LC-806: the chat pool, so a test can seed replies by a second author or
+    /// move a reply to another day.
+    chat: sqlx::SqlitePool,
+    /// LC-806: a second user, for author-change tests.
+    other_id: String,
 }
 
 /// Seed a thread with `reply_count` replies under one root.
@@ -64,6 +69,7 @@ async fn setup(reply_count: usize) -> Setup {
         .execute(&auth)
         .await
         .unwrap();
+    let other_id = db::auth::create_user(&auth, "bob", "h").await.unwrap();
     db::enclave::backfill_general_membership(&auth, &chat)
         .await
         .unwrap();
@@ -87,7 +93,7 @@ async fn setup(reply_count: usize) -> Setup {
         geoip: None,
         login_approval_enabled: false,
         auth,
-        chat,
+        chat: chat.clone(),
         settings,
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
@@ -114,11 +120,22 @@ async fn setup(reply_count: usize) -> Setup {
         room,
         parent,
         replies,
+        chat,
+        other_id,
     }
 }
 
 /// Ids of the reply rows in a fragment, in document order.
+///
+/// LC-806: an older-page fragment ends with ONE out-of-band re-render of the
+/// row that was already on screen (the page boundary, `hx-swap-oob="outerHTML"`
+/// on its wrapper). That row is not part of the page, so scanning stops at the
+/// marker; every id before it is a row the page actually adds.
 fn rendered_reply_ids(html: &str) -> Vec<i64> {
+    let html = match html.find("hx-swap-oob=\"outerHTML\"") {
+        Some(i) => &html[..i],
+        None => html,
+    };
     let mut out = Vec::new();
     let mut rest = html;
     while let Some(i) = rest.find("id=\"threadmsg-") {
@@ -303,58 +320,171 @@ async fn oldest_page_carries_no_sentinel() {
     );
 }
 
-/// A reply's rendered row does not depend on which page it lands on. The thread
-/// panel groups nothing (no follow-up run, no day separator), so a page boundary
-/// is invisible and the load-older fragment needs no out-of-band re-render of
-/// the boundary row - unlike the timeline, which does.
-///
-/// This is the guard for that: add grouping to `thread_reply_inner.html` without
-/// also adding the boundary re-render and this fails, because the boundary reply
-/// would render differently as the first row of a page than as a middle row.
-/// Adding that grouping is tracked in LC-806, which replaces this test.
+// ── LC-806: the panel groups like the timeline ─────────────────────────────
+// `is_follow_up` is computed against the row above with the timeline's own
+// predicate (`db::chat::is_follow_up_of`), a UTC day change renders the day
+// separator, and - because a row now depends on its predecessor - the
+// load-older fragment re-renders the on-screen boundary row out of band. These
+// replace `thread_page_boundary_row_is_identical`, which pinned the OLD
+// row-independence and existed to fail the moment grouping arrived without
+// that re-render.
+
+/// The wrapper (`threadrow-{id}`: optional day separator + the row) of one
+/// reply, up to the next wrapper. Where a day label lives, so tests about
+/// separators read this rather than `row_markup`.
+fn wrapper_markup(html: &str, id: i64) -> String {
+    let anchor = format!("<div id=\"threadrow-{id}\"");
+    let start = html
+        .find(&anchor)
+        .unwrap_or_else(|| panic!("reply {id} wrapper is not in this fragment"));
+    let rest = &html[start..];
+    let end = rest[anchor.len()..]
+        .find("<div id=\"threadrow-")
+        .map(|n| n + anchor.len())
+        .unwrap_or(rest.len());
+    rest[..end].trim_end().to_string()
+}
+
+const FOLLOW_UP_MARK: &str = "lc-followup-ts";
+const DAY_MARK: &str = "lc-day-chip";
+
+/// Consecutive replies by one author inside the grouping window collapse into
+/// a follow-up run: the page's first reply is a header (avatar + author), the
+/// rest drop the header and keep only the hover HH:MM, as in the timeline.
 #[tokio::test]
-async fn thread_page_boundary_row_is_identical() {
+async fn same_author_run_groups_into_follow_ups() {
+    let s = setup(3).await;
+    let (st, panel) = send(
+        &s.app,
+        &s.session,
+        Method::GET,
+        &format!("/room/{}/thread/{}", s.room, s.parent),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    let head = row_markup(&panel, s.replies[0]);
+    assert!(
+        !head.contains(FOLLOW_UP_MARK) && head.contains("font-semibold"),
+        "the page's first reply renders as a header: {head}"
+    );
+    for &id in &s.replies[1..] {
+        let row = row_markup(&panel, id);
+        assert!(
+            row.contains(FOLLOW_UP_MARK) && !row.contains("font-semibold"),
+            "reply {id} groups under the same-author row above it: {row}"
+        );
+    }
+}
+
+/// A different author starts a fresh header; a UTC day change starts a fresh
+/// header AND renders the day separator above the row. The page's first reply
+/// carries the day label (the timeline's rule for a page start); a same-day
+/// successor does not.
+#[tokio::test]
+async fn author_change_and_day_change_break_the_run() {
+    let s = setup(2).await;
+    let by_other = db::chat::insert_reply(&s.chat, s.room, &s.other_id, "from bob", s.parent)
+        .await
+        .unwrap();
+    let next_day = db::chat::insert_reply(&s.chat, s.room, &s.other_id, "tomorrow", s.parent)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE messages SET created_at = datetime(created_at, '+1 day') WHERE id = ?")
+        .bind(next_day)
+        .execute(&s.chat)
+        .await
+        .unwrap();
+
+    let (st, panel) = send(
+        &s.app,
+        &s.session,
+        Method::GET,
+        &format!("/room/{}/thread/{}", s.room, s.parent),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    assert!(
+        wrapper_markup(&panel, s.replies[0]).contains(DAY_MARK),
+        "the page's first reply opens with the day separator"
+    );
+    let second = wrapper_markup(&panel, s.replies[1]);
+    assert!(
+        second.contains(FOLLOW_UP_MARK) && !second.contains(DAY_MARK),
+        "same author, same day: grouped, no separator: {second}"
+    );
+    let bob = wrapper_markup(&panel, by_other);
+    assert!(
+        !bob.contains(FOLLOW_UP_MARK) && !bob.contains(DAY_MARK),
+        "a different author breaks the run without a day change: {bob}"
+    );
+    let tomorrow = wrapper_markup(&panel, next_day);
+    assert!(
+        tomorrow.contains(DAY_MARK) && !tomorrow.contains(FOLLOW_UP_MARK),
+        "a day change renders the separator and a fresh header, even for the \
+         same author within the window: {tomorrow}"
+    );
+}
+
+/// The page boundary falls inside a same-author run. On the first page the
+/// boundary reply is the page's first row, so it renders as a header with a
+/// day label; when the older page arrives its last reply becomes that row's
+/// predecessor, and the fragment re-renders the row out of band as a follow-up
+/// with the day label gone. Exactly what the timeline's older-page fragment
+/// does; without it the join would show a spurious header + separator.
+#[tokio::test]
+async fn older_page_rerenders_the_boundary_row_out_of_band() {
     let page = db::chat::THREAD_REPLY_PAGE_LIMIT as usize;
     let s = setup(page + 10).await;
+    // The oldest row of the first (newest) page.
+    let boundary = s.replies[10];
 
-    // The boundary: the newest reply of the OLDER page, i.e. the row directly
-    // above the first page's oldest row.
-    let boundary = s.replies[9];
+    let (st, panel) = send(
+        &s.app,
+        &s.session,
+        Method::GET,
+        &format!("/room/{}/thread/{}", s.room, s.parent),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let before = wrapper_markup(&panel, boundary);
+    assert!(
+        !before.contains(FOLLOW_UP_MARK) && before.contains(DAY_MARK),
+        "as a page start the boundary row is a header with a day label: {before}"
+    );
 
-    // As the LAST row of a fetched older page (its predecessor is on the page).
     let (st, older) = send(
         &s.app,
         &s.session,
         Method::GET,
         &format!(
             "/room/{}/thread/{}/messages?before={}",
-            s.room, s.parent, s.replies[10]
+            s.room, s.parent, boundary
         ),
     )
     .await;
     assert_eq!(st, StatusCode::OK);
-
-    // As a middle row of a page that spans the same reply with a different
-    // predecessor set.
-    let (st, wide) = send(
-        &s.app,
-        &s.session,
-        Method::GET,
-        &format!(
-            "/room/{}/thread/{}/messages?before={}",
-            s.room, s.parent, s.replies[12]
-        ),
-    )
-    .await;
-    assert_eq!(st, StatusCode::OK);
-
+    // The page's own rows swap in place of the sentinel; the boundary row is
+    // the ONE out-of-band swap, and it now groups under the page's last reply.
     assert_eq!(
-        row_markup(&older, boundary),
-        row_markup(&wide, boundary),
-        "the boundary reply renders identically whatever precedes it; if this \
-         diverges, the panel has grown cross-row state and the load-older \
-         fragment must re-render the boundary row out of band"
+        older.matches("hx-swap-oob=\"outerHTML\"").count(),
+        1,
+        "exactly one out-of-band re-render, the boundary row"
     );
+    let after = wrapper_markup(&older, boundary);
+    assert!(
+        after.contains("hx-swap-oob=\"outerHTML\""),
+        "the boundary row is re-rendered out of band: {after}"
+    );
+    assert!(
+        after.contains(FOLLOW_UP_MARK) && !after.contains(DAY_MARK),
+        "against its new predecessor the boundary row is a follow-up with no \
+         day label: {after}"
+    );
+    // The fetched page itself groups internally: first row header, rest follow-ups.
+    assert!(!row_markup(&older, s.replies[0]).contains(FOLLOW_UP_MARK));
+    assert!(row_markup(&older, s.replies[9]).contains(FOLLOW_UP_MARK));
 }
 
 /// The panel's response size is constant in the thread's length: a 500-reply

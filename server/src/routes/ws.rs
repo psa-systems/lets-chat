@@ -1631,6 +1631,31 @@ async fn render_thread_reply(
     let channels = super::channel_refs_for_room(state, message.room_id, viewer)
         .await
         .unwrap_or_default();
+    // LC-806: a live reply groups against the thread's previous visible reply
+    // the way a panel row groups against the row above it, and carries a day
+    // label when it opens a new UTC day. A predecessor this viewer has blocked
+    // is invisible to them, so it counts as no predecessor (fresh header).
+    let prior = match db::chat::thread_reply_prior(&state.chat, parent_id, message.id).await {
+        Ok(Some((uid, at))) => {
+            if db::auth::is_blocked_either_way(&state.auth, &viewer.id, &uid)
+                .await
+                .unwrap_or(false)
+            {
+                None
+            } else {
+                Some((uid, at))
+            }
+        }
+        _ => None,
+    };
+    let is_follow_up = db::chat::is_follow_up_of(
+        prior.as_ref().map(|(u, t)| (u.as_str(), t.as_str())),
+        (&message.user_id, &message.created_at),
+    );
+    let day_label = match prior.as_ref().map(|(_, at)| at.get(..10)) {
+        Some(prev_day) if prev_day == message.created_at.get(..10) => None,
+        _ => Some(crate::views::room::day_label_for(&message.created_at)),
+    };
     let view = MessageView {
         id: message.id,
         room_id: message.room_id,
@@ -1648,10 +1673,9 @@ async fn render_thread_reply(
         can_delete: false,
         viewer_id: viewer.id.clone(),
         seen_caption: None,
-        is_follow_up: false,
+        is_follow_up,
         show_unread_divider: false,
-        // LC-244: per-message render; the client inserts live day dividers.
-        day_label: None,
+        day_label,
         shame_enabled: false,
         shame_hidden: None,
         reply_count: 0,
