@@ -23,9 +23,16 @@
 </li>
 {% endfor %}
 {% if let Some(cursor) = next_cursor %}
+{# LC-799: `intersect root:#lc-inbox-list`, NOT `revealed`. The list scrolls
+   inside #lc-inbox-list (inbox/page.html), and htmx's `revealed` only rescans
+   on a `scroll` event at `window`, which an inner container's scroll never
+   reaches, so the sentinel never fired and the inbox stopped at page one.
+   `intersect` is IntersectionObserver-based against the named root; `once`
+   keeps a sentinel that stays on screen from re-firing the same cursor (the
+   swapped-in page brings its own). Same shape as partials/older_sentinel.html. #}
 <li class="py-3 text-center text-xs text-content-subtle"
     hx-get="/inbox?before={{ cursor }}&fragment=1"
-    hx-trigger="revealed"
+    hx-trigger="intersect once root:#lc-inbox-list"
     hx-swap="outerHTML">
   {{ "inbox-loading-more"|t }}
 </li>

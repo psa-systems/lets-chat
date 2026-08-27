@@ -24,6 +24,7 @@ struct TestApp {
     app: Router,
     session: String,
     user_id: String,
+    peer_id: String,
     peer_session: String,
     chat: SqlitePool,
 }
@@ -82,6 +83,7 @@ async fn app() -> TestApp {
         app,
         session,
         user_id,
+        peer_id,
         peer_session,
         chat: chat_for_test,
     }
@@ -156,5 +158,67 @@ async fn unread_message_appears_in_inbox() {
     assert!(
         body.contains("/room/1#msg-"),
         "expected deep-link to room 1, got: {body}"
+    );
+}
+
+/// The `before=` cursor on the inbox's load-more sentinel, or `None` when the
+/// markup carries no sentinel (the final page).
+fn sentinel_cursor(html: &str) -> Option<String> {
+    const MARKER: &str = "hx-get=\"/inbox?before=";
+    let start = html.find(MARKER)? + MARKER.len();
+    let rest = &html[start..];
+    let end = rest.find('&')?;
+    Some(rest[..end].to_string())
+}
+
+// LC-799: the inbox pages through its sentinel. The list scrolls inside
+// #lc-inbox-list, so the sentinel must be `intersect`-rooted at that container
+// (htmx's `revealed` only sees window scrolls and never fired). Seeds one more
+// unread than a page, asserts the first page carries the rooted sentinel, and
+// that the fragment endpoint returns the remainder with no further sentinel.
+#[tokio::test]
+async fn inbox_sentinel_is_intersect_rooted_and_pages_to_the_end() {
+    let t = app().await;
+    // PAGE_SIZE is 30 (routes/inbox.rs); one extra forces a second page.
+    for i in 0..31 {
+        db::chat::insert_message(&t.chat, 1, &t.peer_id, &format!("unread number {i}"))
+            .await
+            .unwrap();
+    }
+
+    let (status, first) = get(&t.app, &t.session, "/inbox").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        first.contains("unread number 30") && !first.contains("unread number 0<"),
+        "the first page holds the newest 30 unreads only, got: {first}"
+    );
+    assert!(
+        first.contains("hx-trigger=\"intersect once root:#lc-inbox-list\""),
+        "the sentinel must be intersect-rooted at the inner scroll container, got: {first}"
+    );
+    assert!(
+        !first.contains("hx-trigger=\"revealed\""),
+        "`revealed` never fires inside #lc-inbox-list, got: {first}"
+    );
+    let cursor = sentinel_cursor(&first).expect("first page offers a load-more sentinel");
+
+    let (status, frag) = get(
+        &t.app,
+        &t.session,
+        &format!("/inbox?before={cursor}&fragment=1"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        frag.contains("unread number 0<"),
+        "the fragment returns the remaining unread, got: {frag}"
+    );
+    assert!(
+        !frag.contains("id=\"lc-inbox-list\""),
+        "a fragment carries rows only, not the page chrome, got: {frag}"
+    );
+    assert!(
+        sentinel_cursor(&frag).is_none() && !frag.contains("hx-trigger="),
+        "the final page carries no sentinel, got: {frag}"
     );
 }
