@@ -49,7 +49,7 @@ docker_version_args := '--build-arg GIT_HASH="$(git rev-parse --short=12 HEAD 2>
 # too, so `just pre-commit` (whose `pre_commit_prepare := "check"` runs this
 # recipe) covers them alongside the Rust checks.
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-ui-conventions check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js
+check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-ui-conventions check-update-injection check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js
 
 # Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
 # browser assets and templates, and untokenized backgrounds on the
@@ -120,6 +120,13 @@ check-confirm-apostrophe:
 [group('check')]
 check-ui-conventions:
     nu ci-build/check-ui-conventions.nu
+
+# The self-updater polls where the release publishes: every option_env! update
+# name is injected by the release build, no build arg names a variable nothing
+# reads, and every platform tag the client resolves is pushed (LC-831).
+[group('check')]
+check-update-injection:
+    nu ci-build/check-update-injection.nu
 
 # Check server compilation (standalone)
 [group('check')]

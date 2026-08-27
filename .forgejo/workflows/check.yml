@@ -48,6 +48,15 @@ jobs:
         # dev label, and no job may install a toolchain at run time (LC-647).
         run: nu ci-build/check-runner-labels.nu
 
+      - name: Desktop update injection guard
+        # The self-updater compiles in where it polls and resolves a tag only
+        # the release workflow creates. Both halves drifted apart in silence
+        # once (the injected build arg named a variable no Rust source read, and
+        # nothing published the tags the client asked for), and the desktop
+        # crate's own tests cannot run on this runner. See
+        # ci-build/check-update-injection.nu and LC-831 / LC-594.
+        run: nu ci-build/check-update-injection.nu
+
       - name: Asset color-token guard
         # The browser assets inject markup in states nobody eyeballs (offline
         # banner, failed send, active search row), so a raw palette shade there
