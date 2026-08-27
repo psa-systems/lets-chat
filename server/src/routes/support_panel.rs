@@ -99,6 +99,9 @@ struct SourceChip {
 
 /// One rendered row in the compact panel thread.
 struct PanelMsg {
+    /// LC-807: the message id, rendered as a stable `lc-support-msg-{id}` element
+    /// id so an older page can re-render the page-boundary bubble out of band.
+    id: i64,
     /// Posted by the viewer (right-aligned bubble) vs. the assistant/admin.
     mine: bool,
     body_html: String,
@@ -193,6 +196,13 @@ struct PanelThreadView {
     /// when this page already reaches the start of the conversation. `Some`
     /// renders the top-of-list load-older sentinel.
     older_page_url: Option<String>,
+    /// LC-807: on an older page, the bubble that was the top of the list before
+    /// this page landed above it, re-rendered against its new predecessor. Only
+    /// `Some` when the join splits a consecutive assistant run (this page ends
+    /// with an assistant bubble and the cursor row is one too), in which case
+    /// the boundary bubble loses its avatar. Always `None` on the newest page,
+    /// which has nothing above it; `panel_thread.html` does not read it.
+    boundary: Option<PanelMsg>,
 }
 
 /// LC-795: one older page of bubbles, swapped in over the sentinel that fetched
@@ -203,6 +213,44 @@ struct PanelThreadView {
 struct PanelOlderView {
     messages: Vec<PanelMsg>,
     older_page_url: Option<String>,
+    /// LC-807: see [`PanelThreadView::boundary`]; emitted as an
+    /// `hx-swap-oob="outerHTML"` copy of the on-screen boundary bubble.
+    boundary: Option<PanelMsg>,
+}
+
+/// Build one panel bubble from a raw row. `mine` is whether the viewer posted
+/// it; `show_avatar` is the LC-732 grouping decision made by the caller, which
+/// knows the row above.
+fn panel_msg(m: &db::chat::RawMessage, mine: bool, show_avatar: bool) -> PanelMsg {
+    let (main, sources) = split_sources(&m.body);
+    // LC-723: strip the redundant attribution header from bot replies (the
+    // asker's question already shows as their own bubble in the panel).
+    let main = if mine {
+        main
+    } else {
+        strip_leading_quote(main)
+    };
+    // LC-730: the "checking the docs" placeholder renders as an animated
+    // skeleton rather than flat italic text; skip the markdown render and
+    // carry its start time so the client can stage the wording.
+    let pending = !mine && help_docs::is_thinking_placeholder(main);
+    PanelMsg {
+        id: m.id,
+        mine,
+        body_html: if pending {
+            String::new()
+        } else {
+            markdown::render(main, &[], &[])
+        },
+        sources,
+        pending,
+        pending_since: if pending {
+            to_iso_utc(&m.created_at)
+        } else {
+            String::new()
+        },
+        show_avatar,
+    }
 }
 
 /// True when the support assistant is usable for `user`: the LLM and embeddings
@@ -277,41 +325,35 @@ async fn build_thread_view(
     let mut messages: Vec<PanelMsg> = Vec::new();
     let mut prev_bot = false;
     for m in raw
-        .into_iter()
+        .iter()
         .filter(|m| m.user_id == user.id || m.user_id == bot.id)
     {
         let mine = m.user_id == user.id;
-        let (main, sources) = split_sources(&m.body);
-        // LC-723: strip the redundant attribution header from bot replies (the
-        // asker's question already shows as their own bubble in the panel).
-        let main = if mine {
-            main
-        } else {
-            strip_leading_quote(main)
-        };
-        // LC-730: the "checking the docs" placeholder renders as an animated
-        // skeleton rather than flat italic text; skip the markdown render and
-        // carry its start time so the client can stage the wording.
-        let pending = !mine && help_docs::is_thinking_placeholder(main);
         let show_avatar = !mine && !prev_bot;
         prev_bot = !mine;
-        messages.push(PanelMsg {
-            mine,
-            body_html: if pending {
-                String::new()
-            } else {
-                markdown::render(main, &[], &[])
-            },
-            sources,
-            pending,
-            pending_since: if pending {
-                to_iso_utc(&m.created_at)
-            } else {
-                String::new()
-            },
-            show_avatar,
-        });
+        messages.push(panel_msg(m, mine, show_avatar));
     }
+
+    // LC-807: grouping is decided per page, so the bubble that was the top of
+    // the newer page kept the avatar it was given as the top of the list. When
+    // this older page ends with an assistant bubble and the cursor row (the
+    // newer page's first row) is an assistant bubble too, the join splits one
+    // run, and that boundary bubble is re-rendered without its avatar for an
+    // out-of-band swap. The row is re-read by id, so it must belong to this
+    // room: `before` is caller-supplied. A cursor row that is not a participant
+    // bubble (the cursor is taken before the participant filter) gets no
+    // correction, which is today's behaviour.
+    let mut boundary = None;
+    if let Some(cursor) = before_id {
+        if prev_bot {
+            if let Some(row) = db::chat::get_message(&state.chat, cursor).await? {
+                if row.room_id == room.id && row.user_id == bot.id {
+                    boundary = Some(panel_msg(&row, false, false));
+                }
+            }
+        }
+    }
+
     // LC-795: only a conversation with nothing in it anywhere gets the welcome
     // block. A page whose rows all filtered out still has history behind it.
     let empty = messages.is_empty() && older_page_url.is_none();
@@ -320,6 +362,7 @@ async fn build_thread_view(
         empty,
         stage,
         older_page_url,
+        boundary,
     })
 }
 
@@ -384,6 +427,7 @@ async fn get_older_thread(
     html(&PanelOlderView {
         messages: view.messages,
         older_page_url: view.older_page_url,
+        boundary: view.boundary,
     })
 }
 
@@ -543,6 +587,7 @@ mod tests {
         // time for the staged wording) in place of the flat italic line.
         let view = PanelThreadView {
             messages: vec![PanelMsg {
+                id: 1,
                 mine: false,
                 body_html: String::new(),
                 sources: Vec::new(),
@@ -553,6 +598,7 @@ mod tests {
             empty: false,
             stage: Stage::Normal,
             older_page_url: None,
+            boundary: None,
         };
         let html = view.render().unwrap();
         assert!(

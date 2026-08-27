@@ -2,12 +2,24 @@
    fetched it (hx-swap="outerHTML"), so the next sentinel comes FIRST and this
    page's bubbles follow in ascending order, landing directly above the ones
    already on screen. No stage footer: the stage is derived from the LAST
-   assistant reply, which is always on the newest page. #}
+   assistant reply, which is always on the newest page.
+
+   LC-807: the assistant avatar shows once per consecutive bot run, decided
+   against the row above, so this page's LAST bubble becomes the predecessor of
+   the bubble that was the top of the list. When that join splits a bot run,
+   `boundary` carries the on-screen bubble re-rendered without its avatar and
+   swapped in out of band by id, the way the thread panel's older page does. #}
 {% if let Some(u) = older_page_url.as_ref() %}
 {% let older_url = u %}
 {% let older_root = "#lc-support-thread" %}
 {% include "partials/older_sentinel.html" %}
 {% endif %}
 {% for m in messages %}
+{% let oob = false %}
 {% include "support/panel_bubble.html" %}
 {% endfor %}
+{% if let Some(b) = boundary %}
+{% let m = b %}
+{% let oob = true %}
+{% include "support/panel_bubble.html" %}
+{% endif %}
