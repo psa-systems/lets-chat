@@ -32,13 +32,29 @@
   var LANES = 8;         // start-x lanes across the bottom band
   var ANNOUNCE_MS = 2000; // at most one live-region announcement per window
   var SWEEP_MS = 6000;   // backstop removal if animationend never fires
+  // LC-827: the device-local recent-reaction MRU, the SAME key the message
+  // quick-react bar records and reads (reactions.js), so a call reaction and a
+  // message reaction share one "recently used" history.
+  var RECENT_KEY = 'lc-react-recent';
+  var RECENT_MAX = 16;
+  // Some emoji render text-style unless followed by VS-16 (U+FE0F). The picker
+  // grid emits the qualified form while an older MRU entry may hold the bare
+  // code point; canonicalise so the two dedupe (mirrors layout.html, LC-390).
+  var VS16 = '❤✊✋✌☝☺☹☕☘✂✈⚠♠♣♥♦';
+  function canon(g) {
+    if (typeof g !== 'string' || !g) return g;
+    if (g.length === 1 && VS16.indexOf(g) !== -1) return g + '️';
+    return g;
+  }
 
   // ---- pure helpers (unit-tested) --------------------------------------
-  // Quick-row order: the user's frequent emoji first, then the defaults,
-  // de-duplicated, capped.
-  function trayOrder(frequent, defaults, cap) {
+  // Quick-row order: the caller's preferred list first (LC-827: device-local
+  // recents, then the cross-device frequent seed), then the defaults,
+  // canonicalised, de-duplicated, capped.
+  function trayOrder(preferred, defaults, cap) {
     var out = [];
-    (frequent || []).concat(defaults || []).forEach(function (e) {
+    (preferred || []).concat(defaults || []).forEach(function (raw) {
+      var e = canon(raw);
       if (typeof e === 'string' && e && out.indexOf(e) === -1 && out.length < cap) out.push(e);
     });
     return out;
@@ -81,7 +97,7 @@
       .replace('%emoji%', best);
   }
 
-  var api = { trayOrder: trayOrder, isLikelyEmoji: isLikelyEmoji, laneX: laneX, coalesce: coalesce, DEFAULTS: DEFAULTS, MAX_LIVE: MAX_LIVE };
+  var api = { trayOrder: trayOrder, isLikelyEmoji: isLikelyEmoji, laneX: laneX, coalesce: coalesce, canon: canon, DEFAULTS: DEFAULTS, MAX_LIVE: MAX_LIVE };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
@@ -95,31 +111,49 @@
 
   var laneIdx = 0;
   var frequentPromise = null;
+  var frequentList = null; // resolved value of frequentPromise, once known
   function fetchFrequent() {
     if (!frequentPromise) {
       frequentPromise = fetch('/api/reactions/frequent', { credentials: 'same-origin' })
         .then(function (r) { return r.ok ? r.json() : []; })
-        .catch(function () { return []; });
+        .catch(function () { return []; })
+        .then(function (list) { frequentList = Array.isArray(list) ? list : []; return frequentList; });
     }
     return frequentPromise;
   }
-  // Reorder the quick row once per root from the user's frequent emoji.
-  function seed(root) {
-    if (root.__lcReactSeeded) return;
-    root.__lcReactSeeded = true;
-    fetchFrequent().then(function (list) {
-      var row = root.querySelector('[data-lc-react-row]');
-      if (!row) return;
-      var order = trayOrder(Array.isArray(list) ? list.filter(isLikelyEmoji) : [], DEFAULTS, TRAY_CAP);
-      var cells = row.querySelectorAll('[data-lc-react-emoji]');
-      for (var i = 0; i < cells.length; i++) {
-        if (i < order.length) {
-          cells[i].setAttribute('data-lc-react-emoji', order[i]);
-          cells[i].textContent = order[i];
-        } else {
-          cells[i].remove();
-        }
-      }
+  function readRecent() {
+    try {
+      var a = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+      return Array.isArray(a) ? a : [];
+    } catch (e) { return []; }
+  }
+  function recordRecent(glyph) {
+    glyph = canon((glyph || '').trim());
+    if (!glyph || glyph.length > 6) return;
+    var arr = readRecent().map(canon).filter(function (g) { return g !== glyph; });
+    arr.unshift(glyph);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(arr.slice(0, RECENT_MAX))); } catch (e) { /* storage off */ }
+  }
+  // Rebuild the quick row on EVERY open (LC-827; it used to be seeded once per
+  // root from the frequent list alone, so the emoji just used never appeared):
+  // device-local recents first, so the row changes the instant you react; then
+  // the cross-device frequent seed; then the defaults to fill the row.
+  function renderRow(root) {
+    var row = root.querySelector('[data-lc-react-row]');
+    if (!row) return;
+    var preferred = readRecent().concat(frequentList || []).filter(isLikelyEmoji);
+    var order = trayOrder(preferred, DEFAULTS, TRAY_CAP);
+    var more = row.querySelector('[data-lc-react-more]');
+    Array.prototype.forEach.call(row.querySelectorAll('[data-lc-react-emoji]'), function (c) { c.remove(); });
+    var doc = row.ownerDocument;
+    order.forEach(function (g) {
+      var b = doc.createElement('button');
+      b.type = 'button';
+      b.setAttribute('data-lc-react-emoji', g);
+      b.className = 'lc-emoji-cell';
+      b.setAttribute('tabindex', '-1');
+      b.textContent = g;
+      row.insertBefore(b, more || null);
     });
   }
 
@@ -163,12 +197,19 @@
   function openTray(root) {
     var tray = trayOf(root), btn = toggleOf(root);
     if (!tray) return;
-    seed(root);
+    renderRow(root);
     tray.hidden = false;
     if (btn) btn.setAttribute('aria-expanded', 'true');
     if (!tray.__lcReactKeys) { tray.__lcReactKeys = true; tray.addEventListener('keydown', onTrayKey); }
     placeTray(root);
     focusCell(root, 0);
+    // The cross-device frequent seed arrives once per page; fold it in when it
+    // lands the first time (later opens already rendered with it above).
+    if (frequentList === null) {
+      fetchFrequent().then(function () {
+        if (isOpen(root)) { renderRow(root); focusCell(root, 0); }
+      });
+    }
   }
   function closeTray(root, refocus) {
     var tray = trayOf(root), btn = toggleOf(root);
@@ -196,6 +237,7 @@
     if (slot.childElementCount) {
       var show = slot.hidden;
       slot.hidden = !show;
+      tray.classList.toggle('lc-react-tray--picker', show);
       if (more) more.setAttribute('aria-expanded', show ? 'true' : 'false');
       placeTray(root);
       return;
@@ -212,6 +254,17 @@
           .replace(/\sautofocus\b/g, '');
         slot.innerHTML = html;
         slot.hidden = false;
+        // LC-827: the fragment's root is the composer's floating panel
+        // (`absolute bottom-full w-72`, positioned against its slot), which
+        // inside the tray popped OUT above it as a clipped strip. Make it flow
+        // in place at the tray's width; main.css does the same in CSS as a
+        // belt-and-braces for the positioning utilities.
+        var panel = slot.querySelector('[data-lc-react-picker]');
+        if (panel) {
+          panel.classList.remove('absolute', 'bottom-full', 'left-0', 'mb-1', 'z-30', 'w-72', 'shadow-lg');
+          panel.classList.add('w-full');
+        }
+        tray.classList.add('lc-react-tray--picker');
         if (more) more.setAttribute('aria-expanded', 'true');
         Array.prototype.forEach.call(slot.querySelectorAll('[data-lc-react-emoji^=":"]'), function (c) { c.remove(); });
         var sections = slot.querySelectorAll('[data-lc-emoji-cat]');
@@ -251,6 +304,7 @@
     var roomId = parseInt(root.getAttribute('data-room-id'), 10);
     if (!sock || !roomId || !isLikelyEmoji(emoji)) return;
     try { sock.send(JSON.stringify({ type: 'voice_reaction', room_id: roomId, emoji: emoji.trim() })); } catch (e) { /* reconnecting */ }
+    recordRecent(emoji); // LC-827: surfaces first in the row on the next open
   }
   function spawn(root, emoji) {
     var layer = root.querySelector('[data-lc-react-layer]');
