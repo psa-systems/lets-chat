@@ -47,7 +47,11 @@ fn err_op(reason: &str) -> Response {
 /// pair + nonce + state, persists them in `oidc_pending`, then 302s the
 /// browser to the bunyip authorize endpoint.
 pub async fn get_start(State(state): State<AppState>) -> Response {
-    let client = state.bunyip_sso_client().clone();
+    // LC-826: under the development-only LETS_CHAT_DEV_NO_SSO opt-out there is
+    // no RP; answer with a login-page error instead of the accessor's panic.
+    let Some(client) = state.bunyip_sso.clone() else {
+        return Redirect::to("/login?sso_error=unconfigured").into_response();
+    };
     let state_token = new_random_token();
     let nonce = new_random_token();
     let (verifier, challenge) = new_pkce_pair();
@@ -82,7 +86,11 @@ pub async fn get_callback(
     let (Some(code), Some(state_token)) = (params.code, params.state) else {
         return err_dance("callback missing code/state");
     };
-    let client = state.bunyip_sso_client().clone();
+    // LC-826: under the development-only LETS_CHAT_DEV_NO_SSO opt-out there is
+    // no RP; answer with a login-page error instead of the accessor's panic.
+    let Some(client) = state.bunyip_sso.clone() else {
+        return Redirect::to("/login?sso_error=unconfigured").into_response();
+    };
 
     let pending = match db::oidc_pending::take(&state.auth, &state_token).await {
         Ok(Some(p)) => p,

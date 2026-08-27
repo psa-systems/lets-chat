@@ -22,6 +22,6 @@ mod pkce;
 mod verify;
 
 pub use client::{BunyipSsoClient, BunyipSsoError, TokenResponse, UserInfo};
-pub use config::BunyipSsoConfig;
+pub use config::{dev_no_sso_opt_out, BunyipSsoConfig};
 pub use pkce::{new_pkce_pair, new_random_token};
 pub use verify::IdTokenClaims;

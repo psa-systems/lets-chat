@@ -726,3 +726,48 @@ async fn enclave_icon_upload_forbidden_for_non_manager() {
     let status = post_enclave_icon(&t.app, &t.member_session, 1, &tiny_png()).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
+
+// ── LC-826: booted with no Bunyip RP (the LETS_CHAT_DEV_NO_SSO smoke) ─────
+// The test state has `bunyip_sso: None`, exactly what the development opt-out
+// produces, so these pin the behaviour the local smoke relies on: the login
+// page still renders (with its sign-in link), and the SSO routes redirect to a
+// login error instead of hitting the panicking accessor.
+
+#[tokio::test]
+async fn sso_start_without_an_rp_redirects_to_a_login_error() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/auth/bunyip/start")
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::SEE_OTHER);
+    let loc = res
+        .headers()
+        .get(axum::http::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert_eq!(loc, "/login?sso_error=unconfigured");
+}
+
+#[tokio::test]
+async fn login_page_without_an_rp_renders_and_explains_the_error() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/login?sso_error=unconfigured")
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    let (status, body) = body_string(res).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("/auth/bunyip/start"),
+        "the sign-in link `just verify` checks for must render: {body}"
+    );
+    assert!(
+        body.contains("Single sign-on is not configured on this server."),
+        "the unconfigured error must be explained: {body}"
+    );
+}

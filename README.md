@@ -229,3 +229,7 @@ Users with no email address on file are skipped by the digest tick regardless of
 ## Development happens on Forgejo
 
 The development home for this repository is <https://dev.a8n.run/psa-systems/lets-chat>. The [GitHub](https://github.com/psa-systems/lets-chat) and [Codeberg](https://codeberg.org/psa-systems/lets-chat) copies are read-only mirrors that exist for visibility only: issues and pull requests are disabled there, and no community support runs on the mirrors. File issues and open pull requests on Forgejo.
+
+### Local smoke test
+
+`just verify` builds the release binary, boots it in a container on port 18080 and checks that the login page renders. Sign-in is Bunyip SSO only and the server refuses to start without it, so the smoke sets `LETS_CHAT_DEV_NO_SSO=1`: a development-only opt-out that boots with no identity provider at all (nobody can sign in; the SSO routes answer with a "not configured" login error). Never set it on a real deployment. `./dev/server-up [--release]` runs the binary you last built with `./dev/cargo build` (same image, same target volume, so nothing recompiles) and passes that variable and the `LETS_CHAT_BUNYIP_SSO_*` variables through from your shell if set.
