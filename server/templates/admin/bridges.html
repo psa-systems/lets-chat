@@ -110,7 +110,7 @@
         <td class="text-xs text-content-muted">{% if let Some(ts) = b.last_heartbeat_at.as_ref() %}<time datetime="{{ ts|iso }}" title="{{ ts }}">{{ ts }}</time>{% else %}-{% endif %}</td>
         <td class="lc-table-actions">
           <form method="post" action="/admin/bridges/{{ b.id }}/remove"
-                onsubmit="return confirm('{{ "admin-bridges-remove-confirm"|t }}')">
+                data-lc-confirm="{{ "admin-bridges-remove-confirm"|t }}" onsubmit="return confirm(this.getAttribute('data-lc-confirm'))">
             <button type="submit" class="btn btn-sm btn-danger-outline">{{ "admin-bridges-remove"|t }}</button>
           </form>
         </td>

@@ -43,7 +43,7 @@
     <div class="mb-3 alert alert-danger" role="alert">{{ err }}</div>
     {% endif %}
     <form method="post" action="/admin/restore" enctype="multipart/form-data" class="lc-set-form"
-          onsubmit="return confirm('{{ "admin-backup-stage-confirm"|t }}')">
+          data-lc-confirm="{{ "admin-backup-stage-confirm"|t }}" onsubmit="return confirm(this.getAttribute('data-lc-confirm'))">
       <div class="lc-set-field">
         {# LC-740: max_bytes mirrors the 10 GiB DefaultBodyLimit on
            POST /admin/restore in routes/admin.rs. #}

@@ -66,7 +66,7 @@
         <td class="text-xs text-content-muted"><time datetime="{{ r.created_at|iso }}" title="{{ r.created_at }}">{{ r.created_at }}</time></td>
         <td class="lc-table-actions">
           <form method="post" action="/admin/link-filter/{{ r.id }}/delete"
-                onsubmit="return confirm('{{ "admin-linkfilter-delete-confirm"|t }}')">
+                data-lc-confirm="{{ "admin-linkfilter-delete-confirm"|t }}" onsubmit="return confirm(this.getAttribute('data-lc-confirm'))">
             <button type="submit" class="btn btn-sm btn-danger-outline">{{ "admin-linkfilter-delete"|t }}</button>
           </form>
         </td>

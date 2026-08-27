@@ -37,11 +37,11 @@
       <form method="post" action="/enclave/{{ enclave.id }}/transfer">
         <input type="hidden" name="new_owner_id" value="{{ m.user_id }}">
         <button type="submit" class="btn btn-secondary btn-sm"
-                onclick="return confirm('{{ "enclave-settings-member-transfer-confirm-prefix"|t }} {{ m.label }}{{ "enclave-settings-member-transfer-confirm-suffix"|t }}')">{{ "enclave-settings-member-transfer"|t }}</button>
+                data-lc-confirm="{{ "enclave-settings-member-transfer-confirm-prefix"|t }} {{ m.label }}{{ "enclave-settings-member-transfer-confirm-suffix"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))">{{ "enclave-settings-member-transfer"|t }}</button>
       </form>
       <form method="post" action="/enclave/{{ enclave.id }}/members/{{ m.user_id }}/kick">
         <button type="submit" class="btn btn-sm btn-danger-outline"
-                onclick="return confirm('{{ "enclave-settings-member-kick-confirm-prefix"|t }} {{ m.label }}{{ "enclave-settings-member-kick-confirm-suffix"|t }}')">{{ "enclave-settings-member-kick"|t }}</button>
+                data-lc-confirm="{{ "enclave-settings-member-kick-confirm-prefix"|t }} {{ m.label }}{{ "enclave-settings-member-kick-confirm-suffix"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))">{{ "enclave-settings-member-kick"|t }}</button>
       </form>
     </div>
     {% endif %}

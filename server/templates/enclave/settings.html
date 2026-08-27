@@ -302,7 +302,7 @@
               <form method="post" action="/enclave/{{ enclave.id }}/emojis/{{ e.id }}/delete" class="flex flex-wrap items-center gap-2"
                     hx-post="/enclave/{{ enclave.id }}/emojis/{{ e.id }}/delete" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
                 <button type="submit" class="btn btn-sm btn-danger-outline"
-                        onclick="return confirm('{{ "enclave-settings-emoji-delete-confirm-prefix"|t }}{{ e.shortcode }}{{ "enclave-settings-emoji-delete-confirm-suffix"|t }}')"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "enclave-settings-emoji-delete"|t }}</span></button>
+                        data-lc-confirm="{{ "enclave-settings-emoji-delete-confirm-prefix"|t }}{{ e.shortcode }}{{ "enclave-settings-emoji-delete-confirm-suffix"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "enclave-settings-emoji-delete"|t }}</span></button>
                 <span class="lc-set-status" role="status" aria-live="polite"></span>
               </form>
             </li>

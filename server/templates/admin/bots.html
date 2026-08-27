@@ -108,7 +108,7 @@
         <td class="lc-table-actions">
           {% if !b.disabled %}
           <form method="post" action="/admin/bots/{{ b.id }}/disable"
-                onsubmit="return confirm('{{ "admin-bots-disable-confirm"|t }}')">
+                data-lc-confirm="{{ "admin-bots-disable-confirm"|t }}" onsubmit="return confirm(this.getAttribute('data-lc-confirm'))">
             <button type="submit" class="btn btn-sm btn-danger-outline">{{ "admin-bots-disable"|t }}</button>
           </form>
           {% endif %}
