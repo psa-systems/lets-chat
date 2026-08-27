@@ -47,6 +47,9 @@ fn map_sso_error(code: &str) -> &'static str {
             "This account's email is already linked to a different sign-in identity. Contact an administrator."
         }
         "internal" => "An internal error occurred. Please try again.",
+        // LC-826: the development-only LETS_CHAT_DEV_NO_SSO opt-out booted with
+        // no RP at all.
+        "unconfigured" => "Single sign-on is not configured on this server.",
         _ => "Sign-in failed.",
     }
 }
