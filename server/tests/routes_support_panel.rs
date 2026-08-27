@@ -521,3 +521,175 @@ async fn short_conversation_renders_no_sentinel() {
         "the load-older fragment requires a session"
     );
 }
+
+// LC-807: a load-older join that splits a consecutive assistant run re-renders
+// the boundary bubble (the row the `before=` cursor names) out of band with no
+// avatar, so the joined run shows one avatar, not two. Seeds 60 assistant rows:
+// the newest page is the last 50, so the cursor row and the older page's last
+// bubble are both the assistant's.
+#[tokio::test]
+async fn older_page_rerenders_the_boundary_bubble_without_an_avatar() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+    let (uid, session) = member_session(&auth).await;
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
+    let app: Router = routes::build_router(state(auth.clone(), chat.clone(), settings, true));
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/support/panel/send")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::from("body=the+very+first+question"))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+    let bot = db::auth::find_user_by_username(&auth, "assistant")
+        .await
+        .unwrap()
+        .expect("assistant bot created");
+    let dm = db::chat::find_dm_room(&chat, &bot.id, &uid)
+        .await
+        .unwrap()
+        .expect("support DM room created");
+    for i in 0..60 {
+        db::chat::insert_message(&chat, dm.id, &bot.id, &format!("answer number {i}"))
+            .await
+            .unwrap();
+    }
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/support/panel/thread")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::empty())
+        .unwrap();
+    let first = body_string(app.clone().oneshot(req).await.unwrap()).await;
+    let cursor = older_cursor(&first).expect("first page offers a load-older sentinel");
+    // The cursor row is the top of the newest page: an assistant bubble that,
+    // as the top of the list, was rendered WITH its avatar.
+    let top = format!("<div id=\"lc-support-msg-{cursor}\" class=\"lc-support-msg\">");
+    let top_at = first
+        .find(&top)
+        .expect("the cursor row is the first bubble on the newest page");
+    assert!(
+        first[top_at..].contains("answer number 10"),
+        "seeded 60 assistant rows, so the newest page starts at row 10, got: {first}"
+    );
+    assert!(
+        !first.contains("hx-swap-oob"),
+        "the newest page has nothing above it and emits no correction, got: {first}"
+    );
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/support/panel/thread/older?before={cursor}"))
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let older = body_string(res).await;
+    assert!(
+        older.contains("answer number 9"),
+        "the older page ends with the assistant row before the cursor, got: {older}"
+    );
+    let oob = format!(
+        "<div id=\"lc-support-msg-{cursor}\" class=\"lc-support-msg\" hx-swap-oob=\"outerHTML\">"
+    );
+    assert_eq!(
+        older.matches(&oob).count(),
+        1,
+        "the older page carries exactly one OOB copy of the boundary bubble, got: {older}"
+    );
+    let oob_at = older.find(&oob).unwrap();
+    assert!(
+        !older[..oob_at].contains("hx-swap-oob"),
+        "the page's own bubbles are not out-of-band, got: {older}"
+    );
+    let corrected = &older[oob_at..];
+    assert!(
+        corrected.contains("lc-support-avatar-spacer")
+            && !corrected.contains("<span class=\"lc-support-avatar\" aria-hidden"),
+        "the boundary bubble is re-rendered with the spacer, not the avatar, got: {corrected}"
+    );
+    assert!(
+        corrected.contains("answer number 10"),
+        "the OOB copy is the cursor row's own content, got: {corrected}"
+    );
+}
+
+// LC-807: no correction when the join does not split an assistant run. The
+// older page ends with the viewer's own bubble, so the boundary bubble's avatar
+// (first of its run) was already right.
+#[tokio::test]
+async fn older_page_emits_no_correction_after_the_viewers_bubble() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+    let (uid, session) = member_session(&auth).await;
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
+    let app: Router = routes::build_router(state(auth.clone(), chat.clone(), settings, true));
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/support/panel/send")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::from("body=the+very+first+question"))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+    let bot = db::auth::find_user_by_username(&auth, "assistant")
+        .await
+        .unwrap()
+        .expect("assistant bot created");
+    let dm = db::chat::find_dm_room(&chat, &bot.id, &uid)
+        .await
+        .unwrap()
+        .expect("support DM room created");
+    // The viewer's row lands just above the newest page's 50 assistant rows.
+    db::chat::insert_message(&chat, dm.id, &uid, "one more question")
+        .await
+        .unwrap();
+    for i in 0..50 {
+        db::chat::insert_message(&chat, dm.id, &bot.id, &format!("answer number {i}"))
+            .await
+            .unwrap();
+    }
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/support/panel/thread")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::empty())
+        .unwrap();
+    let first = body_string(app.clone().oneshot(req).await.unwrap()).await;
+    let cursor = older_cursor(&first).expect("first page offers a load-older sentinel");
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/support/panel/thread/older?before={cursor}"))
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let older = body_string(res).await;
+    assert!(
+        older.contains("one more question"),
+        "the older page ends with the viewer's bubble, got: {older}"
+    );
+    assert!(
+        !older.contains("hx-swap-oob"),
+        "no boundary correction when the join does not split a bot run, got: {older}"
+    );
+}
