@@ -36,6 +36,7 @@
 </div>
 {% else %}
 {% for m in messages %}
+{% let oob = false %}
 {% include "support/panel_bubble.html" %}
 {% endfor %}
 {% endif %}

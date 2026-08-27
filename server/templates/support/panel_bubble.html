@@ -1,9 +1,9 @@
 {# LC-795: one support-panel bubble, in `m`. Extracted from panel_thread.html so
    the newest page and a load-older page (panel_older.html) emit identical rows.
-   Grouping (`show_avatar`) is decided per page, so a bot run split exactly at a
-   page join shows one extra avatar; re-rendering the boundary bubble is tracked
-   in LC-807. #}
-<div class="lc-support-msg{% if m.mine %} lc-support-msg-mine{% endif %}">
+   Grouping (`show_avatar`) is decided per page; LC-807 re-renders the bubble at
+   a page join out of band (`oob`), targeting it by its stable id, so a bot run
+   split exactly at the join still shows one avatar. #}
+<div id="lc-support-msg-{{ m.id }}" class="lc-support-msg{% if m.mine %} lc-support-msg-mine{% endif %}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
   {% if !m.mine %}
   {# LC-732: bot avatar on the first message of a consecutive assistant run; a
      spacer keeps grouped replies aligned under it. #}
