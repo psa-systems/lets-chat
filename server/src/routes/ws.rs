@@ -83,6 +83,10 @@ enum ClientFrame {
     /// peers can pin that participant's tile to the stage.
     #[serde(rename = "voice_screen")]
     VoiceScreen { room_id: i64, sharing: bool },
+    /// LC-825: a participant fired a floating reaction; fanned out to the
+    /// call's participants as [`ChatEvent::VoiceReaction`]. Never stored.
+    #[serde(rename = "voice_reaction")]
+    VoiceReaction { room_id: i64, emoji: String },
     /// LC-494: stage control plane. Join/leave as a listener, request or
     /// withdraw the floor, step down from speaking, and (host-only) grant or
     /// revoke another participant's floor. Each mutates the ephemeral hub
@@ -591,7 +595,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::VoiceJoined { .. }
                                 | ChatEvent::VoiceLeft { .. }
                                 | ChatEvent::VoiceMuteChanged { .. }
-                                | ChatEvent::VoiceScreenChanged { .. } => render_voice_event(&e),
+                                | ChatEvent::VoiceScreenChanged { .. }
+                                | ChatEvent::VoiceReaction { .. } => render_voice_event(&e),
                                 // LC-494: re-render the stage roster per viewer
                                 // (host controls + own-state differ per viewer).
                                 ChatEvent::StageChanged { room_id } => {
@@ -782,6 +787,40 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                         sharing,
                                     },
                                 );
+                            }
+                        }
+                        ClientFrame::VoiceReaction { room_id, emoji } => {
+                            // LC-825: an ephemeral floating reaction. Same
+                            // participant gate as mute/screen; the glyph is
+                            // validated so the wire only ever carries one emoji;
+                            // a per-user rate limit drops the excess of a spam
+                            // burst silently (no error frame - a burst should feel
+                            // free, and the client caps what it animates anyway).
+                            // Fans out to the CALL's participants, not everyone
+                            // reading the room. Nothing is stored: no message
+                            // row, no call-event notice, no transcript entry.
+                            if state.hub.is_in_voice_room(conn_id, room_id) {
+                                if let Some(emoji) = validate_reaction_emoji(&emoji) {
+                                    let allowed = matches!(
+                                        state.rate_limits.check(
+                                            crate::rate_limit::RateLimitKind::CallReaction,
+                                            &user.id,
+                                            CALL_REACTIONS_PER_MINUTE,
+                                        ),
+                                        crate::rate_limit::Outcome::Allow
+                                    );
+                                    if allowed {
+                                        let event = ChatEvent::VoiceReaction {
+                                            room_id,
+                                            user_id: user.id.clone(),
+                                            username: user.display_label().to_string(),
+                                            emoji,
+                                        };
+                                        for uid in state.hub.voice_room_users(room_id) {
+                                            state.hub.broadcast_to_user(&uid, &event);
+                                        }
+                                    }
+                                }
                             }
                         }
                         // LC-494: stage control plane. Self-actions require room
@@ -2277,8 +2316,49 @@ fn render_voice_event(event: &ChatEvent) -> Option<String> {
         }
         .render()
         .ok(),
+        // LC-825: the reaction rides the same one-tick bus; the emoji is the
+        // payload and the display label travels so no client renders an id.
+        ChatEvent::VoiceReaction {
+            room_id,
+            user_id,
+            username,
+            emoji,
+        } => VoiceEventFragment {
+            room_id: *room_id,
+            kind: "reaction",
+            user_id,
+            username,
+            avatar_version: "",
+            peers_json: "",
+            payload: Some(emoji),
+        }
+        .render()
+        .ok(),
         _ => None,
     }
+}
+
+/// LC-825: per-user cap on floating reactions per minute. Generous, because a
+/// burst of rapid taps is the intended feel; the client additionally caps how
+/// many it animates at once, so this bounds fan-out and wire volume, not UX.
+const CALL_REACTIONS_PER_MINUTE: u32 = 60;
+
+/// LC-825: accept only something that is plausibly ONE emoji: non-empty, at
+/// most 32 bytes, no ASCII at all (so no text, markup, or a custom `:shortcode:`
+/// in v1), and at most 8 scalars (a flag is 2, a ZWJ family sequence is 7).
+/// Returns the trimmed glyph; anything else is dropped by the caller.
+pub fn validate_reaction_emoji(raw: &str) -> Option<String> {
+    let s = raw.trim();
+    if s.is_empty() || s.len() > 32 {
+        return None;
+    }
+    if s.chars().any(|c| c.is_ascii() || c.is_control()) {
+        return None;
+    }
+    if s.chars().count() > 8 {
+        return None;
+    }
+    Some(s.to_string())
 }
 
 /// Handle a `voice_join` frame: validate the room is an accessible voice
@@ -2816,6 +2896,47 @@ pub mod test_support {
 mod tests {
     use super::*;
     use sqlx::SqlitePool;
+
+    // LC-825: the reaction glyph gate. The wire must only ever carry one emoji.
+    #[test]
+    fn reaction_emoji_accepts_single_glyphs_and_sequences() {
+        for ok in [
+            "👍",
+            "❤️",
+            "👍🏽",
+            "🇺🇸",
+            "👨\u{200d}👩\u{200d}👧\u{200d}👦",
+            "🤔",
+        ] {
+            assert_eq!(validate_reaction_emoji(ok).as_deref(), Some(ok), "{ok}");
+        }
+        // Surrounding whitespace is trimmed, not rejected.
+        assert_eq!(validate_reaction_emoji("  🎉 ").as_deref(), Some("🎉"));
+    }
+
+    #[test]
+    fn reaction_emoji_rejects_text_markup_shortcodes_and_oversize() {
+        for bad in [
+            "",
+            "   ",
+            "a",
+            "👍x",
+            ":smile:",
+            "<b>",
+            "👍 👍",
+            "\u{0001}",
+            // 9 scalars: beyond any real single emoji sequence.
+            "😀😀😀😀😀😀😀😀😀",
+        ] {
+            assert!(
+                validate_reaction_emoji(bad).is_none(),
+                "{bad:?} must be rejected"
+            );
+        }
+        // Over the byte cap even though every scalar is non-ASCII.
+        let long: String = "😀".repeat(9);
+        assert!(validate_reaction_emoji(&long).is_none());
+    }
 
     async fn auth_pool() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

@@ -477,6 +477,18 @@ pub enum ChatEvent {
         user_id: String,
         sharing: bool,
     },
+    /// LC-825: a call participant fired a floating reaction. Ephemeral: it is
+    /// delivered to the call's participants over the voice bus, animated by the
+    /// client and discarded - never a message row, a call-event notice, or a
+    /// transcript entry. `username` is the sender's display label (resolved
+    /// server-side) so a recipient whose roster lacks the sender still shows a
+    /// name, never an id. `emoji` is a single validated glyph.
+    VoiceReaction {
+        room_id: i64,
+        user_id: String,
+        username: String,
+        emoji: String,
+    },
     /// LC-393: call transcription turned ON for a DM call. Broadcast to each
     /// member (mirrors `CallSignal`'s per-recipient `to_user_id` targeting) so
     /// both see the consent banner and their client starts capturing their own

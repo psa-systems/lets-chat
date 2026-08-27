@@ -190,6 +190,11 @@ huddle-lobby-other = in the huddle
 # LC-822: pop the live huddle out into its own window (huddle_popout.js flips
 # the label to "Bring back" while it is out).
 huddle-popout = Pop out
+# LC-825: floating reactions in a call (the toggle, the tray's accessible name,
+# and the More cell that opens the full picker).
+voice-react = React
+voice-react-tray = Reactions
+voice-react-more = More emoji
 # LC-494: stage control plane (speakers vs listeners + request-to-speak).
 stage-label = Stage
 stage-join = Join stage
