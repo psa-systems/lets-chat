@@ -4627,7 +4627,20 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-react-more { font-weight: 600; color: var(--content-muted); }
 .lc-react-more[aria-expanded="true"] { color: var(--accent); }
 [data-lc-react-picker-slot]:empty { display: none; }
-[data-lc-react-picker-slot] { max-height: 40vh; overflow: auto; }
+/* LC-827: the full picker is the composer's floating panel fragment; inside
+   the tray it must flow in place (its own utilities would float it above the
+   tray as a clipped strip) and the tray widens to fit the 8-column grid. The
+   panel scrolls its own grid (.lc-emoji-scroll), so the slot does not. */
+.lc-react-tray [data-lc-react-picker] {
+    position: static;
+    width: 100%;
+    margin: 0;
+    box-shadow: none;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+}
+.lc-react-tray--picker { width: 20rem; }
 .lc-react-cell-hidden { display: none; }
 /* Compact density: smaller floats and badge so they do not dominate the
    denser tiles. */
