@@ -100,6 +100,8 @@ just dev-web-local
 
 Then open `http://localhost:18080`.
 
+`just dev-web-local-mock` layers a stub OP (`dev/mock-oidc.py`) on top so a sign-in actually completes without the bunyip dev-sso stack. Both recipes set `SETUP_DEFAULT_ADMIN` (DEV-300), which seeds an admin account for `dev@example.test` while no admin exists; the stub's primary identity uses that address and claims `bunyip_role: admin`, so the first sign-in lands on it. Set a `mock_user=<name>` cookie on the stub to sign in as an ordinary extra user instead.
+
 To build and run the production-shape image instead:
 
 ```nu
@@ -131,6 +133,7 @@ The Bunyip SSO OP is a hard boot dependency: `main` exits (non-zero) if discover
 | `RUST_LOG` | `lets_chat=info` | Tracing filter |
 | `LETS_CHAT_BUNYIP_SSO_ISSUER` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URI` | (none) | Bunyip OIDC SSO, the sole sign-in path (LC-22). All four are **mandatory**; the server refuses to start without them. `_REDIRECT_URI` is `{base}/auth/bunyip/callback` and must match a `redirect_uris` row on the OP client. Discovery + JWKS are fetched at startup and must succeed. |
 | `LETS_CHAT_BUNYIP_SSO_INSECURE_TLS` | (unset = strict) | DEV ONLY. `1`/`true` makes the SSO HTTP client accept invalid TLS certs (for a dev OP behind a self-signed cert). Never set in production: it disables issuer TLS authentication. |
+| `SETUP_DEFAULT_ADMIN` | (unset) | DEV ONLY (DEV-300). `email:password`, the fleet-wide bootstrap-admin variable (menkent, bunyip, eform read the same name). While the deployment has **no** admin, a debug build seeds one unlinked admin row carrying that verified email; the first sign-in with the same email at the OP adopts it, so a developer does not have to be the first user to get an admin. The password half is accepted for format compatibility and never stored: there is no local password auth (LC-22). A **release** build refuses to seed and logs an error instead, so the variable cannot mint an admin on a real deployment. Because the OP owns the role on every login (LC-413), the OP must also claim `bunyip_role: admin` for that identity or the adopted account is demoted back to `user`; `dev/mock-oidc.py` claims it. |
 | `LETS_CHAT_DEV_NO_SSO` | (unset) | DEV ONLY (LC-826). `1`/`true`/`yes` boots with **no** Bunyip client at all so the local smoke (`just verify`) can run without an identity provider: nobody can sign in and `/auth/bunyip/*` answer with a "not configured" login error. Logged as a warning at startup. Never set on a real deployment. |
 | `LETS_CHAT_SECRET_KEY` | (none) | Encrypts at-rest secrets (Web Push VAPID private key; the sealed IMAP password for email ingress). See [`LETS_CHAT_SECRET_KEY`](#lets_chat_secret_key) below. |
 | `LETS_CHAT_BASE_URL` | `http://localhost:8080` | Externally-reachable base URL. Used to build deep links in outbound mail (digest, mention/DM notifications) and the SSO redirect. |

@@ -15,8 +15,10 @@
 # host uid, then drops privileges before running anything.
 #
 # Env passed through when set on the host: LETS_CHAT_DEV_NO_SSO (development-
-# only: boot with no Bunyip RP, nobody can sign in; what `just verify` uses)
-# and the four LETS_CHAT_BUNYIP_SSO_* vars for a dev with a real Bunyip.
+# only: boot with no Bunyip RP, nobody can sign in; what `just verify` uses),
+# SETUP_DEFAULT_ADMIN (DEV-300, `email:password`; seeds an admin on a debug
+# build only), and the four LETS_CHAT_BUNYIP_SSO_* vars for a dev with a real
+# Bunyip.
 set -euo pipefail
 
 # Compute build metadata on the host (the container has no git checkout
@@ -57,6 +59,7 @@ docker run --rm --detach --init \
     -e "HOST_GID=$HOST_GID" \
     -e "PROFILE=$profile" \
     -e LETS_CHAT_DEV_NO_SSO \
+    -e SETUP_DEFAULT_ADMIN \
     -e LETS_CHAT_BUNYIP_SSO_ISSUER \
     -e LETS_CHAT_BUNYIP_SSO_CLIENT_ID \
     -e LETS_CHAT_BUNYIP_SSO_CLIENT_SECRET \
