@@ -4500,6 +4500,140 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
    Join is disabled and a note links to the live huddle's room. */
 [data-lc-huddle-busy] [data-lc-voice-join] { opacity: 0.5; cursor: not-allowed; }
 
+/* ---- LC-825: floating reactions ------------------------------------------ */
+/* The stage wraps the grid so a reaction layer can sit exactly over it. The
+   layer is a size container (the rise distance is measured in cqh), never takes
+   pointer events, and stacks above the tiles (name labels are z10) but below
+   every overlay (popovers 50, transcript 62, tooltip/toast 80). In the pop-out
+   hosts the wrapper is the flex child that grows, so the grid keeps filling. */
+.lc-voice-stage { position: relative; display: flex; flex-direction: column; min-height: 0; }
+.lc-huddle--popout .lc-voice-stage,
+.lc-huddle--float .lc-voice-stage { flex: 1 1 auto; }
+.lc-react-layer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 12;
+    container-type: size;
+}
+/* One floating emoji: the outer span rises (translateY, cqh-measured) with a
+   pop on entry and a fade over the last third; the inner glyph sways with an
+   alternating translateX so the path wobbles instead of tracking a straight
+   line. Only transform and opacity animate. The randomised custom properties
+   (--lc-rx start lane, --lc-amp sway, --lc-dur, --lc-delay, --lc-rot) come
+   from call_reactions.js so a burst reads organic. */
+.lc-react-float {
+    position: absolute;
+    bottom: 0.5rem;
+    left: var(--lc-rx, 50%);
+    font-size: 2rem;
+    line-height: 1;
+    will-change: transform, opacity;
+    transform: translate(-50%, 0) scale(0.6);
+    opacity: 0;
+    animation: lc-react-rise var(--lc-dur, 3500ms) cubic-bezier(0.2, 0.7, 0.3, 1) var(--lc-delay, 0ms) both;
+}
+.lc-react-glyph {
+    display: inline-block;
+    /* Legibility over any tile: a soft halo in the page surface colour. */
+    text-shadow: 0 1px 2px var(--surface), 0 0 8px var(--surface);
+    animation: lc-react-sway calc(var(--lc-dur, 3500ms) / 3) ease-in-out var(--lc-delay, 0ms) infinite alternate;
+}
+@keyframes lc-react-rise {
+    0%   { transform: translate(-50%, 0) scale(0.6) rotate(0deg); opacity: 0; }
+    8%   { transform: translate(-50%, -6%) scale(1.18) rotate(var(--lc-rot, 0deg)); opacity: 1; }
+    16%  { transform: translate(-50%, -12%) scale(1) rotate(var(--lc-rot, 0deg)); opacity: 1; }
+    66%  { opacity: 1; }
+    100% { transform: translate(-50%, calc(-100cqh + 3rem)) scale(0.95) rotate(var(--lc-rot, 0deg)); opacity: 0; }
+}
+@keyframes lc-react-sway {
+    from { transform: translateX(calc(-1 * var(--lc-amp, 24px))); }
+    to   { transform: translateX(var(--lc-amp, 24px)); }
+}
+/* Attribution: a short-lived pill on the sender's tile with the glyph + name. */
+.lc-react-badge {
+    position: absolute;
+    left: 0.5rem;
+    top: 0.5rem;
+    z-index: 11;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    max-width: calc(100% - 1rem);
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--surface-elevated);
+    color: var(--content);
+    font-size: 0.75rem;
+    line-height: 1.25;
+    pointer-events: none;
+    animation: lc-react-badge 2500ms ease both;
+}
+.lc-react-badge-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes lc-react-badge {
+    0%   { opacity: 0; transform: translateY(4px); }
+    12%  { opacity: 1; transform: none; }
+    80%  { opacity: 1; }
+    100% { opacity: 0; }
+}
+/* High contrast: no halo (it reads as blur there); a solid bordered pill. */
+[data-mode="hc-light"] .lc-react-glyph,
+[data-mode="hc-dark"] .lc-react-glyph {
+    text-shadow: none;
+    padding: 0.125rem 0.375rem;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--surface-elevated);
+}
+/* Reduced motion: no rise or sway. The emoji still fades in and out where it
+   spawned (opacity only) and the tile badge still names the sender, so the
+   reaction is communicated, just not flown. */
+@media (prefers-reduced-motion: reduce) {
+    .lc-react-float { bottom: 1rem; animation: lc-react-static 2400ms ease both; }
+    .lc-react-glyph { animation: none; }
+    .lc-react-badge { animation-name: lc-react-static; }
+}
+@keyframes lc-react-static {
+    0%   { opacity: 0; transform: translate(-50%, 0) scale(1); }
+    15%  { opacity: 1; }
+    70%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, 0) scale(1); }
+}
+/* The tray: a card anchored above the toggle (below it when the bar sits at
+   the top of its window, e.g. the voice page or a pop-out; call_reactions.js
+   measures and flips). The row reuses .lc-emoji-cell; More opens the existing
+   picker fragment in the slot beneath. */
+.lc-react-wrap { position: relative; display: inline-flex; }
+/* main.css loads after tailwind-built.css, so the display above would beat the
+   .hidden utility voice.js toggles (cf. .lc-cbtn.hidden). */
+.lc-react-wrap.hidden { display: none; }
+.lc-react-tray {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.375rem);
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    max-width: min(22rem, 90vw);
+}
+.lc-react-tray[hidden] { display: none; }
+.lc-react-tray--below { bottom: auto; top: calc(100% + 0.375rem); }
+.lc-react-tray--left { right: auto; left: 0; }
+.lc-react-row { display: flex; align-items: center; gap: 0.125rem; }
+.lc-react-more { font-weight: 600; color: var(--content-muted); }
+.lc-react-more[aria-expanded="true"] { color: var(--accent); }
+[data-lc-react-picker-slot]:empty { display: none; }
+[data-lc-react-picker-slot] { max-height: 40vh; overflow: auto; }
+.lc-react-cell-hidden { display: none; }
+/* Compact density: smaller floats and badge so they do not dominate the
+   denser tiles. */
+[data-density="compact"] .lc-react-float { font-size: 1.5rem; }
+[data-density="compact"] .lc-react-badge { font-size: 0.6875rem; padding: 0.0625rem 0.375rem; }
+
 /* ---- Pre-join lobby (LC-416 follow-up) ---------------------------------- */
 /* Shown before joining: previews who is already here as avatar chips, with a
    heading + primary Join CTA, or an empty state. voice.js hides the whole

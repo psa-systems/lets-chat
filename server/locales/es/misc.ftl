@@ -189,6 +189,11 @@ huddle-lobby-other = en el huddle
 # LC-822: sacar el huddle a su propia ventana (huddle_popout.js cambia la
 # etiqueta a "Traer de vuelta" mientras esta fuera).
 huddle-popout = Sacar
+# LC-825: reacciones flotantes en una llamada (el boton, el nombre accesible de
+# la bandeja y la celda Mas que abre el selector completo).
+voice-react = Reaccionar
+voice-react-tray = Reacciones
+voice-react-more = Mas emojis
 # LC-494: plano de control del escenario (oradores vs oyentes + pedir la palabra).
 stage-label = Escenario
 stage-join = Unirse al escenario
