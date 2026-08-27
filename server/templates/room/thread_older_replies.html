@@ -1,10 +1,14 @@
 {# LC-797: one older page of thread replies. Replaces the sentinel that fetched
    it (hx-swap="outerHTML"), so the next sentinel comes FIRST and the page's
    replies follow in ascending order, landing directly above the rows already on
-   screen. No out-of-band boundary re-render is needed: a thread reply row
-   carries no state from the row above it (see `build_thread_reply_views`).
-   Adding grouping to the panel is tracked in LC-806 and must add that
-   re-render at the same time. #}
+   screen.
+
+   LC-806: rows group against the row above them, so the page's LAST reply
+   becomes the predecessor of the row that was the oldest on screen. That row
+   is re-rendered here against its new predecessor and swapped in out of band
+   (its `threadrow-{id}` wrapper, `row_oob`), the way the timeline's older-page
+   fragment does, so a same-author run collapses across the join and a day
+   label that is no longer the first of its day goes away. #}
 {% if let Some(u) = older_page_url.as_ref() %}
 {% let older_url = u %}
 {% let older_root = older_scroll_root.as_str() %}
@@ -12,5 +16,11 @@
 {% endif %}
 {% for r in replies %}
 {% let message = r %}
+{% let row_oob = false %}
 {% include "room/thread_reply_inner.html" %}
 {% endfor %}
+{% if let Some(b) = boundary %}
+{% let message = b %}
+{% let row_oob = true %}
+{% include "room/thread_reply_inner.html" %}
+{% endif %}
