@@ -12,8 +12,27 @@
    replies out (`parent_id IS NULL`) - but this same partial also renders the
    thread PARENT, which DOES appear in the timeline, so the parent's row id was
    duplicated for as long as a thread was open. Everything here is namespaced
-   now. #}
-<div id="threadmsg-{{ message.id }}" class="relative px-3 py-2 rounded-[10px] hover:bg-surface-sunken group">
+   now.
+
+   LC-806: rows GROUP like the timeline's. A follow-up (same author, inside the
+   grouping window, same UTC day - `is_follow_up`, computed against the row
+   above by `build_thread_reply_views` / the live-reply render) drops the avatar
+   and author header and shows only the hover-revealed HH:MM in the gutter, as
+   room/message.html does (LC-377); a UTC day change renders the timeline's day
+   separator (LC-244) above the row. The `threadrow-{id}` wrapper carries the
+   separator + the row as ONE unit so the load-older fragment can re-render a
+   page-boundary row against its new predecessor with a single out-of-band
+   outerHTML swap (`row_oob`, set by that fragment only): the grouping AND the
+   separator can both change when an older page lands above it. #}
+<div id="threadrow-{{ message.id }}"{% if row_oob %} hx-swap-oob="outerHTML"{% endif %}>
+{% if let Some(day_label) = message.day_label.as_ref() %}
+<div role="separator" class="lc-day-divider">
+  <span class="lc-day-rule"></span>
+  <span class="lc-day-chip">{{ day_label }}</span>
+  <span class="lc-day-rule"></span>
+</div>
+{% endif %}
+<div id="threadmsg-{{ message.id }}"{% if !message.is_follow_up %} data-lc-density-tight="row"{% endif %} class="relative px-3 rounded-[10px] {% if message.is_follow_up %}py-0{% else %}py-2{% endif %} hover:bg-surface-sunken group">
   {# LC-595: reactions are started from the hover bar, exactly as in the timeline
      (LC-553), which is what makes a thread reply reactable at all. Only the
      emoji-select is carried over: reply / open-thread / overflow actions either
@@ -26,6 +45,10 @@
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/></svg>
     </button>
   </span>
+  {% if message.is_follow_up %}
+  {# LC-806 / LC-377: grouped row - no header; compact HH:MM in the gutter on hover. #}
+  <time data-lc-ts data-lc-ts-mode="time" datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="lc-followup-ts">{{ message.created_at }}</time>
+  {% else %}
   <div class="flex items-center gap-3">
     {% let avatar_user_id = message.user_id.clone() %}
     {% let avatar_username = message.username.clone() %}
@@ -46,6 +69,7 @@
     >{{ "room-msg-edited"|t }}</button>
     {% endif %}
   </div>
+  {% endif %}
   <div class="lc-md leading-snug mt-1 pl-12">{{ message.body_html()|safe }}</div>
   {# LC-595: the reaction bar in the thread's own id namespace, so it coexists
      with the timeline's bar for the same message instead of colliding with it. #}
@@ -56,4 +80,5 @@
     {% let oob = false %}
     {% include "partials/reaction_bar.html" %}
   </div>
+</div>
 </div>
