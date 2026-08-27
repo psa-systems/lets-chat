@@ -34,6 +34,13 @@
 // authenticated, so the fetch itself is what makes the source trustworthy; the
 // digest check catches a corrupt or truncated download and a manifest that has
 // drifted from the blob it names. See `update_verify`.
+//
+// LC-831: the publisher half of the above landed late. `publish-release.yml`
+// now pushes each binary as an OCI artifact under the tags in
+// `PUBLISHED_PLATFORM_TAGS` and compiles the coordinates it pushed to into the
+// binary, so client and release cannot name different places. The tests at the
+// bottom of this file, plus ci-build/check-update-injection.nu, are what hold
+// the two halves together.
 
 use crate::config;
 use crate::oci::{self, OciError, RegistryRef, RemoteArtifact};
@@ -44,25 +51,35 @@ use std::time::Duration;
 ///
 /// LC-594 lesson, still applying: the compiled-in default must not drift from
 /// where releases actually land, so it is injectable at build time rather than
-/// only hardcoded.
+/// only hardcoded. LC-831 made that injection real: `publish-release.yml`
+/// derives this value from the host it pushes the release artifacts to and
+/// passes it as a build arg, so publisher and client cannot disagree.
 ///
-/// The literal below is `dev.a8n.run`, the Forgejo host that serves the
-/// membership-gated packages today and exposes an OCI endpoint under `/v2/`.
-/// Bunyip's OCI proxy is the intended shipped default (it is what accepts a
-/// Let's Chat user's token); its URL is supplied via
-/// `LETS_CHAT_UPDATE_REGISTRY_URL` once that endpoint is published, per LC-733's
-/// merge gate. An operator points anywhere else with the same env var.
+/// The literal below is the fallback for a build with no injection
+/// (`dev.a8n.run`, the Forgejo host that serves the membership-gated packages
+/// and exposes the OCI endpoint under `/v2/`). Bunyip's OCI proxy is the
+/// intended shipped default once that endpoint is published (LC-733's merge
+/// gate, still open); an operator points anywhere else with the same env var.
 pub const DEFAULT_REGISTRY_URL: &str = match option_env!("LETS_CHAT_UPDATE_REGISTRY_URL") {
     Some(u) if !u.is_empty() => u,
     _ => "https://dev.a8n.run",
 };
 
-/// Repository holding the desktop artifacts, `{owner}/{package}` matching what
-/// `publish-release.yml` uploads to Generic Packages.
+/// Repository holding the desktop artifacts, `{owner}/{package}` matching the
+/// container repository `publish-release.yml` pushes them to. Injected by the
+/// same step that sets the registry, for the same reason.
 pub const DEFAULT_REPOSITORY: &str = match option_env!("LETS_CHAT_UPDATE_REPOSITORY") {
     Some(r) if !r.is_empty() => r,
     _ => "psa-systems-private/lets-chat",
 };
+
+// The two override names, read at build time by the `option_env!` calls above
+// (which need a literal) and at run time by `registry_ref`. `publish-release.yml`
+// must inject exactly these: a name nothing injects ships the fallback, and an
+// injection nothing reads is dead plumbing that still looks like a safeguard.
+// LC-831 was both at once; the tests below reject either direction.
+const REGISTRY_URL_VAR: &str = "LETS_CHAT_UPDATE_REGISTRY_URL";
+const REPOSITORY_VAR: &str = "LETS_CHAT_UPDATE_REPOSITORY";
 
 const MANIFEST_TIMEOUT: Duration = Duration::from_secs(10);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
@@ -111,6 +128,14 @@ impl UpdateError {
     pub fn is_unauthorized(&self) -> bool {
         matches!(self, UpdateError::Registry(e) if e.is_unauthorized())
     }
+
+    /// True when the registry has no artifact at the coordinate this build was
+    /// compiled to poll. LC-831: that is a misconfiguration, not an outage - it
+    /// answers 404 on every check for the life of the binary - so the GUI raises
+    /// it on the same grounds as an entitlement refusal.
+    pub fn is_not_found(&self) -> bool {
+        matches!(self, UpdateError::Registry(e) if e.is_not_found())
+    }
 }
 
 fn env_non_empty(name: &str) -> Option<String> {
@@ -120,16 +145,24 @@ fn env_non_empty(name: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+/// Every tag the release publishes, as `(os, arch, tag)`. This is a contract
+/// with `publish-release.yml`, which pushes an OCI artifact under each of these
+/// names; LC-831: the client asked for tags no release step created, so every
+/// update check 404'd. The table is the single list both sides are checked
+/// against, so adding a platform here without publishing its tag fails the
+/// build rather than shipping a binary that polls nothing.
+const PUBLISHED_PLATFORM_TAGS: &[(&str, &str, &str)] = &[
+    ("linux", "x86_64", "latest-linux-x86_64"),
+    ("windows", "x86_64", "latest-windows-x86_64"),
+];
+
 /// Tag holding this platform's artifact. `None` on a platform we publish no
 /// binary for.
 fn platform_tag() -> Option<&'static str> {
-    if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-        Some("latest-windows-x86_64")
-    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        Some("latest-linux-x86_64")
-    } else {
-        None
-    }
+    PUBLISHED_PLATFORM_TAGS
+        .iter()
+        .find(|(os, arch, _)| *os == std::env::consts::OS && *arch == std::env::consts::ARCH)
+        .map(|(_, _, tag)| *tag)
 }
 
 /// Registry coordinate for this platform's artifact, after env overrides.
@@ -138,10 +171,9 @@ pub fn registry_ref() -> Result<RegistryRef, UpdateError> {
         .or_else(|| platform_tag().map(str::to_string))
         .ok_or(UpdateError::UnsupportedPlatform)?;
     Ok(RegistryRef {
-        registry: env_non_empty("LETS_CHAT_UPDATE_REGISTRY_URL")
+        registry: env_non_empty(REGISTRY_URL_VAR)
             .unwrap_or_else(|| DEFAULT_REGISTRY_URL.to_string()),
-        repository: env_non_empty("LETS_CHAT_UPDATE_REPOSITORY")
-            .unwrap_or_else(|| DEFAULT_REPOSITORY.to_string()),
+        repository: env_non_empty(REPOSITORY_VAR).unwrap_or_else(|| DEFAULT_REPOSITORY.to_string()),
         reference,
     })
 }
@@ -319,12 +351,30 @@ pub fn spawn_startup_check(app: tauri::AppHandle) {
                  Sign in to Let's Chat in the app window, then try again.",
             );
         }
+        // LC-831: the registry answered 404, so this build is polling a
+        // coordinate that holds no artifact for its platform. That is as
+        // permanent as an entitlement refusal - it cannot clear itself, and no
+        // amount of waiting publishes the tag - so it is raised rather than
+        // retried in silence on every launch. There is nothing the user can fix
+        // in the app, hence the different instruction.
+        Err(e) if e.is_not_found() => {
+            eprintln!("lets-chat-desktop: no update artifact published: {e}");
+            notify(
+                &app,
+                "Let's Chat updates unavailable",
+                "This copy is looking for updates where none are published, so it \
+                 cannot update itself. Reinstall from the Let's Chat download page, \
+                 or report this to whoever operates your Let's Chat server.",
+            );
+        }
         Err(e) => {
             // Deliberate suppression of the USER-facing signal only: a startup
             // update check is best-effort, and a transient outage must not pop
             // a notification on every launch. The cause is still logged, and no
             // caller reads a failed check as "up to date" - this thread is the
-            // only consumer of the result.
+            // only consumer of the result. Both classes that cannot clear
+            // themselves (entitlement refusal, missing artifact) are handled
+            // above, so what reaches here is genuinely retryable.
             eprintln!("lets-chat-desktop: update check failed: {e}");
         }
     });
@@ -386,11 +436,158 @@ mod tests {
         );
     }
 
+    const PUBLISH_WORKFLOW: &str = ".forgejo/workflows/publish-release.yml";
+    const DESKTOP_DOCKERFILES: [&str; 2] = [
+        "ci-build/Dockerfile.desktop-linux-bundles",
+        "ci-build/Dockerfile.desktop-windows",
+    ];
+
+    /// Reads a repo file relative to the workspace root. A missing file fails
+    /// the test: the point is that these two sides are checked against each
+    /// other, so "could not look" is not an acceptable outcome.
+    fn repo_file(rel: &str) -> String {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("the desktop crate has a parent directory")
+            .join(rel);
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+    }
+
+    /// Every `key: "value"` in `text` for the given key, in order.
+    fn quoted_values_for(text: &str, key: &str) -> Vec<String> {
+        let needle = format!("{key}: \"");
+        text.split(&needle)
+            .skip(1)
+            .map(|rest| rest.split('"').next().unwrap_or_default().to_string())
+            .collect()
+    }
+
+    /// Every `--build-arg NAME=` in `text` whose NAME starts with `prefix`.
+    fn build_arg_names_starting_with(text: &str, prefix: &str) -> Vec<String> {
+        text.split("--build-arg")
+            .skip(1)
+            .filter_map(|rest| {
+                let name: String = rest
+                    .trim_start()
+                    .trim_start_matches(['$', '"'])
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                name.starts_with(prefix).then_some(name)
+            })
+            .collect()
+    }
+
+    /// LC-831 replaces `platform_tag_is_published_for_supported_targets`, which
+    /// asserted only that a hardcoded match returned `Some`. It could not fail
+    /// while this file had an arm for the target, so it passed for the entire
+    /// life of a client that resolved `latest-linux-x86_64` and
+    /// `latest-windows-x86_64` against a registry where no release step had ever
+    /// created either tag.
+    ///
+    /// The publisher spells those tags out literally (`tag: "..."` in the push
+    /// step) precisely so this comparison is possible. Both directions are
+    /// checked: a tag the client resolves that the release does not push is the
+    /// original defect, and a tag the release pushes that no client resolves is
+    /// an artifact nobody consumes.
     #[test]
-    fn platform_tag_is_published_for_supported_targets() {
-        if cfg!(any(target_os = "linux", target_os = "windows")) && cfg!(target_arch = "x86_64") {
-            assert!(platform_tag().is_some());
+    fn every_platform_tag_is_pushed_by_the_release_workflow() {
+        let workflow = repo_file(PUBLISH_WORKFLOW);
+        let pushed = quoted_values_for(&workflow, "tag");
+        assert!(
+            !pushed.is_empty(),
+            "{PUBLISH_WORKFLOW} pushes no tags at all; the updater has nothing to resolve"
+        );
+        for (os, arch, tag) in PUBLISHED_PLATFORM_TAGS {
+            assert!(
+                pushed.iter().any(|p| p.as_str() == *tag),
+                "the {os}/{arch} client resolves `{tag}`, which {PUBLISH_WORKFLOW} never pushes \
+                 (it pushes {pushed:?})"
+            );
         }
+        for tag in &pushed {
+            assert!(
+                PUBLISHED_PLATFORM_TAGS
+                    .iter()
+                    .any(|(_, _, t)| *t == tag.as_str()),
+                "{PUBLISH_WORKFLOW} pushes `{tag}`, which no client ever resolves"
+            );
+        }
+    }
+
+    /// LC-594's safeguard, made real. The workflow injected
+    /// `LETS_CHAT_UPDATE_BASE_URL` end to end - workflow arg, Dockerfile `ARG`,
+    /// Dockerfile `ENV` - while no Rust source had read that name since LC-733,
+    /// so every release shipped the hardcoded fallback and the plumbing still
+    /// read like a live guard.
+    ///
+    /// Both directions again: a name this module reads that nothing injects
+    /// silently ships the fallback, and an injected name this module does not
+    /// read is the dead plumbing above.
+    #[test]
+    fn release_build_injects_exactly_the_overrides_this_module_reads() {
+        let read_by_client = [REGISTRY_URL_VAR, REPOSITORY_VAR];
+        let workflow = repo_file(PUBLISH_WORKFLOW);
+        let injected = build_arg_names_starting_with(&workflow, "LETS_CHAT_");
+        for name in read_by_client {
+            assert!(
+                injected.contains(&name.to_string()),
+                "{PUBLISH_WORKFLOW} does not inject {name}, so a release ships the compiled \
+                 fallback (it injects {injected:?})"
+            );
+        }
+        for name in &injected {
+            assert!(
+                read_by_client.contains(&name.as_str()),
+                "{PUBLISH_WORKFLOW} injects {name}, which no Rust source reads"
+            );
+        }
+        // A build arg the Dockerfile never declares is dropped by docker, and one
+        // it declares but never exports is invisible to rustc. Either way the
+        // injection above would look complete and change nothing.
+        for dockerfile in DESKTOP_DOCKERFILES {
+            let text = repo_file(dockerfile);
+            for name in read_by_client {
+                assert!(
+                    text.contains(&format!("ARG {name}=")),
+                    "{dockerfile} declares no `ARG {name}`, so the build arg is discarded"
+                );
+                assert!(
+                    text.contains(&format!("{name}=${{{name}}}")),
+                    "{dockerfile} never exports {name} into the build environment"
+                );
+            }
+            assert!(
+                !text.contains("LETS_CHAT_UPDATE_BASE_URL"),
+                "{dockerfile} still carries the dead LETS_CHAT_UPDATE_BASE_URL plumbing"
+            );
+        }
+    }
+
+    /// The compiled repository must name the package the release publishes to.
+    /// In a release build this constant holds the injected value, so this is the
+    /// drift check on the injection itself; in a local build it checks the
+    /// fallback. Only the package segment is comparable here: the owner is an
+    /// org variable CI resolves and the workflow never spells out.
+    #[test]
+    fn default_repository_names_the_package_the_workflow_publishes() {
+        let workflow = repo_file(PUBLISH_WORKFLOW);
+        let package = workflow
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("PACKAGE_NAME:"))
+            .map(str::trim)
+            .expect("publish-release.yml sets PACKAGE_NAME");
+        let (owner, name) = DEFAULT_REPOSITORY.split_once('/').unwrap_or_else(|| {
+            panic!("repository is not {{owner}}/{{package}}: {DEFAULT_REPOSITORY}")
+        });
+        assert!(
+            !owner.is_empty(),
+            "repository has no owner: {DEFAULT_REPOSITORY}"
+        );
+        assert_eq!(
+            name, package,
+            "the updater polls package `{name}` but the release publishes `{package}`"
+        );
     }
 
     #[test]

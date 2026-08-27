@@ -101,6 +101,13 @@ impl OciError {
     pub fn is_unauthorized(&self) -> bool {
         matches!(self, OciError::Unauthorized { .. })
     }
+
+    /// True when the registry holds nothing at this coordinate. LC-831: a tag
+    /// no release publishes answers 404 on every check, so this is as permanent
+    /// as an entitlement refusal and gets the same treatment by the caller.
+    pub fn is_not_found(&self) -> bool {
+        matches!(self, OciError::NotFound { .. })
+    }
 }
 
 /// A `{registry}/v2/{repository}` coordinate plus the tag (or digest) to pull.
@@ -440,5 +447,29 @@ mod tests {
         let other = classify("https://x/y", GuardError::HttpStatus(500));
         assert!(!other.is_unauthorized());
         assert!(!classify("https://x/y", GuardError::HttpStatus(404)).is_unauthorized());
+    }
+
+    /// LC-831: a 404 is the tag-was-never-published case. It must be
+    /// distinguishable from an outage, because the caller escalates it to the
+    /// user instead of retrying it quietly on every launch.
+    #[test]
+    fn not_found_is_its_own_classification() {
+        let err = classify(
+            "https://registry.example.com/v2/x/manifests/latest-linux-x86_64",
+            GuardError::HttpStatus(404),
+        );
+        assert!(err.is_not_found(), "HTTP 404 should be a not-found error");
+        assert!(err.to_string().contains("no release artifact published"));
+        for status in [401, 403, 500, 503] {
+            assert!(
+                !classify("https://x/y", GuardError::HttpStatus(status)).is_not_found(),
+                "HTTP {status} is not a not-found error"
+            );
+        }
+        assert!(!classify(
+            "https://x/y",
+            GuardError::Transport("connection reset".into())
+        )
+        .is_not_found());
     }
 }

@@ -17,15 +17,18 @@ FROM ghcr.io/niceguyit/rust-builder-glibc-windows:v1.0.0-rust1.94-trixie AS buil
 ARG GIT_HASH=unknown
 ARG GIT_VERSION=unknown
 ARG BUILD_DATE=unknown
-# LC-594: Generic Packages root compiled into the binary as its default update
-# source. Empty here so a local build keeps the in-source fallback; the release
-# pipeline passes the path built from the same PACKAGE_OWNER it uploads to, so
-# the two cannot drift when the repo changes orgs.
-ARG LETS_CHAT_UPDATE_BASE_URL=
+# LC-594 / LC-831: the update coordinates compiled into the binary. These are
+# the two names desktop/src/update.rs reads through option_env!; the release
+# pipeline passes the same registry and repository it pushes the artifacts to,
+# so the client cannot poll a location the release never writes. Empty here so
+# a local build keeps the in-source fallback.
+ARG LETS_CHAT_UPDATE_REGISTRY_URL=
+ARG LETS_CHAT_UPDATE_REPOSITORY=
 ENV GIT_HASH=${GIT_HASH} \
     GIT_VERSION=${GIT_VERSION} \
     BUILD_DATE=${BUILD_DATE} \
-    LETS_CHAT_UPDATE_BASE_URL=${LETS_CHAT_UPDATE_BASE_URL}
+    LETS_CHAT_UPDATE_REGISTRY_URL=${LETS_CHAT_UPDATE_REGISTRY_URL} \
+    LETS_CHAT_UPDATE_REPOSITORY=${LETS_CHAT_UPDATE_REPOSITORY}
 
 # Cap concurrent rustc / build-script processes. The desktop-linux,
 # desktop-windows, and OCI builds run in parallel on the same CI runner;
