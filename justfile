@@ -384,7 +384,12 @@ test-js:
 test-desktop:
     ./dev/cargo-desktop test -p lets-chat-desktop
 
-# Verify the standalone server binary starts and serves the login page
+# Verify the standalone server binary starts and serves the login page.
+# LC-826: boots with LETS_CHAT_DEV_NO_SSO=1 (the development-only opt-out of
+# the mandatory Bunyip RP, since the smoke has no Bunyip to talk to), runs the
+# release binary just built (dev/server-up shares dev/cargo's target volume, so
+# nothing recompiles in the container), fails fast if the container exits, and
+# checks for the sign-in link the login page always renders.
 [group('test')]
 verify: build-css
     #!/usr/bin/env nu
@@ -393,16 +398,21 @@ verify: build-css
     ./dev/cargo build --release -p lets-chat-server
     print ""
     print "Starting server container on port 18080..."
-    with-env { HOST_PORT: "18080" } { ./dev/server-up --release -p lets-chat-server }
-    # Wait for the server to be listening (poll for up to 30 seconds).
+    with-env { HOST_PORT: "18080", LETS_CHAT_DEV_NO_SSO: "1" } { ./dev/server-up --release -p lets-chat-server }
+    # Wait for the server to be listening: the prebuilt binary is up in a
+    # second or two, the cargo-run fallback can take minutes, so poll for up to
+    # 10 minutes but stop as soon as the container has exited.
     mut http_code = "000"
     mut body = ""
-    for i in 0..30 {
+    mut seen_alive = false
+    for i in 0..600 {
         sleep 1sec
         let alive = (try { ^docker inspect --format '{{{{.State.Running}}' $container | str trim } catch { "false" })
         if $alive != "true" {
+            if $seen_alive { break }
             continue
         }
+        $seen_alive = true
         $http_code = (try { ^curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/login } catch { "000" })
         if $http_code == "200" {
             $body = (try { ^curl --silent http://127.0.0.1:18080/login } catch { "" })
@@ -410,16 +420,16 @@ verify: build-css
         }
     }
     if $http_code != "200" {
-        print "FAIL: Server did not become healthy within 30 seconds"
+        print "FAIL: Server did not become healthy (container exited or 10 minute budget elapsed)"
         try { ^docker logs --tail 80 $container }
         ./dev/server-down | ignore
         exit 1
     }
     ./dev/server-down | ignore
-    if $http_code == "200" and ($body | str contains '<form') {
-        print $"PASS: Server responded with HTTP ($http_code) and HTML form body"
+    if $http_code == "200" and ($body | str contains '/auth/bunyip/start') {
+        print $"PASS: Server responded with HTTP ($http_code) and the login page"
     } else {
-        print $"FAIL: Server responded with HTTP ($http_code), body did not contain '<form'"
+        print $"FAIL: Server responded with HTTP ($http_code), body did not contain the sign-in link"
         exit 1
     }
 

@@ -131,6 +131,7 @@ The Bunyip SSO OP is a hard boot dependency: `main` exits (non-zero) if discover
 | `RUST_LOG` | `lets_chat=info` | Tracing filter |
 | `LETS_CHAT_BUNYIP_SSO_ISSUER` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URI` | (none) | Bunyip OIDC SSO, the sole sign-in path (LC-22). All four are **mandatory**; the server refuses to start without them. `_REDIRECT_URI` is `{base}/auth/bunyip/callback` and must match a `redirect_uris` row on the OP client. Discovery + JWKS are fetched at startup and must succeed. |
 | `LETS_CHAT_BUNYIP_SSO_INSECURE_TLS` | (unset = strict) | DEV ONLY. `1`/`true` makes the SSO HTTP client accept invalid TLS certs (for a dev OP behind a self-signed cert). Never set in production: it disables issuer TLS authentication. |
+| `LETS_CHAT_DEV_NO_SSO` | (unset) | DEV ONLY (LC-826). `1`/`true`/`yes` boots with **no** Bunyip client at all so the local smoke (`just verify`) can run without an identity provider: nobody can sign in and `/auth/bunyip/*` answer with a "not configured" login error. Logged as a warning at startup. Never set on a real deployment. |
 | `LETS_CHAT_SECRET_KEY` | (none) | Encrypts at-rest secrets (Web Push VAPID private key; the sealed IMAP password for email ingress). See [`LETS_CHAT_SECRET_KEY`](#lets_chat_secret_key) below. |
 | `LETS_CHAT_BASE_URL` | `http://localhost:8080` | Externally-reachable base URL. Used to build deep links in outbound mail (digest, mention/DM notifications) and the SSO redirect. |
 | `LETS_CHAT_ICE_SERVERS` | `[{"urls":"stun:stun.l.google.com:19302"}]` | JSON array of `RTCIceServer` objects for WebRTC calls and voice channels. Add a TURN entry for reliable NAT traversal. |
@@ -229,3 +230,7 @@ Users with no email address on file are skipped by the digest tick regardless of
 ## Development happens on Forgejo
 
 The development home for this repository is <https://dev.a8n.run/psa-systems/lets-chat>. The [GitHub](https://github.com/psa-systems/lets-chat) and [Codeberg](https://codeberg.org/psa-systems/lets-chat) copies are read-only mirrors that exist for visibility only: issues and pull requests are disabled there, and no community support runs on the mirrors. File issues and open pull requests on Forgejo.
+
+### Local smoke test
+
+`just verify` builds the release binary, boots it in a container on port 18080 and checks that the login page renders. Sign-in is Bunyip SSO only and the server refuses to start without it, so the smoke sets `LETS_CHAT_DEV_NO_SSO=1`: a development-only opt-out that boots with no identity provider at all (nobody can sign in; the SSO routes answer with a "not configured" login error). Never set it on a real deployment. `./dev/server-up [--release]` runs the binary you last built with `./dev/cargo build` (same image, same target volume, so nothing recompiles) and passes that variable and the `LETS_CHAT_BUNYIP_SSO_*` variables through from your shell if set.
