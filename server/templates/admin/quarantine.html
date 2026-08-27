@@ -41,7 +41,7 @@
               <button type="submit" class="btn btn-sm btn-secondary">{{ "admin-quarantine-approve"|t }}</button>
             </form>
             <form method="post" action="/admin/quarantine/{{ e.message_id }}/reject"
-                  onsubmit="return confirm('{{ "admin-quarantine-reject-confirm"|t }}')">
+                  data-lc-confirm="{{ "admin-quarantine-reject-confirm"|t }}" onsubmit="return confirm(this.getAttribute('data-lc-confirm'))">
               <button type="submit" class="btn btn-sm btn-danger-outline">{{ "admin-quarantine-reject"|t }}</button>
             </form>
           </div>
