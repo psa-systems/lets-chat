@@ -366,7 +366,7 @@ pub async fn post_scheduled(
     }
 
     let success = format!(
-        "<div class=\"text-sm text-green-700\" role=\"status\" \
+        "<div class=\"text-sm text-success\" role=\"status\" \
          data-scheduled-id=\"{id}\">Scheduled for {stored} UTC.</div>"
     );
     Ok(Html(success))

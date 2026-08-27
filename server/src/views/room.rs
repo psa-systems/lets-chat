@@ -604,7 +604,7 @@ pub(crate) fn linkify_body(
         let url = link.as_str();
         out.push_str("<a href=\"");
         out.push_str(&html_escape(url));
-        out.push_str("\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"text-blue-600 hover:underline\">");
+        out.push_str("\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"text-accent hover:underline\">");
         out.push_str(&html_escape(url));
         out.push_str("</a>");
         cursor = end;
@@ -723,7 +723,7 @@ pub(crate) fn render_body(
                 out.push_str(&html_escape(lead.as_str()));
                 out.push_str("<a href=\"/room/");
                 out.push_str(&c.room_id.to_string());
-                out.push_str("\" class=\"font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded px-1\">#");
+                out.push_str("\" class=\"font-medium text-accent-surface-content bg-accent-surface hover:underline rounded px-1\">#");
                 out.push_str(&html_escape(&c.name));
                 out.push_str("</a>");
                 cursor = whole.end();
@@ -744,7 +744,7 @@ pub(crate) fn render_body(
                 out.push_str(&linkify_body(&body[cursor..whole.start()], &emoji_map));
             }
             out.push_str(&html_escape(lead.as_str()));
-            out.push_str("<span class=\"font-medium text-blue-700 bg-blue-50 rounded px-1\">@");
+            out.push_str("<span class=\"font-medium text-accent-surface-content bg-accent-surface rounded px-1\">@");
             out.push_str(&html_escape(&token_lower));
             out.push_str("</span>");
             cursor = whole.end();
@@ -758,7 +758,7 @@ pub(crate) fn render_body(
             out.push_str(&html_escape(lead.as_str()));
             out.push_str("<a href=\"/profile/");
             out.push_str(&html_escape(&m.user_id));
-            out.push_str("\" class=\"font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded px-1\">@");
+            out.push_str("\" class=\"font-medium text-accent-surface-content bg-accent-surface hover:underline rounded px-1\">@");
             out.push_str(&html_escape(&m.username));
             out.push_str("</a>");
             cursor = whole.end();
@@ -1107,7 +1107,7 @@ mod tests {
         let out = render_body("hey @alice check https://example.com", &mentions, &[], &[]);
         // The chip is a real anchor (not escaped).
         assert!(
-            out.contains(r#"<a href="/profile/alice-id" class="font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded px-1">@alice</a>"#),
+            out.contains(r#"<a href="/profile/alice-id" class="font-medium text-accent-surface-content bg-accent-surface hover:underline rounded px-1">@alice</a>"#),
             "missing mention chip: {out}"
         );
         // The URL is linkified as a real anchor too.
@@ -1138,13 +1138,13 @@ mod tests {
         let out = render_body("hey @here and @channel quick update", &[], &[], &[]);
         assert!(
             out.contains(
-                r#"<span class="font-medium text-blue-700 bg-blue-50 rounded px-1">@here</span>"#
+                r#"<span class="font-medium text-accent-surface-content bg-accent-surface rounded px-1">@here</span>"#
             ),
             "missing @here chip: {out}"
         );
         assert!(
             out.contains(
-                r#"<span class="font-medium text-blue-700 bg-blue-50 rounded px-1">@channel</span>"#
+                r#"<span class="font-medium text-accent-surface-content bg-accent-surface rounded px-1">@channel</span>"#
             ),
             "missing @channel chip: {out}"
         );
