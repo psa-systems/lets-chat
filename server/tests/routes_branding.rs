@@ -733,6 +733,10 @@ async fn enclave_icon_upload_forbidden_for_non_manager() {
 // page still renders (with its sign-in link), and the SSO routes redirect to a
 // login error instead of hitting the panicking accessor.
 
+// The /auth/bunyip/* routes exist only in the standalone build (the saas build
+// keeps its own JWT path), so under saas this URL is a 404 fallthrough that
+// redirects to plain /login. Standalone only, like the other SSO tests above.
+#[cfg(feature = "standalone")]
 #[tokio::test]
 async fn sso_start_without_an_rp_redirects_to_a_login_error() {
     let t = app().await;
