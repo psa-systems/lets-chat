@@ -121,21 +121,35 @@ async fn main() {
     // unreachable OP is a hard startup failure - there is no "off" state and
     // no fallback path. See
     // `docs/lets-chat/sso/bunyip-only/04-lets-chat-server-cutover.md` §4.2.
-    let bunyip_sso_cfg = match lets_chat::oidc::BunyipSsoConfig::from_env() {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!(error = %e, "bunyip SSO config invalid; refusing to start");
-            std::process::exit(1);
-        }
-    };
-    let bunyip_sso = match lets_chat::oidc::BunyipSsoClient::initialize(bunyip_sso_cfg).await {
-        Ok(c) => {
-            tracing::info!(target: "bunyip_sso", "Bunyip RP initialized");
-            Some(c)
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "bunyip SSO initialize failed; refusing to start");
-            std::process::exit(1);
+    //
+    // LC-826: the ONE exception is `LETS_CHAT_DEV_NO_SSO=1`, a development-only
+    // opt-out for the local smoke (`just verify` / `dev/server-up`), which has
+    // no Bunyip to talk to. It boots with no RP at all: nobody can sign in, the
+    // SSO routes answer with a "not configured" login error, and a loud warning
+    // is logged at startup. Never set it on a real deployment.
+    let bunyip_sso = if lets_chat::oidc::dev_no_sso_opt_out() {
+        tracing::warn!(
+            target: "bunyip_sso",
+            "LETS_CHAT_DEV_NO_SSO is set: Bunyip SSO DISABLED, nobody can sign in (development smoke only)"
+        );
+        None
+    } else {
+        let bunyip_sso_cfg = match lets_chat::oidc::BunyipSsoConfig::from_env() {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!(error = %e, "bunyip SSO config invalid; refusing to start");
+                std::process::exit(1);
+            }
+        };
+        match lets_chat::oidc::BunyipSsoClient::initialize(bunyip_sso_cfg).await {
+            Ok(c) => {
+                tracing::info!(target: "bunyip_sso", "Bunyip RP initialized");
+                Some(c)
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "bunyip SSO initialize failed; refusing to start");
+                std::process::exit(1);
+            }
         }
     };
 

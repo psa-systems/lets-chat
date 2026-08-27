@@ -1,24 +1,49 @@
 #!/usr/bin/env bash
-# Run lets-chat-server in a detached Docker container with port 8080 published.
-# Names the container so it can be stopped later via dev/server-down.
+# Run lets-chat-server in a detached Docker container with port 8080 published
+# (override with HOST_PORT). Names the container so dev/server-down can stop it.
+#
+# Usage: ./dev/server-up [--release] [cargo run args...]
+#
+# LC-826: runs in the SAME builder image and per-uid volumes as dev/cargo, so a
+# binary built with `./dev/cargo build [--release] -p lets-chat-server` is
+# already in /cargo-target and starts instantly; only when no prebuilt binary
+# exists does it fall back to `cargo run` inside the container. (The previous
+# rust:slim image had its own target volume, so every start recompiled the
+# whole tree from scratch, which the 30-second smoke in `just verify` could
+# never wait out.) Like dev/cargo it starts as root only to hand the named
+# volumes - including the data volume, which Docker creates root-owned - to the
+# host uid, then drops privileges before running anything.
+#
+# Env passed through when set on the host: LETS_CHAT_DEV_NO_SSO (development-
+# only: boot with no Bunyip RP, nobody can sign in; what `just verify` uses)
+# and the four LETS_CHAT_BUNYIP_SSO_* vars for a dev with a real Bunyip.
 set -euo pipefail
 
-# Compute build metadata on the host (the rust:slim container has no git).
-# build.rs reads these env vars first and falls back to "unknown" otherwise.
+# Compute build metadata on the host (the container has no git checkout
+# metadata to trust). build.rs reads these env vars first and falls back to
+# "unknown" otherwise.
 GIT_HASH=$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 GIT_VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "$GIT_HASH")
 BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+# Same volume names as dev/cargo, so the two share registry, git and target.
+vol_prefix="lets-chat-rewrite-${HOST_UID}"
+
+profile=debug
+for arg in "$@"; do
+    [ "$arg" = "--release" ] && profile=release
+done
 
 docker rm --force lets-chat-rewrite-server >/dev/null 2>&1 || true
 docker run --rm --detach --init \
     --name lets-chat-rewrite-server \
-    --user "$(id -u):$(id -g)" \
     -p "127.0.0.1:${HOST_PORT:-8080}:8080" \
     -v "$PWD:/work" \
     -w /work \
-    -v lets-chat-rewrite-cargo-registry:/usr/local/cargo/registry \
-    -v lets-chat-rewrite-cargo-git:/usr/local/cargo/git \
-    -v lets-chat-rewrite-target:/cargo-target \
+    -v "${vol_prefix}-cargo-registry:/usr/local/cargo/registry" \
+    -v "${vol_prefix}-cargo-git:/usr/local/cargo/git" \
+    -v "${vol_prefix}-target:/cargo-target" \
     -v lets-chat-rewrite-data:/data \
     -e CARGO_HOME=/usr/local/cargo \
     -e CARGO_TARGET_DIR=/cargo-target \
@@ -28,8 +53,34 @@ docker run --rm --detach --init \
     -e "GIT_HASH=$GIT_HASH" \
     -e "GIT_VERSION=$GIT_VERSION" \
     -e "BUILD_DATE=$BUILD_DATE" \
-    rust:1.88-slim-bookworm \
-    cargo run "$@"
+    -e "HOST_UID=$HOST_UID" \
+    -e "HOST_GID=$HOST_GID" \
+    -e "PROFILE=$profile" \
+    -e LETS_CHAT_DEV_NO_SSO \
+    -e LETS_CHAT_BUNYIP_SSO_ISSUER \
+    -e LETS_CHAT_BUNYIP_SSO_CLIENT_ID \
+    -e LETS_CHAT_BUNYIP_SSO_CLIENT_SECRET \
+    -e LETS_CHAT_BUNYIP_SSO_REDIRECT_URI \
+    ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie \
+    bash -c '
+        set -euo pipefail
+        # Named volumes are created root-owned on first use; hand them to the
+        # host uid (registry/git/target as dev/cargo does, plus the data dir
+        # SQLite must be able to create its files in).
+        for d in /usr/local/cargo/registry /usr/local/cargo/git /cargo-target /data; do
+            if [ "$(stat -c %u "$d")" != "$HOST_UID" ]; then
+                chown -R "$HOST_UID:$HOST_GID" "$d"
+            fi
+        done
+        drop="setpriv --reuid=$HOST_UID --regid=$HOST_GID --clear-groups"
+        bin="/cargo-target/$PROFILE/lets-chat"
+        if [ -x "$bin" ]; then
+            echo "server-up: running prebuilt $bin"
+            exec $drop env HOME=/tmp "$bin"
+        fi
+        echo "server-up: no prebuilt binary at $bin; building via cargo run (slow first time)"
+        exec $drop env HOME=/tmp cargo run "$@"
+    ' -- "$@"
 echo "Server container started: lets-chat-rewrite-server"
 echo "Tail logs: docker logs --follow lets-chat-rewrite-server"
 echo "Stop:      ./dev/server-down"
