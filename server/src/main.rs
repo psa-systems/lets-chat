@@ -54,6 +54,9 @@ async fn main() {
     db::set_data_dir(data_dir);
 
     let auth_pool = db::open_auth_pool().await;
+    // DEV-300: dev-only `SETUP_DEFAULT_ADMIN` bootstrap. No-op on a release
+    // build and once any admin exists; see server/src/setup_admin.rs.
+    lets_chat::setup_admin::ensure_default_admin(&auth_pool).await;
     let chat_pool = db::open_chat_pool().await;
     // LC-621: ensure every pre-existing user is a member of the General default
     // enclave on each boot (idempotent INSERT OR IGNORE). The SSO signup path

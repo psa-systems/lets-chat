@@ -2063,6 +2063,42 @@ pub async fn create_user_from_bunyip(
     Ok(id)
 }
 
+/// DEV-300: seed the `SETUP_DEFAULT_ADMIN` row, but only while the deployment
+/// has no admin at all. Returns the new user id, or `None` when an admin
+/// already existed - which is what makes a second boot a no-op rather than a
+/// duplicate or an error.
+///
+/// The row is deliberately UNLINKED (`bunyip_sub = ''`) with a verified email,
+/// the one shape `resolve_or_provision_user` adopts: the first sign-in with
+/// this email claims the account instead of provisioning a second one. Count
+/// and insert share a transaction so the check cannot go stale between them.
+pub async fn create_default_admin(
+    pool: &SqlitePool,
+    username: &str,
+    email: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let admins: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+        .fetch_one(&mut *tx)
+        .await?;
+    if admins > 0 {
+        return Ok(None);
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO users (id, username, password_hash, bunyip_sub, role, email, \
+         email_verified_at, username_confirmed_at, last_active_at) \
+         VALUES (?, ?, '', '', 'admin', ?, datetime('now'), datetime('now'), datetime('now'))",
+    )
+    .bind(&id)
+    .bind(username)
+    .bind(email)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(Some(id))
+}
+
 /// LC-22: returns true when the username is already taken (case-insensitive
 /// per the `users.username COLLATE NOCASE` unique constraint).
 pub async fn username_exists(pool: &SqlitePool, username: &str) -> Result<bool, sqlx::Error> {

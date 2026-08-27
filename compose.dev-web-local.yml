@@ -36,6 +36,12 @@ services:
       LETS_CHAT_DATA_DIR: /data
       BIND_ADDR: 0.0.0.0:8080
       RUST_LOG: lets_chat=debug
+      # DEV-300: fleet-wide bootstrap admin (`email:password`, same variable as
+      # menkent / bunyip / eform). Seeds an admin for this email while the data
+      # volume has none; the mock OP's primary identity uses the same address,
+      # so the first sign-in adopts it. `cargo run` here is a debug build, which
+      # is what unlocks the seed - the release images this repo ships refuse it.
+      SETUP_DEFAULT_ADMIN: ${SETUP_DEFAULT_ADMIN:-dev@example.test:admin1234}
       HOST_UID: ${HOST_UID:-1000}
       HOST_GID: ${HOST_GID:-1000}
       GIT_HASH: ${GIT_HASH:-unknown}

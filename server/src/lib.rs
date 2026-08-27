@@ -39,6 +39,8 @@ pub mod room_digest;
 pub mod routes;
 pub mod scheduled;
 pub mod security_headers;
+/// DEV-300: the dev-only `SETUP_DEFAULT_ADMIN` bootstrap.
+pub mod setup_admin;
 pub mod ssrf;
 pub mod state;
 pub mod stt;
