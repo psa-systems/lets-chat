@@ -4527,7 +4527,7 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     position: absolute;
     bottom: 0.5rem;
     left: var(--lc-rx, 50%);
-    font-size: 2.25rem;
+    font-size: 2.5rem;
     line-height: 1;
     will-change: transform, opacity;
     transform: translate(-50%, 0) scale(0.6);
@@ -4541,7 +4541,7 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     animation: lc-react-sway calc(var(--lc-dur, 3500ms) / 3) ease-in-out var(--lc-delay, 0ms) infinite alternate;
 }
 /* LC-828: after the entry pop the emoji keeps GROWING as it rises, to
-   --lc-grow (1.9-2.4, randomised per float by call_reactions.js) by the top,
+   --lc-grow (2.4-3.0, randomised per float by call_reactions.js) by the top,
    so the float reads as swelling toward the viewer rather than holding one
    size; the fade over the last third is unchanged. Still transform + opacity
    only. The bottom-anchored translate uses `top` as the origin so a bigger
@@ -4551,8 +4551,8 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     0%   { transform: translate(-50%, 0) scale(0.6) rotate(0deg); opacity: 0; }
     8%   { transform: translate(-50%, -6%) scale(1.18) rotate(var(--lc-rot, 0deg)); opacity: 1; }
     16%  { transform: translate(-50%, -12%) scale(1) rotate(var(--lc-rot, 0deg)); opacity: 1; }
-    66%  { transform: translate(-50%, calc((-100cqh + 3rem) * 0.62)) scale(calc(1 + (var(--lc-grow, 2.15) - 1) * 0.7)) rotate(var(--lc-rot, 0deg)); opacity: 1; }
-    100% { transform: translate(-50%, calc(-100cqh + 3rem)) scale(var(--lc-grow, 2.15)) rotate(var(--lc-rot, 0deg)); opacity: 0; }
+    66%  { transform: translate(-50%, calc((-100cqh + 3rem) * 0.62)) scale(calc(1 + (var(--lc-grow, 2.7) - 1) * 0.7)) rotate(var(--lc-rot, 0deg)); opacity: 1; }
+    100% { transform: translate(-50%, calc(-100cqh + 3rem)) scale(var(--lc-grow, 2.7)) rotate(var(--lc-rot, 0deg)); opacity: 0; }
 }
 @keyframes lc-react-sway {
     from { transform: translateX(calc(-1 * var(--lc-amp, 24px))); }
@@ -4651,7 +4651,7 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-react-cell-hidden { display: none; }
 /* Compact density: smaller floats and badge so they do not dominate the
    denser tiles. */
-[data-density="compact"] .lc-react-float { font-size: 1.75rem; }
+[data-density="compact"] .lc-react-float { font-size: 2rem; }
 [data-density="compact"] .lc-react-badge { font-size: 0.6875rem; padding: 0.0625rem 0.375rem; }
 
 /* ---- Pre-join lobby (LC-416 follow-up) ---------------------------------- */
