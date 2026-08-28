@@ -1,8 +1,8 @@
 // LC-821 / LC-822 / LC-823: pop the huddle dock out of the room foot.
 //
-// The dock (room/huddle.html, driven by voice.js) is bound to the room page:
-// leaving the room ends the call, and nothing keeps the huddle in view while
-// reading another room. This module lifts the LIVE dock element out of the page
+// The dock (room/huddle.html, driven by voice.js) is rendered inside the page it
+// belongs to, so on its own it cannot outlive that page or stay in view while
+// another room is read. This module lifts the LIVE dock element out of the page
 // without touching the media session:
 //  - Chromium: Document Picture-in-Picture. requestWindow() gives an always-on-
 //    top window whose document shares this page's JS context, so the dock is
@@ -12,13 +12,17 @@
 //  - Otherwise (Firefox, Safari): an in-page floating panel, fixed over the
 //    chat, draggable by its bar, corner-resizable (native CSS resize), with
 //    its geometry remembered per room.
-// While popped out the root lives outside #main, so a page swap no longer
+// While lifted out the root lives outside #main, so a page swap no longer
 // tears the huddle down: voice.js scan() asks isPopped() and hands the page's
 // own freshly rendered dock to adoptPageDock(), which turns it into a "bring
 // back" placeholder for the same room, or a busy note for another room (one
 // voice session per tab). Delegated click handlers reach the pop-out window
 // through LetsChatDelegate (live.js), which attaches them to any document the
 // dock is moved into.
+// LC-832: two entry points, both landing in the same state. popOut() is the Pop
+// out click and prefers PiP; floatOut() is the automatic one voice.js takes when
+// a swap leaves no dock in the page, and goes straight to the floating panel
+// (see floatOut for why it must not try PiP).
 (function () {
   'use strict';
 
@@ -138,6 +142,20 @@
   function stopWatch() {
     if (st.ro) { try { st.ro.disconnect(); } catch (e) {} st.ro = null; }
   }
+  // LC-832: a swap detaches the dock before floatOut() re-parents it, and the
+  // HTML spec pauses a media element that is removed from its document - which
+  // would leave the call live but silent. Re-play whatever the removal paused;
+  // it is a no-op for the Pop out path, where the dock is moved, never detached.
+  function resumeMedia(root) {
+    var els = root.querySelectorAll('video, audio');
+    Array.prototype.forEach.call(els, function (el) {
+      if (!el.paused) return;
+      try {
+        var p = el.play();
+        if (p && p.catch) p.catch(function () { /* autoplay policy / re-detached */ });
+      } catch (e) { /* not playable yet */ }
+    });
+  }
   function toFloat() {
     var root = st.root;
     if (!root) return;
@@ -163,11 +181,14 @@
       st.ro.observe(root);
     }
     setBtn(root, true);
+    resumeMedia(root);
   }
   // Drag the floating panel by its bar (not by the controls in it).
   document.addEventListener('pointerdown', function (e) {
     if (st.mode !== 'float' || !st.root || e.button !== 0) return;
-    var bar = e.target.closest && e.target.closest('.lc-huddle-bar');
+    // LC-832: the enclave voice channel page floats too, and its bar is
+    // .lc-callbar rather than the huddle dock's .lc-huddle-bar.
+    var bar = e.target.closest && e.target.closest('.lc-huddle-bar, .lc-callbar');
     if (!bar || !st.root.contains(bar)) return;
     if (e.target.closest('button, a, select, input, label')) return;
     e.preventDefault();
@@ -196,12 +217,18 @@
   });
 
   // ---- pop out / bring back ---------------------------------------------
-  function popOut(root) {
-    if (st.mode || !root) return;
+  // Setup both entry points share: adopt the live dock and leave a placeholder
+  // where it sat so Bring back knows where to go. A swap that already detached
+  // the dock has no parent to mark; adoptPageDock() inserts the placeholder when
+  // that room renders again.
+  function claim(root) {
     st.root = root;
     st.roomId = root.getAttribute('data-room-id') || '';
-    // Leave a placeholder where the dock was so Bring back knows where to go.
     if (root.parentNode) root.parentNode.insertBefore(makePlaceholder(), root);
+  }
+  function popOut(root) {
+    if (st.mode || !root) return;
+    claim(root);
     if (!pipSupported()) { toFloat(); return; }
     var r = root.getBoundingClientRect();
     var w = Math.min(960, Math.max(360, Math.round(r.width || 480)));
@@ -222,6 +249,15 @@
       console.warn('huddle: pop-out window unavailable, floating instead', e);
       toFloat();
     });
+  }
+  // LC-832: the automatic path, taken by voice.js scan() when a swap leaves no
+  // dock in the page. Straight to the floating panel, never PiP: requestWindow()
+  // must run inside a click's user activation (see popOut), which a swap does not
+  // carry, and its rejection would strand the dock half-detached.
+  function floatOut(root) {
+    if (st.mode || !root) return;
+    claim(root);
+    toFloat();
   }
   function dockInto(ph) {
     var root = st.root;
@@ -327,6 +363,7 @@
     adoptPageDock: adoptPageDock,
     release: release,
     popOut: popOut,
+    floatOut: floatOut,
     bringBack: bringBack,
   };
 })();

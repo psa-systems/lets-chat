@@ -12,8 +12,12 @@
 // renegotiation (camera toggles) per peer.
 //
 // Mesh practically caps a channel at ~4-6 participants since there's no
-// media server. A joined call is bound to the voice page; navigating away
-// (or the reconnect soft-refresh) leaves the channel.
+// media server. LC-832: a swap that leaves no dock behind no longer ends the
+// call - scan() hands the LIVE dock to huddle_popout.js floatOut(), which
+// re-parents it outside #main as a floating panel and keeps the media session
+// running. A swap that renders a DIFFERENT dock still leaves (bindRoot: one
+// voice session per tab), the reconnect soft-refresh among them, and so does a
+// full browser page load, which keeps no JS state to float.
 (function () {
   'use strict';
 
@@ -1327,6 +1331,15 @@
     if (el) {
       bindRoot(el);
     } else if (root) {
+      // LC-832: the swap left no dock in the page. Lift the LIVE one out instead
+      // of ending the call: floatOut() re-parents it outside #main with the media
+      // session and every element reference intact, and the popped branch above
+      // owns it from the next scan on. Fall through to leave() if that did not
+      // take - a live mic with no UI is how people stay accidentally unmuted.
+      if (joined && pop && pop.floatOut) {
+        pop.floatOut(root);
+        if (pop.isPopped()) return;
+      }
       if (joined) leave();
       root = null;
       cfg = null;
@@ -1337,6 +1350,9 @@
   // re-docks it into this room's placeholder when we are on that page, else
   // drops the element; either way rebind from the page so a later Join targets
   // the room being viewed, not the detached old root.
+  // LC-832: isPopped() covers the floated dock too, so every leave (the Leave
+  // button, a different call, call.js accepting a 1:1 DM) takes the auto-floated
+  // panel down with it rather than orphaning it over the next page.
   function releasePopout() {
     var pop = window.LetsChatHuddlePopout;
     if (!pop || !pop.isPopped()) return;

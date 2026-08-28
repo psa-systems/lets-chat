@@ -4467,7 +4467,10 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     resize: both;
     overflow: hidden;
 }
-.lc-huddle--float .lc-huddle-bar { cursor: move; }
+/* LC-832: the huddle dock drags by .lc-huddle-bar; the enclave voice channel
+   page, which now floats too, drags by its .lc-callbar. */
+.lc-huddle--float .lc-huddle-bar,
+.lc-huddle--float .lc-callbar { cursor: move; }
 .lc-huddle--dragging { user-select: none; }
 /* The participant area fills the host and the tiles follow its height (the
    bar takes ~4.5rem). Selectors carry the .lc-huddle class so they outrank the
