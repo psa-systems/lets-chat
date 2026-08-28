@@ -44,6 +44,9 @@ already in production rather than alongside them.
    LC-821/822/823; phase 4 is what makes it reachable.
 
 A note worth keeping, because it already cost a wrong issue: several comments
-in the tree describe an `hx-boost` model this application has never used.
-`git log -S'hx-boost="true"'` returns nothing across all branches. Correcting
-those comments is part of phase 4.
+in the tree described an `hx-boost` model this application has never used. The
+attribute has never appeared in a template on any branch; the only commit
+carrying the literal `hx-boost="true"` is the one that added this file. Phase 2
+corrected the two misleading template comments, in `room/page.html` and
+`layout.html`. The remaining mention, in `ws.rs`, describes the current model
+accurately and is phase 4's to update when the model changes.
