@@ -3513,7 +3513,7 @@ pub async fn delete_message(
     .await;
     // Return the deleted-fragment HTML directly so the requesting tab also updates.
     let body = format!(
-        "<div id=\"msg-{message_id}\" class=\"px-4 py-2 italic text-slate-400\">[deleted]</div>"
+        "<div id=\"msg-{message_id}\" class=\"px-4 py-2 italic text-content-subtle\">[deleted]</div>"
     );
     Ok(axum::response::Html(body).into_response())
 }

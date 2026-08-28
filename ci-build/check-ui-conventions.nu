@@ -155,6 +155,21 @@ def browser-asset-files [] {
     $files
 }
 
+# The Rust sources that build markup by hand (the autolinker and mention chips
+# in views/room.rs, the deleted-message and scheduled-status fragments in
+# routes/). Tailwind scans these too (`content` lists `./src/**/*.rs`), so a
+# raw palette utility spelled out in a `push_str` or `format!` is live in the
+# built stylesheet, and this was the one scanned surface no palette rule
+# covered (LC-787).
+def rust-markup-files [] {
+    let files = (glob server/src/**/*.rs | sort)
+    if ($files | is-empty) {
+        print --stderr "No Rust sources found under server/src/"
+        exit 1
+    }
+    $files
+}
+
 def markup-files [] {
     (template-files) | append (browser-asset-files)
 }
@@ -209,9 +224,11 @@ def scan-class-attrs [files: list<string>, matches: closure] {
     } | flatten
 }
 
-def palette-in-templates [] {
+# One pattern over whichever file set is passed in; the templates and the Rust
+# markup sources share it and the `lc-allow-palette` marker.
+def palette-literals [files: list<string>] {
     let pattern = $"\\b\(($PREFIXES)\)-\(($HUES)\)-[0-9]{2,3}\\b"
-    template-files | each {|file|
+    $files | each {|file|
         let lines = (open --raw $file | decode utf-8 | lines)
         $lines
         | enumerate
@@ -408,7 +425,13 @@ def rules [] {
             id: "no-palette-literals-in-templates"
             pending: null
             fix: $"use the semantic tokens from tailwind.config.js \(bg-surface-elevated, text-content, border-border, bg-danger, ...\); the one deliberately-dark call stage line must carry a comment with the ($PALETTE_ALLOW) marker naming why \(LC-741, and LC-735 for the same rule over the browser assets\)"
-            check: {|| palette-in-templates }
+            check: {|| palette-literals (template-files) }
+        }
+        {
+            id: "no-palette-literals-in-rust-markup"
+            pending: null
+            fix: $"the Rust sources that build markup by hand are in Tailwind's `content` too, so the same tokens apply \(text-accent for a link, bg-accent-surface text-accent-surface-content for a chip, text-success / text-content-subtle for status copy\); an exception carries a comment with the ($PALETTE_ALLOW) marker naming why \(LC-787\)"
+            check: {|| palette-literals (rust-markup-files) }
         }
         {
             id: "no-fake-link-buttons"
