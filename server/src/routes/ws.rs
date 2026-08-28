@@ -36,6 +36,11 @@ enum ClientFrame {
     /// the topic's fan-out set.
     #[serde(rename = "subscribe_topic")]
     SubscribeTopic { topic: String },
+    /// LC-834: the page this connection is now showing. Sent on connect and on
+    /// every navigation, and it REPLACES the connection's page-scoped state
+    /// rather than adding to it (see [`apply_page_context`]).
+    #[serde(rename = "page_context")]
+    PageContext(PageContext),
     #[serde(rename = "typing")]
     Typing { room_id: i64 },
     #[serde(rename = "thread_typing")]
@@ -107,6 +112,21 @@ enum ClientFrame {
     StageDemote { room_id: i64, user_id: String },
 }
 
+/// LC-834: which page a connection's client is currently showing, as the client
+/// reports it. Both fields are explicit `Option`s and both are always present on
+/// the wire: absence of an enclave has to mean "this page is not in an enclave",
+/// not "this page never said", because one socket now serves many pages.
+#[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PageContext {
+    /// The room whose live updates this page renders, or `None` off a room
+    /// (Home, settings, the enclave landing).
+    #[serde(default)]
+    pub room_id: Option<i64>,
+    /// The enclave this page belongs to, or `None` on Home and DM pages.
+    #[serde(default)]
+    pub enclave_id: Option<i64>,
+}
+
 /// Recognized `kind` discriminators for a call signal. Anything else is
 /// dropped before relay so a malformed client cannot inject arbitrary
 /// values into a peer's call state machine.
@@ -155,6 +175,104 @@ async fn topic_subscribe_allowed(state: &AppState, user: &User, topic: &str) -> 
     }
 }
 
+/// LC-834: rebuild this connection's page-scoped state for the page the client
+/// has just landed on.
+///
+/// The contract is fresh-socket equivalence: afterwards the connection holds
+/// exactly what a socket opened from scratch on `ctx`'s page would hold. That is
+/// also why this is safe to land ahead of LC-837, where a fresh socket is still
+/// what every navigation produces.
+///
+/// The audit outcome per piece of state:
+///
+/// - `subscribed` (and the hub's mirror) drops every room but the destination's.
+///   A retained room is not inert - `render_new_message_or_bump` reads it as
+///   "open in the foreground", so it would advance the read watermark, clear
+///   mentions and broadcast a `DmRead` receipt for a room the user has left, and
+///   push its messages into the `#messages` list of the room they are on.
+/// - `current_enclave` is replaced, `None` included, and the old `enclave:{id}`
+///   topic is left. This is the frame's reason for existing: absence cannot mean
+///   "left the enclave" while Home and DM pages have always sent nothing.
+/// - `dm_seen_msg` is cleared, a fresh socket's caption map being empty. Kept
+///   otherwise, so a same-page re-assert (LC-318's reconnect soft-refresh) is a
+///   no-op in every respect.
+///
+/// `admin` / `user:{id}` topics are untouched: not page-scoped. LC-726's rail
+/// tile joins `admin` on every page, so keeping it IS the equivalence.
+pub async fn apply_page_context(
+    state: &AppState,
+    user: &User,
+    conn_id: ConnId,
+    subscribed: &Arc<Mutex<HashSet<i64>>>,
+    dm_seen_msg: &Arc<Mutex<HashMap<i64, i64>>>,
+    current_enclave: &Arc<Mutex<Option<i64>>>,
+    ctx: PageContext,
+) {
+    // Authorize the destination with the same predicates the additive
+    // `subscribe` / `subscribe_topic` frames use, so this frame can never grant
+    // what those would refuse. A refused id is treated as absent rather than
+    // ignored, so the stale page's state still gets torn down.
+    let next_room = match ctx.room_id {
+        Some(id)
+            if db::chat::is_room_accessible(&state.chat, id, &user.id, user.role == "admin")
+                .await
+                .unwrap_or(false) =>
+        {
+            Some(id)
+        }
+        _ => None,
+    };
+    let next_enclave = match ctx.enclave_id {
+        Some(id) if topic_subscribe_allowed(state, user, &format!("enclave:{id}")).await => {
+            Some(id)
+        }
+        _ => None,
+    };
+
+    let dropped_rooms: Vec<i64> = {
+        let mut set = subscribed.lock().unwrap();
+        let stale: Vec<i64> = set
+            .iter()
+            .copied()
+            .filter(|room_id| Some(*room_id) != next_room)
+            .collect();
+        for room_id in &stale {
+            set.remove(room_id);
+        }
+        if let Some(room_id) = next_room {
+            set.insert(room_id);
+        }
+        stale
+    };
+    for room_id in &dropped_rooms {
+        state.hub.unsubscribe(conn_id, *room_id);
+    }
+    if let Some(room_id) = next_room {
+        state.hub.subscribe(conn_id, room_id);
+    }
+
+    let prev_enclave = {
+        let mut cur = current_enclave.lock().unwrap();
+        std::mem::replace(&mut *cur, next_enclave)
+    };
+    if prev_enclave != next_enclave {
+        if let Some(prev) = prev_enclave {
+            state
+                .hub
+                .unsubscribe_topic(conn_id, &format!("enclave:{prev}"));
+        }
+    }
+    if let Some(eid) = next_enclave {
+        state
+            .hub
+            .subscribe_topic(conn_id, &format!("enclave:{eid}"));
+    }
+
+    if !dropped_rooms.is_empty() || prev_enclave != next_enclave {
+        dm_seen_msg.lock().unwrap().clear();
+    }
+}
+
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
@@ -189,20 +307,29 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     // task below. Consumed by the email-digest "missed" predicate alongside
     // `last_active_at`; does not influence idle-flip.
     db::auth::bump_last_ws_seen(&state.auth, &user.id).await;
+    // LC-834: the three bindings below are this connection's PAGE-SCOPED state -
+    // they describe the page the client is showing, not the connection itself.
+    // They are kept current by the `page_context` frame, which the client sends
+    // on connect and on every navigation and which rebuilds all three to what a
+    // socket freshly opened on the destination page would hold (see
+    // `apply_page_context`). Navigation is still a full page load today, so a
+    // fresh socket is what every navigation actually produces and the frame is
+    // redundant; it is what keeps these correct once the socket outlives a
+    // navigation (LC-837).
     let subscribed: Arc<Mutex<HashSet<i64>>> = Arc::new(Mutex::new(HashSet::new()));
     // Per-connection memory of which own-authored DM message currently shows
     // the "Seen HH:MM" caption, keyed by room_id. Used to clear the previous
     // slot when the peer reads further.
     let dm_seen_msg: Arc<Mutex<HashMap<i64, i64>>> = Arc::new(Mutex::new(HashMap::new()));
-    // LC-337: the enclave this connection's page is currently viewing, learned
-    // from its `enclave:{id}` SubscribeTopic frame. Every enclave page (room,
-    // landing, settings) sends one on open; Home/DM pages send none. With no
-    // hx-boost, each navigation is a full page load (a fresh connection), so
-    // this is stable for the connection's lifetime. `render_sidebar` reads it
-    // so a whole-sidebar OOB refresh renders the recipient's real context
-    // instead of the DM-only shape, which would otherwise clobber the enclave
-    // sidebar (blank categories + enclave rooms) on mark-all-read / mute /
-    // notify-prefs / room-membership events.
+    // LC-337: the enclave this connection's page is currently viewing. Learned
+    // from the `enclave:{id}` SubscribeTopic frame every enclave page (room,
+    // landing, settings) sends on open, and from LC-834's `page_context` frame,
+    // which alone can also clear it: absence of an enclave topic cannot mean
+    // "left the enclave" while it is also how Home and DM pages have always
+    // looked. `render_sidebar` reads it so a whole-sidebar OOB refresh renders
+    // the recipient's real context instead of the DM-only shape, which would
+    // otherwise clobber the enclave sidebar (blank categories + enclave rooms)
+    // on mark-all-read / mute / notify-prefs / room-membership events.
     let current_enclave: Arc<Mutex<Option<i64>>> = Arc::new(Mutex::new(None));
     let (mut tx, mut rx_ws) = socket.split();
 
@@ -226,8 +353,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                         Ok(e) => {
                             // LC-337: snapshot this connection's current enclave
                             // (Copy) so the guard is not held across the awaits
-                            // in the arms below. Read fresh each event in case
-                            // the SubscribeTopic frame arrived after connect.
+                            // in the arms below. Read fresh each event because
+                            // the value changes after connect: the first
+                            // SubscribeTopic frame sets it, and LC-834's
+                            // `page_context` frame replaces it on every move.
                             let cur_enclave = *send_current_enclave.lock().unwrap();
                             let rendered = match &e {
                                 ChatEvent::NewMessage {
@@ -707,6 +836,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     *current_enclave.lock().unwrap() = Some(eid);
                                 }
                             }
+                        }
+                        ClientFrame::PageContext(ctx) => {
+                            apply_page_context(
+                                &state,
+                                &user,
+                                conn_id,
+                                &subscribed,
+                                &dm_seen_msg,
+                                &current_enclave,
+                                ctx,
+                            )
+                            .await;
                         }
                         ClientFrame::Typing { room_id } => {
                             if subscribed.lock().unwrap().contains(&room_id) {
@@ -2817,7 +2958,7 @@ async fn render_enclave_members(
     .ok()
 }
 
-async fn render_sidebar(
+pub async fn render_sidebar(
     state: &AppState,
     viewer: &User,
     current_enclave: Option<i64>,
@@ -2927,6 +3068,11 @@ pub mod test_support {
     // LC-595: the live reaction OOB payload, so a test can assert it carries BOTH
     // surfaces (an open thread panel used to receive nothing at all).
     pub use super::render_reaction_bar;
+    // LC-834: the mid-connection page move and the sidebar render it steers, so
+    // a test can drive a topic change on one connection and assert the sidebar
+    // shape follows it. Same reasoning as the call helpers above: the logic is
+    // reachable only from the receive loop otherwise.
+    pub use super::{apply_page_context, render_sidebar, PageContext};
 }
 
 #[cfg(test)]
@@ -2973,6 +3119,39 @@ mod tests {
         // Over the byte cap even though every scalar is non-ASCII.
         let long: String = "😀".repeat(9);
         assert!(validate_reaction_emoji(&long).is_none());
+    }
+
+    // LC-834: the wire shape of the page-context frame. The `enclave_id: null`
+    // case is the one that matters: it is how Home and DM pages say "this page
+    // is not in an enclave", which no absence-based scheme can express.
+    #[test]
+    fn page_context_frame_carries_an_explicit_null_enclave() {
+        let parse = |s: &str| match serde_json::from_str::<ClientFrame>(s) {
+            Ok(ClientFrame::PageContext(ctx)) => ctx,
+            _ => panic!("not a page_context frame: {s}"),
+        };
+        assert_eq!(
+            parse(r#"{"type":"page_context","room_id":7,"enclave_id":3}"#),
+            PageContext {
+                room_id: Some(7),
+                enclave_id: Some(3),
+            }
+        );
+        // A DM page: a room, explicitly no enclave.
+        assert_eq!(
+            parse(r#"{"type":"page_context","room_id":7,"enclave_id":null}"#),
+            PageContext {
+                room_id: Some(7),
+                enclave_id: None,
+            }
+        );
+        // Home: neither. Omitted keys mean the same as null, so an older client
+        // that sends a bare frame is read as "no page", not rejected.
+        assert_eq!(
+            parse(r#"{"type":"page_context","room_id":null,"enclave_id":null}"#),
+            PageContext::default()
+        );
+        assert_eq!(parse(r#"{"type":"page_context"}"#), PageContext::default());
     }
 
     async fn auth_pool() -> SqlitePool {
