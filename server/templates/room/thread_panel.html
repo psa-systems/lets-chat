@@ -188,7 +188,7 @@
       </button>
     </div>
   </form>
-  <script>
+  <script data-lc-guard="teardown">
   // LC-229: cache the thread textarea + send button once so the per-keystroke
   // disabled toggle hits closed-over references instead of a DOM query
   // (mirrors window.__lcRefreshSend in the main composer). The thread panel is

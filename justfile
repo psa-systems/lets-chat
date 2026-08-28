@@ -49,7 +49,7 @@ docker_version_args := '--build-arg GIT_HASH="$(git rev-parse --short=12 HEAD 2>
 # too, so `just pre-commit` (whose `pre_commit_prepare := "check"` runs this
 # recipe) covers them alongside the Rust checks.
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-ui-conventions check-update-injection check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js
+check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-ui-conventions check-update-injection check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js
 
 # Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
 # browser assets and templates, and untokenized backgrounds on the
@@ -112,6 +112,13 @@ check-revoke-confirm:
 [group('check')]
 check-confirm-apostrophe:
     nu ci-build/check-confirm-apostrophe.nu
+
+# Every inline <script> in a template that can render more than once declares
+# how it survives the re-run (LC-835): data-lc-guard="none|flag|teardown". Carries
+# its own self-test, so a rule engine that stops asserting fails before the scan.
+[group('check')]
+check-swap-safe-scripts:
+    nu ci-build/check-swap-safe-scripts.nu
 
 # The convention classes the 2026-08-11 UI audit closed, held closed: palette
 # literals in templates, fake link buttons, open-coded .btn-danger-outline,
