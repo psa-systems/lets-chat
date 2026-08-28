@@ -112,6 +112,41 @@ Exceptions / gotchas:
 - **Admin-only surfaces**: `routes::admin` is `#[cfg(standalone)]`, so gate the WS arm + renderer `#[cfg(feature = "standalone")]` (the event falls to `render_event` -> None in saas). Skipping this breaks `just test-saas`.
 - **Access loss**: if losing access to a topic's data should stop its events, call `Hub::unsubscribe_user_from_topic` from the access-loss handler (see kick/leave/enclave-delete, LC-176).
 
+## Inline scripts must survive a swap (LC-835)
+
+Every in-app navigation is still a full page load, so an inline `<script>` runs exactly once and nothing here changes what the browser does today. LC-837 swaps `<main id="main">` (`layout.html:24`) instead of loading a new document, and from that point every inline script inside the swapped region re-runs on every navigation. A script that registers on a host the swap does not replace stacks a second registration each time, and the failure is silent: the handler fires twice, the interval ticks twice as fast, nothing throws. An unaudited script is indistinguishable from a safe one, which is why the declaration below is mandatory rather than inferred from what the code looks like.
+
+A **surviving host** is anything the swap leaves in place: `document`, `document.body`, `document.documentElement`, `window`, a repeating `setInterval`, any observer (`MutationObserver`, `IntersectionObserver`, `ResizeObserver`, `PerformanceObserver`), `customElements.define`, `htmx.onLoad`. A one-shot `setTimeout` is not one: it fires once and cannot stack. Binding a node *inside* the swapped region is not one either, and must stay unguarded: the swap replaces that node, so re-running is how the new node gets its handler.
+
+Every inline `<script>` in a template that can render more than once into a live document declares how it stays safe:
+
+| `data-lc-guard` | Promise | Checked by |
+|---|---|---|
+| `none` | Registers nothing on a surviving host; it only touches nodes inside the swapped region. | Zero surviving-host registrations in the body. Mislabel a script that touches `document` and the build fails. |
+| `flag` | A `window.__lc<Name>` test-and-set makes the surviving-host registration happen at most once. | A matching `if (window.__lcX)` / `window.__lcX = true` pair, and at least one registration to justify it. |
+| `teardown` | Each surviving-host registration is paired with an explicit removal, usually on `htmx:beforeCleanupElement` at the nearest `[data-lc-cleanup-root]`. | A `removeEventListener` / `clearInterval` / `.disconnect()` in the body, and at least one registration to justify it. |
+
+The three exist because one idiom does not cover the tree. A whole-body window flag on a script that binds nodes inside `#main` would leave the post-swap nodes unbound, which is the same silent failure pointing the other way. Pick by what the script registers, not by which idiom is shortest:
+
+```html
+<!-- flag: the whole body is one-time because it only wires document.body -->
+<script data-lc-guard="flag">
+(function () {
+  if (window.__lcRoomErrToastWired) return;
+  window.__lcRoomErrToastWired = true;
+  document.body.addEventListener('htmx:responseError', onErr);
+})();
+</script>
+```
+
+A script may mix the two, and the flag then guards only the surviving-host part (`saved/page.html`, `partials/sidebar.html`): the local `wrap.addEventListener` re-runs every render and binds the fresh node, while the `document.body` settle hook sits behind `if (!window.__lcSavedFilterWired)`.
+
+**A once-registered handler must not close over per-render state.** This is the corollary that bites after the guard is in place: the listener survives, the nodes it captured do not. `apply()` in `saved/page.html` resolves `#lc-saved-wrap` and `#lc-saved-list` by id on every call rather than closing over them, and the drag/drop block in `room/composer.html` republishes `window.__lcDropUpload` on every render and resolves `#lc-drop-overlay` at event time, because its `document` listeners are registered once and would otherwise keep uploading into the previous room's composer.
+
+The boundary is stated, not implied. `ci-build/check-swap-safe-scripts.nu` (`just check-swap-safe-scripts`, and a step of the Check workflow) carries a `SHELL` allowlist of the templates that render exactly once per page load and are therefore exempt: `base.html`, `layout.html`, `partials/theme_bootstrap.html`, and the eight `*_modal.html` partials `layout.html` includes after `</main>`. Everything else under `server/templates/` must declare, so a new template is covered by default rather than by remembering to add it. The guard also rejects a `<script src=...>` outside the shell, since a bundle re-fetched and re-executed on every swap double-registers everything it defines.
+
+The script runs its own self-test before it scans, over the same rule engine the scan uses: twenty fixtures, thirteen it must reject (undeclared, an unknown value, `none` over a `document` listener / an interval / an observer, `flag` with no pair or with mismatched names, `teardown` with no removal, `flag` or `teardown` declared over a body that registers nothing) and seven it must accept. Hollow out `verdict` and the self-test fails before a single template is read, so this guard cannot pass while asserting nothing.
+
 ## Confirmation dialogs
 
 Three confirmation styles exist in the codebase. Pick by blast radius, not by convenience.

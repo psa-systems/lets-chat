@@ -71,14 +71,16 @@
    stopPropagation, so it cooperates with the htmx:afterSwap contract in
    layout.html.
    Scope: only controls inside the room root ([data-lc-live-room]) - the room's
-   equivalent of admin's .lc-table - so the listener, which survives on the
-   persistent document.body after an hx-boost navigation, never fires for a
-   different page's controls. The composer is excluded because it already
-   surfaces its own failures through the .composer-error banner.
-   Registered once: hx-boost swaps #main (this block) on room-to-room navigation
-   and re-runs this script, so a window flag guards against stacking a second
-   listener (which would toast N times for one failure). #}
-<script>
+   equivalent of admin's .lc-table - so the listener, which lives on the
+   persistent document.body, never fires for a different page's controls. The
+   composer is excluded because it already surfaces its own failures through
+   the .composer-error banner.
+   Registered once (LC-835, data-lc-guard="flag"): navigation is a full page
+   load today, so this block runs once per load and the flag never fires. It
+   is here for LC-837, which swaps #main on room-to-room navigation and re-runs
+   this script; without the flag that would stack a second listener and toast
+   N times for one failure. The tree had no hx-boost when this was written. #}
+<script data-lc-guard="flag">
 (function () {
   if (window.__lcRoomErrToastWired) return;
   window.__lcRoomErrToastWired = true;

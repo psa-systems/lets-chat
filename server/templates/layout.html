@@ -1336,11 +1336,14 @@ document.body.addEventListener('click', function(e){
   var abnormalClose = false;  // LC-318: last close was a real drop, not a nav
   var WATCHDOG_MS = 60 * 1000;
   var ESCALATE_MS = 5 * 60 * 1000;
-  // LC-318: a normal page navigation (hx-boost swaps the ws-connect
-  // element) briefly closes and reopens the socket, which used to flash
-  // "Connection lost. Reconnecting..." for ~1s on every page move. Wait
-  // this long before painting the banner; a reconnect within the window
-  // cancels it, so only a genuine outage (or a slow reconnect) is shown.
+  // LC-318: a normal page navigation is a full page load, which tears the
+  // socket down and rebuilds it, and that used to flash "Connection lost.
+  // Reconnecting..." for ~1s on every page move. Wait this long before
+  // painting the banner; a reconnect within the window cancels it, so only a
+  // genuine outage (or a slow reconnect) is shown. (The original comment said
+  // hx-boost swaps the ws-connect element; the tree has never had hx-boost.
+  // LC-837 adds it targeting #main, which leaves ws-connect untouched, and
+  // re-evaluates this grace period.)
   var GRACE_MS = 3 * 1000;
 
   function setBanner(next, msg) {
