@@ -60,6 +60,8 @@ A surface that is deliberately dark in every mode says so explicitly rather than
 
 The template half of the same rule lives in `ci-build/check-ui-conventions.nu` (see "Convention gates" below) and now fails the build: LC-741 cleared the last raw palette literals (the call overlays in `layout.html`), so the rule dropped its `pending` marker and enforces like the rest.
 
+The third surface is the Rust source itself. `tailwind.config.js` lists `./src/**/*.rs` in `content`, so a class spelled out in a `push_str` or `format!` (the autolink anchor and mention chips in `views/room.rs`, the deleted-message fragment in `routes/room.rs`, the scheduled-status fragment in `routes/scheduled.rs`) is live in the built stylesheet exactly like one in a template, and until LC-787 it was the one scanned surface no palette rule covered: a fixed `text-blue-600` on every autolinked URL survived two palette audits that way. The same script now sweeps `server/src/**/*.rs` with the same pattern and marker.
+
 One surface is deliberately outside the token layer: `server/assets/offline.html`, the service worker's navigation fallback. It is precached and served with the network down, so it can neither link `main.css` nor run the layout's bootstrap. It therefore carries its own copy of the six colors it needs and its own `lc-mode` resolver, mirroring `server/templates/base.html`. Keep the copied values in step with `main.css` when the light or dark ramp moves; the gate below only checks that the page still resolves a mode, not that the hexes still match (LC-748).
 
 ## Action buttons (LC-743, LC-755)
@@ -357,6 +359,7 @@ Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded 
 | Rule | Scope | Allowed exceptions |
 |---|---|---|
 | No palette literals in templates | `server/templates/**/*.html` | a line (or the line above it) carrying an `lc-allow-palette` comment naming why, for the deliberately-dark call stage |
+| No palette literals in Rust markup | `server/src/**/*.rs`, the sources that build markup by hand (autolinker, mention chips, deleted-message and scheduled-status fragments); Tailwind scans them too | the same `lc-allow-palette` marker on the line or the line above (LC-787) |
 | No fake link buttons | a `<button>` opening tag whose class carries `hover:underline`, in templates and in `server/assets/**/*.js` outside `vendor/` | none |
 | No open-coded danger outline | the literal `.btn-danger-outline` expansion, in the same file set | none |
 | No open-coded primary fill | an unprefixed `bg-accent` + `text-accent-content` pair in a `<button>` / `<a>` / `<label>` opening tag that carries no `btn-primary` | a `hover:` / `focus:` / `aria-pressed:` accent, which paints a state rather than the resting fill |
