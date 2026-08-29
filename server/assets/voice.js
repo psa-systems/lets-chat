@@ -15,9 +15,12 @@
 // media server. LC-832: a swap that leaves no dock behind no longer ends the
 // call - scan() hands the LIVE dock to huddle_popout.js floatOut(), which
 // re-parents it outside #main as a floating panel and keeps the media session
-// running. A swap that renders a DIFFERENT dock still leaves (bindRoot: one
-// voice session per tab), the reconnect soft-refresh among them, and so does a
-// full browser page load, which keeps no JS state to float.
+// running. Since LC-837 that swap is every nav-panel navigation and every
+// back/forward (scan runs on htmx:afterSettle and htmx:historyRestore). A swap
+// that renders a DIFFERENT dock still leaves (bindRoot: one voice session per
+// tab), the reconnect soft-refresh among them, and so does a full browser page
+// load, which keeps no JS state to float; the server drops that connection
+// from the roster when its socket closes.
 (function () {
   'use strict';
 
@@ -1399,6 +1402,11 @@
     scan();
     autoJoinFromQuery();
     document.body.addEventListener('htmx:afterSettle', scan);
+    // LC-832/LC-837: back/forward. htmx restores #main from the server and
+    // fires htmx:historyRestore INSTEAD of afterSettle, so without this the
+    // restore would detach the dock and never float it (a live mic with no
+    // UI), or render the call room's fresh dock beside the floating one.
+    document.body.addEventListener('htmx:historyRestore', scan);
   });
 
   // LC-144: re-route every peer tile's audio when the speaker is changed
