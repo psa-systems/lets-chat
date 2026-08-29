@@ -14,7 +14,7 @@
   {% include "room/message.html" %}
   {% endfor %}
 </div>
-<script>
+<script data-lc-guard="flag">
 // LC-376: message overflow-menu behavior. The per-message `...` menu (LC-376) is
 // a native <details class="lc-msg-more">, so it needs no per-row JS; this single
 // delegated handler (wired once) adds the niceties: opening one menu closes the

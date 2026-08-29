@@ -279,7 +279,7 @@
     {# LC-706: progressive enhancement - localized time-of-day greeting word and
        relative timestamps ("2h ago"). Both degrade to the server-rendered
        fallback (greeting word / exact date) when JS is off. Uses Intl, no deps. #}
-    <script>
+    <script data-lc-guard="none">
     (function () {
       var g = document.querySelector('[data-lc-greeting]');
       if (g) {

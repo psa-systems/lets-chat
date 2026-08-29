@@ -22,7 +22,7 @@
    viewers see an "X is editing the wiki" banner. The server evicts the presence
    ~5s after the last frame, so blurring / saving / navigating clears the banner
    shortly after (mirrors the typing indicator; there is no explicit stop frame). #}
-<script>
+<script data-lc-guard="teardown">
 (function(){
   var form = document.currentScript.previousElementSibling;
   var ta = form && form.querySelector('textarea[name=body]');

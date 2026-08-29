@@ -39,7 +39,7 @@
     <div class="alert alert-danger" role="alert">{{ msg }}</div>
     {% endif %}
   </form>
-  <script>
+  <script data-lc-guard="teardown">
     (function() {
       var popover = document.getElementById('block-search-results');
       var input = document.getElementById('block-username');
