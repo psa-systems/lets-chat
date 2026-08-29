@@ -142,12 +142,33 @@ impl PageState {
     }
 }
 
-fn active_room(id: i64) -> String {
-    format!("<a href=\"/room/{id}\" aria-current=\"page\"")
+/// Whether the anchor whose `href` is exactly `href` carries `aria-current="page"`
+/// somewhere in its opening tag. Scoped to the tag rather than an adjacency
+/// check, because other attributes (LC-837's per-anchor boost) sit between
+/// `href` and `aria-current`.
+fn anchor_is_active(html: &str, href: &str) -> bool {
+    let needle = format!("href=\"{href}\"");
+    let mut from = 0;
+    while let Some(i) = html[from..].find(&needle) {
+        let start = from + i;
+        let end = html[start..]
+            .find('>')
+            .map(|e| start + e)
+            .unwrap_or(html.len());
+        if html[start..end].contains("aria-current=\"page\"") {
+            return true;
+        }
+        from = end;
+    }
+    false
 }
 
-fn active_peer(id: &str) -> String {
-    format!("<a href=\"/dm/{id}\" aria-current=\"page\"")
+fn room_active(html: &str, id: i64) -> bool {
+    anchor_is_active(html, &format!("/room/{id}"))
+}
+
+fn peer_active(html: &str, id: &str) -> bool {
+    anchor_is_active(html, &format!("/dm/{id}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -206,11 +227,11 @@ async fn the_oob_sidebar_highlights_the_room_the_connection_is_on() {
         .await;
     let first = page.sidebar(&fx).await;
     assert!(
-        first.contains(&active_room(fx.enclave_room)),
+        room_active(&first, fx.enclave_room),
         "the room the connection is on carries aria-current, got:\n{first}"
     );
     assert!(
-        !first.contains(&active_room(fx.other_room)),
+        !room_active(&first, fx.other_room),
         "no other room is active, got:\n{first}"
     );
 
@@ -219,11 +240,11 @@ async fn the_oob_sidebar_highlights_the_room_the_connection_is_on() {
         .await;
     let second = page.sidebar(&fx).await;
     assert!(
-        second.contains(&active_room(fx.other_room)),
+        room_active(&second, fx.other_room),
         "the destination room is active after the move, got:\n{second}"
     );
     assert!(
-        !second.contains(&active_room(fx.enclave_room)),
+        !room_active(&second, fx.enclave_room),
         "the room just left is no longer active, got:\n{second}"
     );
 
@@ -251,7 +272,7 @@ async fn a_dm_page_highlights_its_peer_row_by_the_dm_room() {
     page.navigate(&fx, conn_id, Some(dm.id), None).await;
     let html = page.sidebar(&fx).await;
     assert!(
-        html.contains(&active_peer(&fx.peer_id)),
+        peer_active(&html, &fx.peer_id),
         "the DM's peer row carries aria-current, got:\n{html}"
     );
 }
@@ -295,7 +316,7 @@ async fn the_unread_badge_of_the_opened_room_is_cleared_by_the_refresh() {
         "the opened room's badge is empty after the refresh, got:\n{after}"
     );
     assert!(
-        after.contains(&active_room(fx.other_room)),
+        room_active(&after, fx.other_room),
         "and it is the active row, got:\n{after}"
     );
 }

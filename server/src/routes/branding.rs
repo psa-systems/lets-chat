@@ -144,12 +144,12 @@ pub async fn inject_branding_css(
     // Fast path: HTMX fragment requests never carry a <head>, so
     // there is nothing to inject. Bail before touching the DB or
     // buffering the body.
-    let is_htmx = req
-        .headers()
-        .get("hx-request")
-        .and_then(|v| v.to_str().ok())
-        .is_some_and(|v| v.eq_ignore_ascii_case("true"));
-    if is_htmx {
+    // LC-837: a boosted navigation is an htmx request that renders the
+    // whole page; it is injected like a full load, and nav.js carries
+    // the `<style data-lc-brand>` from the response into the surviving
+    // <head>, so a move between scopes with different branding
+    // recolors without a page load.
+    if crate::routes::wants_fragment(req.headers()) {
         return next.run(req).await;
     }
 

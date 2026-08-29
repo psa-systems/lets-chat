@@ -21,7 +21,11 @@
       <path fill-rule="evenodd" d="M4.21 5.23a.75.75 0 011.06-.02l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 11-1.04-1.08L7.94 10 4.23 6.29a.75.75 0 01-.02-1.06zm6 0a.75.75 0 011.06-.02l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 11-1.04-1.08L13.94 10l-3.71-3.71a.75.75 0 01-.02-1.06z" clip-rule="evenodd"/>
     </svg>
   </button>
-  <main id="main" class="flex-1 flex flex-col overflow-hidden min-h-0">
+  {# LC-837: the swap target for boosted navigation (partials/nav_boost.html)
+     and the element htmx snapshots/restores for history. The ws-connect
+     wrapper above and the nav panel are never swapped, so the socket and the
+     sidebar outlive a page move. #}
+  <main id="main" hx-history-elt class="flex-1 flex flex-col overflow-hidden min-h-0">
     <button type="button" id="lc-nav-toggle" aria-label="{{ "layout-toggle-nav"|t }}"
       aria-expanded="false" aria-controls="lc-nav-panel"
       class="md:hidden inline-flex items-center gap-2 border-b border-border px-3 py-2 text-content-muted hover:text-content"
@@ -1336,14 +1340,16 @@ document.body.addEventListener('click', function(e){
   var abnormalClose = false;  // LC-318: last close was a real drop, not a nav
   var WATCHDOG_MS = 60 * 1000;
   var ESCALATE_MS = 5 * 60 * 1000;
-  // LC-318: a normal page navigation is a full page load, which tears the
-  // socket down and rebuilds it, and that used to flash "Connection lost.
-  // Reconnecting..." for ~1s on every page move. Wait this long before
-  // painting the banner; a reconnect within the window cancels it, so only a
-  // genuine outage (or a slow reconnect) is shown. (The original comment said
-  // hx-boost swaps the ws-connect element; the tree has never had hx-boost.
-  // LC-837 adds it targeting #main, which leaves ws-connect untouched, and
-  // re-evaluates this grace period.)
+  // LC-318: a full page load tears the socket down and rebuilds it, and that
+  // used to flash "Connection lost. Reconnecting..." for ~1s on every page
+  // move. Wait this long before painting the banner; a reconnect within the
+  // window cancels it, so only a genuine outage (or a slow reconnect) is shown.
+  // LC-837 re-evaluated this: links in the nav panel are boosted and swap
+  // #main, which leaves the ws-connect wrapper (and so the socket) untouched,
+  // so the cause is gone for those. Links inside #main are still full page
+  // loads until boosting is widened to them, and each of those still cycles
+  // the socket, so the grace stays. Delete it together with the last unboosted
+  // in-app link; a real outage then shows the banner on the first close.
   var GRACE_MS = 3 * 1000;
 
   function setBanner(next, msg) {

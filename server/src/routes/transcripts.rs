@@ -859,8 +859,10 @@ pub async fn index(
     let hide_empty = hide_empty.is_some();
     let rows = build_index_rows(&state, &user, &query, hide_empty).await?;
 
-    // LC-445: htmx search / filter swaps just the list body.
-    if headers.contains_key("hx-request") {
+    // LC-445: htmx search / filter swaps just the list body. LC-837: a boosted
+    // navigation to this page (and a history restore of it) is an htmx request
+    // too, and needs the whole page.
+    if super::wants_fragment(&headers) {
         return html(&TranscriptListBody {
             rows,
             query,
