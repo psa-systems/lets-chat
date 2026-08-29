@@ -8,20 +8,24 @@
 // attributed to the track's participant. It runs NO STT itself.
 //
 // The pure pieces (Clipper, encodeWav, callback URL/headers, config parsing) are
-// unit-tested (bun test). This file is the LiveKit-SDK wiring, verified at
-// staging (stage 5) against a live LiveKit + a real dispatch.
+// unit-tested (bun test). This file is the LiveKit-SDK wiring: it is compiled
+// against the pinned SDK by the Dockerfile `typecheck` stage (LC-841) and
+// verified end to end at staging (stage 5) against a live LiveKit + a real
+// dispatch.
 
 import {
   type JobContext,
+  type JobRequest,
   WorkerOptions,
+  WorkerPermissions,
   cli,
   defineAgent,
 } from '@livekit/agents';
 import {
   AudioStream,
-  RemoteParticipant,
-  RemoteTrack,
-  RemoteTrackPublication,
+  type RemoteParticipant,
+  type RemoteTrack,
+  type RemoteTrackPublication,
   RoomEvent,
   TrackKind,
 } from '@livekit/rtc-node';
@@ -101,7 +105,8 @@ async function captureTrack(
 export default defineAgent({
   entry: async (ctx: JobContext) => {
     const meta = parseJobMeta(ctx.job.metadata);
-    log('dispatched', { room: ctx.room?.name, transcriptId: meta.transcriptId });
+    // ctx.room is not populated until connect(); the job carries the room.
+    log('dispatched', { room: ctx.job.room?.name, transcriptId: meta.transcriptId });
 
     // Subscribe to remote audio tracks as they appear (covers mid-call joiners).
     ctx.room.on(
@@ -116,14 +121,22 @@ export default defineAgent({
   },
 });
 
-// Register the worker under the reserved agent identity + the configured agent
-// name (matching the server's dispatch target).
+// Register the worker under the configured agent name (the server's dispatch
+// target, LC-814). The participant identity is not a worker option: the SDK
+// assigns it when a job is accepted (`agent-<jobId>` by default), so accept
+// every job explicitly under the reserved identity that huddle_sfu.js filters.
+// Join subscribe-only and hidden: the SFU then never announces the agent to the
+// other participants at all, and the roster filter is only belt and braces.
 if (import.meta.main) {
   cli.runApp(
     new WorkerOptions({
       agent: import.meta.filename,
       agentName: config.agentName,
-      identity: agentIdentity(config.agentName),
+      requestFunc: async (req: JobRequest) => {
+        await req.accept(config.agentName, agentIdentity(config.agentName));
+      },
+      // canPublish, canSubscribe, canPublishData, canUpdateMetadata, sources, hidden
+      permissions: new WorkerPermissions(false, true, false, false, [], true),
     }),
   );
 }
