@@ -16,12 +16,11 @@
 //! and `render_sidebar` output that changes shape between the two.
 use lets_chat::models::User;
 use lets_chat::push::{MockPushClient, PushClient};
-use lets_chat::routes::test_support::{apply_page_context, render_sidebar, PageContext};
+use lets_chat::routes::test_support::{apply_page_context, render_sidebar, PageContext, PageScope};
 use lets_chat::ws::events::ChatEvent;
 use lets_chat::ws::hub::Hub;
 use lets_chat::{db, state::AppState};
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::broadcast::error::TryRecvError;
 
 mod common;
@@ -115,34 +114,49 @@ async fn fixture() -> Fx {
 /// frame exactly as the receive loop does.
 #[derive(Default)]
 struct PageState {
-    subscribed: Arc<Mutex<HashSet<i64>>>,
-    dm_seen_msg: Arc<Mutex<HashMap<i64, i64>>>,
-    current_enclave: Arc<Mutex<Option<i64>>>,
+    scope: PageScope,
 }
 
 impl PageState {
-    async fn navigate(&self, fx: &Fx, conn_id: u64, room_id: Option<i64>, enclave_id: Option<i64>) {
+    /// Returns what the receive loop acts on: whether the frame moved the
+    /// connection to a different page (LC-836).
+    async fn navigate(
+        &self,
+        fx: &Fx,
+        conn_id: u64,
+        room_id: Option<i64>,
+        enclave_id: Option<i64>,
+    ) -> bool {
         apply_page_context(
             &fx.state,
             &fx.user,
             conn_id,
-            &self.subscribed,
-            &self.dm_seen_msg,
-            &self.current_enclave,
+            &self.scope,
             PageContext {
                 room_id,
                 enclave_id,
             },
         )
-        .await;
+        .await
     }
 
     fn enclave(&self) -> Option<i64> {
-        *self.current_enclave.lock().unwrap()
+        *self.scope.current_enclave.lock().unwrap()
+    }
+
+    fn room(&self) -> Option<i64> {
+        self.scope.page.lock().unwrap().and_then(|p| p.room_id)
     }
 
     fn rooms(&self) -> Vec<i64> {
-        let mut v: Vec<i64> = self.subscribed.lock().unwrap().iter().copied().collect();
+        let mut v: Vec<i64> = self
+            .scope
+            .subscribed
+            .lock()
+            .unwrap()
+            .iter()
+            .copied()
+            .collect();
         v.sort_unstable();
         v
     }
@@ -163,7 +177,7 @@ async fn a_no_enclave_frame_mid_connection_changes_the_sidebar_shape() {
     page.navigate(&fx, conn_id, Some(fx.enclave_room), Some(fx.enclave_id))
         .await;
     assert_eq!(page.enclave(), Some(fx.enclave_id));
-    let in_enclave = render_sidebar(&fx.state, &fx.user, page.enclave())
+    let in_enclave = render_sidebar(&fx.state, &fx.user, page.enclave(), page.room())
         .await
         .expect("the sidebar renders for an enclave page");
     let enclave_nav = format!("id=\"sidebar-nav-{}\"", fx.enclave_id);
@@ -181,7 +195,7 @@ async fn a_no_enclave_frame_mid_connection_changes_the_sidebar_shape() {
         None,
         "the no-enclave frame must clear the connection's enclave"
     );
-    let at_home = render_sidebar(&fx.state, &fx.user, page.enclave())
+    let at_home = render_sidebar(&fx.state, &fx.user, page.enclave(), page.room())
         .await
         .expect("the sidebar renders for Home");
     assert!(
@@ -201,10 +215,12 @@ async fn a_no_enclave_frame_mid_connection_changes_the_sidebar_shape() {
     page.navigate(&fx, conn_id, Some(fx.enclave_room), Some(fx.enclave_id))
         .await;
     assert_eq!(page.enclave(), Some(fx.enclave_id));
-    assert!(render_sidebar(&fx.state, &fx.user, page.enclave())
-        .await
-        .expect("the sidebar renders again")
-        .contains(&enclave_nav));
+    assert!(
+        render_sidebar(&fx.state, &fx.user, page.enclave(), page.room())
+            .await
+            .expect("the sidebar renders again")
+            .contains(&enclave_nav)
+    );
 }
 
 #[tokio::test]
@@ -311,14 +327,18 @@ async fn the_seen_caption_memory_is_cleared_by_a_move_and_kept_by_a_re_assert() 
 
     page.navigate(&fx, conn_id, Some(fx.enclave_room), Some(fx.enclave_id))
         .await;
-    page.dm_seen_msg.lock().unwrap().insert(fx.enclave_room, 42);
+    page.scope
+        .dm_seen_msg
+        .lock()
+        .unwrap()
+        .insert(fx.enclave_room, 42);
 
     // Re-asserting the SAME page is what LC-318's reconnect soft-refresh does on
     // a live socket today. It must change nothing at all.
     page.navigate(&fx, conn_id, Some(fx.enclave_room), Some(fx.enclave_id))
         .await;
     assert_eq!(
-        page.dm_seen_msg.lock().unwrap().get(&fx.enclave_room),
+        page.scope.dm_seen_msg.lock().unwrap().get(&fx.enclave_room),
         Some(&42),
         "a same-page re-assert must not disturb the caption memory"
     );
@@ -329,15 +349,19 @@ async fn the_seen_caption_memory_is_cleared_by_a_move_and_kept_by_a_re_assert() 
     page.navigate(&fx, conn_id, Some(fx.other_room), Some(fx.enclave_id))
         .await;
     assert!(
-        page.dm_seen_msg.lock().unwrap().is_empty(),
+        page.scope.dm_seen_msg.lock().unwrap().is_empty(),
         "a page move must clear the caption memory"
     );
 
     // An enclave-only move (an enclave landing page holds no room) counts too.
-    page.dm_seen_msg.lock().unwrap().insert(fx.other_room, 7);
+    page.scope
+        .dm_seen_msg
+        .lock()
+        .unwrap()
+        .insert(fx.other_room, 7);
     page.navigate(&fx, conn_id, Some(fx.other_room), None).await;
     assert!(
-        page.dm_seen_msg.lock().unwrap().is_empty(),
+        page.scope.dm_seen_msg.lock().unwrap().is_empty(),
         "leaving the enclave is a page move even when the room is unchanged"
     );
 }

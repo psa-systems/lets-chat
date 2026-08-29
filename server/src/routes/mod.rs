@@ -934,6 +934,38 @@ pub(crate) async fn load_sidebar(
 
 /// Helper: split a SidebarRoom vec into (starred, rest) using the
 /// user's per-room star set + position map.
+/// LC-836: the one definition of "the row for the page the viewer is on".
+/// `room_id` is the chat.db room of the page, a DM page's room included: the
+/// room row with that id, wherever LC-80 bucketed it (uncategorized, inside a
+/// category, or pulled up into Starred), or the peer row whose `dm_room_id` is
+/// it, gets `active` (`aria-current="page"` + the active row class). The page
+/// handlers call it for a full render and `ws::render_sidebar` calls it for
+/// the OOB refresh after a navigation, so the two cannot drift.
+pub fn mark_sidebar_active(
+    categories: &mut [SidebarCategoryGroup],
+    starred_rooms: &mut [SidebarRoom],
+    rooms: &mut [SidebarRoom],
+    starred_peers: &mut [SidebarPeer],
+    peers: &mut [SidebarPeer],
+    room_id: i64,
+) {
+    let categorized = categories.iter_mut().flat_map(|c| c.rooms.iter_mut());
+    for r in rooms
+        .iter_mut()
+        .chain(starred_rooms.iter_mut())
+        .chain(categorized)
+    {
+        if r.id == room_id {
+            r.active = true;
+        }
+    }
+    for p in peers.iter_mut().chain(starred_peers.iter_mut()) {
+        if p.dm_room_id == room_id {
+            p.active = true;
+        }
+    }
+}
+
 fn split_starred_rooms(
     rooms: Vec<SidebarRoom>,
     starred_ids: &std::collections::HashSet<i64>,
