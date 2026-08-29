@@ -170,7 +170,7 @@ const MAX_CALL_PAYLOAD: usize = 64 * 1024;
 /// role; `enclave:{id}` requires membership of that enclave; `user:{id}`
 /// requires the id to be the caller's own (so a tab only subscribes to its own
 /// per-user channel). Unknown / malformed topics are denied.
-async fn topic_subscribe_allowed(state: &AppState, user: &User, topic: &str) -> bool {
+pub async fn topic_subscribe_allowed(state: &AppState, user: &User, topic: &str) -> bool {
     if topic == "admin" {
         return user.role == "admin";
     }
@@ -191,6 +191,57 @@ async fn topic_subscribe_allowed(state: &AppState, user: &User, topic: &str) -> 
         Some(("user", id)) => id == user.id,
         _ => false,
     }
+}
+
+/// LC-838: the user record a live connection authorizes and renders with.
+///
+/// `handle_socket` takes a `User` from the HTTP upgrade, and until LC-837 that
+/// snapshot lived as long as a page: every navigation opened a fresh socket
+/// with a fresh record. Now the socket outlives navigation, so the snapshot is
+/// re-read at the same point a fresh socket would have taken it (see
+/// [`refresh_account`]), and every decision reads the CURRENT snapshot: the
+/// receive loop takes one per frame, the send task one per event. Both are
+/// `Arc<User>` clones of the inner value, so a refresh is one pointer swap and
+/// a read is one refcount bump; neither loop holds the lock across an await.
+pub type Account = Arc<Mutex<Arc<User>>>;
+
+/// LC-838: re-read this connection's user record and make it the snapshot both
+/// loops will consult from now on.
+///
+/// Trigger: the `page_context` frame, which the client sends on connect and on
+/// every navigation. That restores exactly the freshness the codebase had
+/// before LC-837 (one read per page move) rather than inventing a stronger
+/// guarantee (a read per frame, on the hot path) or a weaker one (a socket that
+/// never re-reads). A user demoted while sitting still on a page keeps their
+/// rights until their next page move, as they did before; the alternatives are
+/// recorded on LC-838.
+///
+/// Returns the fresh snapshot, or `None` when the record is gone (the account
+/// was deleted), in which case the caller closes the socket: there is no user
+/// left to authorize. A transient database error keeps the previous snapshot,
+/// because dropping a live call over a hiccup is worse than one stale read.
+///
+/// `Hub::connections` carries its own copy of the display label (typing,
+/// wiki-editing and voice rosters read it), so a rename is pushed there too.
+pub async fn refresh_account(
+    state: &AppState,
+    conn_id: ConnId,
+    account: &Account,
+) -> Option<Arc<User>> {
+    let prev = account.lock().unwrap().clone();
+    let fresh: Arc<User> = match db::auth::find_user_by_id(&state.auth, &prev.id).await {
+        Ok(Some(rec)) => Arc::new(rec.into()),
+        Ok(None) => return None,
+        Err(e) => {
+            tracing::warn!(error = %e, user_id = %prev.id, "account refresh failed; keeping the previous snapshot");
+            return Some(prev);
+        }
+    };
+    if fresh.display_label() != prev.display_label() {
+        state.hub.set_username(conn_id, fresh.display_label());
+    }
+    *account.lock().unwrap() = fresh.clone();
+    Some(fresh)
 }
 
 /// LC-834: rebuild this connection's page-scoped state for the page the client
@@ -316,10 +367,7 @@ pub async fn ws_handler(
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
-    let username = user
-        .display_name
-        .clone()
-        .unwrap_or_else(|| user.username.clone());
+    let username = user.display_label().to_string();
     let (conn_id, mut rx, is_first_conn) = state.hub.connect(&user.id, &username);
     if is_first_conn {
         // Re-fetch so the broadcast carries the freshest persisted status,
@@ -338,6 +386,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     // task below. Consumed by the email-digest "missed" predicate alongside
     // `last_active_at`; does not influence idle-flip.
     db::auth::bump_last_ws_seen(&state.auth, &user.id).await;
+    // LC-838: the user record both loops authorize and render with. `user` is
+    // moved in here; from now on each frame and each event takes its own
+    // snapshot (the `let user` / `let send_user` shadows below), and the
+    // `page_context` frame refreshes it (see `refresh_account`).
+    let account: Account = Arc::new(Mutex::new(Arc::new(user)));
     // LC-834: the three bindings below are this connection's PAGE-SCOPED state -
     // they describe the page the client is showing, not the connection itself.
     // They are kept current by the `page_context` frame, which the client sends
@@ -378,7 +431,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     let (mut tx, mut rx_ws) = socket.split();
 
     let send_state = state.clone();
-    let send_user = user.clone();
+    let send_account = account.clone();
     let send_subscribed = subscribed.clone();
     let send_dm_seen = dm_seen_msg.clone();
     let send_current_enclave = current_enclave.clone();
@@ -396,6 +449,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                 evt = rx.recv() => {
                     match evt {
                         Ok(e) => {
+                            // LC-838: the current user record for this event.
+                            let send_user: Arc<User> = send_account.lock().unwrap().clone();
                             // LC-337: snapshot this connection's current enclave
                             // (Copy) so the guard is not held across the awaits
                             // in the arms below. Read fresh each event because
@@ -850,6 +905,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         match msg {
             Message::Text(text) => {
                 if let Ok(frame) = serde_json::from_str::<ClientFrame>(text.as_str()) {
+                    // LC-838: the current user record for this frame, and the
+                    // display label the call / voice paths attach to it.
+                    let user: Arc<User> = account.lock().unwrap().clone();
+                    let username = user.display_label().to_string();
                     match frame {
                         ClientFrame::Subscribe { room_id } => {
                             // LC-637: authorize the subscribe frame with the SAME
@@ -896,6 +955,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             }
                         }
                         ClientFrame::PageContext(ctx) => {
+                            // LC-838: a page move is where a fresh socket used
+                            // to re-read the user; re-read here, BEFORE the
+                            // destination is authorized, so a demoted admin
+                            // is refused the enclave they no longer belong to.
+                            // A deleted account closes the socket.
+                            let user = match refresh_account(&state, conn_id, &account).await {
+                                Some(u) => u,
+                                None => break,
+                            };
                             let moved =
                                 apply_page_context(&state, &user, conn_id, &scope, ctx).await;
                             // LC-836: a real move (not the connect frame, not
@@ -1135,7 +1203,7 @@ async fn render_unread_badge(
 ///    DM. If both parties have read receipts enabled, render the "Seen HH:MM"
 ///    caption under the most recent own-authored message <= peer's
 ///    `last_read_message_id`, and clear the previous caption slot if any.
-async fn render_dm_read(
+pub async fn render_dm_read(
     state: &AppState,
     viewer: &User,
     room_id: i64,
@@ -3155,6 +3223,10 @@ pub mod test_support {
     // shape follows it. Same reasoning as the call helpers above: the logic is
     // reachable only from the receive loop otherwise.
     pub use super::{apply_page_context, render_sidebar, PageContext, PageScope};
+    // LC-838: the live-connection user snapshot, its refresh, and the two gates
+    // the ticket names (topic authorization, the read-receipt caption), so a
+    // test can change the record mid-connection and assert the gates follow.
+    pub use super::{refresh_account, render_dm_read, topic_subscribe_allowed, Account};
 }
 
 #[cfg(test)]
