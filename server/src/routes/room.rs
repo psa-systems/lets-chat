@@ -512,29 +512,25 @@ pub async fn get_room(
         }
     }
     let (
-        sidebar_categories,
-        sidebar_starred_rooms,
-        sidebar_starred_peers,
+        mut sidebar_categories,
+        mut sidebar_starred_rooms,
+        mut sidebar_starred_peers,
         mut sidebar_rooms,
-        sidebar_peers,
+        mut sidebar_peers,
         switcher,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, current_enclave).await?;
-    let mut sidebar_categories = sidebar_categories;
-    if let Some(r) = sidebar_rooms.iter_mut().find(|r| r.id == room_id) {
-        r.active = true;
-    } else {
-        // After the LC-79 redesign categorized rooms live inside
-        // `sidebar_categories[i].rooms`; scan those too so the active
-        // room's link still highlights when it sits in a category.
-        for cat in sidebar_categories.iter_mut() {
-            if let Some(r) = cat.rooms.iter_mut().find(|r| r.id == room_id) {
-                r.active = true;
-                break;
-            }
-        }
-    }
+    // LC-836: shared with the OOB sidebar refresh, so a navigation without a
+    // page load highlights exactly the row a full render would.
+    super::mark_sidebar_active(
+        &mut sidebar_categories,
+        &mut sidebar_starred_rooms,
+        &mut sidebar_rooms,
+        &mut sidebar_starred_peers,
+        &mut sidebar_peers,
+        room_id,
+    );
 
     let mute_mode = db::notifications::room_mute_mode(&state.chat, &user.id, room_id)
         .await

@@ -387,18 +387,25 @@ pub async fn get_dm(
 
     // Sidebar data (after marking-as-read so the badge for this DM is 0).
     let (
-        sidebar_categories,
-        sidebar_starred_rooms,
-        sidebar_starred_peers,
-        sidebar_rooms,
+        mut sidebar_categories,
+        mut sidebar_starred_rooms,
+        mut sidebar_starred_peers,
+        mut sidebar_rooms,
         mut sidebar_peers,
         switcher,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, None).await?;
-    if let Some(p) = sidebar_peers.iter_mut().find(|p| p.id == peer.id) {
-        p.active = true;
-    }
+    // LC-836: shared with the OOB sidebar refresh; keyed by the DM's room id,
+    // which is what the page reports over the socket.
+    super::mark_sidebar_active(
+        &mut sidebar_categories,
+        &mut sidebar_starred_rooms,
+        &mut sidebar_rooms,
+        &mut sidebar_starred_peers,
+        &mut sidebar_peers,
+        room.id,
+    );
 
     let mute_mode = db::notifications::room_mute_mode(&state.chat, &user.id, room.id)
         .await

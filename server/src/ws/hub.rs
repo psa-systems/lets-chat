@@ -543,6 +543,16 @@ impl Hub {
         }
     }
 
+    /// LC-836: deliver `event` to exactly one connection. For state that is
+    /// per-connection rather than per-user (which page a tab is on), a
+    /// `broadcast_to_user` would make every other tab of the same user
+    /// re-render for a move it did not make. No-op for an unknown id.
+    pub fn send_to_conn(&self, conn_id: ConnId, event: &ChatEvent) {
+        if let Some(conn) = self.connections.get(&conn_id) {
+            let _ = conn.tx.send(event.clone());
+        }
+    }
+
     /// Record a typing event for a connection. Broadcasts UserTyping to the room
     /// (excluding the sender) on the first frame of a new typing session, then
     /// spawns an eviction task that sends UserStoppedTyping after 5s of silence.
