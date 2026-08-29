@@ -148,6 +148,22 @@
     var room = new LK.Room({ adaptiveStream: true, dynacast: true });
     session = { roomId: cfg.roomId, room: room, hooks: hooks, sharing: false };
 
+    // LC-840: the SFU ended the session under us (server shutdown or restart,
+    // the room closed, this participant removed, the network past LiveKit's
+    // reconnect window). stop() clears `session` BEFORE it disconnects, so a
+    // disconnect we asked for finds a different (or no) session here and is
+    // ignored; the connect-failure path below does the same. Anything else
+    // drops the session and tells voice.js, which otherwise keeps `joined`
+    // true with no media: a dock still offering Leave and Mute over silence.
+    var mine = session;
+    room.on(LK.RoomEvent.Disconnected, function (reason) {
+      if (session !== mine) return;
+      session = null;
+      var sink = document.getElementById('lc-huddle-sfu-audio-sink');
+      if (sink) sink.replaceChildren();
+      if (hooks.onDisconnected) hooks.onDisconnected(reason);
+    });
+
     // A remote joined / left: mirror onto the tile grid so the roster matches
     // the mesh path (where VoiceJoined/VoiceLeft drive the same tiles).
     room.on(LK.RoomEvent.ParticipantConnected, function (p) {
