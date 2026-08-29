@@ -1,0 +1,145 @@
+---
+
+# LC-841: build the transcription agent's OCI image (services/transcription-agent,
+# LC-815) and push it to the Forgejo Container Registry as
+# dev.a8n.run/<owner>/lets-chat-transcription-agent, next to the lets-chat app
+# image. Same trigger-derived publish trains as build-oci-image.yml (a main push
+# publishes only :latest, a v* tag only :vX.Y.Z; see ci-build/get-tags.nu), so a
+# release commit's two runs never race on one tag. Path-filtered to the agent so
+# an app-only change does not rebuild it.
+name: Build agent OCI container
+
+on:
+  push:
+    branches:
+      - "main"
+    tags:
+      - "v*"
+    paths:
+      - "services/transcription-agent/**"
+      - "ci-build/get-tags.nu"
+      - ".forgejo/workflows/build-agent-image.yml"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build, compute tags and print every registry action without pushing"
+        type: boolean
+        default: true
+      simulate_tag:
+        description: "Version like v9.9.9 to exercise the release publish path; empty exercises latest"
+        type: string
+        default: ""
+
+jobs:
+  build-and-push:
+    name: Build and push lets-chat-transcription-agent
+    # Base image: the build happens inside `docker buildx`; the runner only
+    # drives docker and the registry (LC-647).
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_REGISTRY: ""
+      REGISTRY_PROVIDER: dev.a8n.run
+      # Same org variables and PAT as build-oci-image.yml (psa-systems private
+      # registry), so the agent image lands beside the app image and the hosts
+      # that already pull lets-chat need no new registry login.
+      REGISTRY_OWNER: ${{ vars.PSA_SYSTEMS_PRIVATE_PACKAGE_OWNER }}
+      REGISTRY_USER: ""
+      REGISTRY_PASSWORD: ${{ secrets.PSA_SYSTEMS_PRIVATE_PACKAGE_PAT }}
+
+    steps:
+      - name: Clone the repository
+        uses: https://code.forgejo.org/actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Verify Docker availability
+        run: |
+          docker version
+          docker buildx version
+
+      - name: Set up buildx builder
+        run: |
+          docker buildx create --name container-builder --driver docker-container --use
+
+      - name: Export Actions runtime env for buildx gha cache
+        # See build-oci-image.yml: a raw `docker buildx build` does not inject
+        # the gha cache backend's env, so re-export it into GITHUB_ENV.
+        uses: https://github.com/crazy-max/ghaction-github-runtime@v3
+
+      - name: Set environment variables
+        shell: nu {0}
+        run: |
+          let owner = $env.REGISTRY_OWNER
+          $"REGISTRY_USER=($owner)\n" | save --append $env.GITHUB_ENV
+          $"IMAGE_REGISTRY=($env.REGISTRY_PROVIDER)/($owner)\n" | save --append $env.GITHUB_ENV
+
+      - name: Resolve publish mode, train and tag
+        id: resolve
+        shell: nu {0}
+        run: |
+          # Trigger-derived mode, never git describe (see build-oci-image.yml
+          # and ci-build/get-tags.nu for the twin-publish race this avoids).
+          let event = "${{ github.event_name }}"
+          let ref_type = "${{ github.ref_type }}"
+          let ref_name = "${{ github.ref_name }}"
+          let simulate_tag = "${{ inputs.simulate_tag }}"
+          let mode = if $event == "workflow_dispatch" {
+            "dry-run"
+          } else if $ref_type == "tag" {
+            "release"
+          } else {
+            "latest"
+          }
+          let dry_run = ($event == "workflow_dispatch" and "${{ inputs.dry_run }}" != "false")
+          let r = (^nu ci-build/get-tags.nu --mode $mode --ref-name $ref_name --simulate-tag $simulate_tag --json | from json)
+          $"mode=($r.mode)\n" | save --append $env.GITHUB_OUTPUT
+          $"train=($r.train)\n" | save --append $env.GITHUB_OUTPUT
+          $"tag=($r.tag)\n" | save --append $env.GITHUB_OUTPUT
+          $"describe=($r.describe)\n" | save --append $env.GITHUB_OUTPUT
+          $"dry_run=($dry_run)\n" | save --append $env.GITHUB_OUTPUT
+          print $"mode=($r.mode) train=($r.train) tag=($r.tag) describe=($r.describe) dry_run=($dry_run)"
+
+      - name: Log in to container registry
+        shell: nu {0}
+        run: |
+          ^docker login --username $env.REGISTRY_USER --password $env.REGISTRY_PASSWORD $env.REGISTRY_PROVIDER
+
+      - name: Build and push image
+        shell: nu {0}
+        run: |
+          let tag = "${{ steps.resolve.outputs.tag }}"
+          let dry_run = ("${{ steps.resolve.outputs.dry_run }}" == "true")
+          let image = "lets-chat-transcription-agent"
+          let registry = $env.IMAGE_REGISTRY
+          let tag_args = [-t $"($registry)/($image):($tag)"]
+          let cache_from = "type=gha"
+          let cache_to = "type=gha,mode=max,ignore-error=true"
+          # A dry-run builds locally and pushes nothing; a real run pushes and
+          # writes the gha buildcache.
+          let push_args = if $dry_run { [--load] } else { [--push --cache-to $cache_to] }
+          # The Dockerfile's last stage is `runtime`; the `test` and `typecheck`
+          # stages are agent-check.yml's job, not a publish gate here.
+          let action = if $dry_run { "[dry-run] WOULD build and push" } else { "Building and pushing" }
+          print $"($action) ($image) with tag: ($tag)"
+          (
+            ^docker buildx build
+              ...$push_args
+              --cache-from $cache_from
+              --target runtime
+              ...$tag_args
+              -f services/transcription-agent/Dockerfile
+              services/transcription-agent
+          )
+
+      - name: Print image URLs
+        shell: nu {0}
+        run: |
+          let tag = "${{ steps.resolve.outputs.tag }}"
+          let dry_run = ("${{ steps.resolve.outputs.dry_run }}" == "true")
+          let prefix = if $dry_run { "[dry-run] WOULD push image to" } else { "Image pushed to" }
+          let image = "lets-chat-transcription-agent"
+          let registry = $env.IMAGE_REGISTRY
+          print $"($prefix) ($registry)/($image):($tag)"
