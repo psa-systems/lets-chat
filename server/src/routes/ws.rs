@@ -343,10 +343,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     // They are kept current by the `page_context` frame, which the client sends
     // on connect and on every navigation and which rebuilds all three to what a
     // socket freshly opened on the destination page would hold (see
-    // `apply_page_context`). Navigation is still a full page load today, so a
-    // fresh socket is what every navigation actually produces and the frame is
-    // redundant; it is what keeps these correct once the socket outlives a
-    // navigation (LC-837).
+    // `apply_page_context`). Since LC-837 a nav-panel navigation swaps #main
+    // over the live socket, so the frame is what keeps these correct; a link
+    // inside #main is still a full page load (a fresh socket) until boosting
+    // is widened to it.
     let subscribed: Arc<Mutex<HashSet<i64>>> = Arc::new(Mutex::new(HashSet::new()));
     // Per-connection memory of which own-authored DM message currently shows
     // the "Seen HH:MM" caption, keyed by room_id. Used to clear the previous

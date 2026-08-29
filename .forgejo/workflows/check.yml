@@ -144,6 +144,15 @@ jobs:
         # ci-build/check-swap-safe-scripts.nu and LC-835.
         run: nu ci-build/check-swap-safe-scripts.nu
 
+      - name: Nav boost guard
+        # Boosted navigation is per anchor (LC-837): every link in the nav
+        # panel carries the partials/nav_boost.html include or an explicit
+        # hx-boost="false", and hx-boost="true" lives in that include only. A
+        # container-level boost is inherited by the sidebar's own htmx
+        # controls and blanks them; an undeclared anchor silently reloads the
+        # page and drops a live call. See ci-build/check-nav-boost.nu.
+        run: nu ci-build/check-nav-boost.nu
+
       - name: UI convention guard
         # The classes the 2026-08-11 UI audit closed, held closed by one grep
         # each: palette literals in templates, buttons styled as text links,

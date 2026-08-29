@@ -24,7 +24,7 @@
      The count rides on the Home switcher entry (id = none), which already
      carries pending_invites, so there is no new Rust-side plumbing. #}
   {% for e in switcher %}{% if e.id.is_none() && e.pending_invites > 0 %}
-  <a href="/invitations" data-lc-invites-banner
+  <a href="/invitations" {% include "partials/nav_boost.html" %} data-lc-invites-banner
      class="mx-2 mt-2 flex items-center gap-2 rounded-md border border-border bg-accent-surface px-2 py-1.5 text-accent-surface-content hover:bg-surface-sunken">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 flex-none" aria-hidden="true">
       <path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z"/>
@@ -58,9 +58,9 @@
          uses (LC-143). Listing it unconditionally here would surface an admin
          link to every plain member. #}
       {% for e in switcher %}{% if e.active %}{% if e.can_manage %}
-      <a href="/enclave/{{ eid }}/settings" role="menuitem" class="lc-menu-item">{{ "switcher-enclave-settings"|t }}</a>
+      <a href="/enclave/{{ eid }}/settings" {% include "partials/nav_boost.html" %} role="menuitem" class="lc-menu-item">{{ "switcher-enclave-settings"|t }}</a>
       {% endif %}{% endif %}{% endfor %}
-      <a href="/enclaves/discover" role="menuitem" class="lc-menu-item">{{ "switcher-discover"|t }}</a>
+      <a href="/enclaves/discover" {% include "partials/nav_boost.html" %} role="menuitem" class="lc-menu-item">{{ "switcher-discover"|t }}</a>
     </div>
   </details>
   {% endif %}
@@ -227,46 +227,46 @@
      in the footer. Icon + label rows on the shared .lc-nav-row rhythm. #}
   <div class="px-2 pb-2 space-y-0.5 border-b border-border">
     <p class="lc-section-label px-2 pb-1">{{ "sidebar-section-navigation"|t }}</p>
-    <a href="/inbox" class="lc-nav-row">
+    <a href="/inbox" {% include "partials/nav_boost.html" %} class="lc-nav-row">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M1 11.27c0-.246.033-.492.099-.73l1.523-5.521A2.75 2.75 0 015.273 3h9.454a2.75 2.75 0 012.651 2.019l1.523 5.52c.066.239.099.485.099.732V15a2 2 0 01-2 2H3a2 2 0 01-2-2v-3.73zm3.068-5.852A1.25 1.25 0 015.273 4.5h9.454a1.25 1.25 0 011.205.918l1.523 5.52c.006.02.01.041.015.062H14a1 1 0 00-.86.49l-.606 1.02a1 1 0 01-.86.49H8.236a1 1 0 01-.894-.553l-.448-.894A1 1 0 006 12H2.53l.015-.062 1.523-5.52z" clip-rule="evenodd"/>
       </svg>
       <span>{{ "sidebar-link-inbox"|t }}</span>
     </a>
-    <a href="/activity" class="lc-nav-row">
+    <a href="/activity" {% include "partials/nav_boost.html" %} class="lc-nav-row">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M10 2a6 6 0 00-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 00.515 1.076 32.91 32.91 0 003.256.508 3.5 3.5 0 006.972 0 32.903 32.903 0 003.256-.508.75.75 0 00.515-1.076A11.448 11.448 0 0116 8a6 6 0 00-6-6zM8.05 14.943a33.54 33.54 0 003.9 0 2 2 0 01-3.9 0z" clip-rule="evenodd"/>
       </svg>
       <span>{{ "sidebar-link-activity"|t }}</span>
     </a>
-    <a href="/saved" class="lc-nav-row">
+    <a href="/saved" {% include "partials/nav_boost.html" %} class="lc-nav-row">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M5 2a2 2 0 00-2 2v14l7-3.5L17 18V4a2 2 0 00-2-2H5z" clip-rule="evenodd"/>
       </svg>
       <span>{{ "sidebar-link-saved"|t }}</span>
     </a>
-    <a href="/scheduled" class="lc-nav-row">
+    <a href="/scheduled" {% include "partials/nav_boost.html" %} class="lc-nav-row">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd"/>
       </svg>
       <span>{{ "sidebar-link-scheduled"|t }}</span>
     </a>
     {# LC-526: kudos leaderboard. #}
-    <a href="/kudos" class="lc-nav-row">
+    <a href="/kudos" {% include "partials/nav_boost.html" %} class="lc-nav-row">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M15.988 3.012A2.25 2.25 0 0118 5.25v.75c0 2.036-1.324 3.763-3.158 4.368a5.99 5.99 0 01-3.842 3.29V16.5h2a.75.75 0 010 1.5h-6a.75.75 0 010-1.5h2v-2.842a5.99 5.99 0 01-3.842-3.29C3.324 9.763 2 8.036 2 6v-.75a2.25 2.25 0 012.012-2.238 39.72 39.72 0 0111.976 0zM4 6c0 1.006.501 1.895 1.266 2.432A6.008 6.008 0 015.02 6.24 3.487 3.487 0 013.5 5.635V6zm12.5-.365a3.487 3.487 0 01-1.52.605 6.008 6.008 0 01-.246 2.192C15.499 7.895 16 7.006 16 6v-.365z" clip-rule="evenodd"/>
       </svg>
       <span>{{ "sidebar-link-kudos"|t }}</span>
     </a>
     {# LC-536: personal member-stats recap. #}
-    <a href="/stats" class="lc-nav-row">
+    <a href="/stats" {% include "partials/nav_boost.html" %} class="lc-nav-row">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path d="M15.5 2A1.5 1.5 0 0014 3.5v13a1.5 1.5 0 001.5 1.5h1a1.5 1.5 0 001.5-1.5v-13A1.5 1.5 0 0016.5 2h-1zM9.5 6A1.5 1.5 0 008 7.5v9A1.5 1.5 0 009.5 18h1a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0010.5 6h-1zM3.5 10A1.5 1.5 0 002 11.5v5A1.5 1.5 0 003.5 18h1A1.5 1.5 0 006 16.5v-5A1.5 1.5 0 004.5 10h-1z"/>
       </svg>
       <span>{{ "sidebar-link-stats"|t }}</span>
     </a>
     {# LC-394: call transcripts archive. #}
-    <a href="/transcripts" class="lc-nav-row">
+    <a href="/transcripts" {% include "partials/nav_boost.html" %} class="lc-nav-row">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm1 4a.75.75 0 000 1.5h4a.75.75 0 000-1.5H8zm0 3a.75.75 0 000 1.5h4a.75.75 0 000-1.5H8zm0 3a.75.75 0 000 1.5h2a.75.75 0 000-1.5H8z" clip-rule="evenodd"/>
       </svg>
