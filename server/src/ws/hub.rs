@@ -543,6 +543,20 @@ impl Hub {
         }
     }
 
+    /// LC-838: a rename reached the live record; keep this connection's copy
+    /// of the display label (read by the typing, wiki-editing and voice roster
+    /// paths) in step with it. No-op for an unknown id.
+    pub fn set_username(&self, conn_id: ConnId, username: &str) {
+        if let Some(mut conn) = self.connections.get_mut(&conn_id) {
+            conn.username = username.to_string();
+        }
+    }
+
+    /// The display label a connection was registered (or last renamed) with.
+    pub fn username_of(&self, conn_id: ConnId) -> Option<String> {
+        self.connections.get(&conn_id).map(|c| c.username.clone())
+    }
+
     /// LC-836: deliver `event` to exactly one connection. For state that is
     /// per-connection rather than per-user (which page a tab is on), a
     /// `broadcast_to_user` would make every other tab of the same user
