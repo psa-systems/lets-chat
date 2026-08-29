@@ -8,8 +8,10 @@
 # docker daemon is on the host, the runner in a container). So, like the desktop
 # build, the work happens inside docker: `docker buildx build --target test`
 # runs `bun test` in the agent's Dockerfile test stage and fails the build (and
-# thus this job) on any test failure. Path-filtered so it only fires on agent
-# changes and never gates unrelated PRs.
+# thus this job) on any test failure. LC-841 adds the `typecheck` stage beside
+# it: the tests never import the LiveKit SDK, so agent.ts could (and did) ship
+# with type errors against it. Path-filtered so it only fires on agent changes
+# and never gates unrelated PRs.
 name: Agent check
 
 on:
@@ -39,3 +41,6 @@ jobs:
 
       - name: Bun unit tests (in the agent's Dockerfile test stage)
         run: docker buildx build --target test -f services/transcription-agent/Dockerfile services/transcription-agent
+
+      - name: Typecheck against the pinned LiveKit SDK (Dockerfile typecheck stage)
+        run: docker buildx build --target typecheck -f services/transcription-agent/Dockerfile services/transcription-agent

@@ -19,6 +19,20 @@ COPY src ./src
 COPY test ./test
 RUN bun test
 
+# LC-841: compile the LiveKit wiring against the pinned SDK. The test stage
+# above imports only the pure modules, never the SDK, which is how agent.ts
+# shipped with two type errors (a type-only import and a WorkerOptions field
+# that does not exist) that no check could see. This stage does the full
+# install (SDK + typescript) and typechecks src/ and test/; CI runs it via
+# `docker buildx build --target typecheck`. Not on the runtime path.
+FROM oven/bun:1 AS typecheck
+WORKDIR /app
+COPY package.json tsconfig.json ./
+RUN bun install
+COPY src ./src
+COPY test ./test
+RUN bun x tsc --noEmit
+
 # Runtime. This is the LAST stage, so a plain `docker build` (and the compose
 # overlay) produces the runtime image WITHOUT running the test stage.
 FROM oven/bun:1 AS runtime

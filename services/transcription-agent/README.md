@@ -47,7 +47,13 @@ bun install
 bun run start      # production worker (waits for dispatch)
 bun run dev        # local dev worker
 bun test           # unit tests (no LiveKit needed)
+bun run typecheck  # compile the LiveKit wiring against the pinned SDK
 ```
+
+The agent joins each dispatched room as `agent-<name>` with a subscribe-only,
+**hidden** grant (`WorkerPermissions`), so the SFU never announces it to the
+other participants; the `agent-` roster filter in `huddle_sfu.js` is a second
+line of defence, not the only one.
 
 Or via Docker:
 
@@ -58,6 +64,21 @@ docker run --rm \
   -e LETS_CHAT_TRANSCRIBE_AGENT_TOKEN=... \
   lets-chat-transcription-agent
 ```
+
+## Published image
+
+CI (`.forgejo/workflows/build-agent-image.yml`, LC-841) builds the runtime
+stage of the Dockerfile and pushes it beside the app image:
+
+```
+dev.a8n.run/psa-systems-private/lets-chat-transcription-agent:latest   # every main push touching the agent
+dev.a8n.run/psa-systems-private/lets-chat-transcription-agent:vX.Y.Z   # every v* tag
+```
+
+`agent-check.yml` gates PRs with the Dockerfile's `test` (bun test) and
+`typecheck` (tsc against the pinned SDK) stages. The fleet deployment (LiveKit
+SFU + this agent on c-01 staging) lives in the docker repo:
+`docs/runbooks/lc-810-c-01-livekit-transcription-agent.md`.
 
 ## Enable it alongside lets-chat
 
