@@ -327,3 +327,36 @@ test('LC-832: a float that does not take falls back to leaving, never a live mic
   assert.deepEqual(h.sfuCalls, ['start', 'stop']);
   assert.equal(h.sent.filter((f) => f.type === 'voice_leave').length, 1);
 });
+
+// LC-837 made back/forward an htmx history restore of #main, which fires
+// htmx:historyRestore and NOT htmx:afterSettle. scan() must run on both, or a
+// restore detaches the dock without floating it (a live mic with no UI) and a
+// restore back into the call room renders a second dock beside the float.
+test('LC-832: a history restore that leaves no dock floats the live one, exactly like a swap', () => {
+  const h = joined();
+
+  h.main.replaceChildren();             // back/forward restored a page with no voice root
+  h.fire('htmx:historyRestore');
+
+  assert.equal(h.voice.isJoined(), true, 'the call outlives the restore');
+  assert.equal(h.popout.isPopped(), true, 'the dock floated on htmx:historyRestore');
+  assert.equal(h.dock.parentNode, h.body, 'the LIVE dock is re-parented outside #main');
+  assert.deepEqual(h.sfuCalls, ['start'], 'no teardown ran');
+  assert.equal(h.sent.filter((f) => f.type === 'voice_leave').length, 0);
+});
+
+test('LC-832: a history restore back into the call room shows the placeholder, not a second dock', () => {
+  const h = joined();
+  h.swap(null);
+  assert.equal(h.popout.isPopped(), true);
+
+  const fresh = makeDock(7);
+  h.main.replaceChildren();
+  h.main.appendChild(fresh);
+  h.fire('htmx:historyRestore');
+
+  assert.equal(fresh.parentNode, null, 'no second dock for the live room');
+  assert.ok(h.body.querySelector('[data-lc-huddle-placeholder][data-room-id="7"]'));
+  assert.equal(h.voice.isJoined(), true);
+  assert.equal(h.popout.roomId(), '7');
+});
