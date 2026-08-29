@@ -797,6 +797,16 @@
   function sfuHooks() {
     return {
       selfId: cfg.selfId,
+      // LC-840: the SFU ended the session under us. Run the ordinary leave
+      // (voice_leave, tiles, the session event pair, the floating dock); its
+      // stop() is a no-op because huddle_sfu.js has already dropped the
+      // session. Tell the user, since the only other symptom is silence.
+      onDisconnected: function () {
+        if (!joined || !sfu) return;
+        leave();
+        var msg = window.__lcS('callConnectionFailed', 'The call connection failed.');
+        if (window.__lcToast) window.__lcToast('err', msg); else alert(msg);
+      },
       audioSink: function () {
         var el = document.getElementById('lc-huddle-sfu-audio-sink');
         if (!el) {

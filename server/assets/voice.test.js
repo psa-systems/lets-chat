@@ -70,6 +70,8 @@ function load() {
   const bodyListeners = {};
   const sent = [];
   const sfuCalls = [];
+  const toasts = [];
+  let sfuHooks = null;
   const tracks = [{ kind: 'audio', enabled: true, stopped: false, stop() { this.stopped = true; } }];
   const store = new Map();
   let controls = {};
@@ -101,9 +103,11 @@ function load() {
     },
     // LC-610: the SFU owns media on this path.
     LetsChatHuddleSfu: {
-      start: () => { sfuCalls.push('start'); return Promise.resolve(true); },
+      // LC-840: keep the hooks so a test can fire onDisconnected as the SFU would.
+      start: (_cfg, hooks) => { sfuCalls.push('start'); sfuHooks = hooks; return Promise.resolve(true); },
       stop: () => { sfuCalls.push('stop'); },
     },
+    __lcToast: (kind, msg) => { toasts.push([kind, msg]); },
     // LC-144: the mesh path takes its mic through the pinned-device module.
     LetsChatDevices: {
       getUserMedia: () => Promise.resolve({
@@ -156,6 +160,8 @@ function load() {
     voice: window.LetsChatVoice,
     popout: window.LetsChatHuddlePopout,
     join: () => controls['[data-lc-voice-join]'](),
+    toasts,
+    sfuHooks: () => sfuHooks,
     leaveClick: () => controls['[data-lc-voice-leave]'](),
     // htmx swapped #main: the old dock is gone from the document, and whatever
     // the new page rendered is in its place. A floating panel lives on the body,
@@ -359,4 +365,33 @@ test('LC-832: a history restore back into the call room shows the placeholder, n
   assert.ok(h.body.querySelector('[data-lc-huddle-placeholder][data-room-id="7"]'));
   assert.equal(h.voice.isJoined(), true);
   assert.equal(h.popout.roomId(), '7');
+});
+
+// LC-840: an SFU-side disconnect the client did not ask for must end the
+// huddle, or voice.js keeps `joined` true with no media.
+test('LC-840: an SFU disconnect leaves the huddle, releases the float and tells the user', () => {
+  const h = joined();
+  h.swap(null);                         // floated, as after a navigation
+  assert.equal(h.popout.isPopped(), true);
+
+  h.sfuHooks().onDisconnected('SERVER_SHUTDOWN');
+
+  assert.equal(h.voice.isJoined(), false);
+  assert.equal(h.sent.filter((f) => f.type === 'voice_leave').length, 1, 'the server roster is told');
+  assert.equal(h.popout.isPopped(), false, 'the floating dock is released');
+  assert.equal(h.body.querySelector('.lc-huddle--float'), null, 'no floating panel remains');
+  assert.equal(h.toasts.length, 1, 'the user is told');
+  assert.equal(h.toasts[0][0], 'err');
+});
+
+test('LC-840: a disconnect after the user already left runs nothing twice', () => {
+  const h = joined();
+  h.leaveClick();
+  assert.equal(h.voice.isJoined(), false);
+  const before = h.sent.filter((f) => f.type === 'voice_leave').length;
+
+  h.sfuHooks().onDisconnected('CLIENT_INITIATED');
+
+  assert.equal(h.sent.filter((f) => f.type === 'voice_leave').length, before, 'no second voice_leave');
+  assert.equal(h.toasts.length, 0, 'nothing to tell: the user chose to leave');
 });
