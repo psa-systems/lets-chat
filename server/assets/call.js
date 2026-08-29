@@ -504,6 +504,14 @@
 
   function startCall(withVideo, ctx) {
     if (phase !== 'idle' && phase !== 'incoming') return;
+    // LC-839: drop any active enclave voice channel or huddle first, as
+    // acceptCall() does - the OS has one mic and the user can't be in two
+    // calls at once. Since LC-837 a huddle survives navigating to the DM page,
+    // so "in a huddle, open a DM, press Call" is an ordinary path. leave()
+    // also releases the floating dock, so no panel is left behind.
+    if (window.LetsChatVoice && window.LetsChatVoice.isJoined()) {
+      window.LetsChatVoice.leave();
+    }
     // Outgoing context comes from the clicked button; if a call is already
     // bound (we are mid-incoming for the same peer) keep the existing one.
     if (phase === 'idle') {
