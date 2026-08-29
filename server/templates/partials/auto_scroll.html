@@ -1,4 +1,4 @@
-<script>
+<script data-lc-guard="teardown">
 (function() {
   // LC-246: clipboard fallback for the per-message "Copy link" buttons when
   // navigator.clipboard is unavailable (older browsers / non-secure contexts).
@@ -307,7 +307,7 @@
   messages.addEventListener('htmx:beforeCleanupElement', maybeTeardown);
 })();
 </script>
-<script>
+<script data-lc-guard="teardown">
 // LC-325: jump-to-date. The full room history is in #messages, so picking a
 // date in the header control scrolls to the first message on/after that day
 // (lexical compare on the `data-lc-day` "YYYY-MM-DD" attribute is chronological)

@@ -18,7 +18,7 @@
     </div>
   </div>
 </div>
-<script>
+<script data-lc-guard="flag">
 // LC-479: client-side label filtering for /saved. Filter chips live inside the
 // live-swapped #lc-saved-list; the active filter is stored on the stable
 // #lc-saved-wrap so it survives the SavedChanged OOB refresh. Rows carry
@@ -26,12 +26,14 @@
 // "__lc_unlabeled__" = no label, else an exact label match). apply() re-runs on
 // every htmx settle so a live refresh re-applies the active filter.
 (function(){
-  var wrap = document.getElementById('lc-saved-wrap');
-  if (!wrap) return;
   var UNLABELED = '__lc_unlabeled__';
+  // LC-835: apply() resolves both roots per call instead of closing over them.
+  // The settle hook below is registered once and outlives a #main swap, so the
+  // function it holds must not pin the pre-swap nodes.
   function apply(){
+    var wrap = document.getElementById('lc-saved-wrap');
     var list = document.getElementById('lc-saved-list');
-    if (!list) return;
+    if (!wrap || !list) return;
     var active = wrap.getAttribute('data-lc-active-filter') || '';
     // If the active label no longer exists after a refresh, fall back to All.
     if (active && active !== UNLABELED &&
@@ -48,6 +50,10 @@
       row.hidden = !show;
     });
   }
+  var wrap = document.getElementById('lc-saved-wrap');
+  if (!wrap) return;
+  // Left unguarded on purpose: #lc-saved-wrap is inside the swap, so every
+  // render binds its own fresh node and the old listener dies with the old one.
   wrap.addEventListener('click', function(e){
     var chip = e.target.closest && e.target.closest('[data-lc-saved-filter]');
     if (!chip) return;
@@ -55,7 +61,12 @@
     wrap.setAttribute('data-lc-active-filter', chip.getAttribute('data-lc-saved-filter') || '');
     apply();
   });
-  document.body.addEventListener('htmx:afterSettle', apply);
+  // LC-835: document.body outlives a #main swap, so register the settle hook
+  // once; a second one would re-apply the filter twice per settle.
+  if (!window.__lcSavedFilterWired) {
+    window.__lcSavedFilterWired = true;
+    document.body.addEventListener('htmx:afterSettle', apply);
+  }
   apply();
 })();
 </script>

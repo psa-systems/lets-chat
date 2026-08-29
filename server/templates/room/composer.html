@@ -177,7 +177,7 @@
             onclick="try{localStorage.setItem('lcSlashTipDismissed','1')}catch(e){} var t=document.getElementById('lc-slash-tip'); if(t)t.remove();"
             class="flex-none text-content-subtle hover:text-content-muted leading-none">&times;</button>
   </div>
-  <script>
+  <script data-lc-guard="none">
     (function(){
       try { if (localStorage.getItem('lcSlashTipDismissed')) return; } catch (e) {}
       var t = document.getElementById('lc-slash-tip');
@@ -483,7 +483,7 @@
           <label class="lc-ttl-opt"><input type="radio" name="ttl" value="7d"><span>{{ "room-composer-ttl-7d"|t }}</span></label>
         </div>
       </details>
-      <script>
+      <script data-lc-guard="teardown">
       (function(){
         // LC-553: reflect the armed self-destruct timer in the summary (accent
         // clock + short duration) and close the popover on pick. Per-element
@@ -500,9 +500,18 @@
           if (s) s.textContent = v || '';
           d.open = false;
         });
-        document.addEventListener('click', function(e){
+        function onDocClick(e){
           if (d.open && !d.contains(e.target)) d.open = false;
-        });
+        }
+        document.addEventListener('click', onDocClick);
+        // LC-835 teardown: the details-bound listener dies with the element,
+        // the document one does not. Drop it when the composer is cleaned up,
+        // mirroring the other composer blocks. Cleanup-root is #composer.
+        var root = document.currentScript.closest('[data-lc-cleanup-root]')
+                || document.currentScript.parentElement;
+        root.addEventListener('htmx:beforeCleanupElement', function(){
+          document.removeEventListener('click', onDocClick);
+        }, { once: true });
       })();
       </script>
       <button
@@ -522,7 +531,7 @@
 <div id="lc-drop-overlay" class="hidden pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-accent/40">
   <div class="rounded-lg bg-surface-elevated px-6 py-4 text-lg font-semibold text-content shadow-lg">{{ "room-composer-drop-file"|t }}</div>
 </div>
-<script>
+<script data-lc-guard="teardown">
 (function(){
   var ta = document.querySelector('#composer textarea[name=body]');
   var slot = document.getElementById('lc-mention-popover');
@@ -707,7 +716,7 @@
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
-<script>
+<script data-lc-guard="none">
 // LC-332: live character counter. Reveals within WARN_WINDOW chars of the cap,
 // warns inside the window, and flags + disables Send when the body is over the
 // cap. Length is counted by Unicode code point (Array.from(...).length) so it
@@ -766,7 +775,7 @@
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
-<script>
+<script data-lc-guard="teardown">
 // LC-296: emoji :shortcode: autocomplete. Third autocomplete on the composer,
 // mirroring the @mention block above (same combobox/listbox ARIA model, 200ms
 // debounce, keyboard nav, and form-swap teardown). Inserts data-insert from the
@@ -868,7 +877,7 @@
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
-<script>
+<script data-lc-guard="teardown">
 // LC-323: #channel autocomplete. Mirror of the emoji block above. A `#` after
 // start-of-line or whitespace opens a listbox of accessible same-enclave rooms;
 // choosing one inserts a `#name` token (render_body rewrites it to a /room/{id}
@@ -967,7 +976,7 @@
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
-<script>
+<script data-lc-guard="teardown">
 // Press Enter anywhere on the page to send the pending message. The textarea
 // has its own onkeydown for the focused case (and mention-popover handling);
 // this covers Enter while focus is elsewhere - message list, body, etc. We
@@ -993,14 +1002,13 @@
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
-<script>
+<script data-lc-guard="flag">
 (function(){
   var input = document.getElementById('lc-file');
   var staged = document.getElementById('lc-staged');
   var errSlot = document.getElementById('lc-upload-error');
   var hidden = document.querySelector('#composer input[name=file_id]');
   var ta = document.querySelector('#composer textarea[name=body]');
-  var overlay = document.getElementById('lc-drop-overlay');
   var currentObjectUrl = null;
 
   // LC-500: client-side mirror of the server allowlist
@@ -1159,6 +1167,12 @@
   // Drag/drop anywhere on the page while a composer is mounted. We use a
   // counter rather than relying on `dragleave` for cleanup because dragleave
   // fires for child elements as the cursor moves over them.
+  // LC-835: the listeners below are registered once on document, so they must
+  // not pin this render's overlay or uploader - after a #main swap both are
+  // detached. Republish the uploader every render, resolve the overlay by id at
+  // event time.
+  window.__lcDropUpload = uploadStaged;
+  function dropOverlay(){ return document.getElementById('lc-drop-overlay'); }
   if (!window.__lcDropAttached) {
     window.__lcDropAttached = true;
     var dragCounter = 0;
@@ -1170,11 +1184,13 @@
       }
       if (!has) return;
       dragCounter++;
-      overlay.classList.remove('hidden');
+      var ov = dropOverlay();
+      if (ov) ov.classList.remove('hidden');
     });
     document.addEventListener('dragleave', function(){
       dragCounter = Math.max(0, dragCounter - 1);
-      if (dragCounter === 0) overlay.classList.add('hidden');
+      var ov = dropOverlay();
+      if (dragCounter === 0 && ov) ov.classList.add('hidden');
     });
     document.addEventListener('dragover', function(e){
       if (e.dataTransfer && e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') !== -1) {
@@ -1183,16 +1199,17 @@
     });
     document.addEventListener('drop', function(e){
       dragCounter = 0;
-      overlay.classList.add('hidden');
+      var ov = dropOverlay();
+      if (ov) ov.classList.add('hidden');
       if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
       e.preventDefault();
       var f = e.dataTransfer.files[0];
-      if (f) uploadStaged(f);
+      if (f && window.__lcDropUpload) window.__lcDropUpload(f);
     });
   }
 })();
 </script>
-<script>
+<script data-lc-guard="teardown">
 // Voice-message recorder. Records mic audio with MediaRecorder, decodes the
 // blob client-side to compute a waveform, then uploads it through the same
 // /api/upload endpoint the file picker uses (with kind=voice + waveform).
@@ -1545,7 +1562,7 @@
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
-<script>
+<script data-lc-guard="teardown">
 // LC-496: async video-clip recorder (Loom-style). Records a camera or screen
 // stream with MediaRecorder and uploads the container through the same
 // /api/upload endpoint (kind=clip). The returned file_id is stashed in the
@@ -1811,7 +1828,7 @@
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
-<script>
+<script data-lc-guard="teardown">
 // LC-76: slash-command autocomplete. Fires while the composer holds only a
 // command name (a leading `/word` with no space yet); clears once the user
 // types args or anything non-command. Click-to-insert via __lcInsertSlash.
@@ -1951,7 +1968,7 @@
   };
 })();
 </script>
-<script>
+<script data-lc-guard="none">
 // LC-230: optimistic local echo. The form's hx-on::config-request calls
 // __lcOptimisticEcho(cid, body) to append a pending placeholder to #messages
 // before the POST round-trip completes. Dedupe: the server echoes the cid on
@@ -2124,7 +2141,7 @@
   };
 })();
 </script>
-<script>
+<script data-lc-guard="none">
 // LC-238: caret-position restore for the per-conversation draft. The draft
 // BODY is restored server-side (the textarea is rendered with `initial_draft`
 // from message_drafts, LC-64); this adds the one piece LC-237 asks for that
@@ -2198,7 +2215,7 @@
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
-<script>
+<script data-lc-guard="none">
 // LC-248: Arrow-Up in an EMPTY composer edits your most recent message.
 // The per-message hover "Edit" button (button[hx-get$="/edit"]) only renders
 // for the viewer's own editable messages, so the LAST such button in #messages
@@ -2229,7 +2246,7 @@
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
-<script>
+<script data-lc-guard="none">
 // LC-254: Markdown formatting toolbar. Each [data-lc-fmt] button wraps the
 // current textarea selection (or inserts a localized placeholder when nothing
 // is selected) in Markdown; the body is rendered server-side, so this is a pure
@@ -2333,7 +2350,7 @@
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
-<script>
+<script data-lc-guard="none">
 // LC-276: Write/Preview toggle. Renders the current draft through the server's
 // markdown pipeline (POST /room/{id}/preview) so the preview is byte-identical
 // to what posting produces, then shows it in place of the textarea. Toggling
@@ -2394,7 +2411,7 @@
   root.addEventListener('htmx:beforeCleanupElement', teardown, { once: true });
 })();
 </script>
-<script>
+<script data-lc-guard="none">
 // LC-399: live markdown highlight overlay. Mirrors the textarea text into the
 // .lc-mdback backdrop with markdown tokens styled, so formatting renders as the
 // user types. The highlighter ONLY wraps characters in spans (never adds,
