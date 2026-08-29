@@ -46,8 +46,12 @@
 // never accumulates duplicate listeners across reconnect soft-refreshes (the
 // reason the old per-page IIFEs needed an explicit teardown). Re-subscribing to
 // a room already subscribed is harmless server-side (the subscriber set is a
-// HashSet). No unsubscribe is sent: subscriptions persist for the life of the
-// socket, matching the prior behavior.
+// HashSet).
+//
+// LC-834: neither frame above can REMOVE a subscription, which breaks once one
+// socket serves several pages. The `page_context` frame below carries the whole
+// page's context (room and enclave, null included) and the server rebuilds the
+// connection from it, so a subscription lasts for a PAGE, not for the socket.
 (function () {
   function sendSubscribe(ws, roomId) {
     if (!ws || roomId == null || roomId === '') return;
@@ -87,11 +91,56 @@
     });
   }
 
+  // LC-834: both keys are always sent, null included, because silence already
+  // means "this page has no enclave" and so cannot also mean "left the enclave".
+  // Sourced from the page's own markup rather than the sidebar's
+  // `sidebar-nav-{id}` (which the LC-415 header reads): the sidebar sits outside
+  // the #main swap target and still shows the page we just left.
+  function pageContext(root) {
+    var roomEl = root.querySelector('[data-lc-live-room]');
+    var room = roomEl ? Number(roomEl.getAttribute('data-lc-live-room')) : NaN;
+    var topicEl = root.querySelector('[data-lc-live-topic^="enclave:"]');
+    var enclave = topicEl
+      ? Number(topicEl.getAttribute('data-lc-live-topic').slice('enclave:'.length))
+      : NaN;
+    return {
+      type: 'page_context',
+      room_id: Number.isFinite(room) ? room : null,
+      enclave_id: Number.isFinite(enclave) ? enclave : null,
+    };
+  }
+
+  function sendPageContext(ws) {
+    if (!ws) return;
+    try {
+      ws.send(JSON.stringify(pageContext(document)));
+    } catch (e) {
+      /* socket not ready / closed; a later htmx:wsOpen will retry */
+    }
+  }
+
   // Socket just opened: subscribe everything currently in the DOM. Use the
   // wrapper from the event detail directly so this does not depend on whether
   // layout.html's own wsOpen listener (which sets window.__lcWS) ran first.
   document.body.addEventListener('htmx:wsOpen', function (evt) {
+    sendPageContext(evt.detail.socketWrapper);
     subscribeWithin(evt.detail.socketWrapper, document);
+  });
+
+  // LC-834: a navigation is a swap of #main and only of #main. Deliberately not
+  // the htmx:load / htmx:afterSettle pair below, which also fire for partial
+  // swaps (modal, thread panel, lazy message page); a frame built from a
+  // partial's subtree would tear down the real page's state. Today the only
+  // #main swap is LC-318's reconnect soft-refresh of the SAME url, so the frame
+  // re-asserts what the connection already has and the server no-ops it.
+  document.body.addEventListener('htmx:afterSwap', function (evt) {
+    // Which element names #main depends on the swap style: htmx fires on the
+    // settled content (the new #main under outerHTML), detail.target is the old.
+    var swapped = evt.target;
+    var requested = evt.detail && evt.detail.target;
+    if ((swapped && swapped.id === 'main') || (requested && requested.id === 'main')) {
+      sendPageContext(window.__lcWS);
+    }
   });
 
   // A live page swapped into an already-open socket (notably the reconnect
