@@ -127,6 +127,24 @@ pub struct PageContext {
     pub enclave_id: Option<i64>,
 }
 
+/// LC-834/LC-836: the page-scoped state of one connection: everything that
+/// describes the page the client is showing rather than the connection itself.
+/// `handle_socket` owns one per socket; the `page_context` frame rebuilds it
+/// through [`apply_page_context`], which is the only place all four move
+/// together.
+#[derive(Clone, Default)]
+pub struct PageScope {
+    /// The rooms this connection receives live events for.
+    pub subscribed: Arc<Mutex<HashSet<i64>>>,
+    /// Which own-authored DM message carries the "Seen HH:MM" caption, per room.
+    pub dm_seen_msg: Arc<Mutex<HashMap<i64, i64>>>,
+    /// LC-337: the enclave the page is in, `None` on Home and DM pages.
+    pub current_enclave: Arc<Mutex<Option<i64>>>,
+    /// LC-836: the authorized page after the last frame, `None` until one
+    /// arrives. Its room is the sidebar's active row.
+    pub page: Arc<Mutex<Option<PageContext>>>,
+}
+
 /// Recognized `kind` discriminators for a call signal. Anything else is
 /// dropped before relay so a malformed client cannot inject arbitrary
 /// values into a peer's call state machine.
@@ -199,15 +217,21 @@ async fn topic_subscribe_allowed(state: &AppState, user: &User, topic: &str) -> 
 ///
 /// `admin` / `user:{id}` topics are untouched: not page-scoped. LC-726's rail
 /// tile joins `admin` on every page, so keeping it IS the equivalence.
+///
+/// LC-836: `page` records the authorized destination and the return value says
+/// whether this frame MOVED the connection: a previous frame existed and named
+/// a different room or enclave. The connect frame (no previous page) and a
+/// same-page re-assert both return `false`; the caller pushes a sidebar
+/// refresh to this connection only on `true`, because the sidebar sits
+/// outside the `#main` swap target and is otherwise left showing the page
+/// the tab came from.
 pub async fn apply_page_context(
     state: &AppState,
     user: &User,
     conn_id: ConnId,
-    subscribed: &Arc<Mutex<HashSet<i64>>>,
-    dm_seen_msg: &Arc<Mutex<HashMap<i64, i64>>>,
-    current_enclave: &Arc<Mutex<Option<i64>>>,
+    scope: &PageScope,
     ctx: PageContext,
-) {
+) -> bool {
     // Authorize the destination with the same predicates the additive
     // `subscribe` / `subscribe_topic` frames use, so this frame can never grant
     // what those would refuse. A refused id is treated as absent rather than
@@ -230,7 +254,7 @@ pub async fn apply_page_context(
     };
 
     let dropped_rooms: Vec<i64> = {
-        let mut set = subscribed.lock().unwrap();
+        let mut set = scope.subscribed.lock().unwrap();
         let stale: Vec<i64> = set
             .iter()
             .copied()
@@ -252,7 +276,7 @@ pub async fn apply_page_context(
     }
 
     let prev_enclave = {
-        let mut cur = current_enclave.lock().unwrap();
+        let mut cur = scope.current_enclave.lock().unwrap();
         std::mem::replace(&mut *cur, next_enclave)
     };
     if prev_enclave != next_enclave {
@@ -269,8 +293,15 @@ pub async fn apply_page_context(
     }
 
     if !dropped_rooms.is_empty() || prev_enclave != next_enclave {
-        dm_seen_msg.lock().unwrap().clear();
+        scope.dm_seen_msg.lock().unwrap().clear();
     }
+
+    let next = PageContext {
+        room_id: next_room,
+        enclave_id: next_enclave,
+    };
+    let prev = scope.page.lock().unwrap().replace(next);
+    matches!(prev, Some(p) if p != next)
 }
 
 pub async fn ws_handler(
@@ -331,6 +362,19 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     // otherwise clobber the enclave sidebar (blank categories + enclave rooms)
     // on mark-all-read / mute / notify-prefs / room-membership events.
     let current_enclave: Arc<Mutex<Option<i64>>> = Arc::new(Mutex::new(None));
+    // LC-836: the page the last `page_context` frame put this connection on,
+    // after authorization; `None` until the first frame. `render_sidebar`
+    // reads its room so an OOB sidebar highlights the row this tab is actually
+    // on, and `apply_page_context` compares against it to tell a real move
+    // (which pushes a sidebar refresh to this one connection) from the connect
+    // frame and from LC-318's same-url re-assert, neither of which may.
+    let page: Arc<Mutex<Option<PageContext>>> = Arc::new(Mutex::new(None));
+    let scope = PageScope {
+        subscribed: subscribed.clone(),
+        dm_seen_msg: dm_seen_msg.clone(),
+        current_enclave: current_enclave.clone(),
+        page: page.clone(),
+    };
     let (mut tx, mut rx_ws) = socket.split();
 
     let send_state = state.clone();
@@ -338,6 +382,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     let send_subscribed = subscribed.clone();
     let send_dm_seen = dm_seen_msg.clone();
     let send_current_enclave = current_enclave.clone();
+    let send_page = page.clone();
     let send = tokio::spawn(async move {
         let mut ping = tokio::time::interval(Duration::from_secs(30));
         ping.tick().await;
@@ -358,6 +403,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             // SubscribeTopic frame sets it, and LC-834's
                             // `page_context` frame replaces it on every move.
                             let cur_enclave = *send_current_enclave.lock().unwrap();
+                            // LC-836: same snapshot discipline for the page's
+                            // room, which the sidebar renders as the active row.
+                            let cur_room = send_page.lock().unwrap().and_then(|p| p.room_id);
                             let rendered = match &e {
                                 ChatEvent::NewMessage {
                                     message, client_id, ..
@@ -417,7 +465,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::RoomMemberAdded { user_id, .. }
                                 | ChatEvent::RoomMemberRemoved { user_id, .. } => {
                                     if user_id == &send_user.id {
-                                        render_sidebar(&send_state, &send_user, cur_enclave).await
+                                        render_sidebar(&send_state, &send_user, cur_enclave, cur_room).await
                                     } else {
                                         None
                                     }
@@ -439,6 +487,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                         &send_state,
                                         &send_user,
                                         cur_enclave,
+                                        cur_room,
                                     )
                                     .await
                                 }
@@ -490,10 +539,19 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 // broadcast_to_user fans to all their tabs;
                                 // re-render the sidebar so cleared badges land
                                 // live. Gated to the owner (defensive).
+                                // LC-836: `PageChanged` is this connection's
+                                // own move to another page over a live socket.
+                                // The sidebar sits outside the `#main` swap
+                                // target, so it is the one part of the shell a
+                                // navigation leaves behind: re-render it whole
+                                // for the destination (active row, the badge
+                                // the page GET just cleared, enclave-keyed nav)
+                                // through the same OOB path mark-all-read uses.
                                 ChatEvent::ReadAllChanged { user_id }
+                                | ChatEvent::PageChanged { user_id }
                                     if user_id == &send_user.id =>
                                 {
-                                    render_sidebar(&send_state, &send_user, cur_enclave).await
+                                    render_sidebar(&send_state, &send_user, cur_enclave, cur_room).await
                                 }
                                 // LC-239: the viewer saved or cleared a draft.
                                 // broadcast_to_user fans to all their tabs;
@@ -641,7 +699,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::RoomNotifyPrefsChanged { user_id, .. }
                                     if user_id == &send_user.id =>
                                 {
-                                    render_sidebar(&send_state, &send_user, cur_enclave).await
+                                    render_sidebar(&send_state, &send_user, cur_enclave, cur_room).await
                                 }
                                 ChatEvent::DmMuteChanged { .. } => {
                                     // Routed only via
@@ -651,7 +709,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     // the sidebar OOB so the peer row's
                                     // greyed-link class and unread-badge
                                     // visibility flip in this tab.
-                                    render_sidebar(&send_state, &send_user, cur_enclave).await
+                                    render_sidebar(&send_state, &send_user, cur_enclave, cur_room).await
                                 }
                                 ChatEvent::SidebarCategoriesChanged { enclave_id } => {
                                     // LC-331: shared category state changed in
@@ -838,16 +896,23 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             }
                         }
                         ClientFrame::PageContext(ctx) => {
-                            apply_page_context(
-                                &state,
-                                &user,
-                                conn_id,
-                                &subscribed,
-                                &dm_seen_msg,
-                                &current_enclave,
-                                ctx,
-                            )
-                            .await;
+                            let moved =
+                                apply_page_context(&state, &user, conn_id, &scope, ctx).await;
+                            // LC-836: a real move (not the connect frame, not
+                            // a same-page re-assert) re-renders this one
+                            // connection's sidebar for the destination. The
+                            // page GET already marked the room read, but its
+                            // `DmRead` fans out to the room's subscribers, and
+                            // this connection was not one of them yet; the
+                            // active row is per page and nothing else sets it.
+                            if moved {
+                                state.hub.send_to_conn(
+                                    conn_id,
+                                    &ChatEvent::PageChanged {
+                                        user_id: user.id.clone(),
+                                    },
+                                );
+                            }
                         }
                         ClientFrame::Typing { room_id } => {
                             if subscribed.lock().unwrap().contains(&room_id) {
@@ -2763,9 +2828,10 @@ async fn render_invitation_change(
     state: &AppState,
     viewer: &User,
     current_enclave: Option<i64>,
+    current_room: Option<i64>,
 ) -> Option<String> {
     let mut out = render_invitations(state, viewer).await.unwrap_or_default();
-    if let Some(sidebar) = render_sidebar(state, viewer, current_enclave).await {
+    if let Some(sidebar) = render_sidebar(state, viewer, current_enclave, current_room).await {
         out.push_str(&sidebar);
     }
     if out.is_empty() {
@@ -2962,6 +3028,7 @@ pub async fn render_sidebar(
     state: &AppState,
     viewer: &User,
     current_enclave: Option<i64>,
+    current_room: Option<i64>,
 ) -> Option<String> {
     // LC-337: render the recipient's CURRENT context, not a hardcoded Home /
     // DM-only shape. The OOB target `#sidebar` exists on every page, so a
@@ -2970,16 +3037,31 @@ pub async fn render_sidebar(
     // `sidebar-nav-{eid}` to `sidebar-nav`. `current_enclave` comes from the
     // connection's `enclave:{id}` topic subscription (see handle_socket).
     let (
-        sidebar_categories,
-        sidebar_starred_rooms,
-        sidebar_starred_peers,
-        sidebar_rooms,
-        sidebar_peers,
+        mut sidebar_categories,
+        mut sidebar_starred_rooms,
+        mut sidebar_starred_peers,
+        mut sidebar_rooms,
+        mut sidebar_peers,
         can_manage_sidebar_categories,
         sidebar_current_enclave,
     ) = super::load_sidebar(state, viewer, current_enclave)
         .await
         .ok()?;
+    // LC-836: `load_sidebar` marks nothing active; the page handlers did that
+    // after it, so every OOB refresh used to drop the highlight. Mark the row
+    // for the room the connection's `page_context` frame reported, with the
+    // same helper the handlers use. `None` (no frame yet, or a page with no
+    // room) renders no highlight, which is what those pages show anyway.
+    if let Some(room_id) = current_room {
+        super::mark_sidebar_active(
+            &mut sidebar_categories,
+            &mut sidebar_starred_rooms,
+            &mut sidebar_rooms,
+            &mut sidebar_starred_peers,
+            &mut sidebar_peers,
+            room_id,
+        );
+    }
     let switcher = super::load_switcher(state, viewer, sidebar_current_enclave)
         .await
         .ok()?;
@@ -3072,7 +3154,7 @@ pub mod test_support {
     // a test can drive a topic change on one connection and assert the sidebar
     // shape follows it. Same reasoning as the call helpers above: the logic is
     // reachable only from the receive loop otherwise.
-    pub use super::{apply_page_context, render_sidebar, PageContext};
+    pub use super::{apply_page_context, render_sidebar, PageContext, PageScope};
 }
 
 #[cfg(test)]

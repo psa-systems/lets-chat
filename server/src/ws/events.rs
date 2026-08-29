@@ -206,6 +206,15 @@ pub enum ChatEvent {
     ReadAllChanged {
         user_id: String,
     },
+    /// LC-836: this connection's client moved to a different page over a live
+    /// socket (its `page_context` frame changed the room or the enclave). Sent
+    /// to that ONE connection via `Hub::send_to_conn`, never broadcast: the
+    /// sidebar sits outside the `#main` swap target, so the send task
+    /// re-renders it OOB for the destination page (active row, cleared badge,
+    /// enclave-keyed nav). Other tabs of the same user did not move.
+    PageChanged {
+        user_id: String,
+    },
     /// LC-239: the viewer's draft for `room_id` was saved (`has_draft = true`)
     /// via the debounced composer PUT, or cleared (`has_draft = false`) by a
     /// send / schedule / empty-body delete. Routed via
