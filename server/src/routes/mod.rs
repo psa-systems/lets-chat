@@ -130,6 +130,21 @@ pub(crate) fn is_hx(headers: &axum::http::HeaderMap) -> bool {
     headers.contains_key("hx-request")
 }
 
+/// LC-837: true when an htmx GET wants a FRAGMENT rather than the page. A
+/// boosted navigation (`HX-Boosted`) and a history restore
+/// (`HX-History-Restore-Request`) are htmx requests too, but both need the
+/// whole page: the client selects `#main` out of it, and a fragment in its
+/// place swaps nothing (or the wrong thing) into the shell. Use this, never a
+/// bare `hx-request` check, on any GET handler or middleware that has a
+/// fragment branch. The `is_hx` helpers above and in the settings / admin /
+/// room_rbac modules gate form POSTs, which are never boosted (the nav panel
+/// has no plain forms), so they keep the bare check.
+pub(crate) fn wants_fragment(headers: &axum::http::HeaderMap) -> bool {
+    headers.contains_key("hx-request")
+        && !headers.contains_key("hx-boosted")
+        && !headers.contains_key("hx-history-restore-request")
+}
+
 /// LC-739: dual-mode answer for a settings form whose success changes page
 /// content an inline status fragment cannot patch (a rotated invite code, a
 /// removed ban row, a renamed enclave in the page header). htmx gets

@@ -143,6 +143,13 @@
     }
   });
 
+  // LC-837: back/forward. htmx restores #main from the server (history cache
+  // is 0, see nav.js) and fires htmx:historyRestore instead of afterSwap, so
+  // the frame is sent here or the server keeps the page the user left.
+  document.body.addEventListener('htmx:historyRestore', function () {
+    sendPageContext(window.__lcWS);
+  });
+
   // A live page swapped into an already-open socket (notably the reconnect
   // soft-refresh, which replaces #main without tearing the socket down):
   // subscribe any live elements in the freshly-settled subtree. We listen on
