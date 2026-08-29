@@ -151,6 +151,22 @@ The boundary is stated, not implied. `ci-build/check-swap-safe-scripts.nu` (`jus
 
 The script runs its own self-test before it scans, over the same rule engine the scan uses: twenty fixtures, thirteen it must reject (undeclared, an unknown value, `none` over a `document` listener / an interval / an observer, `flag` with no pair or with mismatched names, `teardown` with no removal, `flag` or `teardown` declared over a body that registers nothing) and seven it must accept. Hollow out `verdict` and the self-test fails before a single template is read, so this guard cannot pass while asserting nothing.
 
+## Boosted navigation (LC-837)
+
+A link in the persistent shell (the enclave switcher, the sidebar, the account menu) is boosted: it carries `hx-boost="true" hx-target="#main" hx-select="#main" hx-swap="outerHTML"`, rendered from `partials/nav_boost.html` inside the anchor's opening tag, so a page move swaps only `<main id="main">`. The `ws-connect` wrapper, the sidebar and every running script survive it, which is what lets a live call outlive a navigation (LC-832) and what LC-834 to LC-836 prepared for: the client sends its `page_context` frame after the swap, the server rebuilds the connection's page-scoped state and pushes the sidebar for the destination, and the inline scripts in the swapped page re-run safely.
+
+Three rules, held by `ci-build/check-nav-boost.nu` (`just check-nav-boost`, and a step of the Check workflow):
+
+- **Per anchor, never on a container.** `hx-select` and `hx-swap` inherit, and the sidebar's own `hx-post` / `hx-get` controls (mark read, star, category moves, search) would inherit them and blank themselves. `hx-boost="true"` appears in `partials/nav_boost.html` and nowhere else.
+- **Every nav-panel anchor says which side it is on.** It carries the include, or `hx-boost="false"` on purpose. The opt-outs today: `/logout` (the response is the login page, which has no `#main`) and the `/settings#...` deep links (the settings page reads `location.hash` while its scripts run, before htmx pushes the new URL). An anchor with neither silently reloads the page.
+- **`#main` is the history element.** `<main id="main" hx-history-elt>`, so back/forward restore `#main` and leave the socket alone. The history cache is 0 (`nav.js`): a cached snapshot would show a room as it was when the user left it, so back/forward re-fetch the page instead; htmx sends `HX-History-Restore-Request` and swaps the response's `hx-history-elt` into `#main`.
+
+What the server must know: a boosted GET is an htmx request (`HX-Request: true`) and so is a history restore, but both need the whole page. Any GET handler or middleware with a fragment branch decides through `routes::wants_fragment`, which is false for `HX-Boosted` and `HX-History-Restore-Request`; a bare `hx-request` check there sends a list body where a page was expected and the swap lands nothing. The `is_hx` helpers that gate form POSTs keep the bare check: the nav panel has no plain forms, so no POST is ever boosted.
+
+What `nav.js` adds on top of htmx: a boosted response with no `<main id="main">` (the login page after the session expired, an error page) or a 4xx/5xx status cancels the swap and becomes a real navigation to the URL the response came from; the response's `<style data-lc-brand>` is copied into the surviving `<head>`, since branding is injected per scope and a `#main` swap never touches the head; and the mobile nav overlay closes after a swap, as a full load used to do for free.
+
+Links inside `#main` are still full page loads. Widening boost to them is the follow-up, and until then LC-318's reconnect-banner grace period stays: each of those links still cycles the socket.
+
 ## Confirmation dialogs
 
 Three confirmation styles exist in the codebase. Pick by blast radius, not by convenience.
@@ -416,7 +432,7 @@ Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded 
 | No raw NUL bytes | a literal U+0000 in every tracked text file | vendored assets (`server/assets/vendor/`); binary assets carry no text extension and are never read |
 | One ellipsis glyph, no em dash | U+2026 in the locale catalogs; U+2014 in every tracked text file | vendored assets (`server/assets/vendor/`) |
 
-Email templates are excluded from every template rule: they render in a mail client with no stylesheet, so a Tailwind class there is inert. The U+2026 half lives in `ci-build/check-locale-ellipsis.nu` and the `server/assets/**/*.js` palette rule in `ci-build/check-asset-color-tokens.nu`; both run in the same job.
+Email templates are excluded from every template rule: they render in a mail client with no stylesheet, so a Tailwind class there is inert. The U+2026 half lives in `ci-build/check-locale-ellipsis.nu` and the `server/assets/**/*.js` palette rule in `ci-build/check-asset-color-tokens.nu`; both run in the same job. The boosted-navigation rules (per-anchor boost, declared nav anchors, `#main` as the history element) live in `ci-build/check-nav-boost.nu`, same job.
 
 Two things to know before editing the script:
 

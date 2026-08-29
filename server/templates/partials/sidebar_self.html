@@ -50,13 +50,13 @@
       </svg>
       <span>{{ "sidebar-set-status"|t }}</span>
     </button>
-    <a href="/settings#profile" role="menuitem" tabindex="-1" data-lc-account-item class="lc-menu-item">
+    <a href="/settings#profile" hx-boost="false" role="menuitem" tabindex="-1" data-lc-account-item class="lc-menu-item">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z"/>
       </svg>
       <span>{{ "sidebar-edit-profile"|t }}</span>
     </a>
-    <a href="/settings" role="menuitem" tabindex="-1" data-lc-account-item class="lc-menu-item">
+    <a href="/settings" {% include "partials/nav_boost.html" %} role="menuitem" tabindex="-1" data-lc-account-item class="lc-menu-item">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.31 7.498a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.992 6.992 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
       </svg>
@@ -80,7 +80,7 @@
     </button>
     {% if user.role == "admin" || user.role == "moderator" %}
     <div class="my-1 border-t border-border"></div>
-    <a href="{% if user.role == "admin" %}/admin/settings{% else %}/admin/users{% endif %}" role="menuitem" tabindex="-1" data-lc-account-item class="lc-menu-item lc-menu-item-danger">
+    <a href="{% if user.role == "admin" %}/admin/settings{% else %}/admin/users{% endif %}" {% include "partials/nav_boost.html" %} role="menuitem" tabindex="-1" data-lc-account-item class="lc-menu-item lc-menu-item-danger">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M9.661 2.237a.531.531 0 01.678 0 11.947 11.947 0 007.078 2.749.5.5 0 01.479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 01-.332 0C4.939 16.913 1.68 12.512 1.68 7.35c0-.54.035-1.07.104-1.59a.5.5 0 01.48-.425 11.947 11.947 0 007.397-3.098z" clip-rule="evenodd"/>
       </svg>
@@ -88,7 +88,7 @@
     </a>
     {% endif %}
     <div class="my-1 border-t border-border"></div>
-    <a href="/logout" role="menuitem" tabindex="-1" data-lc-account-item class="lc-menu-item">
+    <a href="/logout" hx-boost="false" role="menuitem" tabindex="-1" data-lc-account-item class="lc-menu-item">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M3 4.25A2.25 2.25 0 015.25 2h5.5A2.25 2.25 0 0113 4.25v2a.75.75 0 01-1.5 0v-2a.75.75 0 00-.75-.75h-5.5a.75.75 0 00-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 00.75-.75v-2a.75.75 0 011.5 0v2A2.25 2.25 0 0110.75 18h-5.5A2.25 2.25 0 013 15.75V4.25z" clip-rule="evenodd"/>
         <path fill-rule="evenodd" d="M19 10a.75.75 0 00-.75-.75H8.704l1.048-.943a.75.75 0 10-1.004-1.114l-2.5 2.25a.75.75 0 000 1.114l2.5 2.25a.75.75 0 101.004-1.114L8.704 10.75h9.546A.75.75 0 0019 10z" clip-rule="evenodd"/>

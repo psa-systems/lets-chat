@@ -12,7 +12,7 @@
      landed on the same Home dashboard as the Home tile below, so it was a
      redundant second button stacked on top of Home. #}
   {% for e in switcher %}{% if e.id.is_none() %}
-  <a href="/?home=1"
+  <a href="/?home=1" {% include "partials/nav_boost.html" %}
      class="lc-rail-tile w-11 h-11 flex items-center justify-center{% if e.active %} lc-rail-active{% endif %}"
      aria-label="{{ e.label }}" data-lc-tip="{{ e.label }}" data-lc-tip-pos="right"
      {% if e.active %}aria-current="page"{% endif %}>
@@ -40,7 +40,7 @@
      self-fetches on load (/admin/support/badge) and updates live via the
      #lc-rail-support-badge OOB swap. #}
   {% if user.role == "admin" %}
-  <a href="/admin/support"
+  <a href="/admin/support" {% include "partials/nav_boost.html" %}
      class="lc-rail-tile lc-rail-support w-11 h-11 flex items-center justify-center"
      aria-label="{{ "support-rail-label"|t }}" data-lc-tip="{{ "support-rail-label"|t }}" data-lc-tip-pos="right"
      data-lc-live-topic="admin">
@@ -58,7 +58,7 @@
   {# The only scrolling region: the enclave stack and the `+` that adds to it. #}
   <div class="lc-rail-scroll">
   {% for e in switcher %}{% if let Some(id) = e.id %}
-  <a href="/enclave/{{ id }}"
+  <a href="/enclave/{{ id }}" {% include "partials/nav_boost.html" %}
      class="lc-rail-tile w-11 h-11 flex items-center justify-center{% if e.active %} lc-rail-active{% endif %}"
      aria-label="{{ e.label }}" data-lc-tip="{{ e.label }}" data-lc-tip-pos="right"
      {% if e.active %}aria-current="page"{% endif %}>
@@ -80,7 +80,7 @@
   {% endif %}{% endfor %}
   {# Bare `+`, no tile fill - it is an action, not an enclave, so the filled tile
      made it read as one of them. It sits directly under the enclaves it adds to. #}
-  <a href="/enclaves/discover"
+  <a href="/enclaves/discover" {% include "partials/nav_boost.html" %}
      class="lc-rail-add w-11 h-11 flex items-center justify-center text-2xl font-light leading-none"
      aria-label="{{ "switcher-discover"|t }}" data-lc-tip="{{ "switcher-discover"|t }}" data-lc-tip-pos="right">
     +
@@ -118,24 +118,24 @@
        here (Data & Account, Custom emoji, Saved replies). The canonical
        "Settings" entry lives in the avatar menu (partials/sidebar_self.html). #}
     <div class="lc-rail-flyout" role="menu" aria-label="{{ "sidebar-link-settings"|t }}">
-      <a href="/settings#profile" role="menuitem" class="lc-menu-item">
+      <a href="/settings#profile" hx-boost="false" role="menuitem" class="lc-menu-item">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
         <span>{{ "settings-section-profile"|t }}</span>
       </a>
-      <a href="/settings#appearance" role="menuitem" class="lc-menu-item">
+      <a href="/settings#appearance" hx-boost="false" role="menuitem" class="lc-menu-item">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a8 8 0 100 16 1.5 1.5 0 001.06-2.56.5.5 0 01.35-.85H13a5 5 0 005-5c0-3.59-3.36-6.59-8-5.59zM5.5 11a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3-4a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm5 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"/></svg>
         <span>{{ "settings-section-appearance"|t }}</span>
       </a>
-      <a href="/settings#notifications" role="menuitem" class="lc-menu-item">
+      <a href="/settings#notifications" hx-boost="false" role="menuitem" class="lc-menu-item">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 2a6 6 0 00-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 00.515 1.076 32.9 32.9 0 003.256.508 3.5 3.5 0 006.972 0 32.9 32.9 0 003.256-.508.75.75 0 00.515-1.076A11.45 11.45 0 0116 8a6 6 0 00-6-6zm0 14.5a2 2 0 01-1.95-1.557 33 33 0 003.9 0A2 2 0 0110 16.5z" clip-rule="evenodd"/></svg>
         <span>{{ "settings-section-notifications"|t }}</span>
       </a>
-      <a href="/settings#privacy" role="menuitem" class="lc-menu-item">
+      <a href="/settings#privacy" hx-boost="false" role="menuitem" class="lc-menu-item">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9.661 2.237a.531.531 0 01.678 0 11.947 11.947 0 007.078 2.749.5.5 0 01.479.425c.069.43.105.86.105 1.299 0 5.628-3.808 10.36-8.97 11.749a.53.53 0 01-.276 0C4.808 17.057 1 12.325 1 6.7c0-.439.036-.87.105-1.3a.5.5 0 01.48-.425 11.947 11.947 0 007.076-2.738zM10 14a1 1 0 100-2 1 1 0 000 2zm0-7a1 1 0 00-1 1v2a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
         <span>{{ "settings-section-privacy"|t }}</span>
       </a>
       <div class="lc-menu-divider"></div>
-      <a href="/settings" role="menuitem" class="lc-menu-item">
+      <a href="/settings" {% include "partials/nav_boost.html" %} role="menuitem" class="lc-menu-item">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.31 7.498a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.992 6.992 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
         <span>{{ "sidebar-settings-all"|t }}</span>
       </a>

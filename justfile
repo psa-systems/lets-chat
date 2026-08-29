@@ -49,7 +49,7 @@ docker_version_args := '--build-arg GIT_HASH="$(git rev-parse --short=12 HEAD 2>
 # too, so `just pre-commit` (whose `pre_commit_prepare := "check"` runs this
 # recipe) covers them alongside the Rust checks.
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-ui-conventions check-update-injection check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js
+check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-ui-conventions check-update-injection check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js
 
 # Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
 # browser assets and templates, and untokenized backgrounds on the
@@ -119,6 +119,14 @@ check-confirm-apostrophe:
 [group('check')]
 check-swap-safe-scripts:
     nu ci-build/check-swap-safe-scripts.nu
+
+# LC-837: every anchor in the persistent nav panel is either boosted through the
+# partials/nav_boost.html include (swap #main, keep the socket) or carries
+# hx-boost="false" on purpose, and hx-boost="true" appears nowhere else, since a
+# container-level boost is inherited by the sidebar's own htmx controls.
+[group('check')]
+check-nav-boost:
+    nu ci-build/check-nav-boost.nu
 
 # The convention classes the 2026-08-11 UI audit closed, held closed: palette
 # literals in templates, fake link buttons, open-coded .btn-danger-outline,
