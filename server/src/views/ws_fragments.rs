@@ -445,7 +445,10 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::TranscriptEnded { .. }
         // LC-173: rendered per recipient in the WS send task (own sidebar
         // self block), so the recipient-independent path emits nothing.
-        | ChatEvent::UserProfileChanged { .. } => None,
+        | ChatEvent::UserProfileChanged { .. }
+        // LC-836: rendered per recipient in the WS send task (sidebar OOB for
+        // the page that one connection moved to).
+        | ChatEvent::PageChanged { .. } => None,
         ChatEvent::UserStatusChanged {
             user_id,
             status,
