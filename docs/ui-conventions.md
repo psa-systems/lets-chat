@@ -167,6 +167,15 @@ What `nav.js` adds on top of htmx: a boosted response with no `<main id="main">`
 
 Links inside `#main` are still full page loads. Widening boost to them is the follow-up, and until then LC-318's reconnect-banner grace period stays: each of those links still cycles the socket.
 
+Controls nested inside a boosted anchor (LC-842). htmx attributes inherit, so an
+`hx-get` / `hx-post` / `hx-trigger` element placed inside a boosted `<a>` picks
+up the anchor's `hx-target="#main" hx-select="#main" hx-swap="outerHTML"`; its
+fragment response has no `#main`, so the swap deletes `<main>` and the page goes
+blank. The admin support badge did exactly this. Such a control must declare its
+own `hx-target` and `hx-swap` (and `hx-select="unset"`); `check-nav-boost.nu`
+fails on one that does not, and `nav.js` refuses any non-boosted swap that would
+replace `#main` with a response lacking `<main id="main">`.
+
 ## Confirmation dialogs
 
 Three confirmation styles exist in the codebase. Pick by blast radius, not by convenience.
