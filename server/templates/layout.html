@@ -229,6 +229,18 @@
        a broken feature. Static: no per-participant "who is transcribing" signal
        exists to gate it on, and it is true for every viewer of their own mic. #}
     <div class="px-3 pb-1 text-xs text-content-muted">{{ "voice-transcript-local-only"|t }}</div>
+    {# LC-843: engine preference, revealed by transcribe.js only when this
+       client genuinely has both engines (SpeechRecognition AND MediaRecorder +
+       operator STT). Fast = in-browser Web Speech (instant, audio goes to the
+       browser vendor's cloud); Accurate = server STT clips (~5s delay, audio
+       stays on this server). Persisted per browser in localStorage. #}
+    <label data-lc-engine-wrap hidden class="px-3 pb-1 text-xs text-content-muted flex items-center gap-2">
+      <span>{{ "voice-engine-label"|t }}</span>
+      <select data-lc-engine-pref class="input">
+        <option value="fast">{{ "voice-engine-fast"|t }}</option>
+        <option value="accurate">{{ "voice-engine-accurate"|t }}</option>
+      </select>
+    </label>
     {# LC-590: server-STT failure indicator. The /audio route now answers non-2xx
        once its retries are exhausted (it used to answer 200 with an empty body,
        which read as "you were silent"), and transcribe.js reveals this line.

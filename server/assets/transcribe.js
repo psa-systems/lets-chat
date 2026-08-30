@@ -15,7 +15,9 @@
 // engine only when it does not (or when the browser engine errors at runtime,
 // e.g. its cloud is unreachable) so those clients still get captions instead of
 // nothing. `sttServer` (from /call/config) now just says whether that server
-// fallback is available. Either way speaker attribution is automatic: a
+// fallback is available. LC-843: a client with BOTH engines can override the
+// automatic choice via the drawer's Fast/Accurate control (persisted per
+// browser in localStorage). Either way speaker attribution is automatic: a
 // segment's speaker is whoever's browser produced it, so a call can mix engines
 // across participants and they all append to the one transcript.
 //
@@ -59,6 +61,39 @@
   // cloud recognizer was unreachable/blocked) and we fell back to the server
   // engine, so we don't keep retrying the dead browser engine. Reset on stop.
   var serverFallback = false;
+
+  // LC-843: per-browser engine preference. 'fast' = browser engine, 'accurate' =
+  // server engine, null = automatic (today's behavior: fast when SR exists).
+  // localStorage rather than a server-side setting because availability is
+  // per-browser: the same account's Firefox has no SR, so a roaming preference
+  // would be wrong there. The auto default is unchanged for everyone who never
+  // touches the control.
+  var PREF_KEY = 'lc-transcribe-engine';
+  function readPref() {
+    try {
+      var v = localStorage.getItem(PREF_KEY);
+      return (v === 'fast' || v === 'accurate') ? v : null;
+    } catch (e) { return null; }
+  }
+  function savePref(v) {
+    try { localStorage.setItem(PREF_KEY, v); } catch (e) {}
+  }
+  var enginePref = readPref();
+
+  // LC-843: the one engine decision, pure so the matrix is unit-testable.
+  // Priority: a dead browser engine always yields to the server fallback (a
+  // 'fast' preference cannot resurrect a recognizer whose cloud is
+  // unreachable); then the explicit preference, each honored only when its
+  // engine is actually available on this client; then the automatic default
+  // (browser when SR exists, server when it does not and the operator has STT).
+  function chooseEngine(pref, hasSR, hasMR, server, fallback) {
+    var serverOk = server && hasMR;
+    if (fallback && serverOk) return 'server';
+    if (pref === 'accurate' && serverOk) return 'server';
+    if (pref === 'fast' && hasSR) return 'browser';
+    if (!hasSR && serverOk) return 'server';
+    return 'browser';
+  }
   function loadConfig() {
     fetch('/call/config', { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -212,8 +247,11 @@
   // Hybrid engine choice, evaluated per client. Prefer the browser engine (SR)
   // whenever this browser has it, because it is near-instant. Use the server
   // engine only when SR is absent (Firefox/Safari) and the operator configured
-  // server STT, or once the browser engine has failed at runtime (serverFallback).
-  function useServerEngine() { return (!SR && sttServer) || serverFallback; }
+  // server STT, once the browser engine has failed at runtime (serverFallback),
+  // or when the user picked Accurate in the drawer (LC-843).
+  function useServerEngine() {
+    return chooseEngine(enginePref, !!SR, !!MR, sttServer, serverFallback) === 'server';
+  }
   function startLocalCapture() {
     if (capturing) return;
     // LC-626: a muted session opens no mic. Unmuting resumes capture via the
@@ -526,7 +564,37 @@
       toggles[i].disabled = !supported;
       if (!supported) toggles[i].title = toggles[i].getAttribute('data-lc-unsupported') || '';
     }
+    syncEngineControl();
   }
+
+  // LC-843: the drawer's Fast/Accurate control only appears when this client
+  // genuinely has both engines (SR for fast, MediaRecorder + operator STT for
+  // accurate). Firefox/Safari (no SR) and installs without server STT have no
+  // choice to offer, so they keep an uncluttered drawer.
+  function syncEngineControl() {
+    var wrap = q('[data-lc-engine-wrap]');
+    var sel = q('[data-lc-engine-pref]');
+    if (!wrap || !sel) return;
+    if (!!SR && sttServer && !!MR) wrap.removeAttribute('hidden');
+    else wrap.setAttribute('hidden', '');
+    sel.value = enginePref || 'fast';
+  }
+  document.addEventListener('change', function (e) {
+    var sel = e.target.closest && e.target.closest('[data-lc-engine-pref]');
+    if (!sel) return;
+    var v = sel.value === 'accurate' ? 'accurate' : 'fast';
+    enginePref = v;
+    savePref(v);
+    // Mid-session: restart our own capture on the newly chosen engine. The
+    // shared transcript session stays open (no /end); only the local mic tap is
+    // cycled, exactly like the mute/unmute path. While muted, startLocalCapture
+    // no-ops and the lc:mic-muted unmute handler brings the new engine up.
+    if (transcriptId != null && capturing) {
+      dbg('engine preference changed to ' + v + '; restarting local capture');
+      stopLocalCapture();
+      startLocalCapture();
+    }
+  });
 
   // LC-613: one lifecycle event pair for both surfaces (was lc:call-ended /
   // lc:voice-left and lc:call-active / lc:voice-joined). `detail.surface`
@@ -612,6 +680,9 @@
     setToggle(false);
   }
   document.body.addEventListener('htmx:afterSettle', reconcileStage);
+
+  // LC-843: the pure engine decision, exported for transcribe.test.js.
+  window.LetsChatTranscribe = { chooseEngine: chooseEngine };
 
   // Learn the engine (browser vs server STT) up front, then keep toggles in step.
   loadConfig();
