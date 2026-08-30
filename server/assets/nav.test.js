@@ -100,3 +100,40 @@ test('a #main swap and a history restore close the mobile nav', () => {
   t.fire('htmx:historyRestore', {});
   assert.equal(t.closed.count, 2);
 });
+
+// LC-842: the admin support badge inherited the boosted tile's target and its
+// load request deleted <main>. The template now declares its own target, and
+// nav.js refuses any non-boosted swap that would replace #main with a
+// response that has no <main id="main">, without navigating away.
+test('a non-boosted request aimed at #main whose response has no main is refused, not navigated', () => {
+  const t = load();
+  const warned = [];
+  t.window.console = { warn: (...a) => warned.push(a.join(' ')) };
+  const d = {
+    boosted: false,
+    shouldSwap: true,
+    target: { id: 'main' },
+    requestConfig: { path: '/admin/support/badge' },
+    xhr: { status: 200, responseText: '<span class="badge">3</span>', responseURL: 'https://x/admin/support/badge' },
+  };
+  t.fire('htmx:beforeSwap', d);
+  assert.equal(d.shouldSwap, false);
+  assert.deepEqual(t.assigned, [], 'a fragment request is never turned into a navigation');
+  assert.equal(warned.length, 1);
+  assert.match(warned[0], /admin\/support\/badge/);
+});
+
+test('a non-boosted request aimed at #main whose response carries a main still swaps', () => {
+  const t = load();
+  const d = { boosted: false, shouldSwap: true, target: { id: 'main' }, xhr: { status: 200, responseText: page } };
+  t.fire('htmx:beforeSwap', d);
+  assert.equal(d.shouldSwap, true, 'the LC-318 soft refresh of a full page keeps working');
+});
+
+test('a non-boosted request aimed elsewhere is untouched', () => {
+  const t = load();
+  const d = { boosted: false, shouldSwap: true, target: { id: 'lc-rail-support-badge' }, xhr: { status: 200, responseText: '<span>3</span>' } };
+  t.fire('htmx:beforeSwap', d);
+  assert.equal(d.shouldSwap, true);
+  assert.deepEqual(t.assigned, []);
+});

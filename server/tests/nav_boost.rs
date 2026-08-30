@@ -28,6 +28,9 @@ struct App {
     app: Router,
     session: String,
     room_id: i64,
+    /// LC-842: the app's auth pool and the logged-in user, for role changes.
+    auth: sqlx::SqlitePool,
+    user_id: String,
 }
 
 async fn setup_app() -> App {
@@ -48,6 +51,7 @@ async fn setup_app() -> App {
 
     let hub = Arc::new(Hub::new());
     let bg = lets_chat::bg::spawn(auth.clone());
+    let auth_for_tests = auth.clone();
     let state = AppState {
         geoip: None,
         login_approval_enabled: false,
@@ -77,6 +81,8 @@ async fn setup_app() -> App {
         app: routes::build_router(state),
         session,
         room_id,
+        auth: auth_for_tests,
+        user_id,
     }
 }
 
@@ -249,4 +255,41 @@ async fn main_is_the_history_element_so_a_restore_never_touches_the_socket() {
         ws < main,
         "the ws-connect wrapper encloses #main, not the other way round"
     );
+}
+
+// ---------------------------------------------------------------------------
+// LC-842: a control nested in a boosted anchor never inherits its target.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn the_admin_support_badge_declares_its_own_target_inside_the_boosted_tile() {
+    let a = setup_app().await;
+    // Only admins get the support tile; the badge inside it fetches on load.
+    db::auth::set_user_role(&a.auth, &a.user_id, "admin")
+        .await
+        .unwrap();
+    let (status, page) = get(&a, &format!("/room/{}", a.room_id), &[]).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let tile = format!("href=\"/admin/support\" {BOOST}");
+    assert!(
+        page.contains(&tile),
+        "expected the boosted support tile, got:\n{page}"
+    );
+
+    let start = page
+        .find("id=\"lc-rail-support-badge\"")
+        .expect("the badge span renders");
+    let tag_end = page[start..].find('>').unwrap() + start;
+    let badge = &page[start..tag_end];
+    for attr in [
+        "hx-target=\"this\"",
+        "hx-swap=\"innerHTML\"",
+        "hx-select=\"unset\"",
+    ] {
+        assert!(
+            badge.contains(attr),
+            "the badge must declare {attr} so it does not inherit the tile's #main/outerHTML pair: {badge}"
+        );
+    }
 }
