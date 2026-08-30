@@ -50,8 +50,16 @@
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="h-5 w-5" aria-hidden="true">
       <path d="M8 1a5 5 0 0 0-5 5v1h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a6 6 0 1 1 12 0v6a2.5 2.5 0 0 1-2.5 2.5H9.366a1 1 0 0 1-.866.5h-1a1 1 0 1 1 0-2h1a1 1 0 0 1 .866.5H11.5A1.5 1.5 0 0 0 13 12h-1a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h1V6a5 5 0 0 0-5-5z"/>
     </svg>
+    {# LC-842: this span sits INSIDE the boosted tile, and htmx attributes
+       inherit, so without its own target/swap/select its load request would
+       inherit the tile's hx-target="#main" hx-select="#main" hx-swap="outerHTML"
+       and replace <main> with the (main-less) badge response: a blank page
+       for every admin, on every page load. Declare all three; `unset` turns
+       the inherited hx-select off. check-nav-boost.nu enforces this for any
+       control nested in a boosted anchor. #}
     <span id="lc-rail-support-badge" class="lc-rail-support-slot"
-          hx-get="/admin/support/badge" hx-trigger="load"></span>
+          hx-get="/admin/support/badge" hx-trigger="load"
+          hx-target="this" hx-swap="innerHTML" hx-select="unset"></span>
   </a>
   {% endif %}
   <div class="lc-rail-divider"></div>

@@ -54,15 +54,32 @@
     window.htmx.config.historyCacheSize = 0;
   }
 
+  function targetsMain(detail) {
+    var t = detail && detail.target;
+    return !!(t && t.id === 'main');
+  }
   document.body.addEventListener('htmx:beforeSwap', function (evt) {
     var d = evt.detail;
-    if (!isBoosted(d)) return;
+    var boosted = isBoosted(d);
+    // LC-842: also guard any NON-boosted request aimed at #main (the LC-318
+    // reconnect soft-refresh, or a control that inherited a boosted anchor's
+    // target). A response with no <main id="main"> would otherwise replace
+    // <main> with nothing and leave a blank page whose links have no target.
+    if (!boosted && !targetsMain(d)) return;
     var xhr = d.xhr;
     var html = xhr ? xhr.responseText : '';
     if ((xhr && xhr.status >= 400) || !hasMain(html)) {
       d.shouldSwap = false;
-      var url = fallbackUrl(d);
-      if (url) window.location.assign(url);
+      if (boosted) {
+        // A boosted move to a page without #main (login, error) is a real
+        // navigation.
+        var url = fallbackUrl(d);
+        if (url) window.location.assign(url);
+      } else if (window.console && window.console.warn) {
+        // Not a navigation: refuse the swap and keep the page.
+        var path = d.requestConfig && d.requestConfig.path;
+        window.console.warn('lets-chat: refused to swap #main with a response that has no <main id="main">', path || '');
+      }
       return;
     }
     var css = brandCss(html);
@@ -86,5 +103,5 @@
     if (typeof window.lcCloseNav === 'function') window.lcCloseNav();
   });
 
-  window.LetsChatNav = { hasMain: hasMain, brandCss: brandCss, fallbackUrl: fallbackUrl };
+  window.LetsChatNav = { hasMain: hasMain, brandCss: brandCss, fallbackUrl: fallbackUrl, targetsMain: targetsMain };
 })();

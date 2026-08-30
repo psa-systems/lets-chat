@@ -15,6 +15,13 @@
 # search) would inherit them and blank themselves. So `hx-boost="true"` may
 # appear in exactly one template, the include itself.
 #
+# The same inheritance bites INSIDE a boosted anchor (LC-842): a control nested
+# in the anchor (the admin support badge's hx-get on load) inherits
+# hx-target="#main" hx-select="#main" hx-swap="outerHTML" and, since its
+# response has no #main, replaces <main> with nothing. Every hx-get / hx-post /
+# hx-trigger element nested in a boosted anchor must therefore declare its own
+# hx-target and hx-swap.
+#
 # Carries a self-test over its own rule so a hollowed-out rule fails before a
 # single template is read (the LC-835 pattern).
 
@@ -45,7 +52,43 @@ def unboosted-anchors [text: string]: nothing -> list<string> {
     }
 }
 
+# Every tag nested inside a boosted `<a ...>...</a>` block that issues an htmx
+# request (hx-get / hx-post / hx-trigger) without its own hx-target AND hx-swap.
+def nested-requesters [text: string]: nothing -> list<string> {
+    $text
+    | parse --regex '(?s)(?<block><a\b[^>]*nav_boost\.html[^>]*>.*?</a>)'
+    | get block
+    | each {|block|
+        $block
+        | parse --regex '(?s)(?<tag><[a-z][a-z0-9-]*\b[^>]*>)'
+        | get tag
+        | skip 1
+        | where {|tag|
+            # One line: nushell reads a line-leading `and` as a command name.
+            ($tag =~ 'hx-(get|post|trigger)=') and ((not ($tag | str contains 'hx-target=')) or (not ($tag | str contains 'hx-swap=')))
+        }
+    }
+    | flatten
+}
+
 def self-test [] {
+    let nested_cases = [
+        [text expect];
+        ['<a href="/x" {% include "partials/nav_boost.html" %}><span hx-get="/b" hx-trigger="load"></span></a>' 1]
+        ['<a href="/x" {% include "partials/nav_boost.html" %}><span hx-get="/b" hx-trigger="load" hx-target="this" hx-swap="innerHTML"></span></a>' 0]
+        ['<a href="/x" {% include "partials/nav_boost.html" %}><span hx-get="/b" hx-target="this"></span></a>' 1]
+        ['<a href="/x" {% include "partials/nav_boost.html" %}><svg><path d="M1"/></svg></a>' 0]
+        ['<a href="/x" hx-boost="false"><span hx-get="/b" hx-trigger="load"></span></a>' 0]
+        ["<a href=\"/x\"\n   {% include \"partials/nav_boost.html\" %}>\n  <span hx-get=\"/b\"\n        hx-trigger=\"load\"></span>\n</a>" 1]
+    ]
+    for case in $nested_cases {
+        let got = (nested-requesters $case.text | length)
+        if $got != $case.expect {
+            print --stderr $"self-test failed: expected ($case.expect) nested requester\(s\), got ($got) for: ($case.text)"
+            exit 1
+        }
+    }
+
     let cases = [
         [text expect];
         ['<a href="/x" {% include "partials/nav_boost.html" %} class="y">go</a>' 0]
@@ -106,7 +149,18 @@ def main [] {
         }
     }
 
-    # 4. #main is the history element, so back/forward restore only #main and
+    # 4. A control nested in a boosted anchor declares its own target and swap
+    #    (LC-842), so it cannot inherit the anchor's #main / outerHTML pair.
+    for file in $NAV_PARTIALS {
+        if not ($file | path exists) { continue }
+        let text = (open --raw $file | decode utf-8)
+        for tag in (nested-requesters $text) {
+            let first = ($tag | lines | first | str trim)
+            $failures = ($failures | append $"($file): htmx control nested in a boosted anchor without its own hx-target and hx-swap \(it would inherit #main/outerHTML and blank the page\): ($first)")
+        }
+    }
+
+    # 5. #main is the history element, so back/forward restore only #main and
     #    leave the ws-connect wrapper alone.
     let layout = (open --raw $LAYOUT | decode utf-8)
     if not ($layout =~ '<main id="main" hx-history-elt\b') {
