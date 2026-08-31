@@ -335,14 +335,37 @@ pub trait SttClient: Send + Sync {
 }
 
 /// LC-590: transcribe with the production retry policy ([`STT_BACKOFF`]).
-/// Both call paths (call clips and voice messages) use this rather than calling
-/// the client directly, so a transient engine hiccup no longer drops a clip on
-/// the floor.
+/// Voice messages use this rather than calling the client directly, so a
+/// transient engine hiccup no longer drops a stored artifact on the floor.
+/// Live call clips must NOT: see [`transcribe_live_clip`].
 pub async fn transcribe_with_retry(
     client: &dyn SttClient,
     req: SttRequest,
 ) -> Result<SttResult, SttError> {
     transcribe_with_backoff(client, req, &STT_BACKOFF).await
+}
+
+/// LC-848: transcribe a LIVE call clip - a single attempt, no backoff.
+///
+/// The caller holds one of the [`crate::stt_load::permits`] worker permits
+/// (two by default) for the duration of this call, and a new clip arrives every
+/// 5 seconds per speaker. Under [`STT_BACKOFF`] one stalled clip pinned a
+/// permit for up to 50s (3 x [`LIVE_CLIP_TIMEOUT_SECS`] + 1s + 4s), so a single
+/// engine hiccup pinned BOTH permits within 10s and every later clip was shed
+/// "at capacity". Worse, each retry re-POSTed the same clip while the engine
+/// was still decoding the abandoned earlier attempt (a client-side timeout
+/// closes the connection; the engine does not cancel - LC-845 measured this),
+/// so the retry policy fed the overload it was retrying against, and ONE
+/// speaker could spiral the engine to 500%+ CPU with no way to drain.
+///
+/// A caption retried after a 15s timeout would land 16-50s late: worthless.
+/// Dropping costs one 5s caption gap and the next clip is already on its way,
+/// so the failure mode becomes self-healing instead of self-sustaining.
+pub async fn transcribe_live_clip(
+    client: &dyn SttClient,
+    req: SttRequest,
+) -> Result<SttResult, SttError> {
+    transcribe_with_backoff(client, req, &[]).await
 }
 
 /// The retry loop, with the delays injected. Attempts = `backoff.len() + 1`, so
@@ -1137,6 +1160,23 @@ mod tests {
             mock.call_count(),
             1,
             "a deterministic 4xx must not burn two more calls"
+        );
+    }
+
+    #[tokio::test]
+    async fn live_clips_never_retry() {
+        // LC-848: one speaker's stalled clip must cost ONE caption, not a
+        // 50s permit hold plus duplicated engine load. Even a transient
+        // failure (the retryable kind) gets exactly one attempt.
+        let mock = MockSttClient::failing("never shown", usize::MAX);
+        let err = transcribe_live_clip(&mock, SttRequest::new(vec![1], "audio/webm"))
+            .await
+            .expect_err("single shot");
+        assert!(err.is_transient(), "gave up on a retryable error by design");
+        assert_eq!(
+            mock.call_count(),
+            1,
+            "no second POST to a struggling engine"
         );
     }
 
