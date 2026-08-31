@@ -111,6 +111,13 @@ pub struct SttConfig {
     /// `http_client` default for STT only. Scaled up by the clip's recorded
     /// length where known; see [`stt_timeout`].
     pub timeout_secs: u64,
+    /// LC-844: send `vad_filter=true` (OpenAI provider only). faster-whisper's
+    /// VAD strips silence before decoding, which suppresses whisper's
+    /// dialogue-continuation hallucination on fixed-length live clips (speech
+    /// then a silent tail invites the model to "answer" the speaker). Env-gated
+    /// rather than always-on because the field is a faster-whisper extension
+    /// that other OpenAI-shaped engines may reject.
+    pub vad_filter: bool,
 }
 
 impl SttConfig {
@@ -119,7 +126,8 @@ impl SttConfig {
     /// `LETS_CHAT_STT_PROMPT` (optional glossary, LC-591), and
     /// `LETS_CHAT_STT_PROVIDER` (optional, `openai` default; LC-593), and
     /// `LETS_CHAT_STT_TIMEOUT_SECS` (optional, default
-    /// [`DEFAULT_STT_TIMEOUT_SECS`]; LC-590). An unrecognized provider value
+    /// [`DEFAULT_STT_TIMEOUT_SECS`]; LC-590), and `LETS_CHAT_STT_VAD_FILTER`
+    /// (optional, `1`/`true` to enable; LC-844). An unrecognized provider value
     /// falls back to `openai`; an unparseable or zero timeout falls back to the
     /// default rather than disabling the timeout.
     pub fn from_env() -> Option<Self> {
@@ -143,6 +151,9 @@ impl SttConfig {
                 .and_then(|s| s.parse::<u64>().ok())
                 .filter(|s| *s > 0)
                 .unwrap_or(DEFAULT_STT_TIMEOUT_SECS),
+            vad_filter: var("LETS_CHAT_STT_VAD_FILTER")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
         })
     }
 }
@@ -392,7 +403,16 @@ impl ReqwestSttClient {
             // verbose_json ignores this field and returns the plain {text}
             // shape, which `parse_openai_result` still handles.
             .text("response_format", "verbose_json")
+            // LC-844: greedy decoding. Whisper's default temperature-fallback
+            // ladder is where the creative dialogue-continuation hallucinations
+            // come from on silence-heavy live clips; 0 is a documented OpenAI
+            // field, so it is safe to send to every OpenAI-shaped engine.
+            .text("temperature", "0")
             .part("file", part);
+        // LC-844: faster-whisper extension, operator-gated (see SttConfig).
+        if self.cfg.vad_filter {
+            form = form.text("vad_filter", "true");
+        }
         // LC-591: language hint when known (else the engine autodetects), and
         // the operator glossary when configured.
         if let Some(lang) = language.filter(|l| !l.trim().is_empty()) {
@@ -749,9 +769,38 @@ mod tests {
             SttProvider::OpenAi,
             "provider defaults to openai"
         );
+        assert!(!cfg.vad_filter, "vad filter defaults off (LC-844)");
         unsafe {
             std::env::remove_var("LETS_CHAT_STT_URL");
             std::env::remove_var("LETS_CHAT_STT_PROMPT");
+        }
+    }
+
+    #[test]
+    fn from_env_reads_vad_filter() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: single-threaded test; vars removed at the end.
+        unsafe {
+            std::env::set_var(
+                "LETS_CHAT_STT_URL",
+                "http://127.0.0.1:9/v1/audio/transcriptions",
+            );
+            std::env::set_var("LETS_CHAT_STT_VAD_FILTER", "1");
+        }
+        assert!(SttConfig::from_env().unwrap().vad_filter, "\"1\" enables");
+        unsafe { std::env::set_var("LETS_CHAT_STT_VAD_FILTER", "True") };
+        assert!(
+            SttConfig::from_env().unwrap().vad_filter,
+            "\"true\" enables, case-insensitive"
+        );
+        unsafe { std::env::set_var("LETS_CHAT_STT_VAD_FILTER", "0") };
+        assert!(
+            !SttConfig::from_env().unwrap().vad_filter,
+            "anything else stays off"
+        );
+        unsafe {
+            std::env::remove_var("LETS_CHAT_STT_URL");
+            std::env::remove_var("LETS_CHAT_STT_VAD_FILTER");
         }
     }
 
