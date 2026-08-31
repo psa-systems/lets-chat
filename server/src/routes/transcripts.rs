@@ -320,10 +320,14 @@ async fn ingest_clip(
         tracing::info!(room_id = room.id, "stt at capacity; dropping clip");
         return Err(AppError::TooManyRequests("transcription is busy".into(), 5));
     };
-    let result = match crate::stt::transcribe_with_retry(stt, req).await {
+    // LC-848: single attempt, never the retry ladder. Retrying here held this
+    // permit for up to 50s and re-sent the clip to an engine still chewing on
+    // the abandoned attempt, so one speaker's hiccup spiralled into every clip
+    // being shed. A live caption is stale before a retry could land anyway.
+    let result = match crate::stt::transcribe_live_clip(stt, req).await {
         Ok(r) => r,
         Err(e) => {
-            tracing::warn!(error = %e, "stt transcription failed after retries; dropping clip");
+            tracing::warn!(error = %e, "stt transcription failed; dropping live clip");
             return Err(AppError::Internal("transcription failed".into()));
         }
     };
