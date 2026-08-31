@@ -172,6 +172,10 @@ voice-transcript-clip-failed = No se pudo transcribir parte del audio. Los subt�
 # activa automáticamente para todos en la llamada, incluidos los que se unen más
 # tarde, así que la Transcripción de una persona cubre toda la llamada.
 voice-transcript-local-only = Solo se transcribe tu propio micrófono, en tu dispositivo. Activar Transcribir lo activa automáticamente para todos en la llamada, incluidas las personas que se unan más tarde.
+# LC-843: engine preference shown only to clients that have both engines.
+voice-engine-label = Motor
+voice-engine-fast = Rápido (instantáneo, en el navegador)
+voice-engine-accurate = Preciso (~5s de retraso, en este servidor)
 voice-in-call = En llamada
 # LC-493: huddles ad-hoc (salas de texto de grupo).
 huddle-label = Huddle
