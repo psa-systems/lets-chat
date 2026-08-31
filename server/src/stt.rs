@@ -64,6 +64,19 @@ pub const STT_BACKOFF: [Duration; 2] = [Duration::from_secs(1), Duration::from_s
 /// LC-590 from making the load worse than it found it.
 pub const LIVE_CLIP_TIMEOUT_SECS: u64 = 15;
 
+/// LC-846: default confidence floor for a whisper segment's `avg_logprob`.
+/// Matches faster-whisper's own `log_prob_threshold`: below this the engine
+/// considers the decode failed, and with a single pinned temperature (LC-844's
+/// `temperature=0`) it has no fallback ladder, so the junk text is returned
+/// anyway - fabricated captions that read like the transcript "answering" the
+/// speaker. Segments under the floor are dropped rather than shown.
+pub const DEFAULT_STT_MIN_LOGPROB: f64 = -1.0;
+
+/// LC-846: default ceiling for a segment's `no_speech_prob`, matching
+/// faster-whisper's `no_speech_threshold`. Above it the segment is more likely
+/// silence/noise than speech; whisper's output for those is pure invention.
+pub const DEFAULT_STT_MAX_NO_SPEECH: f64 = 0.6;
+
 /// LC-593: which provider's wire shape the STT endpoint speaks. Selects the
 /// request builder and response parser behind [`SttClient`]; the normalized
 /// [`SttResult`] is identical across providers.
@@ -118,6 +131,14 @@ pub struct SttConfig {
     /// rather than always-on because the field is a faster-whisper extension
     /// that other OpenAI-shaped engines may reject.
     pub vad_filter: bool,
+    /// LC-846: drop verbose_json segments whose `avg_logprob` is below this
+    /// (see [`DEFAULT_STT_MIN_LOGPROB`]). Segments without the field pass, so
+    /// engines that report no confidence are unaffected. Set very low (e.g.
+    /// -99) to effectively disable the gate.
+    pub min_logprob: f64,
+    /// LC-846: drop verbose_json segments whose `no_speech_prob` is above this
+    /// (see [`DEFAULT_STT_MAX_NO_SPEECH`]). Set to 1 to effectively disable.
+    pub max_no_speech: f64,
 }
 
 impl SttConfig {
@@ -127,9 +148,12 @@ impl SttConfig {
     /// `LETS_CHAT_STT_PROVIDER` (optional, `openai` default; LC-593), and
     /// `LETS_CHAT_STT_TIMEOUT_SECS` (optional, default
     /// [`DEFAULT_STT_TIMEOUT_SECS`]; LC-590), and `LETS_CHAT_STT_VAD_FILTER`
-    /// (optional, `1`/`true` to enable; LC-844). An unrecognized provider value
-    /// falls back to `openai`; an unparseable or zero timeout falls back to the
-    /// default rather than disabling the timeout.
+    /// (optional, `1`/`true` to enable; LC-844), and the LC-846 confidence gate
+    /// `LETS_CHAT_STT_MIN_LOGPROB` / `LETS_CHAT_STT_MAX_NO_SPEECH` (optional,
+    /// defaults [`DEFAULT_STT_MIN_LOGPROB`] / [`DEFAULT_STT_MAX_NO_SPEECH`]).
+    /// An unrecognized provider value falls back to `openai`; an unparseable or
+    /// zero timeout falls back to the default rather than disabling the
+    /// timeout; an unparseable threshold likewise falls back to its default.
     pub fn from_env() -> Option<Self> {
         let var = |k: &str| {
             std::env::var(k)
@@ -154,6 +178,12 @@ impl SttConfig {
             vad_filter: var("LETS_CHAT_STT_VAD_FILTER")
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                 .unwrap_or(false),
+            min_logprob: var("LETS_CHAT_STT_MIN_LOGPROB")
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(DEFAULT_STT_MIN_LOGPROB),
+            max_no_speech: var("LETS_CHAT_STT_MAX_NO_SPEECH")
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(DEFAULT_STT_MAX_NO_SPEECH),
         })
     }
 }
@@ -434,7 +464,11 @@ impl ReqwestSttClient {
             req = req.bearer_auth(key);
         }
         let body = send_for_json(req).await?;
-        Ok(parse_openai_result(&body))
+        Ok(parse_openai_result(
+            &body,
+            self.cfg.min_logprob,
+            self.cfg.max_no_speech,
+        ))
     }
 
     /// LC-593: Deepgram prerecorded `/v1/listen`: the raw audio as the request
@@ -564,20 +598,48 @@ pub fn parse_deepgram_result(body: &serde_json::Value) -> SttResult {
 /// and the plain shape (`{text}` only, no segments). A malformed/missing `text`
 /// yields an empty string, matching the pre-LC-591 behaviour. Split out so it is
 /// unit-testable without a live endpoint. Reused by the OpenAI provider (LC-593).
-pub fn parse_openai_result(body: &serde_json::Value) -> SttResult {
+///
+/// LC-846: verbose_json segments also carry whisper's own confidence
+/// (`avg_logprob`, `no_speech_prob`). A segment below `min_logprob` or above
+/// `max_no_speech` is one the engine itself considers a failed decode or
+/// non-speech - with a pinned temperature (LC-844) that junk is returned rather
+/// than retried, and it is exactly the fabricated "the transcript answered me"
+/// caption. Drop those segments; a segment missing the fields passes, so
+/// engines that report no confidence behave as before. When anything was
+/// dropped, `text` is rebuilt from the survivors (all dropped -> empty text,
+/// which callers already treat as "nothing was said"); when nothing was
+/// dropped, the engine's own `text` is kept verbatim. Plain `{text}` bodies
+/// have no per-segment confidence and are untouched.
+pub fn parse_openai_result(
+    body: &serde_json::Value,
+    min_logprob: f64,
+    max_no_speech: f64,
+) -> SttResult {
     let text = body
         .get("text")
         .and_then(|t| t.as_str())
         .unwrap_or_default()
         .trim()
         .to_string();
-    let segments = body
+    let mut dropped = false;
+    let segments: Vec<SttSegment> = body
         .get("segments")
         .and_then(|s| s.as_array())
         .map(|arr| {
             arr.iter()
                 .filter_map(|s| {
                     let t = s.get("text").and_then(|t| t.as_str())?.trim().to_string();
+                    let confident = s
+                        .get("avg_logprob")
+                        .and_then(|v| v.as_f64())
+                        .is_none_or(|lp| lp >= min_logprob)
+                        && s.get("no_speech_prob")
+                            .and_then(|v| v.as_f64())
+                            .is_none_or(|p| p <= max_no_speech);
+                    if !confident {
+                        dropped = true;
+                        return None;
+                    }
                     Some(SttSegment {
                         start: s.get("start").and_then(|v| v.as_f64()).unwrap_or(0.0),
                         end: s.get("end").and_then(|v| v.as_f64()).unwrap_or(0.0),
@@ -587,6 +649,17 @@ pub fn parse_openai_result(body: &serde_json::Value) -> SttResult {
                 .collect()
         })
         .unwrap_or_default();
+    let text = if dropped {
+        segments
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim()
+            .to_string()
+    } else {
+        text
+    };
     SttResult { text, segments }
 }
 
@@ -713,7 +786,7 @@ mod tests {
                 { "start": 1.5, "end": 3.0, "text": " how are you " },
             ],
         });
-        let r = parse_openai_result(&body);
+        let r = parse_openai_result(&body, DEFAULT_STT_MIN_LOGPROB, DEFAULT_STT_MAX_NO_SPEECH);
         assert_eq!(r.text, "hello world how are you");
         assert_eq!(r.segments.len(), 2);
         assert_eq!(r.segments[0].start, 0.0);
@@ -727,7 +800,7 @@ mod tests {
     fn falls_back_to_plain_text_when_no_segments() {
         // An engine that ignores response_format returns the plain shape.
         let body = serde_json::json!({ "text": "  just text  " });
-        let r = parse_openai_result(&body);
+        let r = parse_openai_result(&body, DEFAULT_STT_MIN_LOGPROB, DEFAULT_STT_MAX_NO_SPEECH);
         assert_eq!(r.text, "just text", "text is trimmed");
         assert!(r.segments.is_empty(), "no segments -> empty, not an error");
         assert_eq!(
@@ -741,9 +814,103 @@ mod tests {
     fn malformed_body_yields_empty_text() {
         // Matches the pre-LC-591 behaviour: a body with no usable text is empty,
         // not an error (the caller drops empty results).
-        let r = parse_openai_result(&serde_json::json!({ "unexpected": 1 }));
+        let r = parse_openai_result(
+            &serde_json::json!({ "unexpected": 1 }),
+            DEFAULT_STT_MIN_LOGPROB,
+            DEFAULT_STT_MAX_NO_SPEECH,
+        );
         assert_eq!(r.text, "");
         assert!(r.segments.is_empty());
+    }
+
+    #[test]
+    fn confidence_gate_drops_junk_segments_and_rebuilds_text() {
+        // LC-846: the middle segment is what whisper flags as a failed decode
+        // (avg_logprob under -1.0) - the fabricated "the transcript answered
+        // me" caption. It must vanish and the text must be rebuilt from the
+        // survivors, not keep the engine's full concatenation.
+        let body = serde_json::json!({
+            "text": "what's up I'm not sure it was taking you so long my name is long",
+            "segments": [
+                { "start": 0.0, "end": 1.0, "text": "what's up", "avg_logprob": -0.3, "no_speech_prob": 0.1 },
+                { "start": 1.0, "end": 3.0, "text": "I'm not sure it was taking you so long", "avg_logprob": -1.06, "no_speech_prob": 0.2 },
+                { "start": 3.0, "end": 4.5, "text": "my name is long", "avg_logprob": -0.4, "no_speech_prob": 0.1 },
+            ],
+        });
+        let r = parse_openai_result(&body, DEFAULT_STT_MIN_LOGPROB, DEFAULT_STT_MAX_NO_SPEECH);
+        assert_eq!(r.text, "what's up my name is long");
+        assert_eq!(r.segments.len(), 2);
+        assert_eq!(r.segments[1].text, "my name is long");
+    }
+
+    #[test]
+    fn confidence_gate_drops_probable_non_speech() {
+        // no_speech_prob above the ceiling: whisper says this window is
+        // silence/noise, so whatever text it produced is invention.
+        let body = serde_json::json!({
+            "text": "thanks for watching",
+            "segments": [
+                { "start": 0.0, "end": 4.0, "text": "thanks for watching", "avg_logprob": -0.5, "no_speech_prob": 0.9 },
+            ],
+        });
+        let r = parse_openai_result(&body, DEFAULT_STT_MIN_LOGPROB, DEFAULT_STT_MAX_NO_SPEECH);
+        assert_eq!(
+            r.text, "",
+            "all segments junk -> empty, the caller drops it"
+        );
+        assert!(r.segments.is_empty());
+    }
+
+    #[test]
+    fn confidence_gate_passes_segments_without_confidence_fields() {
+        // An engine that returns segments but no confidence info (non-whisper
+        // OpenAI-shaped engines) must behave exactly as before LC-846.
+        let body = serde_json::json!({
+            "text": "hello world",
+            "segments": [ { "start": 0.0, "end": 1.0, "text": "hello world" } ],
+        });
+        let r = parse_openai_result(&body, DEFAULT_STT_MIN_LOGPROB, DEFAULT_STT_MAX_NO_SPEECH);
+        assert_eq!(
+            r.text, "hello world",
+            "engine text kept verbatim when nothing dropped"
+        );
+        assert_eq!(r.segments.len(), 1);
+    }
+
+    #[test]
+    fn from_env_reads_confidence_thresholds() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: single-threaded test; vars removed at the end.
+        unsafe {
+            std::env::set_var(
+                "LETS_CHAT_STT_URL",
+                "http://127.0.0.1:9/v1/audio/transcriptions",
+            );
+        }
+        let cfg = SttConfig::from_env().expect("configured");
+        assert_eq!(cfg.min_logprob, DEFAULT_STT_MIN_LOGPROB, "default floor");
+        assert_eq!(
+            cfg.max_no_speech, DEFAULT_STT_MAX_NO_SPEECH,
+            "default ceiling"
+        );
+        unsafe {
+            std::env::set_var("LETS_CHAT_STT_MIN_LOGPROB", "-2.5");
+            std::env::set_var("LETS_CHAT_STT_MAX_NO_SPEECH", "0.9");
+        }
+        let cfg = SttConfig::from_env().expect("configured");
+        assert_eq!(cfg.min_logprob, -2.5);
+        assert_eq!(cfg.max_no_speech, 0.9);
+        // Unparseable values fall back to the defaults, never to "gate off".
+        unsafe { std::env::set_var("LETS_CHAT_STT_MIN_LOGPROB", "bogus") };
+        assert_eq!(
+            SttConfig::from_env().unwrap().min_logprob,
+            DEFAULT_STT_MIN_LOGPROB
+        );
+        unsafe {
+            std::env::remove_var("LETS_CHAT_STT_URL");
+            std::env::remove_var("LETS_CHAT_STT_MIN_LOGPROB");
+            std::env::remove_var("LETS_CHAT_STT_MAX_NO_SPEECH");
+        }
     }
 
     #[test]
