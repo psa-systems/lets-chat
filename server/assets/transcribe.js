@@ -195,18 +195,24 @@
     if (t) t.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
-  // ---- caption scroll / jump-to-live (LC-402) ---------------------------
+  // ---- caption scroll / jump-to-live (LC-402 / LC-847) ------------------
   function transcriptBody() { return q('[data-lc-transcript-body]'); }
   function nearBottom(el) { return el.scrollHeight - el.scrollTop - el.clientHeight < 48; }
+  // LC-847: follow intent, not position. onNewCaptions runs AFTER the line is
+  // in the DOM, so a batch taller than the nearBottom band (one Accurate-mode
+  // 5s clip easily is) used to fail the check and strand the view above the
+  // live captions forever. Only a deliberate user scroll clears this flag.
+  var followLive = true;
   function scrollToLive() {
     var el = transcriptBody();
     if (el) el.scrollTop = el.scrollHeight;
+    followLive = true;
     document.body.classList.remove('lc-transcript-scrolled');
   }
   function onNewCaptions() {
     var el = transcriptBody();
     if (!el) return;
-    if (nearBottom(el)) scrollToLive();
+    if (followLive) scrollToLive();
     else document.body.classList.add('lc-transcript-scrolled');
   }
 
@@ -532,11 +538,16 @@
       onNewCaptions();
     }).observe(log, { childList: true });
   }
-  // Track scroll position so the jump-to-live affordance reveals when scrolled up.
+  // Track scroll position so the jump-to-live affordance reveals when scrolled
+  // up. LC-847: this is also the only place follow intent is decided - scrolling
+  // up releases the live view, scrolling back to the bottom re-engages it.
+  // (scrollToLive's own scrollTop write lands here too, but it lands at the
+  // bottom, so it re-confirms follow rather than fighting it.)
   document.addEventListener('scroll', function (e) {
     var el = transcriptBody();
     if (!el || e.target !== el) return;
-    document.body.classList.toggle('lc-transcript-scrolled', !nearBottom(el));
+    followLive = nearBottom(el);
+    document.body.classList.toggle('lc-transcript-scrolled', !followLive);
   }, true);
 
   // ---- transcript drawer controls (LC-402) ------------------------------
@@ -682,7 +693,7 @@
   document.body.addEventListener('htmx:afterSettle', reconcileStage);
 
   // LC-843: the pure engine decision, exported for transcribe.test.js.
-  window.LetsChatTranscribe = { chooseEngine: chooseEngine };
+  window.LetsChatTranscribe = { chooseEngine: chooseEngine, nearBottom: nearBottom };
 
   // Learn the engine (browser vs server STT) up front, then keep toggles in step.
   loadConfig();
