@@ -173,6 +173,11 @@ voice-transcript-clip-failed = Some audio could not be transcribed. Captions may
 # capture), so one person's Transcribe covers the whole call. Say the privacy
 # fact and the auto-activation plainly.
 voice-transcript-local-only = Only your own microphone is transcribed, on your device. Turning on Transcribe activates it for everyone in the call automatically, including people who join later.
+# LC-843: engine preference shown only to clients that have both engines. Name
+# the trade-off (speed vs accuracy) and where the audio goes, briefly.
+voice-engine-label = Engine
+voice-engine-fast = Fast (instant, in-browser)
+voice-engine-accurate = Accurate (~5s delay, on this server)
 voice-in-call = In call
 # LC-493: ad-hoc huddles (group text rooms).
 huddle-label = Huddle
