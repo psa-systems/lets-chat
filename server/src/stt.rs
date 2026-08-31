@@ -368,6 +368,57 @@ pub async fn transcribe_live_clip(
     transcribe_with_backoff(client, req, &[]).await
 }
 
+/// LC-849: retry schedule for the boot warm-up. Much longer than
+/// [`STT_BACKOFF`] because the engine container routinely comes up AFTER the
+/// app on a stack restart, and there is no hurry - the warm-up races only the
+/// first human speaker, not a 5s clip cadence. Six attempts spread over about
+/// a minute of delays (each attempt additionally waits out the operator's base
+/// request timeout).
+pub const STT_WARMUP_BACKOFF: [Duration; 5] = [
+    Duration::from_secs(2),
+    Duration::from_secs(5),
+    Duration::from_secs(10),
+    Duration::from_secs(20),
+    Duration::from_secs(30),
+];
+
+/// LC-849: a minimal valid WAV clip (200ms of 16kHz mono 16-bit PCM silence)
+/// used to force the engine to load its model at boot. Engines like speaches
+/// load the whisper model into RAM lazily on the FIRST transcription request,
+/// so without this the first human speaker after a deploy pays the multi-second
+/// model load and their opening captions blow the live-clip timeout.
+pub fn warmup_clip() -> Vec<u8> {
+    const SAMPLE_RATE: u32 = 16_000;
+    const SAMPLES: u32 = SAMPLE_RATE / 5; // 200ms
+    let data_len = SAMPLES * 2; // 16-bit mono
+    let mut w = Vec::with_capacity(44 + data_len as usize);
+    w.extend_from_slice(b"RIFF");
+    w.extend_from_slice(&(36 + data_len).to_le_bytes());
+    w.extend_from_slice(b"WAVEfmt ");
+    w.extend_from_slice(&16u32.to_le_bytes()); // fmt chunk size
+    w.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    w.extend_from_slice(&1u16.to_le_bytes()); // mono
+    w.extend_from_slice(&SAMPLE_RATE.to_le_bytes());
+    w.extend_from_slice(&(SAMPLE_RATE * 2).to_le_bytes()); // byte rate
+    w.extend_from_slice(&2u16.to_le_bytes()); // block align
+    w.extend_from_slice(&16u16.to_le_bytes()); // bits per sample
+    w.extend_from_slice(b"data");
+    w.extend_from_slice(&data_len.to_le_bytes());
+    w.resize(44 + data_len as usize, 0);
+    w
+}
+
+/// LC-849: send the warm-up clip through the normal client so the engine loads
+/// its model before the first real speaker. Transient failures (engine
+/// container still starting) retry on [`STT_WARMUP_BACKOFF`]; a permanent
+/// failure (bad key, wrong URL) returns immediately - warming cannot fix a
+/// misconfiguration and the regular path will surface it anyway. The result
+/// text is discarded; only the side effect matters.
+pub async fn warmup(client: &dyn SttClient) -> Result<SttResult, SttError> {
+    let req = SttRequest::new(warmup_clip(), "audio/wav");
+    transcribe_with_backoff(client, req, &STT_WARMUP_BACKOFF).await
+}
+
 /// The retry loop, with the delays injected. Attempts = `backoff.len() + 1`, so
 /// an empty slice is exactly the pre-LC-590 single-shot behaviour - which is
 /// also what the tests pass, to exercise the policy without sleeping through it.
@@ -443,6 +494,9 @@ impl ReqwestSttClient {
             "audio.ogg"
         } else if content_type.contains("mp4") || content_type.contains("mpeg") {
             "media.mp4"
+        } else if content_type.contains("wav") {
+            // LC-849: the boot warm-up clip. Nothing user-facing produces WAV.
+            "audio.wav"
         } else {
             "media.webm"
         };
@@ -1178,6 +1232,38 @@ mod tests {
             1,
             "no second POST to a struggling engine"
         );
+    }
+
+    #[test]
+    fn warmup_clip_is_a_valid_wav() {
+        // LC-849: a malformed header would make the engine 4xx the warm-up,
+        // which never retries (permanent), silently leaving the model cold.
+        let w = warmup_clip();
+        assert_eq!(&w[0..4], b"RIFF");
+        assert_eq!(&w[8..16], b"WAVEfmt ");
+        assert_eq!(&w[36..40], b"data");
+        let riff_len = u32::from_le_bytes(w[4..8].try_into().unwrap()) as usize;
+        assert_eq!(riff_len + 8, w.len(), "RIFF length spans the whole file");
+        let data_len = u32::from_le_bytes(w[40..44].try_into().unwrap()) as usize;
+        assert_eq!(data_len + 44, w.len(), "data length spans the samples");
+        assert!(w[44..].iter().all(|b| *b == 0), "silence");
+    }
+
+    #[tokio::test]
+    async fn warmup_sends_one_clip_through_the_client() {
+        let mock = MockSttClient::text("");
+        warmup(&mock).await.expect("engine answered");
+        assert_eq!(mock.call_count(), 1);
+    }
+
+    #[test]
+    fn warmup_backoff_is_patient() {
+        // LC-849: the engine container may come up well after the app; the
+        // schedule must tolerate that without hammering. Pin the shape so a
+        // future edit cannot quietly turn boot into a retry storm.
+        assert_eq!(STT_WARMUP_BACKOFF.len() + 1, 6, "six attempts");
+        let total: Duration = STT_WARMUP_BACKOFF.iter().sum();
+        assert!(total >= Duration::from_secs(60), "spread over a minute+");
     }
 
     #[test]
