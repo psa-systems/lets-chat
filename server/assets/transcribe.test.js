@@ -69,3 +69,17 @@ test('a stored preference is read at load and only valid values count', () => {
     'an unknown pref falls through to the automatic rules');
   assert.equal(t.window.LetsChatTranscribe.chooseEngine('garbage', true, true, true, false), 'browser');
 });
+
+test('nearBottom and why auto-follow cannot be derived from it post-insert (LC-847)', () => {
+  const near = load().window.LetsChatTranscribe.nearBottom;
+  // Pinned to the bottom: inside the 48px band.
+  assert.equal(near({ scrollHeight: 1000, scrollTop: 700, clientHeight: 300 }), true);
+  assert.equal(near({ scrollHeight: 1000, scrollTop: 660, clientHeight: 300 }), true, '40px off still counts as bottom');
+  assert.equal(near({ scrollHeight: 1000, scrollTop: 640, clientHeight: 300 }), false, '60px off is scrolled up');
+  // The LC-847 regression: the view sat AT the bottom, then one Accurate-mode
+  // 5s clip appended a 120px batch. Measured after the insert (the only moment
+  // the MutationObserver can run), the view is now 120px off the bottom, so a
+  // nearBottom-gated auto-scroll refuses to follow - which is why onNewCaptions
+  // scrolls on the followLive intent flag instead of re-deriving it here.
+  assert.equal(near({ scrollHeight: 1120, scrollTop: 700, clientHeight: 300 }), false);
+});
