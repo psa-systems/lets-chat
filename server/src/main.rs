@@ -162,9 +162,30 @@ async fn main() {
         match lets_chat::stt::SttConfig::from_env() {
             Some(cfg) => {
                 tracing::info!(target: "stt", url = %cfg.url, model = %cfg.model, "server-side STT enabled");
-                Some(std::sync::Arc::new(lets_chat::stt::ReqwestSttClient::new(
-                    cfg,
-                )))
+                let provider = cfg.provider;
+                let client: std::sync::Arc<dyn lets_chat::stt::SttClient> =
+                    std::sync::Arc::new(lets_chat::stt::ReqwestSttClient::new(cfg));
+                // LC-849: self-hosted engines load their model lazily on the
+                // first request, so whoever speaks first after a deploy pays
+                // the multi-second load and their opening captions time out.
+                // Fire a tiny silent clip in the background so the model is
+                // hot before anyone talks. Deepgram is skipped: a managed
+                // cloud service needs no warming and bills per request.
+                if provider == lets_chat::stt::SttProvider::OpenAi {
+                    let warm = client.clone();
+                    tokio::spawn(async move {
+                        let t0 = std::time::Instant::now();
+                        match lets_chat::stt::warmup(warm.as_ref()).await {
+                            Ok(_) => {
+                                tracing::info!(target: "stt", elapsed_ms = t0.elapsed().as_millis() as u64, "stt engine warmed")
+                            }
+                            Err(e) => {
+                                tracing::warn!(target: "stt", error = %e, "stt warm-up failed; the first live captions may be slow")
+                            }
+                        }
+                    });
+                }
+                Some(client)
             }
             None => None,
         };
