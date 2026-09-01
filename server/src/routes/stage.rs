@@ -189,6 +189,8 @@ pub async fn get_token(
         &user.id,
         &name,
         can_publish,
+        // No remote control on a Stage broadcast; never grant the data channel.
+        false,
         now,
     )
     .map_err(|e| AppError::Internal(format!("livekit token: {e}")))?;
@@ -260,6 +262,11 @@ pub async fn get_huddle_token(
         Some(n) if !n.trim().is_empty() => n.to_string(),
         _ => user.username.clone(),
     };
+    // LC-854: grant the data channel only while the workspace remote-control
+    // switch is on - it is the sole huddle use of publishData. Read live, so a
+    // toggle takes effect on the next join; existing sessions rely on the
+    // injector's fail-closed gate, not the token.
+    let can_publish_data = crate::routes::ws::remote_control_flag_on(&state).await;
     let token = livekit::mint_token(
         &cfg,
         livekit::Surface::Huddle,
@@ -267,6 +274,7 @@ pub async fn get_huddle_token(
         &user.id,
         &name,
         true,
+        can_publish_data,
         now,
     )
     .map_err(|e| AppError::Internal(format!("livekit token: {e}")))?;

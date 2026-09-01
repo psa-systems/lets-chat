@@ -38,6 +38,10 @@
 
   // Requester-side phase: 'idle' | 'requesting' | 'controlling'.
   var phase = 'idle';
+  // The user id whose screen we are controlling (the sharer), while controlling.
+  var controllingSharer = null;
+  // Controller-side: the active capture unbind fn (LC-854), or null.
+  var captureStop = null;
   // Sharer-side: the controller holding our grant, and the pending requester.
   var grantedTo = null;
   var pendingFrom = null;
@@ -45,6 +49,11 @@
   var sharers = {};
   var requestTimer = null;
   var promptTimer = null;
+  // Controller-side: whether the sharer's machine has a native injector
+  // (LC-640). null = not yet announced, true/false = known. A web sharer has
+  // none, so the controller's input reaches no OS - surface that, do not leave
+  // it a mystery.
+  var sharerNative = null;
 
   // The bar can be re-rendered by an htmx page swap (LC-837 nav boost), so
   // never cache elements - resolve through the CURRENT root on every use.
@@ -60,6 +69,14 @@
   }
   function joined() {
     return !!(window.LetsChatVoice && window.LetsChatVoice.isJoined());
+  }
+  // LC-854: v1 transport is the LiveKit data channel, so control is offered
+  // only on SFU huddles. A mesh huddle (no LiveKit configured) has no data
+  // channel; the affordance stays hidden there rather than granting a session
+  // whose input would go nowhere.
+  function sfuHuddle() {
+    var vr = document.querySelector('[data-lc-voice-root]');
+    return !!vr && vr.getAttribute('data-lc-huddle-sfu') === '1';
   }
   function str(key, fallback) {
     return window.__lcS ? window.__lcS(key, fallback) : fallback;
@@ -83,7 +100,7 @@
     var btn = q('[data-lc-huddle-control-request]');
     if (!btn) return;
     var visible = phase !== 'idle' ||
-      canRequest({ enabled: true, joined: joined(), selfId: selfId(), sharers: sharers });
+      canRequest({ enabled: sfuHuddle(), joined: joined(), selfId: selfId(), sharers: sharers });
     btn.classList.toggle('hidden', !visible);
     var text = phase === 'requesting' ? str('callRequesting', 'Requesting...')
       : phase === 'controlling' ? str('callStopControlling', 'Stop controlling')
@@ -94,9 +111,99 @@
     btn.setAttribute('data-lc-tip', text);
   }
 
+  // ---- LC-854 transport + input replay ------------------------------
+  // The sharer's tile <video> the controller drives (the shared surface). The
+  // roster keys tiles by user id, exactly as voice.js builds them.
+  function tileVideo(uid) {
+    if (!uid) return null;
+    var esc = (window.CSS && CSS.escape) ? CSS.escape(uid) : uid.replace(/"/g, '\\"');
+    return document.querySelector('[data-lc-voice-tile="' + esc + '"] [data-lc-voice-video]');
+  }
+  var sfu = function () { return window.LetsChatHuddleSfu; };
+  // Controller: start capturing over the sharer's tile and shipping frames.
+  // Movement is unreliable (drop-old), clicks/keys reliable, matching the 1:1
+  // channel. Coordinates are normalized [0,1] over the surface; the injector
+  // maps to the sharer's virtual desktop. Known limitation (carried from the
+  // 1:1 flow, inject.rs): a multi-monitor share maps to the whole virtual
+  // desktop, so per-monitor coordinates are off - single/primary shares are
+  // correct.
+  function startCapture(sharerId) {
+    if (captureStop || !window.LetsChatRtc || !window.LetsChatRtc.control) return;
+    var s = sfu();
+    if (!s || !s.sendControl) return; // mesh huddle: no data channel (unavailable)
+    controllingSharer = sharerId;
+    // Learn the sharer's injector capability from their cap frame (LC-640):
+    // this is our only inbound data as the controller.
+    if (s.onControlData) {
+      s.onControlData(function (fromId, text) {
+        if (fromId !== sharerId) return;
+        var cap = parseCap(text);
+        if (cap) { sharerNative = !!cap.native; updateNoInject(); }
+      });
+    }
+    captureStop = window.LetsChatRtc.control.bindCapture(
+      function () { return tileVideo(sharerId); },
+      function (frame) {
+        var reliable = frame.t !== 'm';
+        s.sendControl(JSON.stringify(frame), sharerId, reliable);
+      }
+    );
+  }
+  function stopCapture() {
+    if (captureStop) { try { captureStop(); } catch (e) {} captureStop = null; }
+    var s = sfu();
+    if (s && s.onControlData) s.onControlData(null);
+    controllingSharer = null;
+    sharerNative = null;
+    updateNoInject();
+  }
+  // Sharer: receive the controller's frames and hand each to the native
+  // injector (LC-185) via the same DOM event the 1:1 flow uses; a web sharer
+  // has no injector and the event is unobserved. Only frames from the granted
+  // controller are honored.
+  function armInjection() {
+    var s = sfu();
+    if (!s || !s.onControlData) return;
+    s.onControlData(function (fromId, text) {
+      if (!grantedTo || fromId !== grantedTo) return;
+      var cap = parseCap(text);
+      if (cap) return; // capability frames are controller-bound, ignore here
+      try {
+        document.dispatchEvent(new CustomEvent('lc:control-input', { detail: text }));
+      } catch (e) {}
+    });
+    // Announce our injector capability so the controller learns whether their
+    // input will land, without any server involvement (LC-640). Sent now and
+    // once more shortly after: the grant rides the WS while this rides the
+    // LiveKit data channel, so the controller may not have armed its receiver
+    // by the first send. Both are idempotent.
+    var to = grantedTo;
+    var cap = JSON.stringify({ t: 'cap', native: !!window.__lcNativeControl });
+    s.sendControl(cap, to, true);
+    setTimeout(function () { if (grantedTo === to) s.sendControl(cap, to, true); }, 500);
+  }
+  function disarmInjection() {
+    var s = sfu();
+    if (s && s.onControlData) s.onControlData(null);
+    // Release any keys/buttons the injector is holding.
+    try { document.dispatchEvent(new CustomEvent('lc:control-end')); } catch (e) {}
+  }
+  function parseCap(text) {
+    if (typeof text !== 'string') return null;
+    try { var o = JSON.parse(text); return (o && o.t === 'cap') ? o : null; } catch (e) { return null; }
+  }
+  function updateNoInject() {
+    var note = q('[data-lc-huddle-control-noinject]');
+    if (!note) return;
+    var show = phase === 'controlling' && sharerNative === false;
+    note.classList.toggle('hidden', !show);
+    note.setAttribute('aria-hidden', show ? 'false' : 'true');
+  }
+
   // Requester side ----------------------------------------------------
   function endControlling(msg) {
     if (requestTimer) { clearTimeout(requestTimer); requestTimer = null; }
+    stopCapture();
     phase = 'idle';
     setRequestBtn();
     if (msg) announce(msg);
@@ -149,11 +256,16 @@
     announce(pendingFromName + ' ' + str('huddleControlActiveSuffix', 'is controlling your screen'));
     hidePrompt();
     send('grant');
+    // LC-854: begin accepting the controller's input frames and hand them to
+    // the native injector. Must arm before the grant signal could race a first
+    // frame back, so onControlData is registered first.
+    armInjection();
     show(q('[data-lc-huddle-control-banner]'));
   }
   function endGrant(msg) {
     if (!grantedTo) return;
     grantedTo = null;
+    disarmInjection();
     hide(q('[data-lc-huddle-control-banner]'));
     if (msg) announce(msg);
   }
@@ -176,7 +288,11 @@
         if (phase !== 'requesting') return;
         if (requestTimer) { clearTimeout(requestTimer); requestTimer = null; }
         phase = 'controlling';
+        // LC-854: the grant names the sharer (from_user_id); begin capturing
+        // over their tile and shipping input over the data channel.
+        startCapture(fromId);
         setRequestBtn();
+        updateNoInject();
         announce(str('huddleControlGranted', 'Control granted'));
         break;
       case 'deny':
