@@ -129,7 +129,15 @@ pub fn room_name(surface: Surface, room_id: i64) -> String {
 /// Mint a LiveKit access token (JWT) for `identity` to join `surface` of
 /// `room_id`. `can_publish` is true for anyone allowed to send media - Stage
 /// speakers and hosts, every huddle participant - while everyone may subscribe.
-/// `now_unix` is injected so the claims are deterministically testable.
+/// `can_publish_data` gates the LiveKit data channel: LC-854 rides huddle
+/// remote-control input over it, so it is on only for huddle tokens while the
+/// workspace switch is on, and always off for Stage (no control there). The
+/// injector is fail-closed regardless (input without a live grant injects
+/// nothing), so this is defense in depth, not the only gate. `now_unix` is
+/// injected so the claims are deterministically testable.
+// The parameters map one-to-one onto distinct JWT claim fields; a bundling
+// struct would only rename them without adding meaning.
+#[allow(clippy::too_many_arguments)]
 pub fn mint_token(
     cfg: &LiveKitConfig,
     surface: Surface,
@@ -137,6 +145,7 @@ pub fn mint_token(
     identity: &str,
     name: &str,
     can_publish: bool,
+    can_publish_data: bool,
     now_unix: u64,
 ) -> Result<String, jsonwebtoken::errors::Error> {
     let claims = Claims {
@@ -150,7 +159,7 @@ pub fn mint_token(
             room_join: true,
             can_publish,
             can_subscribe: true,
-            can_publish_data: false,
+            can_publish_data,
         },
     };
     jsonwebtoken::encode(
@@ -363,7 +372,17 @@ mod tests {
     #[test]
     fn speaker_token_can_publish() {
         let c = cfg();
-        let t = mint_token(&c, Surface::Stage, 42, "user-1", "Alice", true, 1_000).unwrap();
+        let t = mint_token(
+            &c,
+            Surface::Stage,
+            42,
+            "user-1",
+            "Alice",
+            true,
+            false,
+            1_000,
+        )
+        .unwrap();
         let claims = decode(&t, &c.api_secret);
         assert_eq!(claims.iss, "devkey");
         assert_eq!(claims.sub, "user-1");
@@ -377,7 +396,7 @@ mod tests {
     #[test]
     fn listener_token_cannot_publish_but_subscribes() {
         let c = cfg();
-        let t = mint_token(&c, Surface::Stage, 7, "user-2", "Bob", false, 5_000).unwrap();
+        let t = mint_token(&c, Surface::Stage, 7, "user-2", "Bob", false, false, 5_000).unwrap();
         let claims = decode(&t, &c.api_secret);
         assert!(!claims.video.can_publish);
         assert!(claims.video.can_subscribe);
@@ -391,11 +410,11 @@ mod tests {
     fn stage_and_huddle_in_one_room_do_not_collide() {
         let c = cfg();
         let stage = decode(
-            &mint_token(&c, Surface::Stage, 42, "u", "U", true, 1_000).unwrap(),
+            &mint_token(&c, Surface::Stage, 42, "u", "U", true, false, 1_000).unwrap(),
             &c.api_secret,
         );
         let huddle = decode(
-            &mint_token(&c, Surface::Huddle, 42, "u", "U", true, 1_000).unwrap(),
+            &mint_token(&c, Surface::Huddle, 42, "u", "U", true, false, 1_000).unwrap(),
             &c.api_secret,
         );
         assert_eq!(stage.video.room, "stage-42");
@@ -412,7 +431,7 @@ mod tests {
     fn huddle_participant_publishes() {
         let c = cfg();
         let claims = decode(
-            &mint_token(&c, Surface::Huddle, 9, "user-3", "Cara", true, 2_000).unwrap(),
+            &mint_token(&c, Surface::Huddle, 9, "user-3", "Cara", true, false, 2_000).unwrap(),
             &c.api_secret,
         );
         assert_eq!(claims.video.room, "huddle-9");
@@ -420,10 +439,28 @@ mod tests {
         assert!(claims.video.can_subscribe);
     }
 
+    /// LC-854: the data channel (remote-control input transport) is granted
+    /// only when asked for - off by default, on when the caller passes it - so
+    /// a huddle token minted with the switch off carries no publishData right.
+    #[test]
+    fn data_channel_grant_is_explicit() {
+        let c = cfg();
+        let off = decode(
+            &mint_token(&c, Surface::Huddle, 3, "u", "U", true, false, 1_000).unwrap(),
+            &c.api_secret,
+        );
+        assert!(!off.video.can_publish_data, "off by default");
+        let on = decode(
+            &mint_token(&c, Surface::Huddle, 3, "u", "U", true, true, 1_000).unwrap(),
+            &c.api_secret,
+        );
+        assert!(on.video.can_publish_data, "granted when requested");
+    }
+
     #[test]
     fn token_is_rejected_under_the_wrong_secret() {
         let c = cfg();
-        let t = mint_token(&c, Surface::Stage, 1, "u", "U", true, 1_000).unwrap();
+        let t = mint_token(&c, Surface::Stage, 1, "u", "U", true, false, 1_000).unwrap();
         let mut v = Validation::new(jsonwebtoken::Algorithm::HS256);
         v.required_spec_claims.clear();
         assert!(
