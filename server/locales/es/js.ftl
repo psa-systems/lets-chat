@@ -33,6 +33,13 @@ js-call-control-no-answer = Solicitud de control sin respuesta
 js-call-control-denied = Solicitud de control denegada
 js-call-control-unavailable = El control remoto no está disponible en esta llamada
 
+# LC-853: flujo de consentimiento de control remoto en huddles (huddle_control.js)
+js-huddle-control-granted = Control concedido
+js-huddle-control-busy = Otra persona ya tiene el control
+js-huddle-control-ended = Control finalizado
+js-huddle-control-requested = solicitó el control de tu pantalla
+js-huddle-control-active-suffix = está controlando tu pantalla
+
 # Bandeja sin conexión (outbox.js)
 js-outbox-offline-queued = Sin conexión: %n% mensaje(s) en cola
 js-outbox-offline-idle = Sin conexión: los mensajes se enviarán al reconectar

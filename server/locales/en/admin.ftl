@@ -317,6 +317,13 @@ admin-settings-maintenance-message-label = Message shown to users
 admin-settings-maintenance-message-placeholder = Back at 17:00 UTC; upgrading the database.
 admin-settings-maintenance-save = Save maintenance mode
 # LC-679: runtime LLM/AI feature flag (kill switch).
+# LC-853: workspace remote-control switch
+admin-settings-rc-heading = Remote control of shared screens
+admin-settings-rc-note = Lets a call participant ask to control a shared screen; the sharer approves every request explicitly. One switch for the whole surface: 1:1 calls and huddles alike. Off by default.
+admin-settings-rc-enable = Enable remote control
+admin-settings-rc-enable-note = Takes effect immediately, no restart. Sessions already granted can still be revoked while off.
+admin-settings-rc-save = Save remote control setting
+
 admin-settings-llm-heading = AI features (LLM / Ollama)
 admin-settings-llm-note = Runtime kill switch for the whole AI surface (writing assistant, catch-up, /ask, translate, suggested replies, semantic search, transcript summaries). Off by default. When on, who can use it is set by the audience below; anyone outside that audience sees no trace. The first request after the model has been idle can take several seconds to warm up; that is expected.
 admin-settings-llm-enable = Enable AI features
