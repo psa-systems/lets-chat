@@ -4227,6 +4227,11 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     width: 100%;
     object-fit: cover;
 }
+/* LC-854: while remote-controlling a shared screen the controller must see the
+   WHOLE surface (cover crops it, stranding the edges and breaking the [0,1]
+   coordinate mapping), so the target tile video switches to contain for the
+   duration. Applied/removed by rtc_common.js bindCapture on the target only. */
+.lc-voice-tile video.lc-rc-contain { object-fit: contain; }
 .lc-voice-avatar {
     position: absolute;
     inset: 0;

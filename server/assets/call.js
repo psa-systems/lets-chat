@@ -853,30 +853,14 @@
   }
 
   // ---- remote control: coordinate mapping --------------------------
-  // Map a viewport point on the letterboxed remote <video> (object-contain) to
-  // normalized [0,1] surface coordinates. Returns null for points outside the
-  // actual video content (the letterbox bars) so we never send a bogus coord.
-  // The controlled side maps [0,1] back to absolute screen pixels using its own
-  // monitor geometry + DPI, keeping the protocol resolution-independent.
+  // LC-854: the coordinate map and modifier bitmask are shared with the huddle
+  // (rtc_common.js LetsChatRtc.control) so both surfaces send the injector one
+  // identical frame format. Behavior here is unchanged - these delegate to the
+  // same math this file used to inline.
   function normCoords(video, clientX, clientY) {
-    if (!video) return null;
-    var vw = video.videoWidth, vh = video.videoHeight;
-    if (!vw || !vh) return null;
-    var rect = video.getBoundingClientRect();
-    if (!rect.width || !rect.height) return null;
-    var scale = Math.min(rect.width / vw, rect.height / vh);
-    var dispW = vw * scale, dispH = vh * scale;
-    var offX = (rect.width - dispW) / 2, offY = (rect.height - dispH) / 2;
-    var x = (clientX - rect.left - offX) / dispW;
-    var y = (clientY - rect.top - offY) / dispH;
-    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-    return { x: x, y: y };
+    return window.LetsChatRtc.control.normCoords(video, clientX, clientY);
   }
-
-  // Modifier bitmask: ctrl=1, shift=2, alt=4, meta=8.
-  function modMask(e) {
-    return (e.ctrlKey ? 1 : 0) | (e.shiftKey ? 2 : 0) | (e.altKey ? 4 : 0) | (e.metaKey ? 8 : 0);
-  }
+  function modMask(e) { return window.LetsChatRtc.control.modMask(e); }
 
   // ---- remote control: input capture (controller side) -------------
   function flushMove() {
