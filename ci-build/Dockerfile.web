@@ -57,6 +57,13 @@ RUN set -eux; \
 # `*.test.js` node-test files (not served, and they require('node:test')).
 # `vendor/*` is already minified and lives in a subdir the flat glob skips.
 #
+# LC-850: the LiveKit browser SDK (served same-origin from /assets/vendor/,
+# LC-512) is gitignored, so a CI checkout does not contain it and every image
+# built before this line shipped without it - huddles and stage audio died with
+# "livekit sdk failed to load" as soon as LiveKit was enabled. It is pinned in
+# package.json + bun.lock, so copy it out of node_modules right after install;
+# cp fails the build loudly if the package ever stops providing the UMD bundle.
+#
 # LC-812: `--format=cjs` is required, not cosmetic. `bun build` defaults to ESM
 # output, so any file exposing `module.exports` (media-constraints.js and
 # mute-state.js expose it for `node --test`) is emitted with a top-level
@@ -75,6 +82,8 @@ COPY server/package.json server/bun.lock server/tailwind.config.js ./
 COPY server/assets ./assets
 COPY server/templates ./templates
 RUN bun install --frozen-lockfile \
+    && mkdir -p assets/vendor \
+    && cp node_modules/livekit-client/dist/livekit-client.umd.js assets/vendor/livekit-client.umd.min.js \
     && bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify \
     && (cd assets \
         && bun build main.css --minify --outdir . \
