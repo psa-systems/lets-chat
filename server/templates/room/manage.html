@@ -152,6 +152,29 @@
       {% include "partials/settings_toggle.html" %}
     </div>
 
+    {# ===== Remote control of shared screens (LC-855) ===== #}
+    {% if room.room_type != "dm" %}
+    <div class="card lc-set-card">
+      <div class="lc-set-card-head">
+        <h3 class="lc-set-card-title">{{ "room-remote-control-heading"|t }}</h3>
+        <p class="lc-set-card-desc">{{ "room-remote-control-intro"|t }}</p>
+      </div>
+      {% if !remote_control_workspace_on %}
+      <p class="lc-set-help">{{ "room-remote-control-workspace-off"|t }}</p>
+      {% endif %}
+      {% let action = "/room/{}/remote-control"|format(room.id) %}
+      {% let name = "enabled" %}
+      {% let enabled = !remote_control_disabled %}
+      {% let aria_label = "room-remote-control-heading"|t %}
+      {% let on_label = "room-remote-control-on-label"|t %}
+      {% let on_text = "room-remote-control-on-text"|t %}
+      {% let off_label = "room-remote-control-off-label"|t %}
+      {% let off_text = "room-remote-control-off-text"|t %}
+      {% let status = "" %}
+      {% include "partials/settings_toggle.html" %}
+    </div>
+    {% endif %}
+
     {# ===== Workflow automations (LC-495) ===== #}
     {% if room.room_type != "dm" %}
     {% include "partials/room_automations.html" %}

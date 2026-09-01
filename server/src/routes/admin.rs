@@ -104,6 +104,7 @@ pub fn router() -> Router<AppState> {
             post(post_quarantine_reject),
         )
         .route("/admin/modlog", get(get_modlog))
+        .route("/admin/remote-control", get(get_remote_control_audit))
         // LC-334: message-report review queue.
         .route("/admin/reports", get(get_reports))
         .route("/admin/reports/badge", get(get_reports_badge))
@@ -1531,6 +1532,76 @@ pub async fn get_modlog(
         build_date: version::BUILD_DATE,
         section: "modlog",
         entries: &entries,
+    };
+    html(&page)
+}
+
+/// `GET /admin/remote-control` - the remote-control consent audit (LC-855). A
+/// read-only listing of recent request/grant/deny/revoke events across DM calls
+/// and huddles, with actor/target ids resolved to display names.
+pub async fn get_remote_control_audit(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+    // Bounded: the audit page shows the most recent window, not all history.
+    let events = db::remote_control_audit::list_events(&state.chat, 500).await?;
+    // One bulk name lookup for every distinct id in the window.
+    let mut ids: Vec<&str> = Vec::with_capacity(events.len() * 2);
+    for e in &events {
+        ids.push(&e.actor_id);
+        ids.push(&e.target_id);
+    }
+    ids.sort_unstable();
+    ids.dedup();
+    let names = db::auth::display_names_for_ids(&state.auth, &ids)
+        .await
+        .unwrap_or_default();
+    let name_of = |id: &str| -> String {
+        match names.get(id) {
+            Some((uname, dname)) => match dname.as_deref() {
+                Some(n) if !n.trim().is_empty() => n.to_string(),
+                _ => uname.clone(),
+            },
+            None => id.to_string(),
+        }
+    };
+    let rows: Vec<crate::views::admin::RcAuditRow> = events
+        .iter()
+        .map(|e| crate::views::admin::RcAuditRow {
+            actor_name: name_of(&e.actor_id),
+            target_name: name_of(&e.target_id),
+            room_id: e.room_id,
+            kind: e.kind.clone(),
+            created_at: e.created_at.clone(),
+        })
+        .collect();
+    let page = crate::views::admin::RemoteControlAuditPage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "remote_control",
+        rows: &rows,
     };
     html(&page)
 }

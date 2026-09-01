@@ -20,6 +20,7 @@ admin-nav-quarantine = Cuarentena
 admin-nav-branding = Marca
 admin-nav-backup = Copia de seguridad
 admin-nav-modlog = Registro de moderación
+admin-nav-remote-control = Control remoto
 admin-nav-reports = Denuncias
 admin-nav-support = Soporte
 admin-nav-analytics = Analíticas

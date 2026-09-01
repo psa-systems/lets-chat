@@ -434,6 +434,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::VoiceSignal { .. }
         | ChatEvent::VoiceMuteChanged { .. }
         | ChatEvent::VoiceScreenChanged { .. }
+        // LC-855: control-active label, rendered onto the voice bus in the send task.
+        | ChatEvent::VoiceControlChanged { .. }
         // LC-825: ephemeral reaction, rendered onto the voice bus in the send task.
         | ChatEvent::VoiceReaction { .. }
         // LC-494: stage roster re-rendered per recipient in the WS send task.

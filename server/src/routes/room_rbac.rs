@@ -154,6 +154,9 @@ pub async fn get_page(
     let assistant_enabled = db::chat::get_room_assistant_enabled(&state.chat, room_id).await?;
     let digest_enabled = db::chat::get_room_digest_enabled(&state.chat, room_id).await?;
     let stage_enabled = db::chat::get_room_stage_enabled(&state.chat, room_id).await?;
+    let remote_control_disabled =
+        db::chat::get_room_remote_control_disabled(&state.chat, room_id).await?;
+    let remote_control_workspace_on = super::ws::remote_control_flag_on(&state).await;
     // LC-495: workflow-automation rules for the included automations section.
     let automations: Vec<crate::views::room_automations::AutomationRow> =
         db::automations::list_for_room(&state.chat, room_id)
@@ -178,6 +181,8 @@ pub async fn get_page(
         assistant_available: super::ai_gate::flag_on(&state).await && state.llm_available(),
         digest_enabled,
         stage_enabled,
+        remote_control_disabled,
+        remote_control_workspace_on,
         automations: &automations,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
@@ -256,6 +261,13 @@ fn saved_toggle(room_id: i64, field: &'static str, enabled: bool) -> SettingsTog
             "room-digest-on-text",
             "room-digest-off-label",
             "room-digest-off-text",
+        ),
+        "remote-control" => (
+            "room-remote-control-heading",
+            "room-remote-control-on-label",
+            "room-remote-control-on-text",
+            "room-remote-control-off-label",
+            "room-remote-control-off-text",
         ),
         _ => (
             "room-stage-heading",
@@ -525,6 +537,43 @@ pub async fn post_stage(
     .await?;
     if is_hx(&headers) {
         return Ok(html(&saved_toggle(room_id, "stage", enabled))?.into_response());
+    }
+    Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
+}
+
+/// POST /room/{id}/remote-control
+///
+/// LC-855: toggle the per-room remote-control opt-out. The form's "enabled"
+/// means "remote control enabled for this room", so a checked box stores
+/// `remote_control_disabled = 0`. Layered under the workspace switch: this can
+/// only further restrict. Same authorization + audit + dual-mode response as
+/// the other room toggles.
+pub async fn post_remote_control(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    headers: HeaderMap,
+    Form(form): Form<AssistantForm>,
+) -> Result<Response, AppError> {
+    require_can_manage(&state, &user, room_id).await?;
+    let enabled = matches!(form.enabled.trim(), "1" | "true" | "on" | "yes");
+    let n = db::chat::set_room_remote_control_disabled(&state.chat, room_id, !enabled).await?;
+    if n == 0 {
+        return Err(AppError::NotFound);
+    }
+    let metadata = format!(r#"{{"remote_control_disabled":{}}}"#, !enabled);
+    db::moderation::log_mod_action(
+        &state.chat,
+        "room_remote_control_toggle",
+        "",
+        &user.id,
+        None,
+        Some(room_id),
+        Some(&metadata),
+    )
+    .await?;
+    if is_hx(&headers) {
+        return Ok(html(&saved_toggle(room_id, "remote-control", enabled))?.into_response());
     }
     Ok(Redirect::to(&format!("/room/{room_id}/manage")).into_response())
 }
