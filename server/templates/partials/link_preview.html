@@ -1,10 +1,15 @@
-{% if title.is_some() || description.is_some() || image_url.is_some() %}
+{% if title.is_some() || description.is_some() || image_hash.is_some() %}
 <a href="{{ url }}" target="_blank" rel="noopener noreferrer"
    class="mt-1 flex gap-3 max-w-md border border-border rounded p-2 hover:bg-surface">
-  {% if let Some(img) = image_url %}
+  {% if let Some(hash) = image_hash %}
   {# LC-781 F7: fixed 64x64 box (h-16 w-16), so exact width/height reserve the
-     space and the thumbnail lazy-loads with the preview card. #}
-  <img src="{{ img }}" alt="" loading="lazy" width="64" height="64" class="h-16 w-16 rounded object-cover flex-none">
+     space and the thumbnail lazy-loads with the preview card.
+     LC-857: served same-origin via the unfurl image proxy (the remote og:image
+     is CSP-blocked by img-src 'self'); the onerror hides the box if the proxy
+     404s so a dead thumbnail never leaves an empty square. #}
+  <img src="/api/unfurl/image/{{ hash }}" alt="" loading="lazy" width="64" height="64"
+       class="h-16 w-16 rounded object-cover flex-none"
+       onerror="this.remove()">
   {% endif %}
   <div class="flex-1 min-w-0">
     {% if let Some(t) = title %}
