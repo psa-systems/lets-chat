@@ -486,6 +486,18 @@ pub enum ChatEvent {
         user_id: String,
         sharing: bool,
     },
+    /// LC-855: a huddle remote-control session started or ended. Broadcast to
+    /// the whole room so every viewer (not just the two parties) can label the
+    /// sharer's tile "{controller} is controlling" while it is active - the
+    /// injected cursor is already visible in the shared pixels, so the label
+    /// tells the room WHO. `sharer_id` is the tile to label; `controller_name`
+    /// is the resolved display name (never an id); `active` false clears it.
+    VoiceControlChanged {
+        room_id: i64,
+        sharer_id: String,
+        controller_name: String,
+        active: bool,
+    },
     /// LC-825: a call participant fired a floating reaction. Ephemeral: it is
     /// delivered to the call's participants over the voice bus, animated by the
     /// client and discarded - never a message row, a call-event notice, or a

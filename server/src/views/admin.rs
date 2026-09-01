@@ -193,6 +193,40 @@ pub struct ModLogPage<'a> {
     pub entries: &'a [ModAction],
 }
 
+/// LC-855: one row of the remote-control audit listing, with actor/target ids
+/// already resolved to display names (never a raw id) in the handler.
+pub struct RcAuditRow {
+    pub actor_name: String,
+    pub target_name: String,
+    pub room_id: i64,
+    pub kind: String,
+    pub created_at: String,
+}
+
+/// LC-855: the admin remote-control audit page (`/admin/remote-control`): a
+/// read-only listing of recent consent events (request/grant/deny/revoke)
+/// across DM calls and huddles.
+#[derive(Template)]
+#[template(path = "admin/remote_control.html")]
+pub struct RemoteControlAuditPage<'a> {
+    pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    pub rows: &'a [RcAuditRow],
+}
+
 /// LC-334: site-admin report-review queue (`/admin/reports`). The open-report
 /// rows render from the shared `admin/reports_items.html` partial (also used by
 /// the live OOB fragment) so a fresh load and a live update render identically.

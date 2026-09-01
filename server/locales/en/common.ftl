@@ -25,6 +25,7 @@ admin-nav-quarantine = Quarantine
 admin-nav-branding = Branding
 admin-nav-backup = Backup
 admin-nav-modlog = Mod log
+admin-nav-remote-control = Remote control
 admin-nav-reports = Reports
 admin-nav-support = Support
 admin-nav-analytics = Analytics

@@ -845,6 +845,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 | ChatEvent::VoiceLeft { .. }
                                 | ChatEvent::VoiceMuteChanged { .. }
                                 | ChatEvent::VoiceScreenChanged { .. }
+                                | ChatEvent::VoiceControlChanged { .. }
                                 | ChatEvent::VoiceReaction { .. } => render_voice_event(&e),
                                 // LC-494: re-render the stage roster per viewer
                                 // (host controls + own-state differ per viewer).
@@ -2475,6 +2476,10 @@ pub async fn relay_control_signal(
         }
         _ => {}
     }
+    // LC-855: log every consent event (request/grant/deny/revoke), not only the
+    // session lifecycle, so the 1:1 flow shares the huddle's full audit trail.
+    let _ =
+        db::remote_control_audit::log_event(&state.chat, room_id, &user.id, &peer_id, kind).await;
     // LC-627: trace the successful relay so a "no prompt on the peer" report can
     // be told apart from a silent drop - if this line is present the signal left
     // the server for the peer, so the next suspect is delivery/render, not relay.
@@ -2589,7 +2594,33 @@ async fn relay_huddle_control_signal(
         }
         return;
     }
+    // LC-855: the per-room opt-out, layered under the workspace switch. Only a
+    // fresh request/grant is blocked; an in-flight session can still be revoked
+    // if a manager disables the room mid-session.
+    if matches!(kind, "request" | "grant")
+        && db::chat::get_room_remote_control_disabled(&state.chat, room_id)
+            .await
+            .unwrap_or(false)
+    {
+        if kind == "request" {
+            echo("unavailable", "room_disabled");
+        }
+        return;
+    }
 
+    // LC-855: append every consent event to the audit (request/grant/deny/
+    // revoke), not only the granted sessions. Best-effort; a log failure never
+    // blocks the relay. `target` is the other party this event concerns.
+    let audit = |target: &str, kind: &str| {
+        let chat = state.chat.clone();
+        let actor = user.id.clone();
+        let target = target.to_string();
+        let kind = kind.to_string();
+        async move {
+            let _ =
+                db::remote_control_audit::log_event(&chat, room_id, &actor, &target, &kind).await;
+        }
+    };
     match kind {
         "request" => {
             if matches!(
@@ -2603,7 +2634,17 @@ async fn relay_huddle_control_signal(
                 echo("unavailable", "rate_limited");
                 return;
             }
-            let sharers = state.hub.voice_screen_sharers(room_id);
+            // LC-855: the dispatched transcription agent joins LiveKit directly,
+            // never the hub voice roster, so it is already absent from both
+            // voice_room_users (the sender gate above) and voice_screen_sharers.
+            // Filter the reserved prefix anyway as defense in depth: an agent is
+            // never an eligible controller or controlled party.
+            let sharers: Vec<String> = state
+                .hub
+                .voice_screen_sharers(room_id)
+                .into_iter()
+                .filter(|s| !s.starts_with(crate::livekit::AGENT_IDENTITY_PREFIX))
+                .collect();
             let [sharer] = sharers.as_slice() else {
                 // No sharer, or several: there is no unambiguous surface to
                 // ask for. (The affordance is hidden in these states, so this
@@ -2626,6 +2667,7 @@ async fn relay_huddle_control_signal(
                 echo("busy", "controller_active_or_pending");
                 return;
             }
+            audit(sharer, "request").await;
             relay_to(sharer, "request");
         }
         "deny" => {
@@ -2640,6 +2682,7 @@ async fn relay_huddle_control_signal(
             let Some(requester) = state.hub.take_control_pending(room_id) else {
                 return;
             };
+            audit(&requester, "deny").await;
             relay_to(&requester, "deny");
         }
         "grant" => {
@@ -2677,7 +2720,12 @@ async fn relay_huddle_control_signal(
             let _ =
                 db::remote_control_audit::start_session(&state.chat, room_id, &requester, &user.id)
                     .await;
+            audit(&requester, "grant").await;
             relay_to(&requester, "grant");
+            // LC-855: label the sharer's tile for every viewer. The controller
+            // is `requester`; resolve their display name (never an id).
+            let controller_name = resolve_display_name(state, &requester).await;
+            fanout_control_label(state, room_id, &user.id, controller_name, true);
         }
         "revoke" => {
             let Ok(Some(sess)) = db::remote_control_audit::open_session(&state.chat, room_id).await
@@ -2694,9 +2742,48 @@ async fn relay_huddle_control_signal(
             } else {
                 &sess.sharer_id
             };
+            audit(other, "revoke").await;
             relay_to(other, "revoke");
+            // LC-855: clear the room-wide "is controlling" label.
+            fanout_control_label(state, room_id, &sess.sharer_id, String::new(), false);
         }
         _ => {}
+    }
+}
+
+/// LC-855: fan the room-wide "is controlling" label to everyone in the huddle
+/// (not room-topic subscribers). Mirrors the VoiceReaction audience: the label
+/// only concerns people seeing the tiles, i.e. the call participants. `active`
+/// false clears it.
+fn fanout_control_label(
+    state: &AppState,
+    room_id: i64,
+    sharer_id: &str,
+    controller_name: String,
+    active: bool,
+) {
+    let event = ChatEvent::VoiceControlChanged {
+        room_id,
+        sharer_id: sharer_id.to_string(),
+        controller_name,
+        active,
+    };
+    for uid in state.hub.voice_room_users(room_id) {
+        state.hub.broadcast_to_user(&uid, &event);
+    }
+}
+
+/// LC-855: resolve a user id to a display name (display_name, else username),
+/// never returning the raw id when the lookup succeeds. Used for the room-wide
+/// control label; a lookup failure falls back to the id so the label is never
+/// empty.
+async fn resolve_display_name(state: &AppState, user_id: &str) -> String {
+    match db::auth::find_user_by_id(&state.auth, user_id).await {
+        Ok(Some(r)) => r
+            .display_name
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or(r.username),
+        _ => user_id.to_string(),
     }
 }
 
@@ -2716,6 +2803,14 @@ pub async fn end_control_on_share_stop(state: &AppState, room_id: i64, sharer_id
     }
     let _ =
         db::remote_control_audit::end_session_by_room(&state.chat, room_id, "share_ended").await;
+    let _ = db::remote_control_audit::log_event(
+        &state.chat,
+        room_id,
+        sharer_id,
+        &sess.controller_id,
+        "revoke",
+    )
+    .await;
     let event = ChatEvent::RemoteControlSignal {
         room_id,
         to_user_id: sess.controller_id.clone(),
@@ -2724,6 +2819,8 @@ pub async fn end_control_on_share_stop(state: &AppState, room_id: i64, sharer_id
         kind: "revoke".to_string(),
     };
     state.hub.broadcast_to_user(&sess.controller_id, &event);
+    // LC-855: clear the room-wide "is controlling" label.
+    fanout_control_label(state, room_id, &sess.sharer_id, String::new(), false);
 }
 
 /// LC-853: a participant leaving the huddle ends any control session they were
@@ -2738,6 +2835,19 @@ async fn end_control_on_participant_gone(state: &AppState, room_id: i64, user_id
         return;
     }
     let _ = db::remote_control_audit::end_session_by_room(&state.chat, room_id, "left_call").await;
+    let _ = db::remote_control_audit::log_event(
+        &state.chat,
+        room_id,
+        user_id,
+        if sess.sharer_id == user_id {
+            &sess.controller_id
+        } else {
+            &sess.sharer_id
+        },
+        "revoke",
+    )
+    .await;
+    let sharer_id = sess.sharer_id.clone();
     let other = if sess.sharer_id == user_id {
         sess.controller_id
     } else {
@@ -2751,6 +2861,8 @@ async fn end_control_on_participant_gone(state: &AppState, room_id: i64, user_id
         kind: "revoke".to_string(),
     };
     state.hub.broadcast_to_user(&other, &event);
+    // LC-855: clear the room-wide "is controlling" label.
+    fanout_control_label(state, room_id, &sharer_id, String::new(), false);
 }
 
 /// Render an inbound `RemoteControlSignal` into the `#lc-control-bus` OOB
@@ -2911,6 +3023,25 @@ fn render_voice_event(event: &ChatEvent) -> Option<String> {
             avatar_version: "",
             peers_json: "",
             payload: Some(if *sharing { "1" } else { "0" }),
+        }
+        .render()
+        .ok(),
+        // LC-855: control-active state rides the same one-tick voice bus.
+        // user_id is the sharer's tile to label, username the controller's
+        // display name, payload the active flag.
+        ChatEvent::VoiceControlChanged {
+            room_id,
+            sharer_id,
+            controller_name,
+            active,
+        } => VoiceEventFragment {
+            room_id: *room_id,
+            kind: "control",
+            user_id: sharer_id,
+            username: controller_name,
+            avatar_version: "",
+            peers_json: "",
+            payload: Some(if *active { "1" } else { "0" }),
         }
         .render()
         .ok(),
