@@ -1565,6 +1565,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/room/{room_id}/digest", post(room_rbac::post_digest))
         // LC-494: per-room stage-mode toggle.
         .route("/room/{room_id}/stage", post(room_rbac::post_stage))
+        .route(
+            "/room/{room_id}/remote-control",
+            post(room_rbac::post_remote_control),
+        )
         // LC-495: per-room workflow automations (manage-page CRUD).
         .route(
             "/room/{room_id}/automations",

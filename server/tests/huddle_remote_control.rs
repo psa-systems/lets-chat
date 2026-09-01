@@ -323,3 +323,92 @@ async fn share_stop_auto_revokes_and_tells_the_controller() {
     .unwrap();
     assert_eq!(reason, "share_ended");
 }
+
+// ---- LC-855 phase 3: audit events, per-room disable, room-wide label --------
+
+async fn audit_kinds(chat: &sqlx::SqlitePool, room: i64) -> Vec<String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT kind FROM remote_control_events WHERE room_id = ? ORDER BY id",
+    )
+    .bind(room)
+    .fetch_all(chat)
+    .await
+    .unwrap()
+}
+
+fn control_labels(events: &[ChatEvent]) -> Vec<(String, bool)> {
+    events
+        .iter()
+        .filter_map(|e| match e {
+            ChatEvent::VoiceControlChanged {
+                controller_name,
+                active,
+                ..
+            } => Some((controller_name.clone(), *active)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn every_consent_event_is_audited_and_the_room_is_labelled() {
+    let s = setup().await;
+    enable(&s).await;
+    let _alice_rx = join(&s, &s.alice, true);
+    let _bob_rx = join(&s, &s.bob, false);
+    // A third participant observes the room-wide control label broadcast.
+    let mut carol_rx = join(&s, &s.carol, false);
+
+    relay_control_signal(&s.state, &s.bob, "Bob", s.room, "request").await;
+    relay_control_signal(&s.state, &s.alice, "Alice", s.room, "grant").await;
+    relay_control_signal(&s.state, &s.alice, "Alice", s.room, "revoke").await;
+
+    // The audit captured all three events (request+grant+revoke), in order -
+    // not only the session open/close the LC-186 table already had.
+    assert_eq!(
+        audit_kinds(&s.chat, s.room).await,
+        vec!["request", "grant", "revoke"]
+    );
+
+    // Carol (an uninvolved participant) saw the room-wide label go active with
+    // the controller's resolved name, then clear.
+    let labels = control_labels(&drain(&mut carol_rx).await);
+    assert!(
+        labels.iter().any(|(name, active)| *active && name == "bob"),
+        "grant broadcasts an active label naming the controller: {labels:?}"
+    );
+    assert!(
+        labels.iter().any(|(_, active)| !*active),
+        "revoke broadcasts a clear"
+    );
+}
+
+#[tokio::test]
+async fn per_room_disable_blocks_requests_under_the_workspace_switch() {
+    let s = setup().await;
+    enable(&s).await; // workspace ON
+    db::chat::set_room_remote_control_disabled(&s.chat, s.room, true)
+        .await
+        .unwrap();
+    let mut alice_rx = join(&s, &s.alice, true);
+    let mut bob_rx = join(&s, &s.bob, false);
+
+    // The room opted out: a request is refused even though the workspace is on.
+    relay_control_signal(&s.state, &s.bob, "Bob", s.room, "request").await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut bob_rx).await, &s.bob.id),
+        vec!["unavailable"]
+    );
+    assert!(control_kinds_to(&drain(&mut alice_rx).await, &s.alice.id).is_empty());
+    assert!(audit_kinds(&s.chat, s.room).await.is_empty());
+
+    // Re-enabling the room lets it through again.
+    db::chat::set_room_remote_control_disabled(&s.chat, s.room, false)
+        .await
+        .unwrap();
+    relay_control_signal(&s.state, &s.bob, "Bob", s.room, "request").await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut alice_rx).await, &s.alice.id),
+        vec!["request"]
+    );
+}

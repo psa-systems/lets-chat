@@ -97,7 +97,9 @@ fn the_status_slot_is_always_present() {
 fn room_manage_binds_an_action_for_every_toggle() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("templates/room/manage.html");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path:?}: {e}"));
-    for field in ["assistant", "digest", "stage"] {
+    // LC-855 added the per-room remote-control toggle alongside the original
+    // three; every one still binds an action and goes through the shared partial.
+    for field in ["assistant", "digest", "stage", "remote-control"] {
         assert!(
             text.contains(&format!(
                 r#"{{% let action = "/room/{{}}/{field}"|format(room.id) %}}"#
@@ -108,7 +110,7 @@ fn room_manage_binds_an_action_for_every_toggle() {
     assert_eq!(
         text.matches(r#"{% include "partials/settings_toggle.html" %}"#)
             .count(),
-        3,
-        "the three Manage toggles all go through the shared partial"
+        4,
+        "the four Manage toggles all go through the shared partial"
     );
 }

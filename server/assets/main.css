@@ -4232,6 +4232,28 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
    coordinate mapping), so the target tile video switches to contain for the
    duration. Applied/removed by rtc_common.js bindCapture on the target only. */
 .lc-voice-tile video.lc-rc-contain { object-fit: contain; }
+/* LC-855: the room-wide "{name} is controlling" label on the sharer's tile,
+   added by huddle_control.js for every viewer. Uses the tuned --danger pair
+   (the same "someone is driving this" signal as the active-control banner), so
+   it keeps its contrast in every theme incl. high-contrast; no bespoke color. */
+.lc-voice-control-label {
+    position: absolute;
+    left: 0.375rem;
+    bottom: 0.375rem;
+    z-index: 2;
+    max-width: calc(100% - 0.75rem);
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    background: var(--danger);
+    color: var(--danger-content);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
 .lc-voice-avatar {
     position: absolute;
     inset: 0;

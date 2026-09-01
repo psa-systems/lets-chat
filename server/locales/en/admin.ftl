@@ -218,6 +218,16 @@ admin-modlog-th-reason = Reason
 admin-modlog-th-when = When
 admin-modlog-empty = No moderation actions logged yet.
 
+# LC-855: remote-control consent audit
+admin-rc-title = Remote control audit
+admin-rc-note = Every remote-control consent event (request, grant, deny, revoke) across direct calls and huddles. The most recent 500 are shown.
+admin-rc-empty = No remote-control events recorded yet.
+admin-rc-th-actor = Actor
+admin-rc-th-event = Event
+admin-rc-th-target = Target
+admin-rc-th-room = Room
+admin-rc-th-when = When
+
 ## Webhook deliveries
 admin-deliveries-title = Webhook deliveries
 admin-deliveries-heading = Deliveries
