@@ -53,27 +53,29 @@
     {% let empty_text_key = "admin-analytics-no-cohorts" %}
     {% include "partials/empty_state.html" %}
     {% else %}
-    <div class="overflow-x-auto">
-      <table class="text-xs border-collapse">
+    {# LC-756: the shared table component, column-count agnostic, so the week
+       columns still vary; the cells take their padding from `.lc-table`. #}
+    <div class="card lc-table-wrap">
+      <table class="lc-table">
         <thead>
-          <tr class="text-content-muted">
-            <th class="text-left font-medium px-2 py-1">{{ "admin-analytics-th-cohort"|t }}</th>
-            <th class="text-right font-medium px-2 py-1">{{ "admin-analytics-th-users"|t }}</th>
+          <tr>
+            <th>{{ "admin-analytics-th-cohort"|t }}</th>
+            <th class="text-right">{{ "admin-analytics-th-users"|t }}</th>
             {% for h in retention_headers %}
-            <th class="text-right font-medium px-2 py-1">{{ h }}</th>
+            <th class="text-right">{{ h }}</th>
             {% endfor %}
           </tr>
         </thead>
         <tbody>
           {% for cohort in retention %}
-          <tr class="border-t border-border">
-            <td class="px-2 py-1 whitespace-nowrap font-mono">{{ cohort.week_label }}</td>
-            <td class="px-2 py-1 text-right tabular-nums">{{ cohort.size }}</td>
+          <tr>
+            <td class="whitespace-nowrap font-mono">{{ cohort.week_label }}</td>
+            <td class="text-right tabular-nums">{{ cohort.size }}</td>
             {% for cell in cohort.retained %}
             {% if let Some(pct) = cell %}
-            <td class="px-2 py-1 text-right tabular-nums text-content-muted">{{ pct }}%</td>
+            <td class="text-right tabular-nums text-content-muted">{{ pct }}%</td>
             {% else %}
-            <td class="px-2 py-1 text-right text-content-subtle">-</td>
+            <td class="text-right text-content-subtle">-</td>
             {% endif %}
             {% endfor %}
           </tr>
