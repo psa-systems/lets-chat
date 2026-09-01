@@ -13,18 +13,12 @@
 #   2. No `<th>` / `<td>` inside a `.lc-table` carries a padding utility.
 #
 # Email templates are excluded (inline-styled layout tables in a mail client).
-# ONE_OFFS are the tables that are not record lists; the two admin ones are
-# tracked for conversion in LC-756.
+# Nothing else is exempt: LC-756 moved the last two one-offs (the cohort
+# retention grid and the IMAP drop log) onto the component, so every table
+# under server/templates/ is checked.
 
 # Tailwind padding utilities: p-4, px-2, py-1.5, pt-1, sm:pb-2, p-px, ...
 const PADDING = '(^|["\s:])p[trblxy]?-(\d|px)'
-
-const ONE_OFFS = [
-    # Dense cohort-retention matrix: a heat grid, not a record list.
-    "server/templates/admin/analytics.html"
-    # IMAP ingress drop log: a diagnostic dump inside a settings card.
-    "server/templates/admin/settings.html"
-]
 
 def main [] {
     let files = (glob server/templates/**/*.html --exclude ["**/email/**"] | sort)
@@ -36,7 +30,6 @@ def main [] {
     let problems = (
         $files | each {|file|
             let rel = ($file | path relative-to $env.PWD)
-            if ($rel in $ONE_OFFS) { return [] }
             let lines = (open --raw $file | lines)
             check-file $rel $lines
         } | flatten

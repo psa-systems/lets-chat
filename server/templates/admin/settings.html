@@ -240,23 +240,25 @@
     </div>
     {% endif %}
     {% if !imap_recent_drops.is_empty() %}
-    <div class="mt-3 overflow-x-auto">
-      <table class="w-full text-xs border-collapse">
+    {# LC-756: the drop log is a record list, so it renders the shared table
+       component; `font-mono` stays, it is content styling, not layout. #}
+    <div class="card lc-table-wrap mt-3">
+      <table class="lc-table">
         <thead>
-          <tr class="text-left border-b border-border text-content-muted">
-            <th class="py-1 pr-3 font-medium">{{ "admin-settings-ingress-drop-time"|t }}</th>
-            <th class="py-1 pr-3 font-medium">{{ "admin-settings-ingress-drop-reason"|t }}</th>
-            <th class="py-1 pr-3 font-medium">{{ "admin-settings-ingress-drop-uid"|t }}</th>
-            <th class="py-1 font-medium">{{ "admin-settings-ingress-drop-detail"|t }}</th>
+          <tr>
+            <th>{{ "admin-settings-ingress-drop-time"|t }}</th>
+            <th>{{ "admin-settings-ingress-drop-reason"|t }}</th>
+            <th>{{ "admin-settings-ingress-drop-uid"|t }}</th>
+            <th>{{ "admin-settings-ingress-drop-detail"|t }}</th>
           </tr>
         </thead>
         <tbody>
           {% for d in imap_recent_drops %}
-          <tr class="border-b border-border">
-            <td class="py-1 pr-3 font-mono whitespace-nowrap"><time datetime="{{ d.dropped_at|iso }}" title="{{ d.dropped_at }}">{{ d.dropped_at }}</time></td>
-            <td class="py-1 pr-3 font-mono">{{ d.reason }}</td>
-            <td class="py-1 pr-3 font-mono">{% if let Some(u) = d.uid %}{{ u }}{% else %}-{% endif %}</td>
-            <td class="py-1">{% if let Some(detail) = d.detail %}{{ detail }}{% else %}-{% endif %}</td>
+          <tr>
+            <td class="font-mono whitespace-nowrap"><time datetime="{{ d.dropped_at|iso }}" title="{{ d.dropped_at }}">{{ d.dropped_at }}</time></td>
+            <td class="font-mono">{{ d.reason }}</td>
+            <td class="font-mono">{% if let Some(u) = d.uid %}{{ u }}{% else %}-{% endif %}</td>
+            <td>{% if let Some(detail) = d.detail %}{{ detail }}{% else %}-{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
