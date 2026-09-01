@@ -1,8 +1,8 @@
 #[allow(unused_imports)]
 use crate::i18n::filters; // LC-188: in-scope for the |t/|tn template filters.
 use askama::Template;
-use axum::extract::{Query, State};
-use axum::http::StatusCode;
+use axum::extract::{Path, Query, State};
+use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
@@ -18,6 +18,9 @@ use crate::state::AppState;
 
 const PREVIEW_TTL_SECS: i64 = 24 * 60 * 60;
 const MAX_PREVIEW_BYTES: usize = 1024 * 1024;
+/// LC-857: a preview thumbnail is small; 5 MiB is generous headroom while
+/// bounding what one proxied fetch can pull into memory.
+const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 const FETCH_TIMEOUT_SECS: u64 = 5;
 const USER_AGENT: &str = "lets-chat-unfurler/1.0";
 const MAX_REDIRECTS: usize = 3;
@@ -33,7 +36,12 @@ struct LinkPreviewFragment<'a> {
     url: &'a str,
     title: Option<&'a str>,
     description: Option<&'a str>,
-    image_url: Option<&'a str>,
+    /// LC-857: the preview's `url_hash`, present only when a usable image
+    /// exists. The template renders `/api/unfurl/image/{hash}` from it so the
+    /// thumbnail is served same-origin (CSP `img-src 'self'`) instead of
+    /// hotlinking the remote `og:image`, which the CSP blocks. The raw image
+    /// URL stays in the DB row; the proxy reads it there by this hash.
+    image_hash: Option<&'a str>,
 }
 
 /// `GET /api/unfurl?url=...` - server-side fetch of an external URL,
@@ -68,7 +76,9 @@ pub async fn get_unfurl(
                 url: &row.url,
                 title: row.title.as_deref(),
                 description: row.description.as_deref(),
-                image_url: cached_image.as_deref(),
+                // The thumbnail is served through the proxy keyed by this row's
+                // hash, but only when the (re-sanitized) image survived.
+                image_hash: cached_image.as_ref().map(|_| url_hash.as_str()),
             };
             return Ok(axum::response::Html(frag.render().unwrap_or_default()).into_response());
         }
@@ -191,9 +201,138 @@ pub async fn get_unfurl(
         url: parsed.as_str(),
         title: parsed_meta.title.as_deref(),
         description: parsed_meta.description.as_deref(),
-        image_url: image_url.as_deref(),
+        image_hash: image_url.as_ref().map(|_| url_hash.as_str()),
     };
     Ok(axum::response::Html(frag.render().unwrap_or_default()).into_response())
+}
+
+/// `GET /api/unfurl/image/{url_hash}` - LC-857: serve a link preview's thumbnail
+/// same-origin so it passes the CSP `img-src 'self'` (the remote `og:image` is
+/// blocked when hotlinked). AuthUser-gated like the unfurl endpoint. Not an open
+/// proxy: it fetches ONLY the `image_url` already stored on the `link_previews`
+/// row for this hash (a URL the unfurler already fetched and sanitized), not an
+/// arbitrary caller-supplied URL. Any failure is a 404, never a 5xx, so a dead
+/// thumbnail reads as "no image" (and the template's onerror hides the box).
+pub async fn get_unfurl_image(
+    State(state): State<AppState>,
+    AuthUser(_user): AuthUser,
+    Path(url_hash): Path<String>,
+) -> Result<Response, AppError> {
+    if !is_valid_hash(&url_hash) {
+        return Err(AppError::NotFound);
+    }
+    let Some(row) = db::uploads::get_link_preview(&state.chat, &url_hash).await? else {
+        return Err(AppError::NotFound);
+    };
+    // Re-sanitize the stored URL against the row's own URL, exactly as the
+    // render path does: a row written before the scheme guard cannot surface a
+    // non-http(s) source, and what we fetch is exactly what the card points at.
+    let Some(image_url) = row.image_url.as_deref().and_then(|raw| {
+        Url::parse(&row.url)
+            .ok()
+            .and_then(|base| sanitize_image_url(&base, raw))
+    }) else {
+        return Err(AppError::NotFound);
+    };
+    let Some((content_type, bytes)) = fetch_image(&image_url).await else {
+        return Err(AppError::NotFound);
+    };
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, content_type),
+            // Match the preview row's 24h TTL. Private: it is per-viewer
+            // AuthUser-gated content, so it must not sit in a shared cache.
+            (
+                header::CACHE_CONTROL,
+                format!("private, max-age={PREVIEW_TTL_SECS}"),
+            ),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+/// LC-857: fetch a remote image through the SSRF-guarded client, following
+/// redirects, gating on an `image/*` content-type and capping the body. Returns
+/// `(content_type, bytes)` or `None` on any failure/rejection. Mirrors the
+/// unfurl fetch loop (`http_client::outbound_get` re-checks SSRF per hop).
+async fn fetch_image(url: &str) -> Option<(String, Vec<u8>)> {
+    let start = Url::parse(url).ok()?;
+    if !matches!(start.scheme(), "http" | "https") {
+        return None;
+    }
+    let timeout = Duration::from_secs(FETCH_TIMEOUT_SECS);
+    let mut current = start;
+    let mut redirects = 0usize;
+    let resp = loop {
+        let req = crate::http_client::outbound_get(current.as_str())
+            .await
+            .ok()?;
+        let r = req
+            .timeout(timeout)
+            .header(reqwest::header::USER_AGENT, USER_AGENT)
+            .send()
+            .await
+            .ok()?;
+        if r.status().is_redirection() {
+            let loc = r
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|v| v.to_str().ok())
+                .map(str::trim)
+                .filter(|l| !l.is_empty())?;
+            let next = current.join(loc).ok()?;
+            redirects += 1;
+            if redirects > MAX_REDIRECTS {
+                return None;
+            }
+            current = next;
+            continue;
+        }
+        break r;
+    };
+    if !resp.status().is_success() {
+        return None;
+    }
+    // Only real images; drop any `; charset=` parameter for the served value.
+    let base_ctype = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_lowercase();
+    if !base_ctype.starts_with("image/") {
+        return None;
+    }
+    let mut body = Vec::with_capacity(64 * 1024);
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk.ok()?;
+        // Refuse an oversized image rather than truncate (a partial image is a
+        // broken image, not a smaller one).
+        if body.len() + bytes.len() > MAX_IMAGE_BYTES {
+            return None;
+        }
+        body.extend_from_slice(&bytes);
+    }
+    if body.is_empty() {
+        return None;
+    }
+    Some((base_ctype, body))
+}
+
+/// LC-857: a `url_hash` is a lowercase sha256 hex string (see `hash_url`).
+/// Reject anything else so a malformed path can never reach the DB lookup.
+fn is_valid_hash(s: &str) -> bool {
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
 #[derive(Default)]
@@ -300,5 +439,24 @@ mod tests {
                 "{raw} must be rejected"
             );
         }
+    }
+
+    #[test]
+    fn image_proxy_hash_validation_is_strict() {
+        // A real sha256 hex (what hash_url emits) is accepted.
+        assert!(is_valid_hash(&hash_url("https://example.com/x")));
+        assert!(is_valid_hash(
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        ));
+        // Wrong length, uppercase, non-hex, and path-traversal shapes are not.
+        assert!(!is_valid_hash(""));
+        assert!(!is_valid_hash(&"a".repeat(63)));
+        assert!(!is_valid_hash(&"a".repeat(65)));
+        assert!(!is_valid_hash(
+            "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+        ));
+        assert!(!is_valid_hash(
+            "../../etc/passwd-padded-out-to-sixty-four-bytes-for-this-test!!!"
+        ));
     }
 }
