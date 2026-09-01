@@ -840,6 +840,14 @@
       },
       setMuted: applyMute,
       setScreen: applyScreen,
+      // LC-853: the SFU noticed our screen share ended outside toggleScreen()
+      // (the browser's "Stop sharing" chrome). Announce over the WS so peers
+      // unpin our tile and the server drops us as the room's sharer.
+      screenEnded: function () {
+        announceScreen(false);
+        setScreenBtn();
+        setCameraBtn();
+      },
       setSpeaking: function (loud) {
         var g = grid();
         if (!g) return;
@@ -1106,7 +1114,11 @@
   function toggleScreen() {
     if (sfu) {
       window.LetsChatHuddleSfu.toggleScreen().then(function (on) {
-        selfSharing = on;
+        // LC-853: announce over the WS too, not only the LiveKit track. Peers
+        // pin the tile from this signal (the mesh path always did), and the
+        // server tracks the room's sharer from it to route remote-control
+        // requests. announceScreen also sets selfSharing.
+        announceScreen(on);
         setScreenBtn();
       });
       return;

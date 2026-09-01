@@ -40,6 +40,10 @@ pub fn router() -> Router<AppState> {
         .route("/admin/settings", get(get_settings).post(post_settings))
         .route("/admin/settings/imap", post(post_imap_settings))
         .route("/admin/settings/llm", post(post_llm_flag))
+        .route(
+            "/admin/settings/remote-control",
+            post(post_remote_control_flag),
+        )
         .route("/admin/settings/help-docs", post(post_help_docs_sources))
         .route("/admin/help-docs/reindex", post(post_help_docs_reindex))
         .route(
@@ -285,6 +289,12 @@ pub async fn get_settings(
     let maintenance_message = db::settings::get_setting(&state.settings, "maintenance_message")
         .await?
         .unwrap_or_default();
+    // LC-853: workspace remote-control switch (default off; see the key's doc).
+    let remote_control_enabled =
+        db::settings::get_setting(&state.settings, super::ws::REMOTE_CONTROL_ENABLED_KEY)
+            .await?
+            .as_deref()
+            == Some("true");
     // LC-679: runtime LLM feature flag + config precondition for the toggle card.
     let llm_flag_enabled = super::ai_gate::flag_on(&state).await;
     let llm_configured = state.llm_available();
@@ -372,6 +382,7 @@ pub async fn get_settings(
         section: "settings",
         default_notify_email_digest,
         maintenance_enabled,
+        remote_control_enabled,
         llm_flag_enabled,
         llm_configured,
         llm_audience_staff,
@@ -782,6 +793,44 @@ pub async fn post_llm_flag(
     };
     db::settings::set_setting(&state.settings, super::ai_gate::LLM_AUDIENCE_KEY, audience).await?;
     let action = if on { "llm_flag_on" } else { "llm_flag_off" };
+    db::moderation::log_mod_action(&state.chat, action, "", &actor.id, None, None, None).await?;
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
+    }
+    Ok(Redirect::to("/admin/settings").into_response())
+}
+
+/// LC-853: form for the remote-control toggle (checkbox present = on).
+#[derive(serde::Deserialize)]
+pub struct RemoteControlFlagForm {
+    #[serde(default)]
+    pub enabled: Option<String>,
+}
+
+/// LC-853: flip the workspace remote-control switch
+/// (`settings.remote_control_enabled`). One switch gates the whole surface -
+/// the 1:1 DM feature (LC-181) and the huddle consent flow alike - and is read
+/// live per signal in `routes::ws`, so flipping it needs no restart. Audited to
+/// the moderation log like maintenance mode and the LLM flag.
+pub async fn post_remote_control_flag(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    headers: HeaderMap,
+    axum::Form(form): axum::Form<RemoteControlFlagForm>,
+) -> Result<Response, AppError> {
+    let on = form.enabled.is_some();
+    let value = if on { "true" } else { "false" };
+    db::settings::set_setting(
+        &state.settings,
+        super::ws::REMOTE_CONTROL_ENABLED_KEY,
+        value,
+    )
+    .await?;
+    let action = if on {
+        "remote_control_on"
+    } else {
+        "remote_control_off"
+    };
     db::moderation::log_mod_action(&state.chat, action, "", &actor.id, None, None, None).await?;
     if is_hx(&headers) {
         return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());

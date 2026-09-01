@@ -1412,6 +1412,10 @@ pub struct RoomPage<'a> {
     /// ICE config for the WebRTC mesh; `huddle_participants` seeds the bar with
     /// anyone already on the line so a fresh page load shows the active huddle.
     pub huddle_enabled: bool,
+    /// LC-853: workspace remote-control switch. Gates the huddle "Request
+    /// control" affordance + consent UI include; the server refuses signals
+    /// independently, so this is presentation, not enforcement.
+    pub remote_control_enabled: bool,
     pub ice_servers: &'a str,
     /// LC-610: true when huddles run over the LiveKit SFU (server has LiveKit
     /// configured), false when they use the WebRTC mesh. Read by voice.js to

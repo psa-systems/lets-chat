@@ -161,6 +161,13 @@ const REMOTE_CONTROL_KINDS: &[&str] = &["request", "grant", "deny", "revoke"];
 /// LC-186: per-requester cap on remote-control `request` signals per minute.
 const REMOTE_CONTROL_REQUEST_CAP: u32 = 10;
 
+/// LC-853: settings key for the workspace-wide remote-control switch. Absent -
+/// or any value other than `"true"` - means OFF, so a deployment that never
+/// touches it has the whole surface (1:1 DM calls AND huddles) disabled.
+/// `deny`/`revoke` stay relayed even when off: an in-flight session must
+/// always be endable (fail closed means fail toward *revoked*, not stuck).
+pub const REMOTE_CONTROL_ENABLED_KEY: &str = "remote_control_enabled";
+
 /// Upper bound on a relayed signaling payload. An SDP blob is a few KiB;
 /// 64 KiB leaves generous headroom while bounding what one peer can push
 /// through the relay in a single frame.
@@ -1053,6 +1060,14 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             // Same gate as mute: only a channel participant may
                             // announce, and only to that channel's subscribers.
                             if state.hub.is_in_voice_room(conn_id, room_id) {
+                                // LC-853: the hub tracks who shares so the
+                                // remote-control relay can route a request to
+                                // the sharer; a stop auto-revokes any control
+                                // session on the vanished surface.
+                                state.hub.set_voice_screen(room_id, &user.id, sharing);
+                                if !sharing {
+                                    end_control_on_share_stop(&state, room_id, &user.id).await;
+                                }
                                 state.hub.broadcast_to_room(
                                     room_id,
                                     &ChatEvent::VoiceScreenChanged {
@@ -2356,7 +2371,7 @@ pub(crate) async fn remote_control_allowed(auth: &sqlx::SqlitePool, a: &str, b: 
 /// to a `dm` room and resolves the peer; additionally it enforces
 /// `remote_control_allowed` (both verified, not blocked) before forwarding.
 /// Consent-only - no input payload is carried here.
-async fn relay_control_signal(
+pub async fn relay_control_signal(
     state: &AppState,
     user: &User,
     from_name: &str,
@@ -2366,12 +2381,17 @@ async fn relay_control_signal(
     if !REMOTE_CONTROL_KINDS.contains(&kind) {
         return;
     }
-    // Remote control is a DM-call feature only (mirrors relay_call_signal's
-    // dm-room gate). Confirm the room is a DM; the row itself is unused. These
-    // are structural checks: if they fail the sender is not in a real 1:1 call,
-    // so there is no requester UI to give feedback to - stay silent.
+    // LC-183 built this for DM calls ("the other member" is well-defined
+    // there); LC-853 routes every non-DM room to the huddle state machine,
+    // which resolves the sharer and enforces one-controller-at-a-time instead.
+    // These are structural checks: if they fail the sender is not in a real
+    // call, so there is no requester UI to give feedback to - stay silent.
     match db::chat::get_room(&state.chat, room_id).await {
         Ok(Some(r)) if r.room_type == "dm" => {}
+        Ok(Some(_)) => {
+            relay_huddle_control_signal(state, user, from_name, room_id, kind).await;
+            return;
+        }
         _ => return,
     }
     let members = match db::chat::list_room_member_ids(&state.chat, room_id).await {
@@ -2408,6 +2428,15 @@ async fn relay_control_signal(
         };
         state.hub.broadcast_to_user(&user.id, &event);
     };
+
+    // LC-853: workspace kill switch, default off. `deny`/`revoke` pass so an
+    // in-flight session can always be torn down after the flag flips.
+    if matches!(kind, "request" | "grant") && !remote_control_flag_on(state).await {
+        if kind == "request" {
+            refuse("disabled");
+        }
+        return;
+    }
 
     // LC-186: blunt request spam / re-request harassment. Only `request` is
     // capped (grant/deny/revoke are responses, not initiations).
@@ -2464,6 +2493,264 @@ async fn relay_control_signal(
         kind: kind.to_string(),
     };
     state.hub.broadcast_to_user(&peer_id, &event);
+}
+
+/// LC-853: true when the workspace remote-control switch is on. Read live from
+/// the settings KV store (no cache) like the LLM flag, so an admin toggle takes
+/// effect on the next signal without a restart.
+pub(crate) async fn remote_control_flag_on(state: &AppState) -> bool {
+    db::settings::get_setting(&state.settings, REMOTE_CONTROL_ENABLED_KEY)
+        .await
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some("true")
+}
+
+/// LC-853: validate + relay one remote-control consent signal inside a huddle
+/// (any non-DM room with a live voice session). Unlike the DM path, "the other
+/// side" is not structural here, so this owns the multi-party state machine:
+///
+/// - a `request` targets the room's single current screen-sharer (tracked in
+///   the hub from `voice_screen` frames); zero or several sharers refuses -
+///   ambiguity fails closed;
+/// - one controller at a time: an open audit session or an unexpired pending
+///   request answers `busy`, never a queue and never a silent transfer;
+/// - `grant`/`deny` are only honored from the current sharer and only while a
+///   pending request exists (the pending slot names who gets the answer);
+/// - `revoke` is honored from either party of the open session and relayed to
+///   the counterpart.
+///
+/// Wire kinds sent back to the requester beyond the LC-183 set: `busy` (someone
+/// else holds or requested control) alongside the LC-627 `unavailable`. Both
+/// are outbound-only - inbound frames are still capped to REMOTE_CONTROL_KINDS.
+/// Consent-only, like the DM path: no input payload ever rides this relay.
+async fn relay_huddle_control_signal(
+    state: &AppState,
+    user: &User,
+    from_name: &str,
+    room_id: i64,
+    kind: &str,
+) {
+    // The sender must be in the huddle right now. Room *membership* is not
+    // enough: control is a live-call interaction, not a room capability.
+    if !state
+        .hub
+        .voice_room_users(room_id)
+        .iter()
+        .any(|u| u == &user.id)
+    {
+        return;
+    }
+
+    // Echo a terminal answer straight back to the sender's own UI (LC-627
+    // pattern). The wire reason stays generic; the tracing line records the
+    // specific gate for operators. `from` is the sender itself - the huddle
+    // consumer keys on `kind`, not on the sender id.
+    let echo = |wire_kind: &'static str, reason: &'static str| {
+        tracing::info!(
+            from = %user.id,
+            room_id,
+            reason,
+            "huddle remote-control signal answered"
+        );
+        let event = ChatEvent::RemoteControlSignal {
+            room_id,
+            to_user_id: user.id.clone(),
+            from_user_id: user.id.clone(),
+            from_name: String::new(),
+            kind: wire_kind.to_string(),
+        };
+        state.hub.broadcast_to_user(&user.id, &event);
+    };
+    let relay_to = |target: &str, kind: &str| {
+        tracing::info!(
+            from = %user.id,
+            to = %target,
+            room_id,
+            kind,
+            "huddle remote-control signal relayed"
+        );
+        let event = ChatEvent::RemoteControlSignal {
+            room_id,
+            to_user_id: target.to_string(),
+            from_user_id: user.id.clone(),
+            from_name: from_name.to_string(),
+            kind: kind.to_string(),
+        };
+        state.hub.broadcast_to_user(target, &event);
+    };
+
+    // Workspace kill switch, default off; `deny`/`revoke` pass (see the key's
+    // doc - a session must always be endable).
+    if matches!(kind, "request" | "grant") && !remote_control_flag_on(state).await {
+        if kind == "request" {
+            echo("unavailable", "disabled");
+        }
+        return;
+    }
+
+    match kind {
+        "request" => {
+            if matches!(
+                state.rate_limits.check(
+                    crate::rate_limit::RateLimitKind::RemoteControlRequest,
+                    &user.id,
+                    REMOTE_CONTROL_REQUEST_CAP,
+                ),
+                crate::rate_limit::Outcome::Deny { .. }
+            ) {
+                echo("unavailable", "rate_limited");
+                return;
+            }
+            let sharers = state.hub.voice_screen_sharers(room_id);
+            let [sharer] = sharers.as_slice() else {
+                // No sharer, or several: there is no unambiguous surface to
+                // ask for. (The affordance is hidden in these states, so this
+                // is a race or a hand-rolled frame - answer, don't explain.)
+                echo("unavailable", "no_single_sharer");
+                return;
+            };
+            if sharer == &user.id {
+                return;
+            }
+            if !remote_control_allowed(&state.auth, &user.id, sharer).await {
+                echo("unavailable", "not_allowed");
+                return;
+            }
+            let busy_session = matches!(
+                db::remote_control_audit::open_session(&state.chat, room_id).await,
+                Ok(Some(_))
+            );
+            if busy_session || !state.hub.set_control_pending(room_id, &user.id) {
+                echo("busy", "controller_active_or_pending");
+                return;
+            }
+            relay_to(sharer, "request");
+        }
+        "deny" => {
+            if !state
+                .hub
+                .voice_screen_sharers(room_id)
+                .iter()
+                .any(|s| s == &user.id)
+            {
+                return;
+            }
+            let Some(requester) = state.hub.take_control_pending(room_id) else {
+                return;
+            };
+            relay_to(&requester, "deny");
+        }
+        "grant" => {
+            if !state
+                .hub
+                .voice_screen_sharers(room_id)
+                .iter()
+                .any(|s| s == &user.id)
+            {
+                return;
+            }
+            let Some(requester) = state.hub.take_control_pending(room_id) else {
+                // Expired or never existed: nobody is waiting on this answer.
+                return;
+            };
+            // The requester must still be in the huddle, still eligible, and
+            // nobody may have taken control in the meantime - all fail closed.
+            if !state
+                .hub
+                .voice_room_users(room_id)
+                .iter()
+                .any(|u| u == &requester)
+            {
+                return;
+            }
+            if !remote_control_allowed(&state.auth, &user.id, &requester).await {
+                return;
+            }
+            if matches!(
+                db::remote_control_audit::open_session(&state.chat, room_id).await,
+                Ok(Some(_))
+            ) {
+                return;
+            }
+            let _ =
+                db::remote_control_audit::start_session(&state.chat, room_id, &requester, &user.id)
+                    .await;
+            relay_to(&requester, "grant");
+        }
+        "revoke" => {
+            let Ok(Some(sess)) = db::remote_control_audit::open_session(&state.chat, room_id).await
+            else {
+                return;
+            };
+            if sess.sharer_id != user.id && sess.controller_id != user.id {
+                return;
+            }
+            let _ = db::remote_control_audit::end_session_by_room(&state.chat, room_id, "revoked")
+                .await;
+            let other = if sess.sharer_id == user.id {
+                &sess.controller_id
+            } else {
+                &sess.sharer_id
+            };
+            relay_to(other, "revoke");
+        }
+        _ => {}
+    }
+}
+
+/// LC-853: a sharer stopping their screen share auto-revokes any control
+/// session on it (there is nothing left to control - LC-186's rule, applied to
+/// the huddle). Also drops a pending request once no sharer remains to answer
+/// it; the requester's own timeout clears their UI.
+pub async fn end_control_on_share_stop(state: &AppState, room_id: i64, sharer_id: &str) {
+    if state.hub.voice_screen_sharers(room_id).is_empty() {
+        state.hub.take_control_pending(room_id);
+    }
+    let Ok(Some(sess)) = db::remote_control_audit::open_session(&state.chat, room_id).await else {
+        return;
+    };
+    if sess.sharer_id != sharer_id {
+        return;
+    }
+    let _ =
+        db::remote_control_audit::end_session_by_room(&state.chat, room_id, "share_ended").await;
+    let event = ChatEvent::RemoteControlSignal {
+        room_id,
+        to_user_id: sess.controller_id.clone(),
+        from_user_id: sharer_id.to_string(),
+        from_name: String::new(),
+        kind: "revoke".to_string(),
+    };
+    state.hub.broadcast_to_user(&sess.controller_id, &event);
+}
+
+/// LC-853: a participant leaving the huddle ends any control session they were
+/// party to and notifies the counterpart. The WS-disconnect backstop
+/// (`end_sessions_for_user`) closes rows on a hard drop; this covers the soft
+/// leave, where the connection lives on but the call role is gone.
+async fn end_control_on_participant_gone(state: &AppState, room_id: i64, user_id: &str) {
+    let Ok(Some(sess)) = db::remote_control_audit::open_session(&state.chat, room_id).await else {
+        return;
+    };
+    if sess.sharer_id != user_id && sess.controller_id != user_id {
+        return;
+    }
+    let _ = db::remote_control_audit::end_session_by_room(&state.chat, room_id, "left_call").await;
+    let other = if sess.sharer_id == user_id {
+        sess.controller_id
+    } else {
+        sess.sharer_id
+    };
+    let event = ChatEvent::RemoteControlSignal {
+        room_id,
+        to_user_id: other.clone(),
+        from_user_id: user_id.to_string(),
+        from_name: String::new(),
+        kind: "revoke".to_string(),
+    };
+    state.hub.broadcast_to_user(&other, &event);
 }
 
 /// Render an inbound `RemoteControlSignal` into the `#lc-control-bus` OOB
@@ -2740,7 +3027,10 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId) {
     // Tell every subscriber of the room, not just remaining voice members: a
     // viewer who is *not* in the call still needs the update so their
     // participants preview stays accurate.
-    let left = ChatEvent::VoiceLeft { room_id, user_id };
+    let left = ChatEvent::VoiceLeft {
+        room_id,
+        user_id: user_id.clone(),
+    };
     state.hub.broadcast_to_room(room_id, &left);
     // LC-612: refresh the sidebar in-call indicator for every member with the
     // post-leave size (0 tears it down). Spawned because this fn is sync.
@@ -2748,6 +3038,24 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId) {
         let st = state.clone();
         tokio::spawn(async move {
             crate::huddle_ring::broadcast_presence(&st, room_id).await;
+        });
+    }
+    // LC-853: once the leaver's LAST connection is out of the call (a second
+    // tab may still be joined), drop their screen-share record and any pending
+    // control request they own, and end any control session they were party to
+    // (notifying the counterpart). Spawned because this fn is sync.
+    if !state
+        .hub
+        .voice_room_users(room_id)
+        .iter()
+        .any(|u| u == &user_id)
+    {
+        state.hub.set_voice_screen(room_id, &user_id, false);
+        state.hub.clear_control_pending_for(room_id, &user_id);
+        let st = state.clone();
+        let uid = user_id.clone();
+        tokio::spawn(async move {
+            end_control_on_participant_gone(&st, room_id, &uid).await;
         });
     }
     // LC-393 Phase 2: if that was the last participant, finalize any open
@@ -3227,6 +3535,10 @@ pub mod test_support {
     // the ticket names (topic authorization, the read-receipt caption), so a
     // test can change the record mid-connection and assert the gates follow.
     pub use super::{refresh_account, render_dm_read, topic_subscribe_allowed, Account};
+    // LC-853: the remote-control relay entry (DM + huddle dispatch) and the
+    // share-stop auto-revoke, so tests can drive the huddle consent state
+    // machine without a WS framing harness. Same reasoning as the call helpers.
+    pub use super::{end_control_on_share_stop, relay_control_signal, REMOTE_CONTROL_ENABLED_KEY};
 }
 
 #[cfg(test)]

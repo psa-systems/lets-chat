@@ -283,6 +283,10 @@ pub struct SettingsPage<'a> {
     pub default_notify_email_digest: bool,
     /// Current value of the maintenance-mode toggle.
     pub maintenance_enabled: bool,
+    /// LC-853: current value of the workspace remote-control switch
+    /// (`remote_control_enabled`). Gates the 1:1 DM feature and the huddle
+    /// consent flow alike; defaults off on a fresh deployment.
+    pub remote_control_enabled: bool,
     /// LC-679: current value of the runtime LLM/AI feature flag (`llm_enabled`).
     pub llm_flag_enabled: bool,
     /// LC-679: whether an LLM endpoint is configured (`LETS_CHAT_LLM_URL`). The

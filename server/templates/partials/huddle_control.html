@@ -1,0 +1,45 @@
+{# LC-853 phase 1: huddle remote-control consent UI (request -> Allow/Deny ->
+   active banner -> revoke). Consent + state machine only; input replay is the
+   LC-854 transport phase. Included inside the huddle/voice control bar of
+   room/huddle.html and voice/page.html, only when the workspace switch is on;
+   the fixed-position prompt and banner render page-anchored regardless of the
+   include point. huddle_control.js owns all behavior: every element here stays
+   `hidden` until it flips them, and the request button surfaces only while
+   joined with exactly one other participant sharing. Classes reuse the LC-184
+   prompt / LC-186 banner styling (all semantic tokens, already in the built
+   CSS) so the huddle consent flow reads identically to the 1:1 one. #}
+<span data-lc-huddle-control data-lc-room="{{ room.id }}">
+  <button type="button" data-lc-huddle-control-request
+          aria-label="{{ "call-request-control"|t }}" data-lc-tip="{{ "call-request-control"|t }}" data-lc-tip-pos="top"
+          class="hidden lc-cbtn">
+    <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10 1a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 0110 1zM5.05 3.05a.75.75 0 011.06 0l1.062 1.06A.75.75 0 116.11 5.173L5.05 4.11a.75.75 0 010-1.06zm9.9 0a.75.75 0 010 1.06l-1.06 1.062a.75.75 0 01-1.062-1.061l1.061-1.06a.75.75 0 011.06 0zM3 8a.75.75 0 01.75-.75h1.5a.75.75 0 010 1.5h-1.5A.75.75 0 013 8zm11 0a.75.75 0 01.75-.75h1.5a.75.75 0 010 1.5h-1.5A.75.75 0 0114 8zm-6.828 2.828a.75.75 0 010 1.061L6.11 12.95a.75.75 0 01-1.06-1.06l1.06-1.062a.75.75 0 011.061 0zm3.594-3.317a.75.75 0 00-1.37.364l-.492 6.861a.75.75 0 001.204.65l1.043-.799.985 3.678a.75.75 0 001.45-.388l-.978-3.646 1.292.204a.75.75 0 00.74-1.16l-3.874-5.764z"/></svg></span>
+    <span class="lc-cbtn-label" data-lc-huddle-control-request-label>{{ "call-request-control"|t }}</span>
+  </button>
+  {# Sharer-side consent prompt. Mirrors the LC-184 prompt in layout.html but
+     fixed to the viewport (the huddle has no full-screen dialog to anchor in).
+     Auto-dismisses to Deny on huddle_control.js's timer. #}
+  <div data-lc-huddle-control-prompt role="alertdialog" aria-modal="false" aria-hidden="true"
+       aria-label="{{ "call-control-request"|t }}"
+       class="hidden fixed left-1/2 top-20 -translate-x-1/2 z-[60] w-80 rounded-lg bg-surface-elevated p-5 text-center shadow-xl">
+    <div class="text-sm text-content-muted">{{ "call-control-request"|t }}</div>
+    <div data-lc-huddle-control-prompt-name class="mt-1 text-base font-semibold text-content"></div>
+    <p class="mt-1 text-xs text-content-muted">{{ "call-control-request-explain"|t }}</p>
+    <div class="mt-4 flex justify-center gap-3">
+      <button type="button" data-lc-huddle-control-grant class="btn btn-primary">{{ "call-control-grant"|t }}</button>
+      <button type="button" data-lc-huddle-control-deny class="btn btn-secondary">{{ "call-control-deny"|t }}</button>
+    </div>
+  </div>
+  {# Sharer-side active-control banner (LC-186's rule: persistent, unmissable,
+     naming the controller, revoke always reachable). Same inverted-pair
+     kill-switch styling as the 1:1 banner. No hotkey hint here: the global
+     Ctrl+Alt+F9 belongs to the desktop app's injector, which the huddle does
+     not arm until the LC-854 transport phase. #}
+  <div data-lc-huddle-control-banner role="alert" aria-hidden="true"
+       class="hidden fixed inset-x-0 top-0 z-[60] flex flex-wrap items-center justify-center gap-3 bg-danger px-4 py-2 text-sm text-danger-content shadow-lg">
+    <span><span data-lc-huddle-control-banner-name class="font-semibold"></span> {{ "call-controlling-suffix"|t }}</span>
+    <button type="button" data-lc-huddle-control-stop class="rounded bg-danger-content px-3 py-1 text-xs font-semibold text-danger hover:opacity-90">{{ "call-stop-control"|t }}</button>
+  </div>
+  {# Polite transition announcements for screen readers (request sent, granted,
+     denied, ended). Visual state lives on the elements above. #}
+  <span data-lc-huddle-control-status class="sr-only" role="status" aria-live="polite"></span>
+</span>
