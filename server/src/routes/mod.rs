@@ -1801,6 +1801,12 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/emojis/{id}", get(custom_emojis::get_emoji))
         .route("/api/unfurl", get(unfurl::get_unfurl))
+        // LC-857: same-origin proxy for a link preview's thumbnail (the remote
+        // og:image is CSP-blocked when hotlinked).
+        .route(
+            "/api/unfurl/image/{url_hash}",
+            get(unfurl::get_unfurl_image),
+        )
         .route("/status", post(status::post_status))
         .route("/status/picker", get(status::get_picker))
         .route("/status/cancel", get(status::cancel_picker))
