@@ -194,14 +194,19 @@ build-css:
     cd server && ../dev/bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
 
 # LC-512: vendor the LiveKit browser SDK same-origin (no CDN at runtime, no CSP
-# change). Pinned version; the output is gitignored + produced at build time
-# like tailwind-built.css. Stage audio is inert until this asset + a LiveKit
-# server are present, so this is best-effort (build does not fail without net).
-livekit_version := "2.5.0"
+# change). The output is gitignored + produced at build time like
+# tailwind-built.css. LC-850: sourced from the bun-installed npm package (pinned
+# in package.json + bun.lock, checksummed) instead of a build-time curl whose
+# swallowed failure shipped images with no SDK and dead huddles/stage audio.
+# The npm package's dist/livekit-client.umd.js is already minified (the old
+# jsdelivr .umd.min.js URL was that same file); it is copied to the .min.js
+# name huddle_sfu.js/stage_media.js request. The cp fails loudly if the
+# package layout ever changes.
 [group('build')]
 vendor-js:
+    cd server && ../dev/bun install --frozen-lockfile
     mkdir -p server/assets/vendor
-    curl -fsSL "https://cdn.jsdelivr.net/npm/livekit-client@{{ livekit_version }}/dist/livekit-client.umd.min.js" -o server/assets/vendor/livekit-client.umd.min.js || echo "warning: could not vendor livekit-client (stage audio will be inert)"
+    cp server/node_modules/livekit-client/dist/livekit-client.umd.js server/assets/vendor/livekit-client.umd.min.js
 
 # Build release binary (standalone)
 [group('build')]
