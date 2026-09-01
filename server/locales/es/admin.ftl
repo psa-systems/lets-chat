@@ -216,6 +216,16 @@ admin-modlog-th-reason = Motivo
 admin-modlog-th-when = Cuando
 admin-modlog-empty = Aun no hay acciones de moderacion registradas.
 
+# LC-855: auditoria de consentimiento de control remoto
+admin-rc-title = Auditoria de control remoto
+admin-rc-note = Cada evento de consentimiento de control remoto (solicitud, concesion, denegacion, revocacion) en llamadas directas y huddles. Se muestran los 500 mas recientes.
+admin-rc-empty = Aun no hay eventos de control remoto registrados.
+admin-rc-th-actor = Actor
+admin-rc-th-event = Evento
+admin-rc-th-target = Destino
+admin-rc-th-room = Sala
+admin-rc-th-when = Cuando
+
 ## Webhook deliveries
 admin-deliveries-title = Entregas de webhook
 admin-deliveries-heading = Entregas

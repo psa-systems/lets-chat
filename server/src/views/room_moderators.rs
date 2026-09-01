@@ -83,6 +83,12 @@ pub struct RoomModeratorsPage<'a> {
     pub digest_enabled: bool,
     /// LC-494: whether "stage" mode is enabled for this room.
     pub stage_enabled: bool,
+    /// LC-855: whether this room has opted OUT of remote control (the per-room
+    /// switch, layered under the workspace `remote_control_enabled` master).
+    pub remote_control_disabled: bool,
+    /// LC-855: whether the workspace remote-control switch is on, so the card
+    /// can show that the room toggle is moot while the master switch is off.
+    pub remote_control_workspace_on: bool,
     /// LC-495: this room's workflow-automation rules (shown via the included
     /// `partials/room_automations.html`; empty for DMs, where the section is
     /// hidden).

@@ -114,10 +114,39 @@
   // ---- LC-854 transport + input replay ------------------------------
   // The sharer's tile <video> the controller drives (the shared surface). The
   // roster keys tiles by user id, exactly as voice.js builds them.
-  function tileVideo(uid) {
+  function tileEl(uid) {
     if (!uid) return null;
     var esc = (window.CSS && CSS.escape) ? CSS.escape(uid) : uid.replace(/"/g, '\\"');
-    return document.querySelector('[data-lc-voice-tile="' + esc + '"] [data-lc-voice-video]');
+    return document.querySelector('[data-lc-voice-tile="' + esc + '"]');
+  }
+  function tileVideo(uid) {
+    var t = tileEl(uid);
+    return t ? t.querySelector('[data-lc-voice-video]') : null;
+  }
+  // LC-855: the room-wide "{name} is controlling" label on the sharer's tile,
+  // seen by every viewer (the injected cursor already shows in the pixels; this
+  // names who). `info` null clears whatever label is up. Only one tile is ever
+  // labelled at a time (one controller per room), so a new label clears the old.
+  var labelledTile = null;
+  function setTileLabel(info) {
+    if (labelledTile && (!info || labelledTile !== info.sharerId)) {
+      var prev = tileEl(labelledTile);
+      var old = prev && prev.querySelector('[data-lc-control-label]');
+      if (old) old.remove();
+      labelledTile = null;
+    }
+    if (!info) return;
+    var tile = tileEl(info.sharerId);
+    if (!tile) return;
+    var el = tile.querySelector('[data-lc-control-label]');
+    if (!el) {
+      el = document.createElement('div');
+      el.setAttribute('data-lc-control-label', '');
+      el.className = 'lc-voice-control-label';
+      tile.appendChild(el);
+    }
+    el.textContent = info.name + ' ' + str('huddleControlActiveSuffix', 'is controlling');
+    labelledTile = info.sharerId;
   }
   var sfu = function () { return window.LetsChatHuddleSfu; };
   // Controller: start capturing over the sharer's tile and shipping frames.
@@ -343,13 +372,23 @@
         hidePrompt();
         endGrant();
         endControlling();
+        setTileLabel(null);
         announce('');
-      } else if (uid === grantedTo) {
-        endGrant(str('huddleControlEnded', 'Control ended'));
+      } else {
+        if (uid === grantedTo) endGrant(str('huddleControlEnded', 'Control ended'));
+        // LC-855: the pending requester left before we answered - dismiss the
+        // sharer's prompt so it does not linger naming someone who is gone.
+        if (uid === pendingFrom) hidePrompt();
       }
       setRequestBtn();
     } else if (kind === 'joined') {
       setRequestBtn();
+    } else if (kind === 'control') {
+      // LC-855: room-wide "who is controlling" label. user_id is the sharer's
+      // tile to label, username the controller's display name, payload active.
+      var activeCtl = node.getAttribute('data-payload') === '1';
+      var ctlName = node.getAttribute('data-username') || str('callAContact', 'A contact');
+      setTileLabel(activeCtl ? { sharerId: uid, name: ctlName } : null);
     }
   }
 

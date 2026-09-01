@@ -1064,6 +1064,36 @@ pub async fn set_room_stage_enabled(
     Ok(res.rows_affected())
 }
 
+/// LC-855: whether this room has opted OUT of remote control. Layered under the
+/// workspace `settings.remote_control_enabled` master switch: control is offered
+/// only when the workspace switch is on AND this is false.
+pub async fn get_room_remote_control_disabled(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+) -> Result<bool, sqlx::Error> {
+    let v: Option<i64> =
+        sqlx::query_scalar("SELECT remote_control_disabled FROM rooms WHERE id = ?")
+            .bind(room_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(v.unwrap_or(0) != 0)
+}
+
+/// LC-855: set the per-room remote-control opt-out. Returns rows affected
+/// (0 = no such room).
+pub async fn set_room_remote_control_disabled(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    disabled: bool,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query("UPDATE rooms SET remote_control_disabled = ? WHERE id = ?")
+        .bind(disabled as i64)
+        .bind(room_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected())
+}
+
 /// LC-492: lightweight room-scoped FTS retrieval for the AI assistant. Returns
 /// up to `limit` `(author_user_id, body)` pairs from the room ranked by FTS
 /// relevance to `fts_query` (already sanitized via `sanitize_fts_query`).

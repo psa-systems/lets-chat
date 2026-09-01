@@ -1,0 +1,36 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}{{ "admin-rc-title"|t }} - Admin - Let's Chat{% endblock %}
+
+{% block admin_main %}
+<p class="lc-set-card-desc text-sm text-content-muted mb-3">{{ "admin-rc-note"|t }}</p>
+{% if rows.is_empty() %}
+{% let empty_text_key = "admin-rc-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<div class="card lc-table-wrap">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-rc-th-actor"|t }}</th>
+        <th>{{ "admin-rc-th-event"|t }}</th>
+        <th>{{ "admin-rc-th-target"|t }}</th>
+        <th>{{ "admin-rc-th-room"|t }}</th>
+        <th>{{ "admin-rc-th-when"|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.actor_name }}</td>
+        <td class="font-mono text-xs">{{ r.kind }}</td>
+        <td>{{ r.target_name }}</td>
+        <td class="text-xs text-content-muted">#{{ r.room_id }}</td>
+        <td class="text-xs text-content-muted whitespace-nowrap"><time datetime="{{ r.created_at|iso }}" title="{{ r.created_at }}">{{ r.created_at }}</time></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}
