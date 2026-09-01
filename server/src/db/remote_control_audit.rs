@@ -34,6 +34,31 @@ pub async fn start_session(
     .map(|_| ())
 }
 
+/// LC-853: the open session for a room, if one exists. The huddle relay uses
+/// this as the single-controller gate (a request while a row is open answers
+/// `busy`) and to resolve who the counterpart of a `revoke` is.
+pub struct OpenSession {
+    pub controller_id: String,
+    pub sharer_id: String,
+}
+
+/// LC-853: fetch the open (un-ended) session for `room_id`, if any.
+pub async fn open_session(pool: &SqlitePool, room_id: i64) -> sqlx::Result<Option<OpenSession>> {
+    sqlx::query_as::<_, (String, String)>(
+        "SELECT controller_id, sharer_id FROM remote_control_sessions
+         WHERE room_id = ?1 AND ended_at IS NULL",
+    )
+    .bind(room_id)
+    .fetch_optional(pool)
+    .await
+    .map(|row| {
+        row.map(|(controller_id, sharer_id)| OpenSession {
+            controller_id,
+            sharer_id,
+        })
+    })
+}
+
 /// Close the open session for a room (kill-switch / revoke / auto-revoke).
 /// No-op if none is open.
 pub async fn end_session_by_room(

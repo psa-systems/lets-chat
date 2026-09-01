@@ -40,6 +40,27 @@
     </form>
   </div>
 
+  {# --- LC-853: remote control of shared screens (workspace switch) --- #}
+  <div class="card lc-set-card">
+    <div class="lc-set-card-head">
+      <h3 class="lc-set-card-title">{{ "admin-settings-rc-heading"|t }}</h3>
+    </div>
+    <p class="lc-set-card-desc text-sm text-content-muted mb-3">{{ "admin-settings-rc-note"|t }}</p>
+    <form class="lc-set-form" method="post" action="/admin/settings/remote-control"
+          hx-post="/admin/settings/remote-control" hx-target="#st-rc" hx-swap="innerHTML" hx-disabled-elt="this">
+      {% let name = "enabled" %}
+      {% let checked = remote_control_enabled %}
+      {% let disabled = false %}
+      {% let title = "admin-settings-rc-enable"|t %}
+      {% let desc = "admin-settings-rc-enable-note"|t %}
+      {% include "partials/toggle_row.html" %}
+      <div class="lc-set-actions">
+        <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-settings-rc-save"|t }}</span></button>
+        <span id="st-rc" class="lc-set-status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </div>
+
   {# --- LC-679: AI / LLM feature flag (runtime kill switch) --- #}
   <div class="card lc-set-card">
     <div class="lc-set-card-head">

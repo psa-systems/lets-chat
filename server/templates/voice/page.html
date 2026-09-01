@@ -119,6 +119,11 @@
           <div data-lc-react-picker-slot></div>
         </div>
       </span>
+      {# LC-853: huddle remote-control consent UI (request button + sharer
+         prompt + active banner), behind the workspace switch. #}
+      {% if remote_control_enabled %}
+      {% include "partials/huddle_control.html" %}
+      {% endif %}
       <button type="button" data-lc-voice-leave
               aria-label="{{ "voice-leave"|t }}" data-lc-tip="{{ "voice-leave"|t }}" data-lc-tip-pos="bottom"
               class="hidden lc-cbtn lc-cbtn--leave">

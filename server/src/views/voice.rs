@@ -31,4 +31,8 @@ pub struct VoicePage<'a> {
     /// JSON array of `RTCIceServer` objects for the mesh peer connections.
     pub ice_servers: &'a str,
     pub participants: &'a [VoiceParticipant],
+    /// LC-853: workspace remote-control switch. Gates the "Request control"
+    /// affordance + consent UI include; the server refuses signals
+    /// independently, so this is presentation, not enforcement.
+    pub remote_control_enabled: bool,
 }
