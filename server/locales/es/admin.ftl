@@ -315,6 +315,13 @@ admin-settings-maintenance-message-label = Mensaje mostrado a los usuarios
 admin-settings-maintenance-message-placeholder = De vuelta a las 17:00 UTC; actualizando la base de datos.
 admin-settings-maintenance-save = Guardar modo de mantenimiento
 # LC-679: interruptor de las funciones de IA (LLM).
+# LC-853: interruptor de control remoto del espacio de trabajo
+admin-settings-rc-heading = Control remoto de pantallas compartidas
+admin-settings-rc-note = Permite a un participante de una llamada pedir el control de una pantalla compartida; quien comparte aprueba cada solicitud de forma explicita. Un solo interruptor para toda la superficie: llamadas 1:1 y huddles por igual. Desactivado por defecto.
+admin-settings-rc-enable = Activar control remoto
+admin-settings-rc-enable-note = Surte efecto de inmediato, sin reiniciar. Las sesiones ya concedidas se pueden revocar aunque este desactivado.
+admin-settings-rc-save = Guardar ajuste de control remoto
+
 admin-settings-llm-heading = Funciones de IA (LLM / Ollama)
 admin-settings-llm-note = Interruptor en tiempo de ejecucion para toda la superficie de IA (asistente de escritura, ponerse al dia, /ask, traducir, respuestas sugeridas, busqueda semantica, resumenes de transcripciones). Desactivado por defecto. Cuando esta activo, quien puede usarlo lo define el publico de abajo; quien quede fuera de ese publico no ve ningun rastro. La primera solicitud tras un periodo inactivo puede tardar varios segundos en calentarse; es normal.
 admin-settings-llm-enable = Activar funciones de IA

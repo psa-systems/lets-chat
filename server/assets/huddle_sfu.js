@@ -186,6 +186,17 @@
       speakers.forEach(function (p) { loud[idOf(p)] = true; });
       hooks.setSpeaking(loud);
     });
+    // LC-853: the browser's own "Stop sharing" chrome ends the screen track
+    // without going through toggleScreen(); LiveKit auto-unpublishes it and
+    // fires this. Sync our sharing state and tell voice.js, so the WS
+    // announcement (remote tile pins + the server's sharer tracking, which
+    // routes remote-control requests) follows instead of going stale.
+    room.on(LK.RoomEvent.LocalTrackUnpublished, function (pub) {
+      if (session !== mine) return;
+      if (!pub || pub.source !== LK.Track.Source.ScreenShare) return;
+      mine.sharing = false;
+      if (hooks.screenEnded) hooks.screenEnded();
+    });
     // A remote muting/unmuting their mic: reflect it on their tile.
     room.on(LK.RoomEvent.TrackMuted, function (_pub, p) {
       if (_pub.kind === 'audio') hooks.setMuted(idOf(p), true);

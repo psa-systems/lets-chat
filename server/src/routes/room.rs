@@ -225,6 +225,7 @@ async fn get_voice_room(
         asset_version: &state.asset_version,
         ice_servers: &state.ice_servers,
         participants: &participants,
+        remote_control_enabled: super::ws::remote_control_flag_on(state).await,
     };
     Ok(html(&page)?.into_response())
 }
@@ -684,6 +685,7 @@ pub async fn get_room(
         gif_teaser: !crate::gif::available() && user.role == "admin",
         room_seen_bar_html,
         huddle_enabled,
+        remote_control_enabled: super::ws::remote_control_flag_on(&state).await,
         ice_servers: &state.ice_servers,
         huddle_sfu: crate::livekit::available(),
         huddle_participants,

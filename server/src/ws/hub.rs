@@ -101,7 +101,31 @@ pub struct Hub {
     /// user_id (a person is on stage regardless of how many tabs they have).
     /// No media here - the audio transport lands in the LC-512 SFU follow-up.
     stages: DashMap<i64, StageState>,
+    /// LC-853: room_id -> user_ids currently announcing a live screen share in
+    /// that huddle/voice channel. Ephemeral like `voice_rooms` - fed by the
+    /// `voice_screen` frame, cleared on the matching `sharing: false`, on
+    /// voice-leave, and on disconnect. The huddle remote-control relay uses it
+    /// to route a control request to the sharer, so it is authoritative enough
+    /// to fail closed on: an empty or ambiguous set refuses the request.
+    voice_screens: DashMap<i64, HashSet<String>>,
+    /// LC-853: room_id -> the single pending remote-control request for that
+    /// huddle (requester waiting on the sharer's Allow/Deny). One slot per
+    /// room, never a queue: a second request while one is pending is refused
+    /// as busy. Entries expire after [`CONTROL_PENDING_TTL`] so an abandoned
+    /// prompt (sharer closed the tab mid-prompt) cannot wedge the room.
+    control_pending: DashMap<i64, ControlPending>,
 }
+
+/// LC-853: one pending huddle control request (see `Hub::control_pending`).
+struct ControlPending {
+    requester_id: String,
+    at: std::time::Instant,
+}
+
+/// LC-853: how long a pending control request stays claimable. Longer than the
+/// client's ~12s request timeout and ~30s prompt auto-deny, so the server slot
+/// outlives every legitimate answer window but still self-clears.
+const CONTROL_PENDING_TTL: std::time::Duration = std::time::Duration::from_secs(45);
 
 /// LC-494: the live roster of one stage room. `participants` is everyone on the
 /// stage (speakers + listeners); `speakers` is the subset granted the floor;
@@ -133,6 +157,8 @@ impl Hub {
             voice_conn: DashMap::new(),
             ringing: DashMap::new(),
             stages: DashMap::new(),
+            voice_screens: DashMap::new(),
+            control_pending: DashMap::new(),
         }
     }
 
@@ -285,6 +311,80 @@ impl Hub {
             .get(&conn_id)
             .map(|r| *r == room_id)
             .unwrap_or(false)
+    }
+
+    // ---- LC-853 huddle remote-control state ---------------------------
+
+    /// Record (or clear) `user_id`'s screen-share announcement for `room_id`.
+    pub fn set_voice_screen(&self, room_id: i64, user_id: &str, sharing: bool) {
+        if sharing {
+            self.voice_screens
+                .entry(room_id)
+                .or_default()
+                .insert(user_id.to_string());
+        } else {
+            if let Some(mut set) = self.voice_screens.get_mut(&room_id) {
+                set.remove(user_id);
+            }
+            self.voice_screens.retain(|_, set| !set.is_empty());
+        }
+    }
+
+    /// The user_ids currently announcing a screen share in `room_id`.
+    pub fn voice_screen_sharers(&self, room_id: i64) -> Vec<String> {
+        self.voice_screens
+            .get(&room_id)
+            .map(|set| set.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// Claim the room's pending-request slot for `requester_id`. Returns false
+    /// when an unexpired request already holds it (one at a time, no queue).
+    pub fn set_control_pending(&self, room_id: i64, requester_id: &str) -> bool {
+        if self.control_pending_active(room_id) {
+            return false;
+        }
+        self.control_pending.insert(
+            room_id,
+            ControlPending {
+                requester_id: requester_id.to_string(),
+                at: std::time::Instant::now(),
+            },
+        );
+        true
+    }
+
+    /// True when an unexpired control request is pending for `room_id`.
+    /// An expired entry is dropped on the way (lazy expiry - nothing polls).
+    pub fn control_pending_active(&self, room_id: i64) -> bool {
+        let expired = match self.control_pending.get(&room_id) {
+            Some(p) => p.at.elapsed() > CONTROL_PENDING_TTL,
+            None => return false,
+        };
+        if expired {
+            self.control_pending.remove(&room_id);
+            return false;
+        }
+        true
+    }
+
+    /// Consume the room's pending request, returning the requester it belonged
+    /// to. `None` when nothing (unexpired) is pending - a grant/deny with no
+    /// live request has nobody to answer and must be dropped.
+    pub fn take_control_pending(&self, room_id: i64) -> Option<String> {
+        if !self.control_pending_active(room_id) {
+            return None;
+        }
+        self.control_pending
+            .remove(&room_id)
+            .map(|(_, p)| p.requester_id)
+    }
+
+    /// Drop the pending request if `user_id` owns it (requester left the
+    /// huddle or disconnected mid-prompt).
+    pub fn clear_control_pending_for(&self, room_id: i64, user_id: &str) {
+        self.control_pending
+            .remove_if(&room_id, |_, p| p.requester_id == user_id);
     }
 
     // ---- LC-494 stage control plane -----------------------------------

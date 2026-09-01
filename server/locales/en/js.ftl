@@ -36,6 +36,13 @@ js-call-control-no-answer = Control request not answered
 js-call-control-denied = Control request denied
 js-call-control-unavailable = Remote control is not available in this call
 
+# LC-853: huddle remote-control consent flow (huddle_control.js)
+js-huddle-control-granted = Control granted
+js-huddle-control-busy = Someone else already has control
+js-huddle-control-ended = Control ended
+js-huddle-control-requested = requested control of your screen
+js-huddle-control-active-suffix = is controlling your screen
+
 # Offline outbox (outbox.js)
 js-outbox-offline-queued = Offline - %n% message(s) queued
 js-outbox-offline-idle = Offline - messages will send when you reconnect
