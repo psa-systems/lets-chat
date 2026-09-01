@@ -39,6 +39,14 @@
     <span><span data-lc-huddle-control-banner-name class="font-semibold"></span> {{ "call-controlling-suffix"|t }}</span>
     <button type="button" data-lc-huddle-control-stop class="rounded bg-danger-content px-3 py-1 text-xs font-semibold text-danger hover:opacity-90">{{ "call-stop-control"|t }}</button>
   </div>
+  {# LC-854/LC-640: shown to the controller while controlling a sharer whose
+     machine has no native injector (they are on the web app), so their input
+     reaches no OS - the crosshair-but-nothing-happens state is explained rather
+     than left a mystery. Same tuned --warning pair as the 1:1 note. #}
+  <div data-lc-huddle-control-noinject aria-hidden="true"
+       class="hidden fixed left-1/2 bottom-6 -translate-x-1/2 z-[60] max-w-[80vw] rounded bg-warning px-3 py-1 text-center text-xs text-warning-content">
+    {{ "call-control-web-peer"|t }}
+  </div>
   {# Polite transition announcements for screen readers (request sent, granted,
      denied, ended). Visual state lives on the elements above. #}
   <span data-lc-huddle-control-status class="sr-only" role="status" aria-live="polite"></span>

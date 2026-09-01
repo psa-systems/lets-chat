@@ -30,6 +30,11 @@
   // Live session, or null. hooks are voice.js's tile callbacks.
   var session = null;
 
+  // LC-854: huddle_control.js registers a callback here to receive inbound
+  // remote-control frames (it is the controlled side). One at a time; cleared
+  // when control ends. cb(fromIdentity, text).
+  var controlDataCb = null;
+
   // LC-764: opt-in call diagnostics. Set `window.__lcCallDebug = true` in the
   // console before reproducing to log the local mic track state on both sides of
   // a mute toggle - the state acceptance criterion one asks to record. Off by
@@ -197,6 +202,17 @@
       mine.sharing = false;
       if (hooks.screenEnded) hooks.screenEnded();
     });
+    // LC-854: inbound remote-control data. Frames ride LiveKit's data channel
+    // on the reserved `lc-control` topic, addressed to a single recipient; hand
+    // each to huddle_control.js, which is the controlled side and forwards to
+    // the native injector. The topic keeps this off any other data use.
+    room.on(LK.RoomEvent.DataReceived, function (payload, participant, _kind, topic) {
+      if (topic !== 'lc-control') return;
+      if (!controlDataCb) return;
+      var text;
+      try { text = new TextDecoder().decode(payload); } catch (e) { return; }
+      controlDataCb(participant ? idOf(participant) : null, text);
+    });
     // A remote muting/unmuting their mic: reflect it on their tile.
     room.on(LK.RoomEvent.TrackMuted, function (_pub, p) {
       if (_pub.kind === 'audio') hooks.setMuted(idOf(p), true);
@@ -310,6 +326,26 @@
     return on;
   }
 
+  // LC-854: send one remote-control frame to a single peer over the data
+  // channel. `text` is the JSON frame; `toIdentity` the sharer's user id;
+  // `reliable` false for movement (drop-old is fine), true for clicks/keys.
+  // No-op unless a session is live and the token granted publishData.
+  function sendControl(text, toIdentity, reliable) {
+    if (!session || !session.room) return;
+    var lp = session.room.localParticipant;
+    if (!lp || !lp.publishData) return;
+    var bytes;
+    try { bytes = new TextEncoder().encode(text); } catch (e) { return; }
+    try {
+      lp.publishData(bytes, {
+        reliable: !!reliable,
+        topic: 'lc-control',
+        destinationIdentities: toIdentity ? [toIdentity] : undefined,
+      });
+    } catch (e) { /* channel not ready or not permitted */ }
+  }
+  function onControlData(cb) { controlDataCb = cb; }
+
   window.LetsChatHuddleSfu = {
     start: start,
     stop: stop,
@@ -317,5 +353,7 @@
     toggleMute: toggleMute,
     toggleCamera: toggleCamera,
     toggleScreen: toggleScreen,
+    sendControl: sendControl,
+    onControlData: onControlData,
   };
 })();
