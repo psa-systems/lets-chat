@@ -445,6 +445,8 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::TranscriptStarted { .. }
         | ChatEvent::TranscriptSegment { .. }
         | ChatEvent::TranscriptEnded { .. }
+        // LC-859: agent-active stand-down, rendered per recipient in the send task.
+        | ChatEvent::TranscriptAgentActive { .. }
         // LC-173: rendered per recipient in the WS send task (own sidebar
         // self block), so the recipient-independent path emits nothing.
         | ChatEvent::UserProfileChanged { .. }

@@ -875,6 +875,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 // per-recipient like the call/voice signals.
                                 ChatEvent::TranscriptStarted { to_user_id, .. }
                                 | ChatEvent::TranscriptEnded { to_user_id, .. }
+                                | ChatEvent::TranscriptAgentActive { to_user_id, .. }
                                     if to_user_id == &send_user.id =>
                                 {
                                     render_transcript_control(&e)
@@ -2140,6 +2141,9 @@ fn render_transcript_control(event: &ChatEvent) -> Option<String> {
             ..
         } => ("started", *transcript_id, started_by_name.as_str()),
         ChatEvent::TranscriptEnded { transcript_id, .. } => ("ended", *transcript_id, ""),
+        // LC-859: agent-active stand-down. transcribe.js reads kind="agent" and
+        // suppresses its own clip capture (the agent covers every track).
+        ChatEvent::TranscriptAgentActive { transcript_id, .. } => ("agent", *transcript_id, ""),
         _ => return None,
     };
     TranscriptControlFragment {
