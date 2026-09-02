@@ -1,0 +1,7 @@
+{# LC-865: OOB re-render of the enclave rail (#switcher). The rail sits OUTSIDE
+   both #main (the boosted nav swap) and #sidebar (the LC-836 sidebar OOB), so a
+   cross-enclave move updated the page content and the sidebar but left the
+   rail's active tile lit on the previous enclave. render_sidebar emits this
+   alongside the sidebar OOB so the active enclave tile follows the move. #}
+{% let oob = true %}
+{% include "partials/enclave_switcher.html" %}
