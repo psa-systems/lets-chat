@@ -18,7 +18,22 @@ function load() {
   function Room() {
     this.handlers = {};
     this.remoteParticipants = new Map();
-    this.localParticipant = { setMicrophoneEnabled: async () => {}, isMicrophoneEnabled: true };
+    // Fake local publications: attach() records which element the self tile
+    // was bound to, so a test can assert the right local video reached it.
+    const attaches = [];
+    const camTrack = { attach: (el) => { attaches.push(['camera', el]); } };
+    const screenTrack = { attach: (el) => { attaches.push(['screen', el]); } };
+    this.localParticipant = {
+      attaches,
+      setMicrophoneEnabled: async () => {},
+      isMicrophoneEnabled: true,
+      _cam: false,
+      isCameraEnabled: false,
+      setCameraEnabled: async function (on) { this._cam = on; this.isCameraEnabled = on; },
+      setScreenShareEnabled: async () => {},
+      getTrackPublication: (src) =>
+        src === 'camera' ? { videoTrack: camTrack } : src === 'screenshare' ? { videoTrack: screenTrack } : null,
+    };
     this.on = (ev, fn) => { this.handlers[ev] = fn; };
     this.connect = async () => {};
     // LiveKit fires Disconnected for a client-initiated disconnect too.
@@ -35,9 +50,10 @@ function load() {
       ActiveSpeakersChanged: 'ActiveSpeakersChanged',
       TrackMuted: 'TrackMuted',
       TrackUnmuted: 'TrackUnmuted',
+      LocalTrackUnpublished: 'LocalTrackUnpublished',
       Disconnected: 'Disconnected',
     },
-    Track: { Source: { Microphone: 'microphone' } },
+    Track: { Source: { Microphone: 'microphone', Camera: 'camera', ScreenShare: 'screenshare' } },
   };
   const sink = new El('div');
   sink.setAttribute('id', 'lc-huddle-sfu-audio-sink');
@@ -71,6 +87,70 @@ function hooks() {
     onDisconnected: (reason) => { calls.push(reason); },
   };
 }
+
+// A hooks object that records the self tile's video state, with a real element
+// for tileVideo(self) so attachSelfVideo has something to attach to.
+function videoHooks() {
+  const selfVideo = new El('video');
+  const hasVideo = [];
+  return {
+    selfVideo,
+    hasVideo,
+    selfId: 'me',
+    audioSink: () => new El('div'),
+    addTile: () => {},
+    removeTile: () => {},
+    tileVideo: (uid) => (uid === 'me' ? selfVideo : null),
+    setHasVideo: (uid, on) => { if (uid === 'me') hasVideo.push(on); },
+    setScreen: () => {},
+    setMuted: () => {},
+    onDisconnected: () => {},
+  };
+}
+
+test('camera on renders the local camera on the self tile', async () => {
+  const t = load();
+  const h = videoHooks();
+  await t.sfu.start({ roomId: 7 }, h);
+
+  const on = await t.sfu.toggleCamera();
+
+  assert.equal(on, true);
+  assert.deepEqual(t.rooms[0].localParticipant.attaches, [['camera', h.selfVideo]]);
+  assert.deepEqual(h.hasVideo, [true], 'the self tile is shown as video, not a compact audio chip');
+});
+
+test('screen share renders the local share and wins over a live camera', async () => {
+  const t = load();
+  const h = videoHooks();
+  await t.sfu.start({ roomId: 7 }, h);
+  await t.sfu.toggleCamera(); // camera already live
+  t.rooms[0].localParticipant.attaches.length = 0;
+  h.hasVideo.length = 0;
+
+  await t.sfu.toggleScreen();
+
+  assert.deepEqual(t.rooms[0].localParticipant.attaches, [['screen', h.selfVideo]],
+    'the screen preview replaces the camera on the self tile');
+  assert.deepEqual(h.hasVideo, [true]);
+});
+
+test('ending a screen share falls back to the still-live camera', async () => {
+  const t = load();
+  const h = videoHooks();
+  await t.sfu.start({ roomId: 7 }, h);
+  await t.sfu.toggleCamera();
+  await t.sfu.toggleScreen();
+  t.rooms[0].localParticipant.attaches.length = 0;
+  h.hasVideo.length = 0;
+
+  // The browser's own "Stop sharing" chrome ends the track outside toggleScreen.
+  t.rooms[0].handlers.LocalTrackUnpublished({ source: 'screenshare' });
+
+  assert.deepEqual(t.rooms[0].localParticipant.attaches, [['camera', h.selfVideo]],
+    'the camera preview comes back');
+  assert.deepEqual(h.hasVideo, [true]);
+});
 
 test('LC-840: a disconnect the client did not ask for reaches voice.js and drops the session', async () => {
   const t = load();
