@@ -14,12 +14,16 @@ function load() {
   const src = fs.readFileSync(path.join(__dirname, 'nav.js'), 'utf8');
   const listeners = {};
   const assigned = [];
+  const toasts = [];
   const brand = { textContent: ':root{--brand-primary:#111111}' };
   const closed = { count: 0 };
   const window = {
     htmx: { config: { historyCacheSize: 10 } },
     location: { assign: (u) => assigned.push(u) },
     lcCloseNav: () => { closed.count += 1; },
+    // LC-867: capture toasts + resolve strings to their English fallback.
+    __lcToast: (kind, msg) => { toasts.push([kind, msg]); },
+    __lcS: (_k, fb) => fb,
   };
   const document = {
     body: {
@@ -33,7 +37,7 @@ function load() {
   const fire = (type, detail, target) => {
     for (const fn of listeners[type] || []) fn({ type, detail, target });
   };
-  return { window, listeners, assigned, brand, closed, fire };
+  return { window, listeners, assigned, toasts, brand, closed, fire };
 }
 
 const page = '<html><head><style data-lc-brand>:root{--brand-primary:#abcdef}</style></head><body><main id="main" hx-history-elt>hi</main></body></html>';
@@ -136,4 +140,36 @@ test('a non-boosted request aimed elsewhere is untouched', () => {
   t.fire('htmx:beforeSwap', d);
   assert.equal(d.shouldSwap, true);
   assert.deepEqual(t.assigned, []);
+});
+
+// LC-867: only a boosted request aimed at #main is a shell navigation whose
+// failure deserves feedback.
+test('isBoostedNav is true only for a boosted #main request', () => {
+  const nav = load().window.LetsChatNav;
+  assert.equal(nav.isBoostedNav({ boosted: true, target: { id: 'main' } }), true);
+  assert.equal(nav.isBoostedNav({ requestConfig: { boosted: true }, target: { id: 'main' } }), true, 'boosted flag can live on requestConfig');
+  assert.equal(nav.isBoostedNav({ boosted: false, target: { id: 'main' } }), false, 'a background #main fetch is not a nav');
+  assert.equal(nav.isBoostedNav({ boosted: true, target: { id: 'lc-rail-support-badge' } }), false, 'a boosted request not aimed at #main');
+  assert.equal(nav.isBoostedNav({ boosted: true }), false, 'no target');
+});
+
+test('a dropped shell navigation (sendError / timeout) shows a retry toast', () => {
+  const t = load();
+  // A network-dropped enclave/room switch: boosted, aimed at #main, no response.
+  t.fire('htmx:sendError', { boosted: true, target: { id: 'main' } });
+  assert.equal(t.toasts.length, 1, 'the failed click is not a silent no-op');
+  assert.equal(t.toasts[0][0], 'err');
+  assert.match(t.toasts[0][1], /connection/i);
+
+  t.fire('htmx:timeout', { boosted: true, target: { id: 'main' } });
+  assert.equal(t.toasts.length, 2, 'a timeout is fed back too');
+});
+
+test('a dropped BACKGROUND request does not toast', () => {
+  const t = load();
+  // The rail support-badge self-fetch failing must not nag the user.
+  t.fire('htmx:sendError', { boosted: false, target: { id: 'lc-rail-support-badge' } });
+  // A boosted request aimed elsewhere is likewise not a shell navigation.
+  t.fire('htmx:timeout', { boosted: true, target: { id: 'lc-rail-support-badge' } });
+  assert.deepEqual(t.toasts, [], 'only shell navigation failures are surfaced');
 });
