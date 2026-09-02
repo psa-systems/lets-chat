@@ -432,3 +432,23 @@ test('LC-610: the voice_screen echo of our own share does not hide the SFU self 
   assert.equal(tile.getAttribute('data-media'), 'video', 'the self tile stays a video tile');
   assert.equal(tile.getAttribute('data-screen'), 'true', 'the share pin is still set');
 });
+
+test('LC-610: the screen echo still nudges a REMOTE peer tile (the self skip is self-only)', () => {
+  const h = joined();
+  const grid = h.dock.querySelector('[data-lc-voice-grid]');
+
+  // A remote peer marked as video, whose track has since gone dead (a frozen
+  // last frame after they stopped sharing). Their voice_screen=false echo must
+  // still run updateTileMedia for them and revert the frozen frame - the self
+  // skip added for the black-out fix must not swallow the remote nudge.
+  h.sfuHooks().addTile('u2', 'Bob');
+  const tile = grid.querySelector('[data-lc-voice-tile="u2"]');
+  const video = tile.querySelector('[data-lc-voice-video]');
+  h.sfuHooks().setHasVideo('u2', true);
+  video.srcObject = { getVideoTracks: () => [{ readyState: 'ended', muted: false }] };
+  assert.equal(tile.getAttribute('data-media'), 'video', 'precondition: shown as video');
+
+  h.event({ 'data-room-id': 7, 'data-kind': 'screen', 'data-user-id': 'u2', 'data-payload': '0' });
+
+  assert.equal(tile.getAttribute('data-media'), 'audio', 'the remote peer nudge still fires');
+});

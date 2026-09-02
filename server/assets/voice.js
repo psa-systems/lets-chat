@@ -1314,7 +1314,13 @@
       // Nudge the camera-vs-avatar swap: on stop the peer often drops their
       // video track, and re-evaluating here reverts the frozen last frame even
       // if the track's own onmute/onremovetrack was missed.
-      updateTileMedia(userId);
+      // LC-610: never do this for our OWN echo. The self tile's video is owned
+      // by the local media path (on SFU by huddle_sfu setHasVideo, with a null
+      // localStream), so recomputing here reads that null stream and hides a
+      // live screen share (the black-out bug). updateTileMedia has an
+      // `sfu && self` guard for this, but the `sfu` flag is unreliable in the
+      // bus instance that drains this echo, so gate on identity here directly.
+      if (!(cfg && userId === cfg.selfId)) updateTileMedia(userId);
       return;
     }
     if (!joined) return;
