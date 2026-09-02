@@ -114,6 +114,14 @@ pub struct Hub {
     /// as busy. Entries expire after [`CONTROL_PENDING_TTL`] so an abandoned
     /// prompt (sharer closed the tab mid-prompt) cannot wedge the room.
     control_pending: DashMap<i64, ControlPending>,
+    /// LC-859: room_id -> the open transcript session whose server-side
+    /// transcription AGENT (LC-814) is live. Set when the agent dispatch
+    /// succeeds, cleared when the session finalizes. Present clients learn of it
+    /// through the TranscriptAgentActive broadcast; late joiners read it via
+    /// GET .../transcript/active. Either way they suppress their own per-client
+    /// clip capture, since the agent already transcribes every track (without it
+    /// the browser and the agent both run whisper on the same speaker).
+    transcript_agents: DashMap<i64, i64>,
 }
 
 /// LC-853: one pending huddle control request (see `Hub::control_pending`).
@@ -159,6 +167,7 @@ impl Hub {
             stages: DashMap::new(),
             voice_screens: DashMap::new(),
             control_pending: DashMap::new(),
+            transcript_agents: DashMap::new(),
         }
     }
 
@@ -336,6 +345,24 @@ impl Hub {
             .get(&room_id)
             .map(|set| set.iter().cloned().collect())
             .unwrap_or_default()
+    }
+
+    // ---- LC-859 transcription-agent presence --------------------------
+
+    /// Mark `room_id`'s server-side transcription agent live for `transcript_id`.
+    pub fn set_transcript_agent(&self, room_id: i64, transcript_id: i64) {
+        self.transcript_agents.insert(room_id, transcript_id);
+    }
+
+    /// Clear any transcription-agent marker for `room_id` (on session finalize).
+    pub fn clear_transcript_agent(&self, room_id: i64) {
+        self.transcript_agents.remove(&room_id);
+    }
+
+    /// Whether a server-side transcription agent is live for `room_id`. Clients
+    /// use it to suppress their own per-client capture (the agent covers them).
+    pub fn transcript_agent_active(&self, room_id: i64) -> bool {
+        self.transcript_agents.contains_key(&room_id)
     }
 
     /// Claim the room's pending-request slot for `requester_id`. Returns false
@@ -858,6 +885,30 @@ mod tests {
         let hub = Hub::new();
         // No connections / no subscription; must not panic.
         hub.unsubscribe_user_from_topic("ghost", "enclave:1");
+    }
+
+    // LC-859: the transcription-agent marker a late joiner reads to decide
+    // whether to suppress its own per-client capture.
+    #[test]
+    fn transcript_agent_marker_is_set_and_cleared_per_room() {
+        let hub = Hub::new();
+        assert!(!hub.transcript_agent_active(7), "unset by default");
+
+        hub.set_transcript_agent(7, 100);
+        assert!(
+            hub.transcript_agent_active(7),
+            "set after a confirmed dispatch"
+        );
+        assert!(
+            !hub.transcript_agent_active(8),
+            "other rooms are unaffected"
+        );
+
+        hub.clear_transcript_agent(7);
+        assert!(
+            !hub.transcript_agent_active(7),
+            "cleared when the session finalizes"
+        );
     }
 
     // LC-498: a wiki-editing heartbeat broadcasts WikiEditing to the room except
