@@ -139,3 +139,7 @@ js-huddle-busy = You are in a huddle in another room
 # throttled and coalesced by call_reactions.js.
 js-react-announce = %name% reacted %emoji%
 js-react-announce-many = %name% and %n% others reacted %emoji%
+# LC-867: toast when a shell navigation (enclave/room switch) is dropped by the
+# network (htmx:sendError / htmx:timeout), so a failed click is not a silent
+# no-op (nav.js).
+js-nav-failed = Could not load - connection issue. Try again.

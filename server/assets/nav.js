@@ -103,5 +103,36 @@
     if (typeof window.lcCloseNav === 'function') window.lcCloseNav();
   });
 
-  window.LetsChatNav = { hasMain: hasMain, brandCss: brandCss, fallbackUrl: fallbackUrl, targetsMain: targetsMain };
+  // LC-867: a boosted shell navigation (enclave / room switch) whose request is
+  // dropped by the network - htmx:sendError (no response) or htmx:timeout -
+  // leaves htmx to no-op silently, so the click looks broken with no feedback.
+  // A RESPONSE-level failure (4xx/5xx, or a page with no #main) is already turned
+  // into a real navigation by the beforeSwap handler above; only a SEND-level
+  // failure with no response reaches here. Surface a toast so the user knows to
+  // retry rather than clicking into a void. Gated to boosted #main requests so it
+  // fires only for shell navigation, never for a background fetch.
+  function isBoostedNav(detail) {
+    return isBoosted(detail) && targetsMain(detail);
+  }
+  function navFailedToast() {
+    if (typeof window.__lcToast !== 'function') return;
+    var msg = window.__lcS
+      ? window.__lcS('navFailed', 'Could not load - connection issue. Try again.')
+      : 'Could not load - connection issue. Try again.';
+    window.__lcToast('err', msg);
+  }
+  document.body.addEventListener('htmx:sendError', function (evt) {
+    if (isBoostedNav(evt.detail)) navFailedToast();
+  });
+  document.body.addEventListener('htmx:timeout', function (evt) {
+    if (isBoostedNav(evt.detail)) navFailedToast();
+  });
+
+  window.LetsChatNav = {
+    hasMain: hasMain,
+    brandCss: brandCss,
+    fallbackUrl: fallbackUrl,
+    targetsMain: targetsMain,
+    isBoostedNav: isBoostedNav,
+  };
 })();
