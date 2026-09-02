@@ -38,6 +38,11 @@ function makeDock(roomId, sfu) {
   bar.appendChild(join);
   root.appendChild(bar);
   root.appendChild(new El('video'));
+  // The tile grid: createTile / updateTileMedia render into this, so a test
+  // that inspects the self tile needs it present.
+  const grid = new El('div');
+  grid.setAttribute('data-lc-voice-grid', '');
+  root.appendChild(grid);
   return root;
 }
 
@@ -72,6 +77,7 @@ function load() {
   const sfuCalls = [];
   const toasts = [];
   let sfuHooks = null;
+  let busCb = null;
   const tracks = [{ kind: 'audio', enabled: true, stopped: false, stop() { this.stopped = true; } }];
   const store = new Map();
   let controls = {};
@@ -99,7 +105,9 @@ function load() {
     // LC-616: voice.js takes its control-bar dispatch and event bus from here.
     LetsChatRtc: {
       bindControls: (map) => { controls = map; },
-      watchBus: () => {},
+      // Capture the inbound-event callback so a test can drive server frames
+      // (roster/joined/screen/...) the way the real bus delivers them.
+      watchBus: (_bus, _attr, cb) => { busCb = cb; },
     },
     // LC-610: the SFU owns media on this path.
     LetsChatHuddleSfu: {
@@ -162,6 +170,13 @@ function load() {
     join: () => controls['[data-lc-voice-join]'](),
     toasts,
     sfuHooks: () => sfuHooks,
+    // Deliver one inbound server frame as a bus node (data-* attributes), the
+    // way LetsChatRtc.watchBus would hand it to voice.js's handleEvent.
+    event: (attrs) => {
+      const n = new El('div');
+      Object.keys(attrs).forEach((k) => n.setAttribute(k, String(attrs[k])));
+      if (busCb) busCb(n);
+    },
     leaveClick: () => controls['[data-lc-voice-leave]'](),
     // htmx swapped #main: the old dock is gone from the document, and whatever
     // the new page rendered is in its place. A floating panel lives on the body,
@@ -394,4 +409,26 @@ test('LC-840: a disconnect after the user already left runs nothing twice', () =
 
   assert.equal(h.sent.filter((f) => f.type === 'voice_leave').length, before, 'no second voice_leave');
   assert.equal(h.toasts.length, 0, 'nothing to tell: the user chose to leave');
+});
+
+test('LC-610: the voice_screen echo of our own share does not hide the SFU self tile', () => {
+  const h = joined();
+  const grid = h.dock.querySelector('[data-lc-voice-grid]');
+  const tile = grid.querySelector('[data-lc-voice-tile="u1"]');
+  const video = tile.querySelector('[data-lc-voice-video]');
+
+  // huddle_sfu.js attached our live screen track and marked the tile as video.
+  h.sfuHooks().setHasVideo('u1', true);
+  h.sfuHooks().setScreen('u1', true);
+  assert.equal(video.style.display, '', 'precondition: the share is visible');
+  assert.equal(tile.getAttribute('data-media'), 'video');
+
+  // The server echoes our own voice_screen back to us; handleEvent runs
+  // updateTileMedia(self). In SFU it must NOT recompute from the null
+  // localStream and hide the live share (the black-out bug).
+  h.event({ 'data-room-id': 7, 'data-kind': 'screen', 'data-user-id': 'u1', 'data-payload': '1' });
+
+  assert.equal(video.style.display, '', 'the self share stays visible after its own echo');
+  assert.equal(tile.getAttribute('data-media'), 'video', 'the self tile stays a video tile');
+  assert.equal(tile.getAttribute('data-screen'), 'true', 'the share pin is still set');
 });
