@@ -143,3 +143,7 @@ js-react-announce-many = %name% and %n% others reacted %emoji%
 # network (htmx:sendError / htmx:timeout), so a failed click is not a silent
 # no-op (nav.js).
 js-nav-failed = Could not load - connection issue. Try again.
+# LC-866: toast when the transcription mic tap cannot open after switching the
+# Fast/Accurate engine (the browser engine had not released the device yet), so
+# a switch that stopped capturing is not silent (transcribe.js).
+js-stt-mic-failed = Could not start transcription. Try again.

@@ -122,15 +122,23 @@ function loadRich(opts) {
       }
     );
   }
+  const toasts = [];
+  // A MediaRecorder that records nothing but honours start/stop, so the success
+  // path (getUserMedia resolves -> recordClip) runs without a real recorder.
+  function FakeMR() {}
+  FakeMR.prototype.start = function () {};
+  FakeMR.prototype.stop = function () {};
+  FakeMR.isTypeSupported = () => false;
   const window = {
     // No SpeechRecognition: with a server engine configured, chooseEngine picks
     // 'server' (the path that reaches getUserMedia), so the suppression is what
     // the assertion turns on rather than an engine-choice accident.
-    MediaRecorder: function () {},
+    MediaRecorder: FakeMR,
     LetsChatMedia: { audio: () => ({}) },
     __lcSessionRoom: 7,
+    __lcToast: (kind, msg) => { toasts.push([kind, msg]); },
+    __lcS: (_k, fb) => fb,
   };
-  window.MediaRecorder.isTypeSupported = () => false;
   const document = {
     body: stubEl(),
     addEventListener(type, fn) { (docListeners[type] = docListeners[type] || []).push(fn); },
@@ -153,22 +161,38 @@ function loadRich(opts) {
   };
   const navigator = {
     language: 'en-US',
-    // Count the attempt, then reject so the "server" engine stops before it
-    // builds a MediaRecorder + 5s timer that would outlive the test.
-    mediaDevices: { getUserMedia: () => { gum.n += 1; return Promise.reject(new Error('stop')); } },
+    // getUserMedia behaviour is opts-driven. `gumFailures` unset (the default)
+    // rejects every call - the adopt tests only care that it is REACHED, never
+    // that it resolves. A number rejects that many leading calls, then resolves,
+    // so LC-866's retry-after-Web-Speech-release can be exercised deterministically.
+    mediaDevices: {
+      getUserMedia: () => {
+        gum.n += 1;
+        if (opts.gumFailures == null || gum.n <= opts.gumFailures) {
+          return Promise.reject({ name: 'NotReadableError', message: 'device busy' });
+        }
+        return Promise.resolve({ getTracks: () => [{ stop() {} }] });
+      },
+    },
   };
+  // Controllable timers: transcribe.js schedules the LC-866 retry (250ms) and the
+  // clip cadence (5s) via setTimeout. Collect them so a test fires the retry on
+  // demand and no real timer outlives the test.
+  const timers = [];
+  const setTimeoutStub = (fn) => { timers.push(fn); return timers.length; };
+  const runTimers = () => { timers.splice(0).forEach((fn) => fn()); };
   const sandbox = {
     window, document, navigator, fetch,
     localStorage: {
       getItem: (k) => (k in stored ? stored[k] : null),
       setItem: (k, v) => { stored[k] = String(v); },
     },
-    console, setTimeout, clearTimeout,
+    console, setTimeout: setTimeoutStub, clearTimeout: () => {},
   };
   vm.runInNewContext(src, sandbox);
   const flush = async () => { for (let i = 0; i < 30; i += 1) await Promise.resolve(); };
   const fireDoc = (type, detail) => (docListeners[type] || []).forEach((fn) => fn({ type, detail }));
-  return { fireDoc, flush, gum };
+  return { fireDoc, flush, gum, toasts, runTimers };
 }
 
 test('LC-859: a late joiner adopting an agent-covered session does not open its own capture', async () => {
@@ -187,4 +211,34 @@ test('LC-859: without an agent, adopting an open session still opens per-client 
   await t.flush();
 
   assert.ok(t.gum.n >= 1, 'no agent -> the client captures its own clips as before');
+});
+
+test('LC-866: a mic acquire that fails right after the switch is retried, not swallowed', async () => {
+  // gumFailures: 1 = the first getUserMedia rejects (Web Speech has not released
+  // the device yet on a Fast -> Accurate switch), the retry succeeds.
+  const t = loadRich({ agentActive: false, gumFailures: 1 });
+  await t.flush();
+  t.fireDoc('lc:rtc-session-started', { room: 7 });
+  await t.flush();
+  assert.equal(t.gum.n, 1, 'the first acquire failed');
+  assert.deepEqual(t.toasts, [], 'no give-up toast while a retry is pending');
+
+  t.runTimers(); // the 250ms retry fires
+  await t.flush();
+  assert.equal(t.gum.n, 2, 'the retry re-acquires the mic once Web Speech let go');
+  assert.deepEqual(t.toasts, [], 'the retry succeeded, so nothing is surfaced');
+});
+
+test('LC-866: a mic that stays busy surfaces a toast instead of stopping silently', async () => {
+  const t = loadRich({ agentActive: false, gumFailures: 99 });
+  await t.flush();
+  t.fireDoc('lc:rtc-session-started', { room: 7 });
+  await t.flush();
+  t.runTimers(); // the single retry fires and also fails
+  await t.flush();
+
+  assert.equal(t.gum.n, 2, 'it tried, retried once, then gave up (no infinite retry)');
+  assert.equal(t.toasts.length, 1, 'the failure is surfaced, not swallowed');
+  assert.equal(t.toasts[0][0], 'err');
+  assert.match(t.toasts[0][1], /transcription/i);
 });
