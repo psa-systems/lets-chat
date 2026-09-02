@@ -347,6 +347,19 @@
     // unmute alike. Web Speech (browser engine) is unaffected and still runs.
     if (agentActive) { dbg('server capture suppressed: transcription agent active'); return; }
     capturing = true;
+    acquireSttMic(0);
+  }
+  // LC-866: open the STT mic tap, retrying once. Switching Fast -> Accurate hands
+  // the mic over from the browser engine (Web Speech), whose recognizer can still
+  // hold the device for a beat after recog.stop() - so this getUserMedia races
+  // that release and throws (NotReadableError / AbortError). The old bare .catch
+  // swallowed it and never retried, so the switch silently stopped capturing
+  // while the toggle still read "on" (LC-866). Retry once after a short delay (by
+  // then Web Speech has let go), then surface the failure rather than dying
+  // quietly. Starting fresh in Accurate mode never hit this - no recognizer held
+  // the mic - which is exactly why only the switch broke, not a cold start.
+  function acquireSttMic(attempt) {
+    if (!capturing) return;
     // LC-628: this STT tap is a second mic open alongside the call; request the
     // same echo cancellation / noise suppression / auto gain so the clip we POST
     // is not the caller's own echo.
@@ -354,7 +367,17 @@
       if (!capturing) { stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} }); return; }
       sttStream = stream;
       recordClip();
-    }).catch(function () { capturing = false; });
+    }).catch(function (e) {
+      dbg('stt mic acquire failed (attempt ' + attempt + '): ' + (e && e.name));
+      if (attempt < 1 && capturing) {
+        setTimeout(function () { acquireSttMic(attempt + 1); }, 250);
+        return;
+      }
+      capturing = false;
+      if (window.__lcToast) {
+        window.__lcToast('err', window.__lcS('sttMicFailed', 'Could not start transcription. Try again.'));
+      }
+    });
   }
   function recordClip() {
     if (!capturing || !sttStream) return;
