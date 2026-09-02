@@ -140,3 +140,7 @@ js-react-announce-many = %name% y %n% mas reaccionaron %emoji%
 # red (htmx:sendError / htmx:timeout), para que un clic fallido no sea un no-op
 # silencioso (nav.js).
 js-nav-failed = No se pudo cargar - problema de conexion. Intentalo de nuevo.
+# LC-866: aviso cuando la captura del microfono para transcripcion no abre tras
+# cambiar el motor Rapido/Preciso (el motor del navegador aun no soltaba el
+# dispositivo), para que un cambio que detuvo la captura no sea silencioso.
+js-stt-mic-failed = No se pudo iniciar la transcripcion. Intentalo de nuevo.
