@@ -219,6 +219,13 @@
     var video = t.querySelector('[data-lc-voice-video]');
     var avatar = t.querySelector('[data-lc-voice-avatar]');
     if (!video || !avatar) return;
+    // LC-610: on the SFU path the self tile's video is owned by huddle_sfu.js
+    // (setHasVideo), driven by the LiveKit publications - `localStream` is null
+    // there. The `voice_screen` echo of our own share re-enters this fn for the
+    // self tile; recomputing from the null localStream would set hasVideo=false
+    // and hide a live screen/camera that is actually attached (the black-out
+    // bug). Leave the self tile alone in SFU; setHasVideo is authoritative.
+    if (sfu && cfg && userId === cfg.selfId) return;
     var hasVideo;
     if (cfg && userId === cfg.selfId) {
       // Our own track: presence is authoritative (we fully remove it on
