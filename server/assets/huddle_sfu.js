@@ -200,6 +200,9 @@
       if (session !== mine) return;
       if (!pub || pub.source !== LK.Track.Source.ScreenShare) return;
       mine.sharing = false;
+      // The screen preview we attached to the self tile is gone; restore the
+      // camera preview if it is still live, otherwise fall back to the avatar.
+      attachSelfVideo(mine);
       if (hooks.screenEnded) hooks.screenEnded();
     });
     // LC-854: inbound remote-control data. Frames ride LiveKit's data channel
@@ -300,17 +303,32 @@
       if (window.console) console.warn('huddle sfu camera:', e && e.message);
       return lp.isCameraEnabled;
     }
-    // Attach our own camera preview onto the self tile (LiveKit does not loop
-    // local media back through subscription).
-    var pub = lp.getTrackPublication && lp.getTrackPublication(window.LivekitClient.Track.Source.Camera);
-    var videoEl = session.hooks.tileVideo(session.hooks.selfId);
-    if (on && pub && pub.videoTrack && videoEl) {
-      pub.videoTrack.attach(videoEl);
-      session.hooks.setHasVideo(session.hooks.selfId, true);
-    } else if (!on) {
-      session.hooks.setHasVideo(session.hooks.selfId, false);
-    }
+    // Render the self tile from whichever local video is live (a screen share
+    // in progress keeps the stage; otherwise the camera we just toggled).
+    attachSelfVideo(session);
     return on;
+  }
+
+  // Show the self participant's own live video on their tile. LiveKit does not
+  // loop local media back through subscription, so unlike a remote tile the
+  // self tile is only ever driven from here. Screen share wins over the camera
+  // when both are live (it is the thing the user just chose to present).
+  function attachSelfVideo(s) {
+    var lp = s.room.localParticipant;
+    var LK = window.LivekitClient;
+    var videoEl = s.hooks.tileVideo(s.hooks.selfId);
+    if (!videoEl || !lp.getTrackPublication) return;
+    var pub = lp.getTrackPublication(LK.Track.Source.ScreenShare);
+    if (!(pub && pub.videoTrack && s.sharing)) {
+      pub = lp.getTrackPublication(LK.Track.Source.Camera);
+      if (!(pub && pub.videoTrack && lp.isCameraEnabled)) pub = null;
+    }
+    if (pub && pub.videoTrack) {
+      pub.videoTrack.attach(videoEl);
+      s.hooks.setHasVideo(s.hooks.selfId, true);
+    } else {
+      s.hooks.setHasVideo(s.hooks.selfId, false);
+    }
   }
 
   async function toggleScreen() {
@@ -322,6 +340,9 @@
       return session.sharing;
     }
     session.sharing = on;
+    // Render our own share on the self tile (the mesh path shows it too); on
+    // stop, fall back to the camera preview if the camera is still live.
+    attachSelfVideo(session);
     session.hooks.setScreen(session.hooks.selfId, on);
     return on;
   }
