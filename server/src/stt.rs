@@ -139,6 +139,13 @@ pub struct SttConfig {
     /// LC-846: drop verbose_json segments whose `no_speech_prob` is above this
     /// (see [`DEFAULT_STT_MAX_NO_SPEECH`]). Set to 1 to effectively disable.
     pub max_no_speech: f64,
+    /// LC-859: fallback language (ISO-639-1, e.g. `en`) used when a clip carries
+    /// no per-speaker locale hint. Without it whisper runs a language-detection
+    /// pass on every clip (visible in speaches logs, often at low confidence on a
+    /// short live clip), which is wasted CPU when the room's language is known.
+    /// A per-speaker `locale` still wins; this only fills the blank. Unset leaves
+    /// the engine autodetecting as before.
+    pub default_language: Option<String>,
 }
 
 impl SttConfig {
@@ -154,6 +161,9 @@ impl SttConfig {
     /// An unrecognized provider value falls back to `openai`; an unparseable or
     /// zero timeout falls back to the default rather than disabling the
     /// timeout; an unparseable threshold likewise falls back to its default.
+    /// `LETS_CHAT_STT_LANGUAGE` (optional, ISO-639-1; LC-859) sets the fallback
+    /// language for clips with no per-speaker locale, so whisper skips its
+    /// per-clip detection pass; unset leaves the engine autodetecting.
     pub fn from_env() -> Option<Self> {
         let var = |k: &str| {
             std::env::var(k)
@@ -184,6 +194,7 @@ impl SttConfig {
             max_no_speech: var("LETS_CHAT_STT_MAX_NO_SPEECH")
                 .and_then(|s| s.parse::<f64>().ok())
                 .unwrap_or(DEFAULT_STT_MAX_NO_SPEECH),
+            default_language: var("LETS_CHAT_STT_LANGUAGE"),
         })
     }
 }
@@ -521,8 +532,13 @@ impl ReqwestSttClient {
             form = form.text("vad_filter", "true");
         }
         // LC-591: language hint when known (else the engine autodetects), and
-        // the operator glossary when configured.
-        if let Some(lang) = language.filter(|l| !l.trim().is_empty()) {
+        // the operator glossary when configured. LC-859: fall back to the
+        // operator's configured default language when the speaker carries no
+        // locale, so whisper skips its per-clip detection pass.
+        let lang = language
+            .filter(|l| !l.trim().is_empty())
+            .or(self.cfg.default_language.as_deref());
+        if let Some(lang) = lang.filter(|l| !l.trim().is_empty()) {
             form = form.text("language", lang.trim().to_string());
         }
         if let Some(prompt) = self.cfg.prompt.clone() {
@@ -1045,6 +1061,39 @@ mod tests {
         unsafe {
             std::env::remove_var("LETS_CHAT_STT_URL");
             std::env::remove_var("LETS_CHAT_STT_VAD_FILTER");
+        }
+    }
+
+    #[test]
+    fn from_env_reads_default_language() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: single-threaded test; vars removed at the end.
+        unsafe {
+            std::env::set_var(
+                "LETS_CHAT_STT_URL",
+                "http://127.0.0.1:9/v1/audio/transcriptions",
+            );
+        }
+        assert_eq!(
+            SttConfig::from_env().unwrap().default_language,
+            None,
+            "unset -> no default (engine autodetects as before)"
+        );
+        unsafe { std::env::set_var("LETS_CHAT_STT_LANGUAGE", "  en  ") };
+        assert_eq!(
+            SttConfig::from_env().unwrap().default_language.as_deref(),
+            Some("en"),
+            "LC-859: read and trimmed"
+        );
+        unsafe { std::env::set_var("LETS_CHAT_STT_LANGUAGE", "   ") };
+        assert_eq!(
+            SttConfig::from_env().unwrap().default_language,
+            None,
+            "blank -> None, same as unset"
+        );
+        unsafe {
+            std::env::remove_var("LETS_CHAT_STT_URL");
+            std::env::remove_var("LETS_CHAT_STT_LANGUAGE");
         }
     }
 
