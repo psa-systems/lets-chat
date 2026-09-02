@@ -837,6 +837,14 @@
         var avatar = t.querySelector('[data-lc-voice-avatar]');
         v.style.display = on ? '' : 'none';
         if (avatar) avatar.style.display = on ? 'none' : '';
+        // LC-700: the huddle grid keeps a tile as a compact audio chip - and
+        // CSS-hides its <video> (main.css) - until the tile carries
+        // data-media="video". The mesh path sets this through updateTileMedia;
+        // the SFU path renders video only through this hook, so it must set the
+        // same attribute or a live camera/screen stays invisible behind the
+        // chip layout. data-screen is owned separately (setScreen), so an
+        // audio-only value here never un-pins an active share.
+        t.setAttribute('data-media', on ? 'video' : 'audio');
       },
       setMuted: applyMute,
       setScreen: applyScreen,
