@@ -136,3 +136,7 @@ js-huddle-busy = Estas en un huddle en otra sala
 # llamada, agrupados y limitados por call_reactions.js.
 js-react-announce = %name% reacciono %emoji%
 js-react-announce-many = %name% y %n% mas reaccionaron %emoji%
+# LC-867: aviso cuando una navegacion (cambio de enclave/sala) se pierde por la
+# red (htmx:sendError / htmx:timeout), para que un clic fallido no sea un no-op
+# silencioso (nav.js).
+js-nav-failed = No se pudo cargar - problema de conexion. Intentalo de nuevo.
