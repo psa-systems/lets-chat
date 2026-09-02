@@ -2,7 +2,7 @@
    .lc-rail-scroll below). When the whole rail was one scroll container, a long
    enough enclave list pushed the foot utilities - settings, shortcuts, and the
    avatar - below the fold, where they were silently unreachable. #}
-<nav id="switcher" aria-label="{{ "switcher-nav-label"|t }}" class="w-16 flex flex-col items-center py-3 gap-2 overflow-visible">
+<nav id="switcher"{% if oob %} hx-swap-oob="outerHTML"{% endif %} aria-label="{{ "switcher-nav-label"|t }}" class="w-16 flex flex-col items-center py-3 gap-2 overflow-visible">
   {# LC-576 / LC-622: rail order is Home -> rule -> enclaves -> discover, then the
      utilities pinned to the foot with the avatar last. The rule separates the
      product-level Home entry from the enclave stack; `+` is part of that stack

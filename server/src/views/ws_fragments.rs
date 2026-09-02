@@ -148,6 +148,19 @@ pub struct SidebarUpdateFragment<'a> {
     pub switcher: &'a [crate::views::layout::SwitcherEntry],
 }
 
+/// LC-865: OOB re-render of the enclave rail (`#switcher`). The rail sits
+/// OUTSIDE both `#main` (the boosted nav swap) and `#sidebar` (the LC-836
+/// sidebar OOB), so a cross-enclave move left its active tile lit on the
+/// previous enclave. `render_sidebar` emits this alongside the sidebar OOB so
+/// the active enclave tile follows the move. Shares `partials/enclave_switcher.html`
+/// with the page render (there `oob = false`), so the two render identically.
+#[derive(Template)]
+#[template(path = "ws/switcher_update.html")]
+pub struct SwitcherUpdateFragment<'a> {
+    pub user: &'a User,
+    pub switcher: &'a [crate::views::layout::SwitcherEntry],
+}
+
 /// LC-173: OOB swap of the sidebar self block (`#sidebar-self`) when the user
 /// edits their own profile, so the avatar / display name / custom status
 /// refresh in every one of their tabs. Shares `partials/sidebar_self.html`
@@ -536,6 +549,107 @@ mod tests {
         assert!(
             html.contains(r#"data-from-avatar-version="999""#),
             "call signal must carry the caller's avatar version, got: {html}"
+        );
+    }
+
+    fn sample_user() -> User {
+        User {
+            id: "u1".to_string(),
+            username: "alice".to_string(),
+            display_name: None,
+            role: "user".to_string(),
+            is_muted: false,
+            muted_until: None,
+            is_banned: false,
+            ban_reason: None,
+            banned_until: None,
+            created_at: String::new(),
+            read_receipts_enabled: true,
+            bio: None,
+            avatar_ext: None,
+            status: "active".to_string(),
+            custom_status: None,
+            last_active_at: String::new(),
+            is_profile_public: false,
+            notify_browser_enabled: false,
+            notify_sound_enabled: false,
+            notify_push_enabled: false,
+            notify_email_digest_enabled: false,
+            notify_login_alerts_enabled: false,
+            notify_email_activity_enabled: false,
+            totp_enabled: false,
+            is_bot: false,
+            locale: None,
+            theme_mode: None,
+            theme_palette: None,
+            theme_scale: None,
+            home_landing: None,
+            density: None,
+            pronouns: None,
+            profile_links: None,
+            timezone: None,
+            username_confirmed_at: Some(String::new()),
+            dnd_active: false,
+        }
+    }
+
+    fn switcher_entry(
+        id: Option<i64>,
+        label: &str,
+        active: bool,
+    ) -> crate::views::layout::SwitcherEntry {
+        crate::views::layout::SwitcherEntry {
+            id,
+            label: label.to_string(),
+            initial: label.chars().next().unwrap_or('?').to_string(),
+            unread: 0,
+            pending_invites: 0,
+            active,
+            logo_url: None,
+            can_manage: false,
+        }
+    }
+
+    // LC-865: the enclave rail sits outside #sidebar, so render_sidebar re-renders
+    // it OOB. The fragment must (a) carry hx-swap-oob so it actually replaces the
+    // live rail, and (b) light the tile for the enclave the move landed in - the
+    // whole point, since a cross-enclave move used to leave the old tile lit.
+    #[test]
+    fn switcher_update_is_oob_and_marks_the_active_enclave() {
+        let user = sample_user();
+        let switcher = vec![
+            switcher_entry(None, "Home", false),
+            switcher_entry(Some(1), "General", true),
+            switcher_entry(Some(2), "Dev", false),
+        ];
+        let html = SwitcherUpdateFragment {
+            user: &user,
+            switcher: &switcher,
+        }
+        .render()
+        .unwrap();
+
+        assert!(
+            html.contains(r#"id="switcher""#) && html.contains(r#"hx-swap-oob="outerHTML""#),
+            "the rail fragment must OOB-swap #switcher, got: {html}"
+        );
+        // The active enclave's tile links to /enclave/1 and is the one lit.
+        let active = html
+            .split("<a ")
+            .find(|tile| tile.contains(r#"href="/enclave/1""#))
+            .expect("the General enclave tile is rendered");
+        assert!(
+            active.contains("lc-rail-active") && active.contains(r#"aria-current="page""#),
+            "the enclave the move landed in must be lit, got tile: {active}"
+        );
+        // The enclave we moved AWAY from must not stay lit.
+        let inactive = html
+            .split("<a ")
+            .find(|tile| tile.contains(r#"href="/enclave/2""#))
+            .expect("the Dev enclave tile is rendered");
+        assert!(
+            !inactive.contains("lc-rail-active"),
+            "the previous enclave tile must not stay lit, got tile: {inactive}"
         );
     }
 }

@@ -234,6 +234,16 @@ async fn the_oob_sidebar_highlights_the_room_the_connection_is_on() {
         !room_active(&first, fx.other_room),
         "no other room is active, got:\n{first}"
     );
+    // LC-865: the enclave rail (outside #sidebar) follows the move too - it
+    // lights the enclave the connection is in, not Home.
+    assert!(
+        anchor_is_active(&first, &format!("/enclave/{}", fx.enclave_id)),
+        "the rail lights the current enclave, got:\n{first}"
+    );
+    assert!(
+        !anchor_is_active(&first, "/?home=1"),
+        "the rail does not light Home while in an enclave, got:\n{first}"
+    );
 
     // Move rooms on the same connection: the highlight follows.
     page.navigate(&fx, conn_id, Some(fx.other_room), Some(fx.enclave_id))
@@ -248,12 +258,25 @@ async fn the_oob_sidebar_highlights_the_room_the_connection_is_on() {
         "the room just left is no longer active, got:\n{second}"
     );
 
-    // A page with no room (Home) highlights nothing.
+    // A page with no room (Home) highlights no sidebar row. Scope the check to
+    // the #sidebar fragment: render_sidebar now also emits the enclave rail OOB
+    // (LC-865), whose Home tile is legitimately lit here.
     page.navigate(&fx, conn_id, None, None).await;
     let home = page.sidebar(&fx).await;
+    let home_sidebar = home.split("<nav id=\"switcher\"").next().unwrap_or(&home);
     assert!(
-        !home.contains("aria-current=\"page\""),
-        "Home highlights no row, got:\n{home}"
+        !home_sidebar.contains("aria-current=\"page\""),
+        "Home highlights no sidebar row, got:\n{home}"
+    );
+    // LC-865: and the rail follows back to Home - it lights the Home tile and
+    // drops the enclave it just left.
+    assert!(
+        anchor_is_active(&home, "/?home=1"),
+        "the rail lights Home, got:\n{home}"
+    );
+    assert!(
+        !anchor_is_active(&home, &format!("/enclave/{}", fx.enclave_id)),
+        "the rail drops the enclave just left, got:\n{home}"
     );
 }
 
