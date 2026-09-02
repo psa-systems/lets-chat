@@ -20,8 +20,9 @@ use crate::views::room::{MessageView, ReactionView};
 use crate::views::ws_fragments::{
     render_event, AckUpdateFragment, CallSignalFragment, EditedMessageFragment, HuddleRingFragment,
     InCallBadgeFragment, MentionClearedFragment, MentionedFragment, NewMessageFragment,
-    ReminderFragment, SeenIndicatorFragment, SidebarUpdateFragment, ThreadReplyOobFragment,
-    TranscriptControlFragment, TranscriptSegmentFragment, UnreadBadgeFragment, VoiceEventFragment,
+    ReminderFragment, SeenIndicatorFragment, SidebarUpdateFragment, SwitcherUpdateFragment,
+    ThreadReplyOobFragment, TranscriptControlFragment, TranscriptSegmentFragment,
+    UnreadBadgeFragment, VoiceEventFragment,
 };
 use crate::ws::events::ChatEvent;
 use crate::ws::hub::{ConnId, RingingResult};
@@ -3572,7 +3573,7 @@ pub async fn render_sidebar(
     let switcher = super::load_switcher(state, viewer, sidebar_current_enclave)
         .await
         .ok()?;
-    SidebarUpdateFragment {
+    let sidebar = SidebarUpdateFragment {
         user: viewer,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
@@ -3584,7 +3585,19 @@ pub async fn render_sidebar(
         switcher: &switcher,
     }
     .render()
-    .ok()
+    .ok()?;
+    // LC-865: the enclave rail (`#switcher`) sits OUTSIDE `#sidebar`, so the
+    // sidebar OOB above never touches the rail's active tile. Re-render the rail
+    // OOB in the same frame from the same `switcher` (whose `active` was computed
+    // for `sidebar_current_enclave`) so a cross-enclave move relights the correct
+    // tile instead of leaving the previous enclave lit (LC-865).
+    let rail = SwitcherUpdateFragment {
+        user: viewer,
+        switcher: &switcher,
+    }
+    .render()
+    .ok()?;
+    Some(format!("{sidebar}{rail}"))
 }
 
 /// Build the OOB fragments for a MessagePinned / MessageUnpinned event:
