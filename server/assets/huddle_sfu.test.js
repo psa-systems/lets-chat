@@ -19,10 +19,23 @@ function load() {
     this.handlers = {};
     this.remoteParticipants = new Map();
     // Fake local publications: attach() records which element the self tile
-    // was bound to, so a test can assert the right local video reached it.
+    // was bound to (so a test can assert the right local video reached it) and
+    // models LiveKit's real behavior of ADDING the track to the element's
+    // existing srcObject stream - which is what makes clearing srcObject first
+    // matter for the black-out fix.
     const attaches = [];
-    const camTrack = { attach: (el) => { attaches.push(['camera', el]); } };
-    const screenTrack = { attach: (el) => { attaches.push(['screen', el]); } };
+    function mkTrack(kind) {
+      return {
+        kind,
+        attach: (el) => {
+          attaches.push([kind, el]);
+          if (!el.srcObject) el.srcObject = { _v: [], getVideoTracks() { return this._v; } };
+          el.srcObject._v.push(kind);
+        },
+      };
+    }
+    const camTrack = mkTrack('camera');
+    const screenTrack = mkTrack('screen');
     this.localParticipant = {
       attaches,
       setMicrophoneEnabled: async () => {},
@@ -133,6 +146,11 @@ test('screen share renders the local share and wins over a live camera', async (
   assert.deepEqual(t.rooms[0].localParticipant.attaches, [['screen', h.selfVideo]],
     'the screen preview replaces the camera on the self tile');
   assert.deepEqual(h.hasVideo, [true]);
+  // The black-out regression: the element must hold ONLY the screen track. If
+  // the stale camera track were left first in the stream, the <video> would
+  // render it and the share would show black.
+  assert.deepEqual(h.selfVideo.srcObject.getVideoTracks(), ['screen'],
+    'the stale camera track is cleared, not left ahead of the screen');
 });
 
 test('ending a screen share falls back to the still-live camera', async () => {
