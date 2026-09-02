@@ -538,6 +538,18 @@ pub enum ChatEvent {
         to_user_id: String,
         transcript_id: i64,
     },
+    /// LC-859: the server-side transcription AGENT (LC-814) is now live for this
+    /// session, so each client should stand its own per-client clip capture
+    /// down - the agent already transcribes every track, and running both puts
+    /// the same speaker through whisper twice. Broadcast only when the agent
+    /// dispatch actually succeeds; a failed dispatch sends nothing and clients
+    /// keep capturing, so a caption is never lost to a dispatch that never came
+    /// up.
+    TranscriptAgentActive {
+        room_id: i64,
+        to_user_id: String,
+        transcript_id: i64,
+    },
 }
 
 /// Control frames sent from client to server.

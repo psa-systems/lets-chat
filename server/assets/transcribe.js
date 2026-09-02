@@ -53,6 +53,14 @@
   // Learn which engine to use from /call/config (server-wide config; same for
   // every participant). Until it resolves we assume the browser engine.
   var sttServer = false;
+  // LC-859: true once the server-side transcription AGENT (LC-814) is live for
+  // this session. The agent transcribes every track server-side, so our own
+  // per-client clip capture (the MediaRecorder "server" engine) must stand down
+  // or the same speaker goes through whisper twice. Learned from the bus 'agent'
+  // control event and from the .../transcript/active adoption response. Does NOT
+  // affect the browser Web Speech engine (that runs off-box and is a user's
+  // deliberate "Fast" choice); only the server-clip path yields.
+  var agentActive = false;
   var CLIP_MS = 5000;      // length of each server-STT audio clip
   var sttStream = null;    // mic stream for MediaRecorder
   var sttRecorder = null;
@@ -333,6 +341,11 @@
   }
   function startServerCapture() {
     if (!MR) return;
+    // LC-859: the server-side agent already transcribes every track, so do not
+    // also POST our own clips. This is the single choke point for the "server"
+    // engine, so it covers the Accurate choice, the Web-Speech fallback, and
+    // unmute alike. Web Speech (browser engine) is unaffected and still runs.
+    if (agentActive) { dbg('server capture suppressed: transcription agent active'); return; }
     capturing = true;
     // LC-628: this STT tap is a second mic open alongside the call; request the
     // same echo cancellation / noise suppression / auto gain so the clip we POST
@@ -488,11 +501,22 @@
       n.remove();
       if (kind === 'started') {
         transcriptId = id ? parseInt(id, 10) : null;
+        // LC-859: a fresh session has no confirmed agent yet; the 'agent' event
+        // follows only if dispatch succeeds. Clear any stale flag first so this
+        // session's capture is not wrongly suppressed by the last one's agent.
+        agentActive = false;
         showBanner(true);
         setToggle(true);
         startLocalCapture();
+      } else if (kind === 'agent') {
+        // LC-859: the server-side agent came up for this session. Stand our own
+        // clip capture down (the agent covers every track); a client on the
+        // browser Web Speech engine keeps that running.
+        agentActive = true;
+        stopServerCapture();
       } else if (kind === 'ended') {
         transcriptId = null;
+        agentActive = false;
         stopLocalCapture();
         showBanner(false);
         setToggle(false);
@@ -626,6 +650,9 @@
       .then(function (j) {
         if (!j || j.transcript_id == null || transcriptId != null) return;
         transcriptId = parseInt(j.transcript_id, 10);
+        // LC-859: adopt the agent-active state too, so a late joiner never opens
+        // its own clip capture for a session the agent already covers.
+        agentActive = !!j.agent_active;
         showBanner(true);
         setToggle(true);
         startLocalCapture();
@@ -640,6 +667,7 @@
       else { stopLocalCapture(); showBanner(false); setToggle(false); }
     } else {
       transcriptId = null;
+      agentActive = false;
       stopLocalCapture();
       showBanner(false);
       setToggle(false);

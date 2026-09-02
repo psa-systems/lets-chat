@@ -417,11 +417,25 @@ fn maybe_dispatch_agent(state: &AppState, room: &Room, transcript_id: i64) {
         "base_url": state.base_url,
     })
     .to_string();
+    let state = state.clone();
+    let room = room.clone();
     tokio::spawn(async move {
         let now = chrono::Utc::now().timestamp().max(0) as u64;
         match crate::livekit::dispatch_transcription_agent(&cfg, &room_name, metadata, now).await {
             Ok(()) => {
-                tracing::info!(room = %room_name, transcript_id, "transcription agent dispatched")
+                tracing::info!(room = %room_name, transcript_id, "transcription agent dispatched");
+                // LC-859: the agent is now the single server-side source. Mark it
+                // live and tell present clients to stand their per-client capture
+                // down; late joiners read the same state via .../transcript/active.
+                // We only reach here on a CONFIRMED dispatch, so a dispatch that
+                // fails leaves clients capturing and never drops a caption.
+                state.hub.set_transcript_agent(room.id, transcript_id);
+                broadcast_to_members(&state, &room, |to| ChatEvent::TranscriptAgentActive {
+                    room_id: room.id,
+                    to_user_id: to,
+                    transcript_id,
+                })
+                .await;
             }
             Err(e) => tracing::warn!(
                 room = %room_name,
@@ -479,7 +493,13 @@ pub async fn active(
     let tid = db::transcripts::open_session_for_room(&state.chat, room_id)
         .await?
         .map(|s| s.id);
-    Ok(Json(json!({ "transcript_id": tid })))
+    // LC-859: tell a late joiner whether the server-side transcription agent is
+    // already covering this room, so it adopts the session without also starting
+    // its own per-client capture (which would double every speaker to whisper).
+    let agent_active = state.hub.transcript_agent_active(room_id);
+    Ok(Json(
+        json!({ "transcript_id": tid, "agent_active": agent_active }),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -654,6 +674,10 @@ async fn finalize(state: &AppState, room: &Room, transcript_id: i64) {
     let transitioned = db::transcripts::end_session(&state.chat, transcript_id)
         .await
         .unwrap_or(false);
+    // LC-859: the session is closing, so any transcription-agent marker for this
+    // room is stale. Clear it before the end broadcast so a later session in the
+    // same room starts from a clean (no-agent) state.
+    state.hub.clear_transcript_agent(room.id);
     broadcast_to_members(state, room, |to| ChatEvent::TranscriptEnded {
         room_id: room.id,
         to_user_id: to,
@@ -689,7 +713,9 @@ pub async fn finalize_open_for_user(state: &AppState, user_id: &str) {
         if let Ok(Some(session)) = db::transcripts::get(&state.chat, tid).await {
             if let Ok(Some(room)) = db::chat::get_room(&state.chat, session.room_id).await {
                 // end_session already transitioned (it's in `closed`), so just
-                // broadcast end + post the notice.
+                // broadcast end + post the notice. LC-859: also clear any
+                // agent marker, mirroring finalize().
+                state.hub.clear_transcript_agent(room.id);
                 broadcast_to_members(state, &room, |to| ChatEvent::TranscriptEnded {
                     room_id: room.id,
                     to_user_id: to,

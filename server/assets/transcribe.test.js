@@ -83,3 +83,108 @@ test('nearBottom and why auto-follow cannot be derived from it post-insert (LC-8
   // scrolls on the followLive intent flag instead of re-deriving it here.
   assert.equal(near({ scrollHeight: 1120, scrollTop: 700, clientHeight: 300 }), false);
 });
+
+// LC-859: the server-side agent yields. A late joiner adopts an open session via
+// GET .../transcript/active; when that reports agent_active, the client must NOT
+// open its own per-client clip capture (the agent already transcribes every
+// track). This drives the real adopt path and asserts on whether getUserMedia -
+// the first thing the "server" engine does - is reached.
+//
+// A permissive Proxy stands in for every DOM node so the module's banner/toggle
+// wiring runs without a real DOM; only the fetch routing, the mic spy, and the
+// captured document listeners matter to the assertion.
+function loadRich(opts) {
+  const src = fs.readFileSync(path.join(__dirname, 'transcribe.js'), 'utf8');
+  const stored = { 'lc-stt-engine': 'accurate' };
+  const gum = { n: 0 };
+  const docListeners = {};
+  function stubEl() {
+    return new Proxy(
+      {},
+      {
+        get(_t, p) {
+          if (p === 'classList') return { add() {}, remove() {}, toggle() {}, contains: () => false };
+          if (p === 'style') return {};
+          if (p === 'querySelector') return () => stubEl();
+          if (p === 'querySelectorAll') return () => [];
+          if (p === 'getAttribute') return () => null;
+          if (p === 'hasAttribute') return () => false;
+          if (p === 'closest') return () => null;
+          if (['setAttribute', 'removeAttribute', 'appendChild', 'removeChild', 'remove',
+            'addEventListener', 'removeEventListener', 'focus', 'scrollIntoView', 'insertBefore'].includes(p)) {
+            return () => {};
+          }
+          if (p === 'parentNode') return null;
+          if (p === 'children') return [];
+          return '';
+        },
+        set() { return true; },
+      }
+    );
+  }
+  const window = {
+    // No SpeechRecognition: with a server engine configured, chooseEngine picks
+    // 'server' (the path that reaches getUserMedia), so the suppression is what
+    // the assertion turns on rather than an engine-choice accident.
+    MediaRecorder: function () {},
+    LetsChatMedia: { audio: () => ({}) },
+    __lcSessionRoom: 7,
+  };
+  window.MediaRecorder.isTypeSupported = () => false;
+  const document = {
+    body: stubEl(),
+    addEventListener(type, fn) { (docListeners[type] = docListeners[type] || []).push(fn); },
+    querySelector: () => stubEl(),
+    querySelectorAll: () => [],
+    getElementById: () => stubEl(),
+  };
+  const fetch = (url) => {
+    if (url.indexOf('/call/config') === 0) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ sttServer: true }) });
+    }
+    if (url.indexOf('/transcript/active') !== -1) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ transcript_id: 5, agent_active: !!opts.agentActive }),
+      });
+    }
+    // Any other call (a clip POST would land here); harmless in this test.
+    return Promise.resolve({ ok: true, text: () => Promise.resolve('') });
+  };
+  const navigator = {
+    language: 'en-US',
+    // Count the attempt, then reject so the "server" engine stops before it
+    // builds a MediaRecorder + 5s timer that would outlive the test.
+    mediaDevices: { getUserMedia: () => { gum.n += 1; return Promise.reject(new Error('stop')); } },
+  };
+  const sandbox = {
+    window, document, navigator, fetch,
+    localStorage: {
+      getItem: (k) => (k in stored ? stored[k] : null),
+      setItem: (k, v) => { stored[k] = String(v); },
+    },
+    console, setTimeout, clearTimeout,
+  };
+  vm.runInNewContext(src, sandbox);
+  const flush = async () => { for (let i = 0; i < 30; i += 1) await Promise.resolve(); };
+  const fireDoc = (type, detail) => (docListeners[type] || []).forEach((fn) => fn({ type, detail }));
+  return { fireDoc, flush, gum };
+}
+
+test('LC-859: a late joiner adopting an agent-covered session does not open its own capture', async () => {
+  const t = loadRich({ agentActive: true });
+  await t.flush(); // let loadConfig() resolve sttServer=true
+  t.fireDoc('lc:rtc-session-started', { room: 7 });
+  await t.flush(); // adopt fetch -> agentActive -> startLocalCapture
+
+  assert.equal(t.gum.n, 0, 'the server-clip capture is suppressed while the agent covers the room');
+});
+
+test('LC-859: without an agent, adopting an open session still opens per-client capture', async () => {
+  const t = loadRich({ agentActive: false });
+  await t.flush();
+  t.fireDoc('lc:rtc-session-started', { room: 7 });
+  await t.flush();
+
+  assert.ok(t.gum.n >= 1, 'no agent -> the client captures its own clips as before');
+});
