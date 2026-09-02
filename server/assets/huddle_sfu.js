@@ -323,6 +323,14 @@
       pub = lp.getTrackPublication(LK.Track.Source.Camera);
       if (!(pub && pub.videoTrack && lp.isCameraEnabled)) pub = null;
     }
+    // Rebind to a single track. LiveKit's attach() ADDS the track to the
+    // element's existing srcObject, and a <video> renders only the FIRST video
+    // track of its stream. Starting a screen share while the camera is live
+    // would otherwise leave the element on `[camera, screen]` and keep showing
+    // the (now stale) camera - the tile blacks out instead of showing the
+    // share. Clearing srcObject first guarantees the chosen track stands alone.
+    // (Both tracks still publish to peers; this only fixes the self preview.)
+    videoEl.srcObject = null;
     if (pub && pub.videoTrack) {
       pub.videoTrack.attach(videoEl);
       s.hooks.setHasVideo(s.hooks.selfId, true);
