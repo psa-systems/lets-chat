@@ -1,0 +1,15 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}{{ "admin-voice-log-title"|t }} - Admin - Let's Chat{% endblock %}
+
+{% block admin_main %}
+{# LC-859: id-keyed live region. The AdminVoiceLogOob fragment swaps this
+   innerHTML on the `admin` topic as call events are logged, so an admin watching
+   this page sees connect / drop / rejoin / mute entries arrive during a live
+   meeting without reloading. The page header (title) is rendered by the admin
+   shell from `section`. #}
+<p class="text-sm text-content-muted mb-3">{{ "admin-voice-log-intro"|t }}</p>
+<div id="admin-voice-log-list">
+  {% include "admin/voice_log_items.html" %}
+</div>
+{% endblock %}

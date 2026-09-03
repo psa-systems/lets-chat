@@ -226,6 +226,16 @@ admin-rc-th-target = Destino
 admin-rc-th-room = Sala
 admin-rc-th-when = Cuando
 
+# LC-859: registro de observabilidad de llamadas de voz
+admin-voice-log-title = Registro de voz
+admin-voice-log-intro = Eventos del ciclo de vida de llamadas de audio (conexion, reconexion, salida, caida, silencio, activacion) con sala y participante. Se actualiza en vivo durante una reunion; se muestran los 200 mas recientes, conservados por 24 horas.
+admin-voice-log-empty = Aun no hay eventos de llamadas de voz registrados.
+admin-voice-log-th-when = Cuando
+admin-voice-log-th-event = Evento
+admin-voice-log-th-room = Sala
+admin-voice-log-th-participant = Participante
+admin-voice-log-th-detail = Detalle
+
 ## Webhook deliveries
 admin-deliveries-title = Entregas de webhook
 admin-deliveries-heading = Entregas
