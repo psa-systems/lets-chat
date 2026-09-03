@@ -17,6 +17,7 @@ use sqlx::{Row, SqlitePool};
 const RETENTION: &str = "-1 day";
 
 /// One row of the voice-event log, newest-first in the admin listing.
+#[derive(Debug, Clone)]
 pub struct VoiceEvent {
     pub room_id: i64,
     pub user_id: String,
