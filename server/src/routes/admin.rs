@@ -105,6 +105,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/admin/modlog", get(get_modlog))
         .route("/admin/remote-control", get(get_remote_control_audit))
+        .route("/admin/voice-log", get(get_voice_log))
         // LC-334: message-report review queue.
         .route("/admin/reports", get(get_reports))
         .route("/admin/reports/badge", get(get_reports_badge))
@@ -1602,6 +1603,60 @@ pub async fn get_remote_control_audit(
         build_date: version::BUILD_DATE,
         section: "remote_control",
         rows: &rows,
+    };
+    html(&page)
+}
+
+/// `GET /admin/voice-log` - LC-859: the voice-call observability log. A live,
+/// read-only listing of recent call lifecycle events (connect / reconnect /
+/// left / dropped / mute / unmute) with room id, participant, and timestamp, so
+/// an admin can debug an in-progress meeting from the record. Updates live on
+/// the `admin` topic as events are logged (see `AdminVoiceLogChanged`).
+pub async fn get_voice_log(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+    // Bounded: the page shows the most recent window, not all retained history.
+    let events: Vec<crate::views::admin::VoiceLogRow> =
+        db::voice_events::list_recent(&state.chat, 200)
+            .await?
+            .into_iter()
+            .map(|e| crate::views::admin::VoiceLogRow {
+                room_id: e.room_id,
+                user_id: e.user_id,
+                user_label: e.user_label,
+                kind: e.kind,
+                detail: e.detail,
+                created_at: e.created_at,
+            })
+            .collect();
+    let page = crate::views::admin::VoiceLogPage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "voice_log",
+        events: &events,
     };
     html(&page)
 }

@@ -671,6 +671,16 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 ChatEvent::AdminSupportChanged => {
                                     render_admin_support(&send_state).await
                                 }
+                                // LC-859: a voice-call event was logged. Re-query
+                                // + render the log list OOB for every admin (same
+                                // fragment for all). Standalone-only, like the
+                                // report/support queues; in saas this event is
+                                // never rendered and falls through to
+                                // render_event (None).
+                                #[cfg(feature = "standalone")]
+                                ChatEvent::AdminVoiceLogChanged => {
+                                    render_admin_voice_log(&send_state).await
+                                }
                                 // LC-719: support-bubble panel push. Rendered per
                                 // recipient (only the addressed user's connections
                                 // receive it via broadcast_to_user) as an OOB swap
@@ -1026,7 +1036,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                         }
                         ClientFrame::VoiceLeave { room_id } => {
                             let _ = room_id;
-                            handle_voice_leave(&state, conn_id);
+                            handle_voice_leave(&state, conn_id, "left");
                         }
                         ClientFrame::VoiceSignal {
                             room_id,
@@ -1057,6 +1067,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                         muted,
                                     },
                                 );
+                                // LC-859: log the mute broadcast so LC-764-style
+                                // mute divergence is visible in the record.
+                                record_voice_event(
+                                    &state,
+                                    room_id,
+                                    &user.id,
+                                    &username,
+                                    if muted { "mute" } else { "unmute" },
+                                    None,
+                                )
+                                .await;
                             }
                         }
                         ClientFrame::VoiceScreen { room_id, sharing } => {
@@ -1147,7 +1168,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         }
     }
 
-    handle_voice_leave(&state, conn_id);
+    handle_voice_leave(&state, conn_id, "dropped");
     if let Some(uid) = state.hub.disconnect(conn_id) {
         // LC-186 backstop: a hard WS drop never sends a `revoke`, so close any
         // remote-control session this user left open (call end, crash, network
@@ -3095,6 +3116,37 @@ pub fn validate_reaction_emoji(raw: &str) -> Option<String> {
     Some(s.to_string())
 }
 
+/// LC-859: persist one voice-call lifecycle event, emit a structured log line so
+/// the same fact is greppable in the server logs, and nudge the admin voice-log
+/// view so it updates live during a meeting. Best-effort: a logging failure is
+/// warned and swallowed, never affecting the call. `kind` is a fixed vocabulary
+/// (connect / reconnect / left / dropped / mute / unmute).
+pub(crate) async fn record_voice_event(
+    state: &AppState,
+    room_id: i64,
+    user_id: &str,
+    user_label: &str,
+    kind: &str,
+    detail: Option<&str>,
+) {
+    if let Err(e) =
+        db::voice_events::log_event(&state.chat, room_id, user_id, user_label, kind, detail).await
+    {
+        tracing::warn!(room_id, user = %user_id, kind, error = %e, "voice event log failed");
+        return;
+    }
+    tracing::info!(
+        room_id,
+        user = %user_id,
+        kind,
+        detail = detail.unwrap_or(""),
+        "voice call event"
+    );
+    state
+        .hub
+        .broadcast_to_topic("admin", &ChatEvent::AdminVoiceLogChanged);
+}
+
 /// Handle a `voice_join` frame: validate the room is an accessible voice
 /// channel, register the connection in the hub, hand the joiner the current
 /// roster, and announce the joiner to everyone already in the channel.
@@ -3123,6 +3175,18 @@ pub async fn handle_voice_join(
     // huddle. Captured before `voice_join` mutates the roster.
     let started_huddle = state.hub.voice_room_users(room_id).is_empty();
     let peers = state.hub.voice_join(conn_id, room_id);
+    // LC-859: log the connect. A join within 30s of this user's own departure
+    // from this room is a reconnect (the LC-764 "dropped then came back" case),
+    // derived from the log itself rather than tracked in memory.
+    let kind = if db::voice_events::had_recent_departure(&state.chat, room_id, &user.id, 30)
+        .await
+        .unwrap_or(false)
+    {
+        "reconnect"
+    } else {
+        "connect"
+    };
+    record_voice_event(state, room_id, &user.id, username, kind, None).await;
     // The joiner gets the roster so it can open a peer connection to each.
     state.hub.broadcast_to_user(
         &user.id,
@@ -3155,11 +3219,24 @@ pub async fn handle_voice_join(
 
 /// Remove `conn_id` from its voice channel (if any) and tell the remaining
 /// participants. Idempotent - safe to call on both explicit leave and
-/// disconnect.
-pub fn handle_voice_leave(state: &AppState, conn_id: ConnId) {
-    let Some((room_id, user_id, _)) = state.hub.voice_leave(conn_id) else {
+/// disconnect. `reason` is the LC-859 log kind: `"left"` for an explicit
+/// `voice_leave` frame, `"dropped"` for a socket close / hard disconnect.
+pub fn handle_voice_leave(state: &AppState, conn_id: ConnId, reason: &str) {
+    let Some((room_id, user_id, name)) = state.hub.voice_leave(conn_id) else {
         return;
     };
+    // LC-859: log the departure (graceful leave vs ungraceful drop). Spawned
+    // because this fn is sync; a drop is the audio-error signal an admin scans
+    // for in the voice log.
+    {
+        let st = state.clone();
+        let uid = user_id.clone();
+        let label = name.clone();
+        let kind = reason.to_string();
+        tokio::spawn(async move {
+            record_voice_event(&st, room_id, &uid, &label, &kind, None).await;
+        });
+    }
     // Tell every subscriber of the room, not just remaining voice members: a
     // viewer who is *not* in the call still needs the update so their
     // participants preview stays accurate.
@@ -3476,6 +3553,31 @@ async fn render_admin_support(state: &AppState) -> Option<String> {
     }
     .render()
     .ok()
+}
+
+/// LC-859: render the voice-log OOB fragment (`#admin-voice-log-list`) for the
+/// `admin` topic after a call lifecycle event is logged. Same fragment for every
+/// admin, so one render serves all recipients. Standalone-only (the admin page is
+/// `#[cfg(standalone)]`).
+#[cfg(feature = "standalone")]
+async fn render_admin_voice_log(state: &AppState) -> Option<String> {
+    let events: Vec<crate::views::admin::VoiceLogRow> =
+        db::voice_events::list_recent(&state.chat, 200)
+            .await
+            .ok()?
+            .into_iter()
+            .map(|e| crate::views::admin::VoiceLogRow {
+                room_id: e.room_id,
+                user_id: e.user_id,
+                user_label: e.user_label,
+                kind: e.kind,
+                detail: e.detail,
+                created_at: e.created_at,
+            })
+            .collect();
+    crate::views::admin::AdminVoiceLogOob { events }
+        .render()
+        .ok()
 }
 
 /// LC-173: re-render the sidebar self block (avatar + name + custom status) as

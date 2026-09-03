@@ -1,0 +1,6 @@
+{# LC-859: live OOB fragment for voice-log changes, broadcast on the `admin`
+   topic when a call lifecycle event is logged. Swaps the list (present only on
+   /admin/voice-log); the id-keyed swap drops silently on any other admin page. #}
+<div id="admin-voice-log-list" hx-swap-oob="innerHTML">
+  {% include "admin/voice_log_items.html" %}
+</div>

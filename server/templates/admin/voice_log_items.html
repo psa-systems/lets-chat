@@ -1,0 +1,42 @@
+{# LC-859: voice-call lifecycle rows. Shared by admin/voice_log.html (full page)
+   and admin/voice_log_oob.html (live OOB swap) so a fresh load and a live update
+   render identically. Iterates `events` (a slice of views::admin::VoiceLogRow).
+   Each row carries the room id, participant id + label, the event kind, and the
+   timestamp - enough to correlate an audio problem to a call and a speaker. #}
+{% if events.is_empty() %}
+{% let empty_text_key = "admin-voice-log-empty" %}
+{% include "partials/empty_state.html" %}
+{% else %}
+<div class="card lc-table-wrap">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-voice-log-th-when"|t }}</th>
+        <th>{{ "admin-voice-log-th-event"|t }}</th>
+        <th>{{ "admin-voice-log-th-room"|t }}</th>
+        <th>{{ "admin-voice-log-th-participant"|t }}</th>
+        <th>{{ "admin-voice-log-th-detail"|t }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in events %}
+      <tr>
+        <td class="text-xs text-content-muted whitespace-nowrap"><time datetime="{{ e.created_at|iso }}" title="{{ e.created_at }}">{{ e.created_at }}</time></td>
+        <td>
+          {# `dropped` is an ungraceful disconnect - the audio-error signal an
+             admin scans for - so it gets the danger badge; the rest are quiet. #}
+          {% if e.kind == "dropped" %}
+          <span class="rounded bg-danger-surface text-danger text-xs px-1.5 py-0.5 uppercase tracking-wide font-mono">{{ e.kind }}</span>
+          {% else %}
+          <span class="font-mono text-xs">{{ e.kind }}</span>
+          {% endif %}
+        </td>
+        <td class="font-mono text-xs">#{{ e.room_id }}</td>
+        <td>{{ e.user_label }} <span class="text-content-muted font-mono text-xs">{{ e.user_id }}</span></td>
+        <td class="text-content-muted">{% if let Some(d) = e.detail.as_ref() %}{{ d }}{% else %}-{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
