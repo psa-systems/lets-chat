@@ -23,9 +23,10 @@
       <tr>
         <td class="text-xs text-content-muted whitespace-nowrap"><time datetime="{{ e.created_at|iso }}" title="{{ e.created_at }}">{{ e.created_at }}</time></td>
         <td>
-          {# `dropped` is an ungraceful disconnect - the audio-error signal an
-             admin scans for - so it gets the danger badge; the rest are quiet. #}
-          {% if e.kind == "dropped" %}
+          {# `dropped` (an ungraceful disconnect) and `error` (a client-reported
+             ICE/track failure, LC-869) are the audio-fault signals an admin
+             scans for, so they get the danger badge; the rest are quiet. #}
+          {% if e.kind == "dropped" || e.kind == "error" %}
           <span class="rounded bg-danger-surface text-danger text-xs px-1.5 py-0.5 uppercase tracking-wide font-mono">{{ e.kind }}</span>
           {% else %}
           <span class="font-mono text-xs">{{ e.kind }}</span>

@@ -93,6 +93,13 @@ enum ClientFrame {
     /// call's participants as [`ChatEvent::VoiceReaction`]. Never stored.
     #[serde(rename = "voice_reaction")]
     VoiceReaction { room_id: i64, emoji: String },
+    /// LC-869: the browser observed a voice connection error the server cannot
+    /// see on its own (ICE reaching 'failed', a getUserMedia/track error while
+    /// establishing audio). Logged to `voice_events` as kind `error` so it
+    /// lands in the same /admin/voice-log an admin reads during a call. Gated
+    /// to a current participant of the room; `detail` is length-bounded.
+    #[serde(rename = "voice_diag")]
+    VoiceDiag { room_id: i64, detail: String },
     /// LC-494: stage control plane. Join/leave as a listener, request or
     /// withdraw the floor, step down from speaking, and (host-only) grant or
     /// revoke another participant's floor. Each mutates the ephemeral hub
@@ -1135,6 +1142,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     }
                                 }
                             }
+                        }
+                        ClientFrame::VoiceDiag { room_id, detail } => {
+                            handle_voice_diag(&state, &user, &username, conn_id, room_id, detail)
+                                .await;
                         }
                         // LC-494: stage control plane. Self-actions require room
                         // access + stage mode; promote/demote additionally
@@ -3120,7 +3131,7 @@ pub fn validate_reaction_emoji(raw: &str) -> Option<String> {
 /// the same fact is greppable in the server logs, and nudge the admin voice-log
 /// view so it updates live during a meeting. Best-effort: a logging failure is
 /// warned and swallowed, never affecting the call. `kind` is a fixed vocabulary
-/// (connect / reconnect / left / dropped / mute / unmute).
+/// (connect / reconnect / left / dropped / mute / unmute / error).
 pub(crate) async fn record_voice_event(
     state: &AppState,
     room_id: i64,
@@ -3145,6 +3156,59 @@ pub(crate) async fn record_voice_event(
     state
         .hub
         .broadcast_to_topic("admin", &ChatEvent::AdminVoiceLogChanged);
+}
+
+/// LC-869: per-user cap on client-observed voice diagnostics. An ICE connection
+/// can flap through 'failed' many times a minute, so the cap is generous but
+/// bounded; over-limit reports are dropped silently (no error frame).
+const VOICE_DIAG_PER_MINUTE: u32 = 30;
+/// LC-869: max bytes of the client-supplied `detail` we persist. A report is a
+/// short label ("ice failed: peer ab12cd", "getUserMedia: NotAllowedError"),
+/// never a stack trace; anything longer is truncated so the wire and the log
+/// row stay bounded regardless of what the browser sends.
+const VOICE_DIAG_DETAIL_MAX: usize = 200;
+
+/// Handle a `voice_diag` frame: a browser-observed voice connection error
+/// (LC-869). Gated to a current participant of the room, per-user rate limited,
+/// and the `detail` is sanitized + length-bounded before it is logged to
+/// `voice_events` as kind `error`. Best-effort: a non-participant, an
+/// over-limit report, or an empty detail is dropped silently.
+pub async fn handle_voice_diag(
+    state: &AppState,
+    user: &User,
+    username: &str,
+    conn_id: ConnId,
+    room_id: i64,
+    detail: String,
+) {
+    // Only a current participant of the channel may report on it.
+    if !state.hub.is_in_voice_room(conn_id, room_id) {
+        return;
+    }
+    // Bound the noise of a flapping client.
+    if !matches!(
+        state.rate_limits.check(
+            crate::rate_limit::RateLimitKind::VoiceDiag,
+            &user.id,
+            VOICE_DIAG_PER_MINUTE,
+        ),
+        crate::rate_limit::Outcome::Allow
+    ) {
+        return;
+    }
+    // Sanitize: collapse control characters to spaces so a log row stays one
+    // readable line, trim, and cap the length (by chars, so we never split a
+    // multi-byte sequence).
+    let detail: String = detail
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .take(VOICE_DIAG_DETAIL_MAX)
+        .collect();
+    let detail = detail.trim();
+    if detail.is_empty() {
+        return;
+    }
+    record_voice_event(state, room_id, &user.id, username, "error", Some(detail)).await;
 }
 
 /// Handle a `voice_join` frame: validate the room is an accessible voice
@@ -3772,7 +3836,7 @@ async fn render_pin_event(
 /// harness that would test axum's plumbing more than this logic. Not a
 /// production entry point - the router never routes here.
 pub mod test_support {
-    pub use super::{handle_voice_join, handle_voice_leave, relay_call_signal};
+    pub use super::{handle_voice_diag, handle_voice_join, handle_voice_leave, relay_call_signal};
     // LC-595: the live reaction OOB payload, so a test can assert it carries BOTH
     // surfaces (an open thread panel used to receive nothing at all).
     pub use super::render_reaction_bar;
