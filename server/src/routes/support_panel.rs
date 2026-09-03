@@ -654,6 +654,36 @@ mod tests {
     }
 
     #[test]
+    fn waiting_stage_confirms_creation_and_shows_the_reference() {
+        // LC-862: a request filed with no admin online must show the submitter an
+        // explicit confirmation carrying a reference they can return to - not a
+        // vague "waiting" line. The no-admin /human confirmation derives the
+        // waiting stage keyed on the ticket, and the rendered status card names
+        // the reference (previously the id was only in the scrolling bubble above
+        // and the hidden form field, so a submitter could not tell from the
+        // interface that a request had been created).
+        let no_admin = "_bob, no admins are available right now, so I've filed support ticket #77 for follow-up. You can add details below._";
+        let stage = derive_stage(no_admin, "2026-08-16 00:46:02");
+        assert!(matches!(stage, Stage::Waiting(77, _)));
+        let view = PanelThreadView {
+            messages: Vec::new(),
+            empty: false,
+            stage,
+            older_page_url: None,
+            boundary: None,
+        };
+        let html = view.render().unwrap();
+        assert!(
+            html.contains("lc-support-waiting-ref"),
+            "the waiting card carries the explicit request-created confirmation, got: {html}"
+        );
+        assert!(
+            html.contains("#77"),
+            "the confirmation names the ticket reference, got: {html}"
+        );
+    }
+
+    #[test]
     fn compose_ticket_body_joins_only_the_filled_fields() {
         let form = DetailForm {
             ticket_id: 1,

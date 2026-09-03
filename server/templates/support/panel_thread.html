@@ -52,6 +52,11 @@
    ticket with more detail. Keeping to wait is the passive default. #}
 {% when Stage::Waiting with (ticket_id, since) %}
 <div class="lc-support-stage lc-support-waiting" data-lc-support-waiting data-since="{{ since }}" role="status">
+  {# LC-862: lead with an explicit "request created (ref #N)" line. The ticket id
+     was previously only in the composer bubble above and in the hidden form
+     field, so the persistent status card never confirmed to the submitter that a
+     request had actually been created - the reported defect. #}
+  <p class="lc-support-waiting-ref"><strong>{{ "support-waiting-ref"|t }} #{{ ticket_id }}</strong></p>
   <div class="lc-support-waiting-live">
     <span class="lc-support-waiting-dot" aria-hidden="true"></span>
     <span class="lc-support-waiting-text">{{ "support-waiting-live"|t }}</span>

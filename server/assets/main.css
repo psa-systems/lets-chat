@@ -6346,6 +6346,13 @@ html[data-lc-support-open] .lc-support-root .lc-support-launcher::after { displa
     color: var(--content);
     border: 1px solid var(--border);
 }
+/* LC-862: explicit "request created (ref #N)" confirmation at the head of the
+   waiting card, so the submitter can see their request was filed and keep the
+   reference. */
+.lc-support-waiting-ref {
+    margin: 0;
+    font-size: 0.8125rem;
+}
 .lc-support-waiting-live {
     display: flex;
     align-items: center;
