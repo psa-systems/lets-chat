@@ -44,6 +44,19 @@
     try { console.log.apply(console, ['[lc-call sfu]'].concat([].slice.call(arguments))); } catch (e) {}
   }
 
+  // LC-869: report a browser-observed SFU connection error (LiveKit connection
+  // reaching 'failed', a mic getUserMedia/publish error) over the chat socket so
+  // it lands in voice_events (/admin/voice-log) alongside the mesh path. The
+  // server gates on room participation and length-bounds the detail; a missing
+  // socket is a silent no-op (we are tearing down anyway).
+  function sfuDiag(roomId, detail) {
+    var ws = window.__lcWS;
+    if (!ws || !roomId || !detail) return;
+    try {
+      ws.send(JSON.stringify({ type: 'voice_diag', room_id: roomId, detail: String(detail).slice(0, 200) }));
+    } catch (e) { /* socket reconnecting */ }
+  }
+
   // Read the published microphone track's real state for diagnostics. Defensive
   // across LiveKit versions: never throws, returns whatever it can resolve.
   function micTrackState(lp) {
@@ -169,6 +182,18 @@
       if (hooks.onDisconnected) hooks.onDisconnected(reason);
     });
 
+    // LC-869: the LiveKit connection reached a terminal 'failed' state (ICE
+    // could not be (re)established). Report it to the voice log; the separate
+    // Disconnected handler above already tells voice.js to tear the dock down.
+    room.on(LK.RoomEvent.ConnectionStateChanged, function (st) {
+      if (st === LK.ConnectionState.Failed) sfuDiag(cfg.roomId, 'sfu ice failed');
+    });
+    // LC-869: a getUserMedia/device error surfaced by LiveKit outside our own
+    // setMicrophoneEnabled call (e.g. the mic vanished mid-call).
+    room.on(LK.RoomEvent.MediaDevicesError, function (e) {
+      sfuDiag(cfg.roomId, 'sfu media: ' + (e && e.name ? e.name : (e && e.message) || 'error'));
+    });
+
     // A remote joined / left: mirror onto the tile grid so the roster matches
     // the mesh path (where VoiceJoined/VoiceLeft drive the same tiles).
     room.on(LK.RoomEvent.ParticipantConnected, function (p) {
@@ -228,6 +253,9 @@
       await room.connect(info.url, info.token);
     } catch (e) {
       if (window.console) console.warn('huddle sfu connect:', e && e.message);
+      // LC-869: connect never came up (ICE/token/network). Report before we
+      // drop the session so it lands in the voice log.
+      sfuDiag(cfg.roomId, 'sfu connect: ' + ((e && e.message) || 'error'));
       session = null;
       try { room.disconnect(); } catch (ignored) {}
       return false;
@@ -250,6 +278,9 @@
         // which also proceeds when getUserMedia fails for video but here the
         // user can still hear others.
         if (window.console) console.warn('huddle sfu mic:', e && e.message);
+        // LC-869: a getUserMedia/publish failure the server cannot see - report
+        // it so an admin can tell this participant joined muted involuntarily.
+        sfuDiag(cfg.roomId, 'sfu mic: ' + (e && e.name ? e.name : (e && e.message) || 'error'));
       }
     }
     return true;
