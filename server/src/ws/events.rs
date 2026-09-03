@@ -256,6 +256,15 @@ pub enum ChatEvent {
     /// render side (the queue is `#[cfg(standalone)]`); in saas it falls through
     /// to `render_event` (None), mirroring `AdminReportChanged`.
     AdminSupportChanged,
+    /// LC-859: a voice-call lifecycle event was logged (connect / reconnect /
+    /// left / dropped / mute / unmute). Broadcast on the `admin` topic; the WS
+    /// send task re-queries and renders the `#admin-voice-log-list` OOB fragment
+    /// for each admin, so an admin watching `/admin/voice-log` sees new entries
+    /// arrive live during a meeting. Carries no payload (the send task re-reads
+    /// the recent window), mirroring `AdminReportChanged`. Standalone-only on the
+    /// render side (the admin page is `#[cfg(standalone)]`); in saas it falls
+    /// through to `render_event` (None).
+    AdminVoiceLogChanged,
     /// LC-719: the support-bubble panel thread for `user_id` changed (a `/support`
     /// answer landed or a `/human` confirmation posted in the user's assistant-bot
     /// DM). Broadcast via `broadcast_to_user`, so only that user's connections

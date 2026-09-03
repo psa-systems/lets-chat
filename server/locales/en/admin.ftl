@@ -228,6 +228,16 @@ admin-rc-th-target = Target
 admin-rc-th-room = Room
 admin-rc-th-when = When
 
+# LC-859: voice-call observability log
+admin-voice-log-title = Voice log
+admin-voice-log-intro = Audio-call lifecycle events (connect, reconnect, left, dropped, mute, unmute) with room and participant. Updates live during a meeting; the most recent 200 are shown, kept for 24 hours.
+admin-voice-log-empty = No voice-call events recorded yet.
+admin-voice-log-th-when = When
+admin-voice-log-th-event = Event
+admin-voice-log-th-room = Room
+admin-voice-log-th-participant = Participant
+admin-voice-log-th-detail = Detail
+
 ## Webhook deliveries
 admin-deliveries-title = Webhook deliveries
 admin-deliveries-heading = Deliveries
