@@ -202,7 +202,7 @@ async fn leave_announces_and_removes_from_the_roster() {
     handle_voice_join(&s.state, &s.alice, "alice", alice_conn, s.room).await;
     let _ = drain(&mut bob_rx); // clear the join announcement
 
-    handle_voice_leave(&s.state, alice_conn);
+    handle_voice_leave(&s.state, alice_conn, "left");
 
     assert!(
         !s.hub
@@ -217,6 +217,85 @@ async fn leave_announces_and_removes_from_the_roster() {
     );
 }
 
+/// Kinds logged for `user_id`, newest first (mirrors `list_recent`'s order).
+async fn voice_kinds_for(state: &AppState, user_id: &str) -> Vec<String> {
+    db::voice_events::list_recent(&state.chat, 200)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|e| e.user_id == user_id)
+        .map(|e| e.kind)
+        .collect()
+}
+
+/// LC-859: handle_voice_leave logs the departure on a spawned task (the fn is
+/// sync), so a test that reads the log right after must wait for the write.
+async fn wait_for_kind(state: &AppState, user_id: &str, kind: &str) {
+    for _ in 0..100 {
+        if voice_kinds_for(state, user_id)
+            .await
+            .iter()
+            .any(|k| k == kind)
+        {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("voice event '{kind}' for {user_id} was never logged");
+}
+
+#[tokio::test]
+async fn disconnect_and_rejoin_are_logged_with_room_and_participant() {
+    // LC-859: an admin debugging a live call must see connect, the ungraceful
+    // drop, and the rejoin in the server-side record, each carrying the room and
+    // participant. This drives a forced disconnect + rejoin through the same
+    // handlers a real socket close and reconnect take.
+    let s = setup().await;
+
+    // Connect (handle_voice_join awaits the log, so it is visible immediately).
+    let (c1, _r1, _) = s.hub.connect(&s.alice_id, "alice");
+    handle_voice_join(&s.state, &s.alice, "alice", c1, s.room).await;
+    assert_eq!(
+        voice_kinds_for(&s.state, &s.alice_id).await,
+        vec!["connect".to_string()],
+        "the first join is logged as a connect"
+    );
+
+    // Forced drop: the socket-close path passes "dropped" (the audio-error
+    // signal). The departure row must land before the rejoin classifies itself.
+    handle_voice_leave(&s.state, c1, "dropped");
+    wait_for_kind(&s.state, &s.alice_id, "dropped").await;
+
+    // Rejoin on a fresh connection: a join within the reconnect window after a
+    // departure is logged as a reconnect, not another plain connect.
+    let (c2, _r2, _) = s.hub.connect(&s.alice_id, "alice");
+    handle_voice_join(&s.state, &s.alice, "alice", c2, s.room).await;
+
+    let kinds = voice_kinds_for(&s.state, &s.alice_id).await;
+    assert!(
+        kinds.contains(&"connect".to_string()),
+        "the connect is logged, got {kinds:?}"
+    );
+    assert!(
+        kinds.contains(&"dropped".to_string()),
+        "the forced drop is logged, got {kinds:?}"
+    );
+    assert!(
+        kinds.contains(&"reconnect".to_string()),
+        "the rejoin is logged as a reconnect, got {kinds:?}"
+    );
+
+    // Every row is scoped to this call and speaker (room id + participant id).
+    let rows = db::voice_events::list_recent(&s.state.chat, 200)
+        .await
+        .unwrap();
+    assert!(
+        rows.iter()
+            .all(|e| e.room_id == s.room && e.user_id == s.alice_id),
+        "each event carries the room id and the participant id"
+    );
+}
+
 #[tokio::test]
 async fn leave_on_an_unregistered_connection_is_a_noop() {
     let s = setup().await;
@@ -226,7 +305,7 @@ async fn leave_on_an_unregistered_connection_is_a_noop() {
     s.hub.voice_join(bob_conn, s.room);
 
     let never_joined: ConnId = 999_999;
-    handle_voice_leave(&s.state, never_joined);
+    handle_voice_leave(&s.state, never_joined, "left");
 
     assert_eq!(
         s.hub.voice_room_users(s.room).len(),

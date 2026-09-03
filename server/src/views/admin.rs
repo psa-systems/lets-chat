@@ -251,6 +251,52 @@ pub struct ReportsPage<'a> {
     pub reports: &'a [ReportView],
 }
 
+/// LC-859: one row of the voice-event log listing. `kind` is a fixed vocabulary
+/// (connect / reconnect / left / dropped / mute / unmute) the template maps to a
+/// localized label; `user_label` is the participant name captured at event time.
+pub struct VoiceLogRow {
+    pub room_id: i64,
+    pub user_id: String,
+    pub user_label: String,
+    pub kind: String,
+    pub detail: Option<String>,
+    pub created_at: String,
+}
+
+/// LC-859: the admin voice-call observability page (`/admin/voice-log`): a live,
+/// read-only listing of recent call lifecycle events. The page and the live OOB
+/// fragment share `admin/voice_log_items.html` (both expose `events`) so a fresh
+/// load and a live update render identically.
+#[derive(Template)]
+#[template(path = "admin/voice_log.html")]
+pub struct VoiceLogPage<'a> {
+    pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    pub events: &'a [VoiceLogRow],
+}
+
+/// LC-859: live OOB fragment broadcast on the `admin` topic when a voice event is
+/// logged. Swaps the `#admin-voice-log-list` region (present only on
+/// `/admin/voice-log`); the id-keyed swap drops silently on any other admin page.
+#[derive(Template)]
+#[template(path = "admin/voice_log_oob.html")]
+pub struct AdminVoiceLogOob {
+    pub events: Vec<VoiceLogRow>,
+}
+
 /// LC-714: the AI help desk support-ticket queue page. Mirrors `ReportsPage`:
 /// the page and the live OOB fragment share `admin/support_items.html` so a
 /// fresh load and a live update render identically.
