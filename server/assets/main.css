@@ -4345,6 +4345,23 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 /* The bar is a query container so the shared .lc-callbar-controls rule collapses
    labelled buttons to icons when the dock is narrow (reused from the call bar). */
 .lc-huddle-bar { container: lc-callbar / inline-size; }
+/* LC-868: the dock bar was a single non-wrapping row, so once the huddle is
+   popped out or floated - hosts the user can size to any width - the controls
+   clip: the Leave button falls off a mid-width window (labels still shown but
+   the row is wider than the window), and most controls vanish in a narrow one
+   (icon-only buttons still overflow, with no scroll on a PiP/float that the
+   viewport-keyed mobile rule never matches). The full-screen call bar
+   (.lc-callbar) has always wrapped for exactly this reason; give the huddle bar
+   the same resilience so every control stays reachable at any width. Wrapping
+   only engages when the row cannot fit, so the docked full-width bar is
+   unchanged. min-width:0 lets the control cluster shrink and wrap its own
+   buttons instead of forcing the bar wider. */
+.lc-huddle-bar { flex-wrap: wrap; row-gap: 0.375rem; }
+.lc-huddle-bar .lc-callbar-controls {
+    flex-wrap: wrap;
+    row-gap: 0.375rem;
+    min-width: 0;
+}
 .lc-huddle-collapse .lc-cbtn-ico { transform: rotate(180deg); }
 
 /* Collapsed: keep the control bar, drop the participant area. Instant (a
