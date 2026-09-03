@@ -4,7 +4,7 @@
 //! no direct tests - only indirect exercise through the transcription and ring
 //! suites.
 
-use lets_chat::routes::test_support::{handle_voice_join, handle_voice_leave};
+use lets_chat::routes::test_support::{handle_voice_diag, handle_voice_join, handle_voice_leave};
 use lets_chat::state::AppState;
 use lets_chat::ws::events::ChatEvent;
 use lets_chat::ws::hub::{ConnId, Hub};
@@ -293,6 +293,102 @@ async fn disconnect_and_rejoin_are_logged_with_room_and_participant() {
         rows.iter()
             .all(|e| e.room_id == s.room && e.user_id == s.alice_id),
         "each event carries the room id and the participant id"
+    );
+}
+
+#[tokio::test]
+async fn client_diag_logs_an_error_row_only_for_a_participant() {
+    // LC-869: a browser-observed ICE/track failure reported via voice_diag lands
+    // in voice_events as kind=error, scoped to the room + participant, and only
+    // from a current participant of that room (the report is gated).
+    let s = setup().await;
+
+    // Alice is in the huddle; her report is logged as an error with the detail.
+    let (c1, _r1, _) = s.hub.connect(&s.alice_id, "alice");
+    handle_voice_join(&s.state, &s.alice, "alice", c1, s.room).await;
+    handle_voice_diag(
+        &s.state,
+        &s.alice,
+        "alice",
+        c1,
+        s.room,
+        "ice failed: peer ab12cd".to_string(),
+    )
+    .await;
+
+    let rows = db::voice_events::list_recent(&s.state.chat, 200)
+        .await
+        .unwrap();
+    let errs: Vec<_> = rows.iter().filter(|e| e.kind == "error").collect();
+    assert_eq!(errs.len(), 1, "one error row is logged, got {rows:?}");
+    assert_eq!(errs[0].room_id, s.room, "the row is scoped to the call");
+    assert_eq!(errs[0].user_id, s.alice_id, "the row names the reporter");
+    assert_eq!(
+        errs[0].detail.as_deref(),
+        Some("ice failed: peer ab12cd"),
+        "the detail is preserved"
+    );
+
+    // A report from a connection that never joined this room is dropped: only a
+    // current participant may write to the call's log.
+    let bob = user_row(&s.state, &s.bob_id).await;
+    let (c2, _r2, _) = s.hub.connect(&s.bob_id, "bob");
+    handle_voice_diag(&s.state, &bob, "bob", c2, s.room, "ice failed".to_string()).await;
+    assert_eq!(
+        db::voice_events::list_recent(&s.state.chat, 200)
+            .await
+            .unwrap()
+            .iter()
+            .filter(|e| e.kind == "error")
+            .count(),
+        1,
+        "a non-participant's report is not logged"
+    );
+}
+
+#[tokio::test]
+async fn client_diag_sanitizes_and_bounds_the_detail() {
+    // LC-869: the detail is client-supplied, so control characters collapse to
+    // spaces (one readable log line), it is length-bounded, and an empty detail
+    // is dropped rather than logged.
+    let s = setup().await;
+    let (c1, _r1, _) = s.hub.connect(&s.alice_id, "alice");
+    handle_voice_join(&s.state, &s.alice, "alice", c1, s.room).await;
+
+    let noisy = format!("ice\nfailed\t{}", "x".repeat(500));
+    handle_voice_diag(&s.state, &s.alice, "alice", c1, s.room, noisy).await;
+    let d = db::voice_events::list_recent(&s.state.chat, 200)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|e| e.kind == "error")
+        .and_then(|e| e.detail)
+        .expect("an error row with a detail");
+    assert!(
+        !d.contains('\n') && !d.contains('\t'),
+        "control characters are collapsed, got {d:?}"
+    );
+    assert!(
+        d.chars().count() <= 200,
+        "the detail is length-bounded, got {} chars",
+        d.chars().count()
+    );
+    assert!(
+        d.starts_with("ice failed"),
+        "the content survives, got {d:?}"
+    );
+
+    // A whitespace-only detail is dropped (no second error row).
+    handle_voice_diag(&s.state, &s.alice, "alice", c1, s.room, "   ".to_string()).await;
+    assert_eq!(
+        db::voice_events::list_recent(&s.state.chat, 200)
+            .await
+            .unwrap()
+            .iter()
+            .filter(|e| e.kind == "error")
+            .count(),
+        1,
+        "an empty detail is not logged"
     );
 }
 

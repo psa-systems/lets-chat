@@ -75,6 +75,15 @@
       payload: payload || null,
     });
   }
+  // LC-869: report a browser-observed voice connection error (ICE reaching
+  // 'failed', a getUserMedia/addTrack error) to the server so it lands in the
+  // same voice_events log (/admin/voice-log) an admin reads during the call.
+  // Only sent while actually in a call; the server further gates on room
+  // participation and length-bounds the detail. Fire-and-forget.
+  function voiceDiag(detail) {
+    if (!cfg || !joined || !detail) return;
+    wsSend({ type: 'voice_diag', room_id: cfg.roomId, detail: String(detail).slice(0, 200) });
+  }
 
   // LC-764: opt-in call diagnostics for the mesh path (the SFU path logs from
   // huddle_sfu.js). Set `window.__lcCallDebug = true` in the console before
@@ -639,6 +648,15 @@
       applyConnectionState(userId, pc.connectionState); // LC-410: live quality
       if (pc.connectionState === 'failed') {
         console.warn('voice: connection to', userId, 'failed; awaiting VoiceLeft');
+        // LC-869: report the ICE failure once per failure edge - the mesh can
+        // flap a peer through 'failed' transiently, and the server rate-limits
+        // anyway, but a client-side guard keeps a single flap to one row.
+        if (!p.diagFailed) {
+          p.diagFailed = true;
+          voiceDiag('ice failed: peer ' + String(userId).slice(0, 8));
+        }
+      } else if (pc.connectionState === 'connected') {
+        p.diagFailed = false;
       }
     };
     return pc;
@@ -652,7 +670,14 @@
       // track wins so a new joiner mid-share also receives the share rather
       // than the (transiently still present) camera.
       if (sharing && t.kind === 'video' && t !== screenTrack) return;
-      pc.addTrack(t, localStream);
+      // LC-869: a failed addTrack (audio especially) leaves a peer with no
+      // media and is invisible server-side; report it to the voice log.
+      try {
+        pc.addTrack(t, localStream);
+      } catch (e) {
+        console.warn('voice: addLocalTracks addTrack failed', e);
+        voiceDiag('addTrack ' + t.kind + ' failed: ' + (e && e.name ? e.name : 'error'));
+      }
     });
   }
 

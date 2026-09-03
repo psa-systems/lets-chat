@@ -107,6 +107,12 @@ pub enum RateLimitKind {
     /// cap is generous and over-limit reactions are dropped silently (no error
     /// frame) rather than refused loudly.
     CallReaction,
+    /// LC-869: per-user cap on client-observed voice diagnostics (`voice_diag`
+    /// WS frames: ICE/track/getUserMedia failures reported from the browser).
+    /// Keyed by the reporter's user_id. An ICE connection can flap through
+    /// 'failed' repeatedly, so the cap bounds a noisy client and over-limit
+    /// reports are dropped silently.
+    VoiceDiag,
 }
 
 impl RateLimitKind {
@@ -129,6 +135,7 @@ impl RateLimitKind {
             RateLimitKind::SttGlobal => "sttg",
             RateLimitKind::SttRoom => "sttr",
             RateLimitKind::CallReaction => "rxn",
+            RateLimitKind::VoiceDiag => "vdiag",
         }
     }
 }
