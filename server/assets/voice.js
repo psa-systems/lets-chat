@@ -1399,6 +1399,20 @@
       if (el && el !== root) pop.adoptPageDock(el);
       return;
     }
+    // LC-870: a swap landed on a DIFFERENT room's dock while a call is live in
+    // this one (an enclave switch during the call). Preserve the call instead of
+    // letting bindRoot() leave: float the live dock out of #main - exactly as the
+    // swap-left-no-dock path below does - and hand the page's fresh dock to the
+    // controller for the "in a huddle in another room" busy note (one session per
+    // tab). Fall through to bindRoot only if the float did not take (a live mic
+    // with no UI is how people stay accidentally unmuted).
+    if (el && root && joined && el !== root
+        && el.getAttribute('data-room-id') !== String(cfg && cfg.roomId)) {
+      if (pop && pop.floatOut) {
+        pop.floatOut(root);
+        if (pop.isPopped()) { pop.adoptPageDock(el); return; }
+      }
+    }
     if (el) {
       bindRoot(el);
     } else if (root) {
