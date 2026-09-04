@@ -151,6 +151,7 @@ shortcuts-slash = Comando de barra
 shortcuts-next-unread = Siguiente sala sin leer
 shortcuts-prev-unread = Sala anterior sin leer
 shortcuts-switcher = Cambio rápido
+shortcuts-toggle-sidebar = Alternar barra lateral
 shortcuts-help = Mostrar esta ayuda
 
 ## Quick switcher (LC-260)

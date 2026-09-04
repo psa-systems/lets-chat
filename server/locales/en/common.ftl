@@ -156,6 +156,7 @@ shortcuts-slash = Slash command
 shortcuts-next-unread = Next unread room
 shortcuts-prev-unread = Previous unread room
 shortcuts-switcher = Quick switcher
+shortcuts-toggle-sidebar = Toggle sidebar
 shortcuts-help = Show this help
 
 ## Quick switcher (LC-260)

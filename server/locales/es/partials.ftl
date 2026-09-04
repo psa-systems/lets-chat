@@ -62,7 +62,10 @@ sidebar-category-add = Añadir
 switcher-nav-label = Enclaves
 switcher-enclave-settings = Ajustes del enclave
 switcher-discover = Descubrir o crear enclaves
-switcher-sidebar-toggle = Contraer o expandir la barra lateral
+# LC-871: state-specific copy for the single sidebar toggle - the tooltip names
+# what THIS click does in the current state, not both directions at once.
+sidebar-toggle-collapse = Contraer barra lateral
+sidebar-toggle-expand = Expandir barra lateral
 
 ## Avatar / status
 partials-status-dnd = No molestar
