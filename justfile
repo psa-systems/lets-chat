@@ -411,6 +411,15 @@ test-js:
 test-desktop:
     ./dev/cargo-desktop test -p lets-chat-desktop
 
+# LC-861: same-audio transcription comparison harness. Replays the fixtures in
+# server/tests/fixtures/stt through each service listed in LETS_CHAT_STT_BENCH
+# ('label=provider,url,model[,api_key];...') and prints a WER + latency table.
+# The deterministic harness tests run in the normal suite; this is the opt-in
+# live run against real endpoints (see server/tests/stt_comparison.rs).
+[group('test')]
+stt-bench:
+    ./dev/cargo test -p lets-chat-server --test stt_comparison -- --ignored --nocapture
+
 # Verify the standalone server binary starts and serves the login page.
 # LC-826: boots with LETS_CHAT_DEV_NO_SSO=1 (the development-only opt-out of
 # the mandatory Bunyip RP, since the smoke has no Bunyip to talk to), runs the
