@@ -159,6 +159,10 @@ shortcuts-switcher = Quick switcher
 shortcuts-toggle-sidebar = Toggle sidebar
 shortcuts-help = Show this help
 
+## LC-864: deployment-environment indicator. The label word only; the
+## environment value (staging, dev, ...) is an operator-set config string.
+env-label = Environment
+
 ## Quick switcher (LC-260)
 # LC-750 (F27): the dialog's accessible name. Separate from the input's
 # placeholder, which is a hint and ends in an ellipsis.

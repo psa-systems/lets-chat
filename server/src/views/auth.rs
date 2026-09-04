@@ -24,4 +24,9 @@ pub struct LoginPage<'a> {
     /// LC-22: host portion of the configured Bunyip issuer, rendered in the
     /// "you will be redirected to ..." note under the button.
     pub bunyip_issuer_host: &'a str,
+    /// LC-864: the deployment environment an account signing in here is
+    /// provisioned against (staging, dev, ...), or None in production. Shown as
+    /// a small note by the sign-in button so a user knows which environment they
+    /// are entering before they authenticate.
+    pub environment: Option<&'a str>,
 }
