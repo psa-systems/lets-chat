@@ -1,19 +1,11 @@
 <aside id="sidebar"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="w-64 lc-sidebar border-r border-border flex flex-col">
-  {# LC-576: sidebar head - product title with the collapse chevron beside it,
-     as in the prototype (.sb-head). This is the primary collapse control; the
-     rail keeps a counterpart that only appears once the sidebar is collapsed,
-     because a collapsed #sidebar is display:none and a chevron living in here
-     would disappear with it, leaving no way to expand again. #}
+  {# LC-576 / LC-871: sidebar head - the product title. The collapse control used
+     to live here as a chevron beside the title, with a separate floating rail
+     ribbon for the collapsed state, so the same function had two homes the user
+     had to re-find. It now has a single fixed home at the far left of the room
+     header (partials/room_header.html). #}
   <div class="lc-sidebar-head">
     <span class="lc-sidebar-title">Let's Chat</span>
-    <button type="button" data-lc-sidebar-toggle aria-controls="sidebar" aria-expanded="true"
-            onclick="window.__lcToggleSidebar && window.__lcToggleSidebar()"
-            aria-label="{{ "switcher-sidebar-toggle"|t }}" data-lc-tip="{{ "switcher-sidebar-toggle"|t }}" data-lc-tip-pos="bottom"
-            class="lc-sidebar-foot-btn hidden md:inline-flex">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
-        <path fill-rule="evenodd" d="M15.79 14.77a.75.75 0 01-1.06.02l-4.25-4.24a.75.75 0 010-1.06l4.25-4.25a.75.75 0 111.06 1.06L12.06 10l3.71 3.71a.75.75 0 01.02 1.06zm-6 0a.75.75 0 01-1.06.02L4.48 10.55a.75.75 0 010-1.06l4.25-4.25a.75.75 0 111.06 1.06L6.06 10l3.71 3.71a.75.75 0 01.02 1.06z" clip-rule="evenodd"/>
-      </svg>
-    </button>
   </div>
   {# LC-769: pending-invitations banner. The invitations page was otherwise only
      reachable from the Home dashboard card, and the rail's Home badge blends the
