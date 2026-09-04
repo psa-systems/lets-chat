@@ -4427,8 +4427,15 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 
 /* Audio-only (no tile carries a live camera or a screen-share pin): lay the
    in-call grid out as a wrapping row of compact chips. Reuses the live tile DOM
-   (speaking ring, mute badge, YOU pill) - only the geometry changes. */
-.lc-huddle [data-lc-voice-grid]:not(.lc-voice-grid--hidden):not(:has([data-media="video"], [data-screen])) {
+   (speaking ring, mute badge, YOU pill) - only the geometry changes.
+   LC-872: gated on :not(.lc-huddle--collapsed). Without it this rule (specificity
+   0,4,0: two classes + two attributes) outranked the collapsed hide above
+   (.lc-huddle--collapsed [data-lc-voice-grid], only 0,2,0) and forced the chip
+   strip back to display:flex, so Collapse did nothing in an audio-only huddle -
+   it only appeared to work once a camera/screen made the :not(:has(video)) test
+   fail and the strip was a video grid the hide rule could win against. Excluding
+   the collapsed state here makes the two rules mutually exclusive. */
+.lc-huddle:not(.lc-huddle--collapsed) [data-lc-voice-grid]:not(.lc-voice-grid--hidden):not(:has([data-media="video"], [data-screen])) {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
