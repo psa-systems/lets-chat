@@ -1,4 +1,23 @@
 <header id="lc-room-header" data-lc-density-tight="header" class="lc-header">
+  {# LC-871: the single sidebar collapse/expand control, in its one fixed home at
+     the far left of the room header - the same position in both states, so it
+     never has to be re-found (it replaced a bare chevron in the sidebar head plus
+     a floating rail ribbon that each lived elsewhere). aria-expanded and the
+     state-specific tooltip/label are synced client-side (base.html
+     __lcSyncSidebarToggles) because the collapse state is client-only; the
+     double-chevron flips direction via CSS (« collapse -> » expand). Desktop
+     only - mobile uses the #lc-nav-toggle hamburger for the overlay sidebar. #}
+  <button type="button" data-lc-sidebar-toggle aria-controls="sidebar" aria-expanded="true"
+          onclick="window.__lcToggleSidebar && window.__lcToggleSidebar()"
+          aria-label="{{ "sidebar-toggle-collapse"|t }}"
+          data-lc-tip="{{ "sidebar-toggle-collapse"|t }} (Ctrl+\)" data-lc-tip-pos="bottom"
+          data-lc-tip-collapse="{{ "sidebar-toggle-collapse"|t }} (Ctrl+\)"
+          data-lc-tip-expand="{{ "sidebar-toggle-expand"|t }} (Ctrl+\)"
+          class="lc-sidebar-toggle">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path fill-rule="evenodd" d="M15.79 14.77a.75.75 0 01-1.06.02l-4.25-4.24a.75.75 0 010-1.06l4.25-4.25a.75.75 0 111.06 1.06L12.06 10l3.71 3.71a.75.75 0 01.02 1.06zm-6 0a.75.75 0 01-1.06.02L4.48 10.55a.75.75 0 010-1.06l4.25-4.25a.75.75 0 111.06 1.06L6.06 10l3.71 3.71a.75.75 0 01.02 1.06z" clip-rule="evenodd"/>
+    </svg>
+  </button>
   <div class="min-w-0 flex-1">
     {# LC-576: title row - hash, name, then the favorite star, as in the
        prototype. The star posts to the same /rooms/{id}/star endpoint the

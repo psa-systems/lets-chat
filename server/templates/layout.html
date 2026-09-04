@@ -9,18 +9,11 @@
     {% include "partials/sidebar.html" %}
   </div>
   <div id="lc-nav-backdrop" class="hidden fixed inset-0 z-20 bg-black/40 md:hidden" onclick="lcCloseNav()"></div>
-  {# LC-553: expand ribbon for the collapsed sidebar. A half-round tab sitting on
-     the rail's outer seam with a double-chevron, shown only while collapsed (and
-     only on desktop, where the collapse applies). Fixed-positioned so it is not
-     clipped by the nav panel, and it replaces the old in-rail expand tile. #}
-  <button type="button" data-lc-sidebar-toggle data-lc-sidebar-ribbon aria-controls="sidebar" aria-expanded="false"
-          onclick="window.__lcToggleSidebar && window.__lcToggleSidebar()"
-          aria-label="{{ "switcher-sidebar-toggle"|t }}" data-lc-tip="{{ "switcher-sidebar-toggle"|t }}" data-lc-tip-pos="right"
-          class="lc-sidebar-ribbon">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
-      <path fill-rule="evenodd" d="M4.21 5.23a.75.75 0 011.06-.02l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 11-1.04-1.08L7.94 10 4.23 6.29a.75.75 0 01-.02-1.06zm6 0a.75.75 0 011.06-.02l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 11-1.04-1.08L13.94 10l-3.71-3.71a.75.75 0 01-.02-1.06z" clip-rule="evenodd"/>
-    </svg>
-  </button>
+  {# LC-871: the sidebar collapse/expand control now has a single fixed home at
+     the far left of the room header (partials/room_header.html). The old floating
+     rail ribbon that used to sit here (for the collapsed state only) is gone; one
+     persistent control serves both states, and Ctrl/Cmd+\ toggles from anywhere
+     including pages with no room header. #}
   {# LC-837: the swap target for boosted navigation (partials/nav_boost.html)
      and the element htmx snapshots/restores for history. The ws-connect
      wrapper above and the nav panel are never swapped, so the socket and the
@@ -652,16 +645,15 @@ document.body.addEventListener('click', function(e){
   var link = e.target.closest('#lc-nav-panel a');
   if (link) lcCloseNav();
 });
-// LC-270: sync the sidebar collapse toggle's aria-expanded to the persisted
-// state (set on <html> by the base.html no-flash bootstrap). The collapse
-// state is client-only, so the server cannot render the right value.
-(function(){
-  var collapsed = document.documentElement.getAttribute('data-lc-sidebar') === 'collapsed';
-  var btns = document.querySelectorAll('[data-lc-sidebar-toggle]');
-  for (var i = 0; i < btns.length; i++) {
-    btns[i].setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-  }
-})();
+// LC-270 / LC-871: sync the sidebar toggle(s) to the persisted collapse state
+// (set on <html> by the base.html no-flash bootstrap; client-only, so the server
+// cannot render the right value). Runs on load and after every boosted #main
+// swap, since the room header that carries the control is re-rendered by the
+// server with the default (expanded) aria/tooltip copy.
+if (window.__lcSyncSidebarToggles) {
+  window.__lcSyncSidebarToggles();
+  document.body.addEventListener('htmx:afterSettle', window.__lcSyncSidebarToggles);
+}
 </script>
 <script>
 // LC-272: copy button on code blocks. Enhances each rendered `.lc-md pre`
