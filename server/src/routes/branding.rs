@@ -219,6 +219,24 @@ pub async fn inject_branding_css(
         // Fragment / no <head>: leave as-is.
         original.into_owned()
     };
+    // LC-864: the deployment-environment badge rides this same single full-page
+    // body rewrite - the asset / fragment / non-HTML / non-success guards above
+    // are exactly the ones it needs too, so a second buffering middleware would
+    // be pure waste. Nothing is added in production (env_badge_html returns "").
+    // Spliced before the last </body> so the fixed badge lives at the document
+    // end; a page with no </body> (should not happen for a full page) is left
+    // unchanged.
+    let badge = crate::environment::env_badge_html(crate::environment::deployment_environment());
+    let injected = match (badge.is_empty(), injected.rfind("</body>")) {
+        (false, Some(idx)) => {
+            let mut out = String::with_capacity(injected.len() + badge.len());
+            out.push_str(&injected[..idx]);
+            out.push_str(&badge);
+            out.push_str(&injected[idx..]);
+            out
+        }
+        _ => injected,
+    };
     let mut new_res = Response::from_parts(parts, Body::from(injected));
     // Length changed; let the runtime re-derive it.
     new_res.headers_mut().remove(header::CONTENT_LENGTH);

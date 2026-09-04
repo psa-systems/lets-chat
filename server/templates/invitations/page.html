@@ -11,6 +11,12 @@
      scrolls normally instead of clipping. #}
   <div class="flex min-h-full flex-col justify-center">
     <section class="lc-page-narrow lc-page-pad">
+      {# LC-864: which environment this account (and so any invitation here) is
+         provisioned on. Off production only, matching the shell badge, so a
+         recipient can tell a staging invite from a production one. #}
+      {% if let Some(env) = environment %}
+      <p class="lc-small text-content-muted mb-3">{{ "env-label"|t }}: {{ env }}</p>
+      {% endif %}
       {# LC-161: live-updated region. EnclaveInvitation{Created,Resolved} already
          broadcast_to_user, so every tab's socket receives them; the WS send task
          swaps this #lc-invitations block by id (no topic subscription needed -

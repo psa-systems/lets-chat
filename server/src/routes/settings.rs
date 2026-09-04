@@ -1196,6 +1196,7 @@ async fn render_welcome_handle(
         error,
         brand_logo: branding.logo_upload_id.is_some(),
         brand_heading: branding.login_heading,
+        environment: crate::environment::deployment_environment(),
     };
     html(&page)
 }

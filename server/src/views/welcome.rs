@@ -20,4 +20,8 @@ pub struct WelcomeHandlePage<'a> {
     pub error: Option<&'a str>,
     pub brand_logo: bool,
     pub brand_heading: String,
+    /// LC-864: the environment this newly provisioned account lives on
+    /// (staging, dev, ...), or None in production. Stated on the first-entry
+    /// prompt so a new user knows which environment they were provisioned on.
+    pub environment: Option<&'a str>,
 }

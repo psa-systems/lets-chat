@@ -15,6 +15,11 @@
       {% if !brand_heading.is_empty() %}{{ brand_heading }}{% else %}{{ "welcome-handle-heading"|t }}{% endif %}
     </h1>
     <p class="text-sm text-content-muted">{{ "welcome-handle-intro"|t }}</p>
+    {# LC-864: state which environment this new account is provisioned on. Off
+       production only, matching the shell badge. #}
+    {% if let Some(env) = environment %}
+    <p class="text-xs text-content-subtle text-center">{{ "env-label"|t }}: {{ env }}</p>
+    {% endif %}
     {% if let Some(err) = error %}
     <div class="alert alert-danger" role="alert">{{ err }}</div>
     {% endif %}
