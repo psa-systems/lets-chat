@@ -6,8 +6,9 @@
 // getUserMedia or RTCPeerConnection, while sharing every presence/UI/teardown
 // step with the mesh path.
 //
-// Covered: which branch scan() takes on a swap (float, leave-for-a-different-
-// dock, plain unbind), that leave() takes the floating panel down with it (the
+// Covered: which branch scan() takes on a swap (float on an empty swap, float-
+// and-mark-busy on a different room's dock (LC-870), plain unbind), that leave()
+// takes the floating panel down with it (the
 // Leave button, and call.js accepting a 1:1 DM call), and that the teardown is
 // a real one - `voice_leave` on the wire and the SFU session stopped.
 const test = require('node:test');
@@ -308,21 +309,26 @@ test('LC-832: the enclave voice channel page floats too, and its mesh leave rele
   assert.equal(h.tracks[0].stopped, true, 'the microphone is released');
 });
 
-test('LC-832: a swap that renders a DIFFERENT dock still ends the call (bindRoot), never floats', () => {
+test('LC-870: switching enclaves mid-call floats the live dock and marks the new room busy, never leaves', () => {
   const h = joined();
 
-  h.swap(makeDock(9));                  // room 9's page, rendered by the swap
+  const other = makeDock(9);
+  h.swap(other);                        // room 9's page, rendered by the enclave switch
 
-  assert.equal(h.voice.isJoined(), false, 'one voice session per tab');
-  assert.deepEqual(h.sfuCalls, ['start', 'stop']);
-  assert.equal(h.sent.filter((f) => f.type === 'voice_leave').length, 1);
-  assert.equal(h.popout.isPopped(), false, 'nothing was floated');
-  assert.equal(h.dock.classList.contains('lc-huddle--float'), false);
+  // The call is preserved, not ended: the live dock is lifted out of #main and
+  // keeps running, exactly like the swap-left-no-dock path.
+  assert.equal(h.voice.isJoined(), true, 'the call survives the enclave switch');
+  assert.deepEqual(h.sfuCalls, ['start'], 'no teardown ran');
+  assert.equal(h.sent.filter((f) => f.type === 'voice_leave').length, 0, 'the roster is not told we left');
+  assert.equal(h.popout.isPopped(), true, 'the live dock floated');
+  assert.equal(h.popout.roomId(), '7', 'still bound to the room the call is in');
+  assert.equal(h.dock.parentNode, h.body, 'the LIVE dock is re-parented outside #main');
+  assert.equal(h.dock.classList.contains('lc-huddle--float'), true);
 
-  // Rebound to the new page, so a Join there joins room 9.
-  h.join();
-  assert.equal(h.voice.isJoined(), true);
-  assert.equal(h.sent.filter((f) => f.type === 'voice_join' && f.room_id === 9).length, 1);
+  // The destination room's own dock gets the busy note (one session per tab):
+  // its Join is inert while a call is live elsewhere.
+  assert.equal(other.hasAttribute('data-lc-huddle-busy'), true, 'the new room shows the busy note');
+  assert.equal(other.querySelector('[data-lc-voice-join]').hasAttribute('disabled'), true, 'its Join is disabled');
 });
 
 test('LC-832: a swap with no dock and no live call just unbinds - nothing floats', () => {
