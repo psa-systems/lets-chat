@@ -24,6 +24,11 @@
     {% endif %}
     <a href="/auth/bunyip/start" class="btn btn-primary w-full">Sign in with Bunyip</a>
     <p class="text-xs text-content-subtle">You will be redirected to {{ bunyip_issuer_host }} to sign in.</p>
+    {# LC-864: which environment an account signing in here is provisioned
+       against. Only rendered off production, matching the shell badge. #}
+    {% if let Some(env) = environment %}
+    <p class="text-xs text-content-subtle">{{ "env-label"|t }}: {{ env }}</p>
+    {% endif %}
     <p class="text-xs text-content-subtle" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
   </div>
 </main>

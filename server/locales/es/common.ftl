@@ -154,6 +154,10 @@ shortcuts-switcher = Cambio rápido
 shortcuts-toggle-sidebar = Alternar barra lateral
 shortcuts-help = Mostrar esta ayuda
 
+## LC-864: indicador del entorno de despliegue. Solo la etiqueta; el valor del
+## entorno (staging, dev, ...) es una cadena de configuración del operador.
+env-label = Entorno
+
 ## Quick switcher (LC-260)
 # LC-750 (F27): the dialog's accessible name. Separate from the input's
 # placeholder, which is a hint and ends in an ellipsis.

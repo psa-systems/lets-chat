@@ -77,6 +77,7 @@ pub(crate) async fn build_login_page<'a>(
         brand_body_html,
         sso_error,
         bunyip_issuer_host,
+        environment: crate::environment::deployment_environment(),
     })
 }
 

@@ -1574,6 +1574,7 @@ pub async fn get_invitations(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
+        environment: crate::environment::deployment_environment(),
     })
 }
 
