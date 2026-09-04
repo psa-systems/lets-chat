@@ -94,11 +94,11 @@
     +
   </a>
   </div>
-  {# LC-553: the expand control is no longer a tile inside the rail - the
-     collapsed sidebar used to disappear "into" the rail with only a rail button
-     to bring it back. It is now a ribbon tab on the rail's outer seam
-     (.lc-sidebar-ribbon in layout.html), so the affordance reads as "pull the
-     sidebar back out" rather than another rail icon. #}
+  {# LC-871: the sidebar expand control is not on the rail at all. It is the one
+     persistent collapse/expand button at the far left of the room header
+     (room_header.html), which serves both states from a single fixed home;
+     Ctrl/Cmd+\ toggles it from anywhere. (Earlier iterations put it in the rail,
+     then on a floating rail-seam ribbon.) #}
   {# LC-576: the rail foot carries Settings / Shortcuts / Profile, stacked, as in
      the prototype (gear, help, avatar). They were briefly a row in the sidebar
      foot, which is wrong on two counts: the prototype puts them here, and the

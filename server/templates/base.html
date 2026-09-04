@@ -78,6 +78,23 @@
       var sb = null;
       try { sb = localStorage.getItem("lc-sidebar"); } catch (e) {}
       applySidebar(sb);
+      // LC-871: one persistent collapse control (far left of the room header) in
+      // both states, replacing the old pair (a bare chevron in the sidebar head +
+      // a floating rail ribbon that each lived in a different place). Sync every
+      // [data-lc-sidebar-toggle] to the current state: aria-expanded plus the
+      // state-specific tooltip/label copy carried on the button as
+      // data-lc-tip-collapse / data-lc-tip-expand (each already includes the
+      // shortcut). The chevron direction is pure CSS (rotate keyed on <html>).
+      window.__lcSyncSidebarToggles = function () {
+        var collapsed = d.getAttribute("data-lc-sidebar") === "collapsed";
+        var btns = document.querySelectorAll("[data-lc-sidebar-toggle]");
+        for (var i = 0; i < btns.length; i++) {
+          var b = btns[i];
+          b.setAttribute("aria-expanded", collapsed ? "false" : "true");
+          var tip = collapsed ? b.getAttribute("data-lc-tip-expand") : b.getAttribute("data-lc-tip-collapse");
+          if (tip) { b.setAttribute("data-lc-tip", tip); b.setAttribute("aria-label", tip); }
+        }
+      };
       window.__lcToggleSidebar = function () {
         var collapsed = d.getAttribute("data-lc-sidebar") === "collapsed";
         var next = collapsed ? "" : "collapsed";
@@ -86,11 +103,19 @@
           else localStorage.removeItem("lc-sidebar");
         } catch (e) {}
         applySidebar(next);
-        var btns = document.querySelectorAll("[data-lc-sidebar-toggle]");
-        for (var i = 0; i < btns.length; i++) {
-          btns[i].setAttribute("aria-expanded", next ? "false" : "true");
-        }
+        window.__lcSyncSidebarToggles();
       };
+      // LC-871: Ctrl/Cmd+\ toggles the sidebar from anywhere. Desktop-only, like
+      // the collapse itself (the md-only CSS below), and this also covers pages
+      // that have no room header (e.g. settings), so the sidebar is never left
+      // collapsed with no way back. e.key is "\" for this combo.
+      document.addEventListener("keydown", function (e) {
+        if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.isComposing) return;
+        if (e.key !== "\\" && e.code !== "Backslash") return;
+        if (!window.matchMedia("(min-width: 768px)").matches) return;
+        e.preventDefault();
+        window.__lcToggleSidebar();
+      });
 
       // LC-576: the right Details panel gets the mirror of the LC-270 left
       // sidebar collapse, so both rails carry a chevron. Same shape throughout:
