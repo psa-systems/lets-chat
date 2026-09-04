@@ -4425,6 +4425,31 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-huddle--resizing { user-select: none; }
 .lc-huddle--resizing [data-lc-voice-grid] { transition: none; }
 
+/* LC-864: deployment-environment badge. Injected into every full page by
+   inject_branding_css (routes/branding.rs) when LETS_CHAT_ENVIRONMENT is set to
+   a non-production value; production injects nothing. A small non-interactive
+   ribbon centered on the top edge so it is visible on every screen without ever
+   covering a control (pointer-events:none: it cannot intercept a click). Uses
+   the amber --warning token so "not production" reads the same, and stays tuned,
+   in every theme. */
+.lc-env-badge {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    pointer-events: none;
+    padding: 0.125rem 0.75rem;
+    border-radius: 0 0 0.5rem 0.5rem;
+    background: var(--warning);
+    color: var(--warning-content);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
+}
+
 /* Audio-only (no tile carries a live camera or a screen-share pin): lay the
    in-call grid out as a wrapping row of compact chips. Reuses the live tile DOM
    (speaking ring, mute badge, YOU pill) - only the geometry changes.

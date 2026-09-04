@@ -353,4 +353,8 @@ pub struct InvitationsPage<'a> {
     pub sidebar_peers: &'a [SidebarPeer],
     pub switcher: &'a [SwitcherEntry],
     pub asset_version: &'a str,
+    /// LC-864: the environment this account (and therefore any invitation shown
+    /// here) is provisioned against, or None in production. Stated on the page
+    /// so a recipient knows whether the invite is on staging or production.
+    pub environment: Option<&'a str>,
 }

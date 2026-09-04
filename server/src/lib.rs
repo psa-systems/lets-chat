@@ -13,6 +13,7 @@ pub mod email;
 pub mod email_ingress;
 pub mod embeddings;
 pub mod emoji_catalog;
+pub mod environment;
 pub mod error;
 pub mod geoip;
 pub mod gif;
