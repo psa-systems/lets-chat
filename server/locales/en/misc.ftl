@@ -173,6 +173,11 @@ voice-transcript-clip-failed = Some audio could not be transcribed. Captions may
 # capture), so one person's Transcribe covers the whole call. Say the privacy
 # fact and the auto-activation plainly.
 voice-transcript-local-only = Only your own microphone is transcribed, on your device. Turning on Transcribe activates it for everyone in the call automatically, including people who join later.
+# LC-860: live captions are a distinct presentation with no accuracy guarantee;
+# the saved transcript of record is assembled separately (server-side, on a
+# delay) and never contains this live text. State the boundary in the drawer so
+# a viewer does not read the live captions as the record.
+voice-caption-live-note = Live captions are approximate. The saved transcript is assembled separately.
 # LC-843: engine preference shown only to clients that have both engines. Name
 # the trade-off (speed vs accuracy) and where the audio goes, briefly.
 voice-engine-label = Engine

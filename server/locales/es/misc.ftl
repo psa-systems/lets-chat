@@ -172,6 +172,10 @@ voice-transcript-clip-failed = No se pudo transcribir parte del audio. Los subt�
 # activa automáticamente para todos en la llamada, incluidos los que se unen más
 # tarde, así que la Transcripción de una persona cubre toda la llamada.
 voice-transcript-local-only = Solo se transcribe tu propio micrófono, en tu dispositivo. Activar Transcribir lo activa automáticamente para todos en la llamada, incluidas las personas que se unan más tarde.
+# LC-860: los subtítulos en vivo son una presentación distinta, sin garantía de
+# precisión; la transcripción guardada se genera por separado y nunca contiene
+# este texto en vivo.
+voice-caption-live-note = Los subtítulos en vivo son aproximados. La transcripción guardada se genera por separado.
 # LC-843: engine preference shown only to clients that have both engines.
 voice-engine-label = Motor
 voice-engine-fast = Rápido (instantáneo, en el navegador)
