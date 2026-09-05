@@ -869,6 +869,164 @@ async fn agent_clip_rejects_speaker_outside_the_room() {
     assert!(segs.is_empty(), "no segment stored for a non-participant");
 }
 
+/// LC-860: once the server-capture agent is covering a room it owns the
+/// transcript of record. A participant's browser output (Web Speech text and
+/// own-mic clips) is then a LIVE caption only - still accepted (200) and fanned
+/// out for display, but never written into the stored record, so the fast,
+/// loose browser text cannot pollute the accurate server-assembled transcript.
+#[tokio::test]
+async fn agent_active_browser_captions_are_live_only_not_recorded() {
+    std::env::set_var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN", AGENT_TOKEN);
+    let mock: Arc<dyn lets_chat::stt::SttClient> =
+        Arc::new(lets_chat::stt::MockSttClient::text("agent record line"));
+    let s = setup_with_stt(Some(mock)).await;
+    let tid = open_voice_session(&s).await;
+
+    // The agent is now covering this room - what a confirmed dispatch marks.
+    s.hub.set_transcript_agent(s.voice_room, tid);
+
+    // Bob's browser posts a Web Speech caption and an own-mic clip. Both are
+    // accepted so the client never has to special-case "agent is up", but neither
+    // is persisted.
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=browser+caption+text"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "the browser caption is still accepted");
+    let (st, _) = post_raw(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/audio"),
+        b"fake-clip-bytes",
+        "audio/webm",
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "the browser clip is still accepted");
+
+    // The agent posts the record line.
+    let (st, _) = post_agent(
+        &s.app,
+        &format!("/call/transcript/{tid}/agent-clip"),
+        Some(AGENT_TOKEN),
+        Some(&s.b_id),
+        b"fake-track-audio",
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    // Only the agent's line is in the stored record; neither browser artifact is.
+    let texts: Vec<String> = db::transcripts::list_segments(&s.chat, tid)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|g| g.text)
+        .collect();
+    assert_eq!(
+        texts,
+        vec!["agent record line".to_string()],
+        "browser captions stay out of the record while the agent covers the room: {texts:?}"
+    );
+}
+
+/// LC-860 acceptance: with an agent covering the room, the STORED transcript is
+/// identical whether or not live browser captions are flowing - because only the
+/// agent feeds the record. Disabling captions therefore has no effect on
+/// transcript completeness.
+#[tokio::test]
+async fn agent_record_is_identical_with_captions_on_and_off() {
+    std::env::set_var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN", AGENT_TOKEN);
+    let mock: Arc<dyn lets_chat::stt::SttClient> =
+        Arc::new(lets_chat::stt::MockSttClient::text("the agent line"));
+
+    // Captions OFF: only the agent posts.
+    let s = setup_with_stt(Some(mock.clone())).await;
+    let tid = open_voice_session(&s).await;
+    s.hub.set_transcript_agent(s.voice_room, tid);
+    let uri = format!("/call/transcript/{tid}/agent-clip");
+    post_agent(&s.app, &uri, Some(AGENT_TOKEN), Some(&s.b_id), b"a").await;
+    let off: Vec<String> = db::transcripts::list_segments(&s.chat, tid)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|g| g.text)
+        .collect();
+
+    // Captions ON: the browser also chatters before and after the same agent clip.
+    let s2 = setup_with_stt(Some(mock)).await;
+    let tid2 = open_voice_session(&s2).await;
+    s2.hub.set_transcript_agent(s2.voice_room, tid2);
+    post(
+        &s2.app,
+        &s2.b_session,
+        &format!("/call/transcript/{tid2}/segment"),
+        Some("text=chatter+one"),
+    )
+    .await;
+    post_agent(
+        &s2.app,
+        &format!("/call/transcript/{tid2}/agent-clip"),
+        Some(AGENT_TOKEN),
+        Some(&s2.b_id),
+        b"a",
+    )
+    .await;
+    post(
+        &s2.app,
+        &s2.b_session,
+        &format!("/call/transcript/{tid2}/segment"),
+        Some("text=chatter+two"),
+    )
+    .await;
+    let on: Vec<String> = db::transcripts::list_segments(&s2.chat, tid2)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|g| g.text)
+        .collect();
+
+    assert_eq!(
+        on, off,
+        "captions on vs off yield the same stored record: on={on:?} off={off:?}"
+    );
+    assert_eq!(on, vec!["the agent line".to_string()]);
+}
+
+/// LC-860: with NO agent covering the room (a DM, or a call where agent dispatch
+/// failed), the browser IS the transcript of record - the fallback that keeps
+/// those calls complete. This pins the fallback so a future change to the
+/// separation cannot silently drop the record when there is no server pipeline.
+#[tokio::test]
+async fn no_agent_browser_segment_still_records() {
+    let s = setup().await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+    // No set_transcript_agent: the room has no server pipeline.
+    let (st, _) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=fallback+record+line"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(
+        segs.len(),
+        1,
+        "browser is the record when no agent covers the room"
+    );
+    assert_eq!(segs[0].text, "fallback record line");
+}
+
 #[tokio::test]
 async fn audio_rejected_when_server_stt_disabled() {
     // Default setup has no STT client: /audio is 400 (clients only POST audio
