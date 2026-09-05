@@ -222,6 +222,11 @@
        a broken feature. Static: no per-participant "who is transcribing" signal
        exists to gate it on, and it is true for every viewer of their own mic. #}
     <div class="px-3 pb-1 text-xs text-content-muted">{{ "voice-transcript-local-only"|t }}</div>
+    {# LC-860: live captions are a separate presentation from the transcript of
+       record - approximate, and never written into the saved transcript (which
+       the server assembles on a delay). This muted note keeps the boundary
+       visible so the live text is not mistaken for the record. #}
+    <div class="px-3 pb-1 text-xs text-content-muted lc-caption-live-note">{{ "voice-caption-live-note"|t }}</div>
     {# LC-843: engine preference, revealed by transcribe.js only when this
        client genuinely has both engines (SpeechRecognition AND MediaRecorder +
        operator STT). Fast = in-browser Web Speech (instant, audio goes to the
