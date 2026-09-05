@@ -231,6 +231,22 @@ fn is_echo_of(candidate: &str, recent: &[String]) -> bool {
     recent.iter().any(|r| contains_seq(&caption_words(r), &c))
 }
 
+/// LC-860: which artifact a produced segment feeds. The server-capture agent
+/// (LC-810) assembles the transcript OF RECORD; the browser's own Web Speech /
+/// clip output is a LIVE caption. Separating the two is the point of this issue:
+/// the fast-but-loose browser text must never land in the stored record while an
+/// accurate server pipeline is covering the room. With no agent on the room the
+/// browser is still the only source, so it stays the record (the fallback), which
+/// keeps DM calls and dispatch-failure calls complete.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Origin {
+    /// The trusted server-capture agent: always the transcript of record.
+    Agent,
+    /// A participant's browser (Web Speech text or an own-mic clip): a live
+    /// caption, and the record only when no agent is covering the room.
+    Browser,
+}
+
 async fn record_and_broadcast(
     state: &AppState,
     room: &Room,
@@ -238,6 +254,7 @@ async fn record_and_broadcast(
     user: &User,
     text: &str,
     duration_ms: i64,
+    origin: Origin,
 ) -> Result<(), AppError> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -264,15 +281,25 @@ async fn record_and_broadcast(
         );
         return Ok(());
     }
-    db::transcripts::append_segment(
-        &state.chat,
-        transcript_id,
-        &user.id,
-        trimmed,
-        None,
-        duration_ms,
-    )
-    .await?;
+    // LC-860: decide whether this segment is written to the transcript of record.
+    // The agent is always the record. Browser output is the record only when no
+    // agent is covering this room; while an agent is active it is a live caption
+    // only, so the fast browser text never pollutes the accurate stored record.
+    let persist = match origin {
+        Origin::Agent => true,
+        Origin::Browser => !state.hub.transcript_agent_active(room.id),
+    };
+    if persist {
+        db::transcripts::append_segment(
+            &state.chat,
+            transcript_id,
+            &user.id,
+            trimmed,
+            None,
+            duration_ms,
+        )
+        .await?;
+    }
     let speaker = label_for(state, &user.id).await;
     broadcast_to_members(state, room, |to| ChatEvent::TranscriptSegment {
         room_id: room.id,
@@ -303,6 +330,7 @@ async fn ingest_clip(
     speaker: &User,
     stt: &dyn crate::stt::SttClient,
     req: crate::stt::SttRequest,
+    origin: Origin,
 ) -> Result<(), AppError> {
     // LC-592: live captions are the heaviest producer (one clip per 5 seconds
     // per speaker), so they are rate-limited alongside stored attachments.
@@ -340,6 +368,7 @@ async fn ingest_clip(
         speaker,
         &result.text,
         result.duration_ms(),
+        origin,
     )
     .await
 }
@@ -526,8 +555,19 @@ pub async fn segment(
         return Ok(Html(String::new()));
     }
     // Browser Web Speech path: text only, no engine timings (duration 0 -> the
-    // export uses its synthetic cue length for these).
-    record_and_broadcast(&state, &room, transcript_id, &user, &text, 0).await?;
+    // export uses its synthetic cue length for these). LC-860: browser output is
+    // a live caption; it feeds the stored record only when no agent covers the
+    // room (see `Origin`).
+    record_and_broadcast(
+        &state,
+        &room,
+        transcript_id,
+        &user,
+        &text,
+        0,
+        Origin::Browser,
+    )
+    .await?;
     Ok(Html(String::new()))
 }
 
@@ -576,7 +616,18 @@ pub async fn audio(
     let req = crate::stt::SttRequest::new(body.to_vec(), content_type)
         .with_language(user.locale.as_deref())
         .with_timeout_secs(crate::stt::LIVE_CLIP_TIMEOUT_SECS);
-    ingest_clip(&state, &room, transcript_id, &user, stt.as_ref(), req).await?;
+    // LC-860: an own-mic browser clip is a live caption; `Origin::Browser` keeps
+    // it out of the stored record while a server agent is covering the room.
+    ingest_clip(
+        &state,
+        &room,
+        transcript_id,
+        &user,
+        stt.as_ref(),
+        req,
+        Origin::Browser,
+    )
+    .await?;
     Ok(Html(String::new()))
 }
 
@@ -646,7 +697,17 @@ pub async fn agent_clip(
     let req = crate::stt::SttRequest::new(body.to_vec(), content_type)
         .with_language(language)
         .with_timeout_secs(crate::stt::LIVE_CLIP_TIMEOUT_SECS);
-    ingest_clip(&state, &room, transcript_id, &speaker, stt.as_ref(), req).await?;
+    // LC-860: the server-capture agent is the transcript of record.
+    ingest_clip(
+        &state,
+        &room,
+        transcript_id,
+        &speaker,
+        stt.as_ref(),
+        req,
+        Origin::Agent,
+    )
+    .await?;
     Ok(Html(String::new()))
 }
 
