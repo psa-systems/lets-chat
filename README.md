@@ -2,15 +2,7 @@
 
 Self-hosted team chat: rooms, DMs, calls, and an HTTP API, shipped as a single Rust binary. Talk on your own terms.
 
-<!--
-LC-873 records the Let's Chat walkthrough GIF. When it lands, commit it in-repo
-at docs/assets/lets-chat-walkthrough.gif (a raw asset URL is fragile and a
-cross-repo relative path does not render on the mirrors) and replace this
-comment with:
-![Let's Chat walkthrough](docs/assets/lets-chat-walkthrough.gif)
-The committed lets-chat.png is a personal screenshot, not a product demo, and
-LC-873 retires it.
--->
+![Let's Chat](lets-chat.png)
 
 ## Try it
 
