@@ -447,3 +447,10 @@ Two things to know before editing the script:
 
 - A rule whose class is not clear yet carries a `pending: "<issue>"` marker. It still runs and prints its hits on every run, but does not fail the build; the issue named in the marker deletes it as part of its own change, which is why each of those issues carries "add the CI check" in its own acceptance criteria. The script is the source of which rules are live; do not restate that here.
 - Read files with `open --raw`, never `grep -r`, so no rule depends on grep's binary heuristic: a single raw control byte makes every grep-family tool skip the whole file silently. A NUL written as a raw byte in `layout.html` did exactly that until LC-757 respelled it as the `\u0000` JS escape; the `no-raw-nul-bytes` rule now fails the build if one comes back.
+
+## Brand
+
+The mascot is a cheerful messenger bird perched on a speech bubble, and the
+tagline is "Talk on your own terms." Both are the defaults an operator's own
+branding (custom logo, colors, login text, favicon at `/admin/settings`)
+overrides.
