@@ -6328,7 +6328,7 @@ html[data-lc-support-open] .lc-support-panel { display: flex; }
    badge in the corner (the count comes from `data-lc-attention`, set by
    base.html); it clears on the next open. */
 .lc-support-launcher { position: relative; }
-.lc-support-root[data-lc-attention] .lc-support-launcher::after {
+.lc-support-launcher[data-lc-attention]::after {
     content: attr(data-lc-attention);
     position: absolute;
     top: -0.25rem;
