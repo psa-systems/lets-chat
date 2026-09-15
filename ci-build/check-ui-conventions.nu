@@ -408,6 +408,36 @@ def raw-nul-bytes [] {
     } | flatten
 }
 
+# LC-879: every `window.__lcS('key', ...)` call in a first-party browser
+# asset must have a matching entry in the `window.__lcI18n` table in
+# server/templates/base.html, or the string never localizes and silently
+# falls back to the English literal at every call site - the bug this issue
+# closed for the toast Dismiss button.
+def i18n-table-keys [] {
+    open --raw server/templates/base.html
+    | decode utf-8
+    | lines
+    | parse --regex '^\s*(?<key>[a-zA-Z0-9_]+): "\{\{ "js-'
+    | get key
+}
+
+def lcs-keys-without-table-entry [] {
+    let table = (i18n-table-keys)
+    (browser-asset-files) | each {|file|
+        open --raw $file
+        | decode utf-8
+        | lines
+        | enumerate
+        | each {|row|
+            $row.item
+            | parse --regex "__lcS\\('(?<key>[a-zA-Z0-9_]+)'"
+            | where {|m| $m.key not-in $table }
+            | each {|m| $"($file):($row.index + 1): __lcS\('($m.key)'\) has no window.__lcI18n entry in server/templates/base.html" }
+        }
+        | flatten
+    } | flatten
+}
+
 def offline-brand-name [] {
     $OFFLINE_ASSETS | each {|file|
         open --raw $file
@@ -522,6 +552,12 @@ def rules [] {
             pending: null
             fix: "write the byte as a language escape (`\\u0000` in a JS string literal), never as a raw control character: a literal NUL makes every grep-family tool treat the whole file as binary and skip it, so a grep-based gate over the directory reads nothing and still passes (LC-757)"
             check: {|| raw-nul-bytes }
+        }
+        {
+            id: "lcs-key-has-i18n-table-entry"
+            pending: null
+            fix: "add the key to the window.__lcI18n table in server/templates/base.html (window.__lcS(key, fallback)|t \"js-...\"); an __lcS call with no table entry always renders its English fallback regardless of locale (LC-879)"
+            check: {|| lcs-keys-without-table-entry }
         }
         {
             id: "no-em-dash"

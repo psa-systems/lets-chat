@@ -144,3 +144,8 @@ js-nav-failed = No se pudo cargar - problema de conexion. Intentalo de nuevo.
 # cambiar el motor Rapido/Preciso (el motor del navegador aun no soltaba el
 # dispositivo), para que un cambio que detuvo la captura no sea silencioso.
 js-stt-mic-failed = No se pudo iniciar la transcripcion. Intentalo de nuevo.
+# LC-879: el boton de cerrar manual en un toast generado por el cliente
+# (toast.js). El toast identico generado por el servidor ya se localiza con
+# `action-dismiss`; esta es la contraparte `js-*` que exige la tabla de
+# base.html.
+js-toast-dismiss = Descartar
