@@ -158,7 +158,13 @@
       <div class="lc-voice-lobby-avatars" data-lc-voice-preview-names>
         {% for p in participants %}
         <span class="lc-voice-lobby-chip" data-lc-voice-preview-name="{{ p.user_id }}" data-lc-label="{{ p.label }}" data-lc-avatar-version="{{ p.user_id|avatar_version }}">
-          <img class="lc-voice-lobby-avatar" src="{{ p.user_id|avatar_url }}" alt="{{ p.label }}">
+          {% let avatar_user_id = p.user_id.clone() %}
+          {% let avatar_username = p.label.clone() %}
+          {% let avatar_ext = p.avatar_ext.clone() %}
+          {% let avatar_status = p.status.clone() %}
+          {% let avatar_custom_status = p.custom_status.clone() %}
+          {% let avatar_size = "h-14 w-14 text-xs" %}
+          {% include "partials/avatar.html" %}
           <span class="lc-voice-lobby-name">{{ p.label }}</span>
         </span>
         {% endfor %}
