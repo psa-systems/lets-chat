@@ -2,6 +2,9 @@
 # Debe mantenerse en paridad con en/js.ftl (la prueba i18n_catalog lo exige).
 # `%name%` / `%status%` / `%n%` son marcadores literales que el JS sustituye.
 
+# Avisos (toast.js)
+js-dismiss = Descartar
+
 # Llamadas (call.js) + canales de voz (voice.js)
 js-call-mute = Silenciar
 js-call-unmute = Activar micrófono
@@ -17,7 +20,6 @@ js-call-declined = Llamada rechazada
 js-call-declined-by = %name% rechazó la llamada
 js-call-missed-from = Llamada perdida de %name%
 js-call-no-answer = Sin respuesta
-js-call-ended = Llamada finalizada
 js-call-peer-left = %name% salió de la llamada
 js-call-no-mic-camera = No se pudo acceder al micrófono o la cámara.
 js-call-no-camera = No se pudo acceder a la cámara.
@@ -52,13 +54,8 @@ js-outbox-retry = Reintentar
 js-outbox-discard = Descartar
 
 # Subidas + grabación de voz (composer.html)
-js-upload-uploading-file = Subiendo %name%...
-js-upload-uploading-voice = Subiendo mensaje de voz...
-js-upload-attached = Adjunto: %name% (%size%)
-js-upload-voice-attached = Mensaje de voz adjunto
 js-upload-failed = Error al subir
 js-upload-failed-status = Error al subir: %status%
-js-upload-remove-attachment = Quitar adjunto
 js-upload-bad-type = %name% no es un tipo de archivo admitido (solo imagenes y PDF).
 js-upload-too-large = %name% pesa %size%, supera el limite de %limit%.
 js-voice-rec-unsupported = Este navegador no admite la grabación de voz

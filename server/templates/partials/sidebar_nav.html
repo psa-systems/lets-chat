@@ -65,7 +65,7 @@
         </form>
         {% if can_manage_sidebar_categories %}
         <details class="relative">
-          <summary class="list-none cursor-pointer text-content-subtle hover:text-content px-1" title="{{ "sidebar-category-actions"|t }}">&#8230;</summary>
+          <summary class="list-none cursor-pointer text-content-subtle hover:text-content px-1" title="{{ "sidebar-category-actions"|t }}">...</summary>
           <div class="absolute right-0 top-full mt-1 z-30 bg-surface-elevated border border-border rounded shadow text-sm w-56 p-2 space-y-2">
             <form hx-patch="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" class="flex flex-col gap-1">
               <label class="text-xs text-content-muted">{{ "sidebar-category-name-label"|t }}{% include "partials/required_mark.html" %}
