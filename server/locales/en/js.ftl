@@ -4,6 +4,9 @@
 # es/js.ftl must stay in lockstep (the i18n_catalog gate enforces parity).
 # `%name%` / `%status%` / `%n%` are literal placeholders the JS substitutes.
 
+# Toasts (toast.js)
+js-dismiss = Dismiss
+
 # Calls (call.js) + voice channels (voice.js)
 js-call-mute = Mute
 js-call-unmute = Unmute
@@ -19,7 +22,6 @@ js-call-declined = Call declined
 js-call-declined-by = %name% declined the call
 js-call-missed-from = Missed call from %name%
 js-call-no-answer = No answer
-js-call-ended = Call ended
 js-call-peer-left = %name% left the call
 js-call-no-mic-camera = Could not access your microphone or camera.
 js-call-no-camera = Could not access your camera.
@@ -55,13 +57,8 @@ js-outbox-retry = Retry
 js-outbox-discard = Discard
 
 # Uploads + voice recording (composer.html)
-js-upload-uploading-file = Uploading %name%...
-js-upload-uploading-voice = Uploading voice message...
-js-upload-attached = Attached: %name% (%size%)
-js-upload-voice-attached = Voice message attached
 js-upload-failed = Upload failed
 js-upload-failed-status = Upload failed: %status%
-js-upload-remove-attachment = Remove attachment
 js-upload-bad-type = %name% is not a supported file type (images and PDF only).
 js-upload-too-large = %name% is %size%, over the %limit% limit.
 js-voice-rec-unsupported = Voice recording is not supported in this browser

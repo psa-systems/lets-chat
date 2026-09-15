@@ -2507,25 +2507,6 @@ math {
 .lc-sidebar-add:hover { background-color: var(--accent-hover); }
 .lc-sidebar-add svg { height: 1.125rem; width: 1.125rem; }
 
-/* LC-576: the bottom-left utility row (Profile / Shortcuts / Settings), matching
-   the prototype's .sb-foot. It sits inside .lc-sidebar, which already remaps the
-   generic tokens onto the sidebar ramp, so plain var(--border) / var(--content)
-   here resolve to the navy variants - no sidebar-specific tokens needed. */
-.lc-sidebar-foot {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    flex: none;
-    padding: 0.75rem 1rem;
-    border-top: 1px solid var(--border);
-    color: var(--content-muted);
-    font-size: 0.875rem;
-    cursor: pointer;
-}
-.lc-sidebar-foot:hover { color: var(--content); }
-.lc-sidebar-foot svg { height: 1.125rem; width: 1.125rem; flex: none; }
-
-
 /* LC-576: collapsed create-category disclosure at the foot of the room list. */
 .lc-sb-newcat {
     margin-top: 0.5rem;
@@ -2737,21 +2718,6 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     cursor: pointer;
 }
 .lc-panel-close:hover { color: var(--content); background-color: var(--surface-sunken); }
-
-/* Skeleton block (for slow loads). Apply `.lc-skeleton` to a sized element
-   while content streams in. */
-.lc-skeleton {
-    background: linear-gradient(
-        90deg,
-        var(--surface-sunken) 0%,
-        var(--border) 50%,
-        var(--surface-sunken) 100%
-    );
-    background-size: 200% 100%;
-    animation: lc-shimmer 1.4s linear infinite;
-    border-radius: 0.25rem;
-    color: transparent;
-}
 
 /* `hx-indicator` partner: an inline spinner that becomes visible while the
    bound request is in flight. Wired via htmx's built-in `.htmx-indicator`
@@ -3127,16 +3093,6 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     background-color: var(--rail-tile);
 }
 
-/* Settings gear on the active enclave tile + the collapse chevron: muted rail
-   icons that brighten on hover. */
-.lc-rail-gear {
-    color: var(--rail-content-muted);
-    transition: color 0.15s ease, background-color 0.15s ease;
-}
-.lc-rail-gear:hover {
-    color: var(--rail-content);
-    background-color: var(--rail-tile);
-}
 /* Thin divider above the discover / collapse controls at the rail foot. */
 .lc-rail-divider {
     flex: none;
@@ -3211,14 +3167,6 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     height: 1rem;
     flex: none;
 }
-/* Role-gated admin / moderate row: danger-toned so it reads as privileged. */
-.lc-nav-row-danger {
-    color: var(--danger);
-}
-.lc-nav-row-danger:hover {
-    color: var(--danger);
-}
-
 /* LC-368: account dropdown menu items. Like .lc-nav-row but tuned for a menu on
    an elevated surface: full-strength text at rest, a sunken hover/focus tint
    (the row sits on --surface-elevated, so hover must go the other way). The
@@ -5548,15 +5496,6 @@ textarea.input { min-height: 4.5rem; resize: vertical; }
     object-fit: cover;
     border: 1px solid var(--border);
 }
-.lc-set-avatar-fallback {
-    display: flex; align-items: center; justify-content: center;
-    height: 4rem; width: 4rem; flex: none;
-    border-radius: 9999px;
-    background: var(--surface-sunken);
-    color: var(--content-muted);
-    font-weight: 600; font-size: 1.25rem;
-}
-
 /* Sessions list. */
 .lc-set-sessions { display: flex; flex-direction: column; }
 .lc-set-session {
@@ -6187,13 +6126,6 @@ html[data-lc-support-open] .lc-support-panel { display: flex; }
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-}
-.lc-support-empty {
-    margin: auto;
-    text-align: center;
-    color: var(--content-muted);
-    font-size: 0.875rem;
-    padding: 1rem;
 }
 /* LC-732: bot rows carry a small assistant avatar; the row aligns to the bubble
    bottom so the avatar sits beside the last line of a tall reply. */
