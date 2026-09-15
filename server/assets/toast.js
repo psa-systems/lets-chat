@@ -84,7 +84,7 @@
     close.type = 'button';
     close.className = 'lc-toast-close';
     close.setAttribute('data-lc-toast-close', '');
-    close.setAttribute('aria-label', (window.__lcS && window.__lcS('dismiss', 'Dismiss')) || 'Dismiss');
+    close.setAttribute('aria-label', (window.__lcS && window.__lcS('toastDismiss', 'Dismiss')) || 'Dismiss');
     close.innerHTML = '&times;';
     toast.appendChild(ico);
     toast.appendChild(text);

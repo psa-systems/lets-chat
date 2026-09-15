@@ -147,3 +147,7 @@ js-nav-failed = Could not load - connection issue. Try again.
 # Fast/Accurate engine (the browser engine had not released the device yet), so
 # a switch that stopped capturing is not silent (transcribe.js).
 js-stt-mic-failed = Could not start transcription. Try again.
+# LC-879: the manual close button on a client-raised toast (toast.js). The
+# identical server-raised toast already localizes via `action-dismiss`; this
+# is the `js-*` counterpart the base.html table requires.
+js-toast-dismiss = Dismiss
