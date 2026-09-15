@@ -43,10 +43,14 @@
   // (non-2xx like a 413 body cap, a 500, or a network drop), htmx would
   // otherwise swap nothing. Surface a generic error in that form's status slot
   // plus a toast so a Save can never complete with no feedback.
+  // LC-876: scoped to [data-lc-settings] so this net never fires alongside
+  // room/page.html's or admin/users.html's own scoped listeners for the same
+  // event - one failure, one toast.
   function errorNetInit() {
     function onErr(e) {
       var src = (e.detail && e.detail.elt) || e.target;
-      var form = src && src.closest && src.closest('form');
+      if (!src || !src.closest || !src.closest('[data-lc-settings]')) return;
+      var form = src.closest('form');
       var slot = form && form.querySelector('.lc-set-status');
       var msg = (window.__lcS && window.__lcS('settingsSaveError', 'Could not save. Please try again.'))
         || 'Could not save. Please try again.';
