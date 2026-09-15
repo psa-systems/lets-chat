@@ -290,6 +290,9 @@ pub struct InvitationCard {
     /// Inviter display name / handle, already resolved (never a raw UUID).
     pub inviter_name: String,
     pub inviter_avatar_ext: Option<String>,
+    /// LC-884: routes the inviter avatar through `partials/avatar.html`.
+    pub inviter_status: String,
+    pub inviter_custom_status: Option<String>,
 }
 
 impl InvitationCard {
