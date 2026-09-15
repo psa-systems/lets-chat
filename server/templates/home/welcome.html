@@ -149,7 +149,7 @@
                 <span class="min-w-0 flex-1">
                   <span class="lc-home-row-title">
                     <span class="min-w-0 truncate">{{ r.name }}</span>
-                    {% if !r.created_at.is_empty() %}<time datetime="{{ r.created_at_iso() }}" title="{{ r.created_at }}" data-lc-reltime class="lc-home-row-time">{{ r.day() }}</time>{% endif %}
+                    {% if !r.created_at.is_empty() %}<time datetime="{{ r.created_at_iso() }}" title="{{ r.created_at }}" data-lc-ts class="lc-home-row-time">{{ r.day() }}</time>{% endif %}
                   </span>
                   <span class="block truncate lc-small text-content-muted">{{ r.preview }}</span>
                 </span>
@@ -276,9 +276,10 @@
       </div>
     </div>
 
-    {# LC-706: progressive enhancement - localized time-of-day greeting word and
-       relative timestamps ("2h ago"). Both degrade to the server-rendered
-       fallback (greeting word / exact date) when JS is off. Uses Intl, no deps. #}
+    {# LC-706: progressive enhancement - localized time-of-day greeting word.
+       Degrades to the server-rendered fallback greeting word when JS is off.
+       LC-890: the catch-up row timestamp uses the shared `data-lc-ts`
+       formatter (layout.html) instead of a page-local one. #}
     <script data-lc-guard="none">
     (function () {
       var g = document.querySelector('[data-lc-greeting]');
@@ -287,24 +288,6 @@
         var word = h < 12 ? g.dataset.morning : (h < 18 ? g.dataset.afternoon : g.dataset.evening);
         if (word) g.textContent = word;
       }
-      if (typeof Intl === 'undefined' || !Intl.RelativeTimeFormat) return;
-      var rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-      var units = [['year', 31536000], ['month', 2592000], ['day', 86400], ['hour', 3600], ['minute', 60]];
-      document.querySelectorAll('time[data-lc-reltime]').forEach(function (el) {
-        var iso = el.getAttribute('datetime');
-        if (!iso) return;
-        var then = Date.parse(iso);
-        if (isNaN(then)) return;
-        var diff = (then - Date.now()) / 1000;
-        var abs = Math.abs(diff);
-        if (abs < 60) { el.textContent = rtf.format(0, 'minute'); return; }
-        for (var i = 0; i < units.length; i++) {
-          if (abs >= units[i][1] || i === units.length - 1) {
-            el.textContent = rtf.format(Math.round(diff / units[i][1]), units[i][0]);
-            return;
-          }
-        }
-      });
     })();
     </script>
   </div>
