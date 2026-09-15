@@ -3,11 +3,13 @@
    into #lc-home-support-card). Renders nothing when the queue is empty, so the
    container can stay in the DOM and the card can appear live when a request lands.
    References `open_count` and `tickets` (the newest few open SupportViews). #}
+{% import "partials/unread_badge.html" as unread_badge %}
 {% if open_count > 0 %}
 <section class="card lc-home-card lc-home-support overflow-hidden p-0" aria-label="{{ "support-home-title"|t }}">
   <header class="lc-home-card-head">
     <span class="lc-home-card-title">{{ "support-home-title"|t }}</span>
-    <span class="lc-count-pill lc-count-pill--alert">{{ open_count }}</span>
+    {% let support_noun = "support-home-title"|t %}
+    {% call unread_badge::badge(open_count, support_noun, "alert") %}
   </header>
   <ul class="lc-home-support-list">
     {% for t in tickets %}{% if loop.index0 < 3 %}
