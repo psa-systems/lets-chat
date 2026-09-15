@@ -450,7 +450,7 @@
     if (!ok) {
       var msg = (toggleEl && toggleEl.getAttribute('data-lc-unsupported')) ||
         'Live transcription is not supported in this browser.';
-      alert(msg);
+      if (window.__lcToast) window.__lcToast('err', msg);
       return;
     }
     // LC-396: drive OUR OWN UI directly from the response (it returns
@@ -466,7 +466,7 @@
     }).then(function (r) {
       if (!r.ok) {
         try { console.warn('lets-chat: transcription start failed', r.status); } catch (e) {}
-        alert('Could not start transcription (error ' + r.status + ').');
+        if (window.__lcToast) window.__lcToast('err', 'Could not start transcription (error ' + r.status + ').');
         return null;
       }
       return r.json();
@@ -478,7 +478,7 @@
         startLocalCapture();
       }
     }).catch(function () {
-      alert('Could not start transcription (network error).');
+      if (window.__lcToast) window.__lcToast('err', 'Could not start transcription (network error).');
     });
   }
   function endSession() {

@@ -550,7 +550,7 @@
         if (phase !== 'idle') { teardown(); return; }
         becomeCaller();
       }).catch(function () {
-        alert(window.__lcS('callNoMicCamera', 'Could not access your microphone or camera.'));
+        if (window.__lcToast) window.__lcToast('err', window.__lcS('callNoMicCamera', 'Could not access your microphone or camera.'));
         teardown();
       });
   }
@@ -588,7 +588,7 @@
         signal('accept');
         incoming = null;
       }).catch(function () {
-        alert(window.__lcS('callNoMicCamera', 'Could not access your microphone or camera.'));
+        if (window.__lcToast) window.__lcToast('err', window.__lcS('callNoMicCamera', 'Could not access your microphone or camera.'));
         signal('reject');
         teardown();
       });
@@ -654,7 +654,7 @@
         if (pc) pc.addTrack(vtrack, localStream);
         refreshLocalVideo();
         setCameraBtn();
-      }).catch(function () { alert(window.__lcS('callNoCamera', 'Could not access your camera.')); });
+      }).catch(function () { if (window.__lcToast) window.__lcToast('err', window.__lcS('callNoCamera', 'Could not access your camera.')); });
     }
   }
 
@@ -726,7 +726,7 @@
     if (phase === 'idle' || !localStream) return;
     if (isSharingScreen()) { endScreenShare(); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      alert(window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
+      if (window.__lcToast) window.__lcToast('err', window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
       return;
     }
     if (!pc) return;
