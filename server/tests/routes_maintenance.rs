@@ -255,6 +255,30 @@ async fn login_surface_stays_reachable_during_maintenance() {
 }
 
 #[tokio::test]
+async fn maintenance_page_declares_the_accept_language_locale() {
+    let t = app().await;
+    db::settings::set_setting(&t.settings, "maintenance_mode", "true")
+        .await
+        .unwrap();
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/")
+        .header(header::COOKIE, format!("session={}", t.member_session))
+        .header(header::ACCEPT_LANGUAGE, "es")
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body =
+        String::from_utf8_lossy(&to_bytes(res.into_body(), 1 << 20).await.unwrap()).to_string();
+    assert!(
+        body.contains(r#"<html lang="es">"#),
+        "maintenance page should declare its Accept-Language locale; got: {body}"
+    );
+}
+
+#[tokio::test]
 async fn ws_upgrade_rejected_for_non_admin_during_maintenance() {
     let t = app().await;
     db::settings::set_setting(&t.settings, "maintenance_mode", "true")
