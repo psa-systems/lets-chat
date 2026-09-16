@@ -55,3 +55,33 @@ pub fn build(event: &ChatEvent) -> Result<Bytes, PayloadError> {
     });
     Ok(Bytes::from(serde_json::to_vec(&value)?))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // LC-918: the reader cannot choose not to see a push toast, so a
+    // spoiler must never reach the payload text even redacted-once-upstream.
+    #[test]
+    fn mentioned_payload_redacts_spoiler() {
+        let snippet = crate::views::markdown::redact_spoilers("intro ||secret|| outro");
+        let event = ChatEvent::Mentioned {
+            kind: "mention".to_string(),
+            room_id: 1,
+            room_type: "public".to_string(),
+            room_label: "#hiring".to_string(),
+            message_id: 1,
+            mentioned_user_id: "u2".to_string(),
+            author_label: "Dave".to_string(),
+            snippet,
+            target_path: "/room/1#msg-1".to_string(),
+        };
+        let bytes = build(&event).expect("Mentioned event builds a payload");
+        let json = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(json.contains("[spoiler]"), "no placeholder: {json}");
+        assert!(
+            !json.contains("secret"),
+            "spoiler text leaked into push payload: {json}"
+        );
+    }
+}
