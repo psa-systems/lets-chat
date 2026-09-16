@@ -171,12 +171,12 @@
           else localStorage.removeItem("lc-support-open");
         } catch (e) {}
         applySupport(next);
-        var root = document.querySelector("[data-lc-support-root]");
         // Opening clears the attention dot and fetches the thread; a closed
         // bubble issues no requests (live updates arrive via WS push).
         if (next) {
           if (window.__lcDismissSupportHint) window.__lcDismissSupportHint();
-          if (root) root.removeAttribute("data-lc-attention");
+          var launcherEl = document.querySelector("[data-lc-support-launcher]");
+          if (launcherEl) launcherEl.removeAttribute("data-lc-attention");
           if (window.htmx) {
             var t = document.getElementById("lc-support-thread");
             if (t) window.htmx.trigger(t, "lcopen");
@@ -310,11 +310,11 @@
         var tgt = e.detail && e.detail.target;
         if (tgt && tgt.id === "lc-support-thread" &&
             d.getAttribute("data-lc-support-open") !== "1") {
-          var r = document.querySelector("[data-lc-support-root]");
-          if (r) {
-            var n = parseInt(r.getAttribute("data-lc-attention"), 10) || 0;
+          var l = document.querySelector("[data-lc-support-launcher]");
+          if (l) {
+            var n = parseInt(l.getAttribute("data-lc-attention"), 10) || 0;
             n = n + 1;
-            r.setAttribute("data-lc-attention", n > 9 ? "9+" : String(n));
+            l.setAttribute("data-lc-attention", n > 9 ? "9+" : String(n));
           }
         }
       });
@@ -463,6 +463,7 @@
      `%name%` / `%status%` / `%n%` are placeholders the JS substitutes. #}
   <script>
     window.__lcI18n = {
+      dismiss: "{{ "js-dismiss"|t }}",
       aiFailed: "{{ "js-ai-failed"|t }}",
       aiRetry: "{{ "js-ai-retry"|t }}",
       composeApplied: "{{ "js-compose-applied"|t }}",
@@ -479,6 +480,8 @@
       callConnectionFailed: "{{ "js-call-connection-failed"|t }}",
       navFailed: "{{ "js-nav-failed"|t }}",
       sttMicFailed: "{{ "js-stt-mic-failed"|t }}",
+      sttUnsupported: "{{ "js-stt-unsupported"|t }}",
+      sttStartFailed: "{{ "js-stt-start-failed"|t }}",
       callDeclined: "{{ "js-call-declined"|t }}",
       callDeclinedBy: "{{ "js-call-declined-by"|t }}",
       huddleRingStarted: "{{ "js-huddle-ring-started"|t }}",
@@ -492,7 +495,6 @@
       reactAnnounceMany: "{{ "js-react-announce-many"|t }}",
       callMissedFrom: "{{ "js-call-missed-from"|t }}",
       callNoAnswer: "{{ "js-call-no-answer"|t }}",
-      callEnded: "{{ "js-call-ended"|t }}",
       callPeerLeft: "{{ "js-call-peer-left"|t }}",
       callNoMicCamera: "{{ "js-call-no-mic-camera"|t }}",
       callNoCamera: "{{ "js-call-no-camera"|t }}",
@@ -520,13 +522,8 @@
       outboxFailed: "{{ "js-outbox-failed"|t }}",
       outboxRetry: "{{ "js-outbox-retry"|t }}",
       outboxDiscard: "{{ "js-outbox-discard"|t }}",
-      uploadUploadingFile: "{{ "js-upload-uploading-file"|t }}",
-      uploadUploadingVoice: "{{ "js-upload-uploading-voice"|t }}",
-      uploadAttached: "{{ "js-upload-attached"|t }}",
-      uploadVoiceAttached: "{{ "js-upload-voice-attached"|t }}",
       uploadFailed: "{{ "js-upload-failed"|t }}",
       uploadFailedStatus: "{{ "js-upload-failed-status"|t }}",
-      uploadRemoveAttachment: "{{ "js-upload-remove-attachment"|t }}",
       uploadBadType: "{{ "js-upload-bad-type"|t }}",
       uploadTooLarge: "{{ "js-upload-too-large"|t }}",
       voiceRecUnsupported: "{{ "js-voice-rec-unsupported"|t }}",
@@ -576,6 +573,14 @@
     // Lookup helper: returns the localized string for `k`, or `fb` (the English
     // literal kept at each call site) when the key is absent.
     window.__lcS = function (k, fb) { var v = window.__lcI18n[k]; return v == null ? fb : v; };
+    // Notify helper: routes through the shared toast once toast.js (loaded with
+    // `defer`) has run, and falls back to console.error plus a native alert so a
+    // failure is never silent while that script is still pending or failed to load.
+    window.__lcNotify = function (kind, msg) {
+      if (window.__lcToast) { window.__lcToast(kind, msg); return; }
+      try { console.error('lets-chat: ' + msg); } catch (e) {}
+      alert(msg);
+    };
   </script>
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">
   <link rel="stylesheet" href="/assets/main.css?v={{ asset_version }}">

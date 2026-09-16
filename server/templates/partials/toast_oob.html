@@ -1,0 +1,4 @@
+{#- LC-879: the one out-of-band toast markup, appended to #lc-toast-region and
+   picked up by toast.js (auto-dismiss / manual close). Caller binds `ok` and
+   `message` before including. -#}
+<div hx-swap-oob="beforeend:#lc-toast-region"><div class="lc-toast lc-toast--{% if ok %}ok{% else %}err{% endif %}" role="status" data-lc-toast><span class="lc-toast-ico" aria-hidden="true">{% if ok %}&#10003;{% else %}!{% endif %}</span><span class="lc-toast-msg">{{ message }}</span><button type="button" class="lc-toast-close" data-lc-toast-close aria-label="{{ "action-dismiss"|t }}">&times;</button></div></div>

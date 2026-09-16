@@ -66,7 +66,7 @@
         wrap.appendChild(document.createTextNode(msg));
         slot.appendChild(wrap);
       }
-      if (window.__lcToast) window.__lcToast('err', msg);
+      window.__lcNotify('err', msg);
     }
     document.body.addEventListener('htmx:responseError', onErr);
     document.body.addEventListener('htmx:sendError', onErr);
@@ -98,9 +98,7 @@
     var dl = root.querySelector('[data-lc-download-data]');
     if (dl) {
       dl.addEventListener('click', function () {
-        if (window.__lcToast) {
-          window.__lcToast('ok', dl.getAttribute('data-lc-downloading') || 'Preparing your data...');
-        }
+        window.__lcNotify('ok', dl.getAttribute('data-lc-downloading') || 'Preparing your data...');
       });
     }
     var del = root.querySelector('[data-lc-delete-form]');

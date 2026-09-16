@@ -109,6 +109,15 @@ function load() {
       // Capture the inbound-event callback so a test can drive server frames
       // (roster/joined/screen/...) the way the real bus delivers them.
       watchBus: (_bus, _attr, cb) => { busCb = cb; },
+      // LC-875: the shared label setter voice.js (and huddle_popout.js's
+      // adopted placeholder) now use instead of a local copy.
+      setLabel: (btn, text) => {
+        if (!btn) return;
+        const l = btn.querySelector('.lc-cbtn-label');
+        if (l) l.textContent = text; else btn.textContent = text;
+        btn.setAttribute('aria-label', text);
+        btn.setAttribute('data-lc-tip', text);
+      },
     },
     // LC-610: the SFU owns media on this path.
     LetsChatHuddleSfu: {
@@ -117,6 +126,7 @@ function load() {
       stop: () => { sfuCalls.push('stop'); },
     },
     __lcToast: (kind, msg) => { toasts.push([kind, msg]); },
+    __lcNotify: (kind, msg) => { toasts.push([kind, msg]); },
     // LC-144: the mesh path takes its mic through the pinned-device module.
     LetsChatDevices: {
       getUserMedia: () => Promise.resolve({
