@@ -693,3 +693,60 @@ async fn older_page_emits_no_correction_after_the_viewers_bubble() {
         "no boundary correction when the join does not split a bot run, got: {older}"
     );
 }
+
+// LC-909: two concurrent panel renders for a user with no bot DM yet (the WS
+// push and an in-flight HTTP request both call `support_dm_room`) must not
+// race into two assistant-bot DM rooms. Before the `dm_pairs` unique
+// constraint, `find_dm_room` -> `create_dm_room` was a plain find-then-create
+// with no guard, so both requests could see `None` and each create a room.
+// The `find_or_create_dm_room` race-safety is exercised directly in
+// `tests/db_dm.rs`; this pins the same guarantee through the real HTTP path
+// `support_dm_room` is reached from.
+#[tokio::test]
+async fn concurrent_panel_renders_create_only_one_bot_dm() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+    let (uid, session) = member_session(&auth).await;
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
+    let app: Router = routes::build_router(state(auth.clone(), chat.clone(), settings, true));
+
+    let make_req = || {
+        Request::builder()
+            .method(Method::GET)
+            .uri("/support/panel/thread")
+            .header(header::COOKIE, format!("session={session}"))
+            .body(Body::empty())
+            .unwrap()
+    };
+
+    let app_a = app.clone();
+    let app_b = app.clone();
+    let (res_a, res_b) = tokio::join!(app_a.oneshot(make_req()), app_b.oneshot(make_req()));
+    assert_eq!(res_a.unwrap().status(), StatusCode::OK);
+    assert_eq!(res_b.unwrap().status(), StatusCode::OK);
+
+    let bot = db::auth::find_user_by_username(&auth, "assistant")
+        .await
+        .unwrap()
+        .expect("assistant bot created");
+
+    let dm_rooms: Vec<i64> = sqlx::query_scalar(
+        "SELECT r.id FROM rooms r \
+         JOIN room_members m1 ON m1.room_id = r.id AND m1.user_id = ? \
+         JOIN room_members m2 ON m2.room_id = r.id AND m2.user_id = ? \
+         WHERE r.room_type = 'dm'",
+    )
+    .bind(&bot.id)
+    .bind(&uid)
+    .fetch_all(&chat)
+    .await
+    .unwrap();
+    assert_eq!(
+        dm_rooms.len(),
+        1,
+        "exactly one assistant-bot DM room must exist for the user, got: {dm_rooms:?}"
+    );
+}
