@@ -730,9 +730,7 @@
     } else if (typeof target._lcAiOriginal === 'string') {
       target.innerHTML = target._lcAiOriginal;
       if (window.htmx && window.htmx.process) window.htmx.process(target);
-      if (window.__lcToast) {
-        window.__lcToast('err', window.__lcS ? window.__lcS('aiFailed', 'AI request failed. Please try again.') : 'AI request failed. Please try again.');
-      }
+      window.__lcNotify('err', window.__lcS ? window.__lcS('aiFailed', 'AI request failed. Please try again.') : 'AI request failed. Please try again.');
     }
     target._lcAiOriginal = null;
     target._lcAiRetry = null;
