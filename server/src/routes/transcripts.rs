@@ -323,6 +323,7 @@ async fn record_and_broadcast(
 /// its own "not configured" ordering, and the caller builds the
 /// [`crate::stt::SttRequest`] (it owns the clip bytes + the language hint, which
 /// differ by path). Design notes: LC-810.
+#[allow(clippy::too_many_arguments)]
 async fn ingest_clip(
     state: &AppState,
     room: &Room,
@@ -331,6 +332,7 @@ async fn ingest_clip(
     stt: &dyn crate::stt::SttClient,
     req: crate::stt::SttRequest,
     origin: Origin,
+    fallback_duration_ms: Option<i64>,
 ) -> Result<(), AppError> {
     // LC-592: live captions are the heaviest producer (one clip per 5 seconds
     // per speaker), so they are rate-limited alongside stored attachments.
@@ -360,14 +362,24 @@ async fn ingest_clip(
         }
     };
     // LC-591: store the real spoken length from the engine's segment timings so
-    // the WebVTT export can use it instead of a synthetic cue duration.
+    // the WebVTT export can use it instead of a synthetic cue duration. LC-921:
+    // the engine measures speech, so it wins whenever it has a timing; the
+    // caller's fallback (the agent's own wall-clock clip duration) only covers
+    // engines that return no segments, since it also carries leading/trailing
+    // silence the engine's timings would have excluded.
+    let engine_duration_ms = result.duration_ms();
+    let duration_ms = if engine_duration_ms > 0 {
+        engine_duration_ms
+    } else {
+        fallback_duration_ms.unwrap_or(0)
+    };
     record_and_broadcast(
         state,
         room,
         transcript_id,
         speaker,
         &result.text,
-        result.duration_ms(),
+        duration_ms,
         origin,
     )
     .await
@@ -626,6 +638,7 @@ pub async fn audio(
         stt.as_ref(),
         req,
         Origin::Browser,
+        None,
     )
     .await?;
     Ok(Html(String::new()))
@@ -694,6 +707,19 @@ pub async fn agent_clip(
         .map(str::trim)
         .filter(|s| !s.is_empty());
     let language = x_language.or(speaker.locale.as_deref());
+    // LC-921: the agent measures each clip's real wall-clock duration sample by
+    // sample and sends it as X-Duration-Secs. That is a fallback under the
+    // engine's own segment timings (see `ingest_clip`), not a replacement,
+    // because it includes leading/trailing silence the engine's timings would
+    // have excluded. Anything that does not parse as a finite, positive number
+    // of seconds is dropped rather than failing the request.
+    let fallback_duration_ms = headers
+        .get("x-duration-secs")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|secs| secs.is_finite() && *secs > 0.0)
+        .map(|secs| (secs * 1000.0).round() as i64);
     let req = crate::stt::SttRequest::new(body.to_vec(), content_type)
         .with_language(language)
         .with_timeout_secs(crate::stt::LIVE_CLIP_TIMEOUT_SECS);
@@ -706,6 +732,7 @@ pub async fn agent_clip(
         stt.as_ref(),
         req,
         Origin::Agent,
+        fallback_duration_ms,
     )
     .await?;
     Ok(Html(String::new()))
