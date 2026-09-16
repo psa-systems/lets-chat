@@ -204,6 +204,87 @@ async fn skipped_opt_out_when_toggle_off() {
 }
 
 #[tokio::test]
+async fn skipped_muted_when_room_mute_mode_is_all() {
+    let fx = setup(true, true, true).await;
+    db::notifications::set_room_mute_mode(
+        &fx.state.chat,
+        &fx.recipient_id,
+        fx.room_id,
+        db::notifications::MuteMode::All,
+    )
+    .await
+    .unwrap();
+    let outcome = dispatch_mention_notification(
+        &fx.state,
+        &fx.recipient_id,
+        fx.message_id,
+        NotificationKind::Mention,
+        fx.room_id,
+        &fx.room_name,
+    )
+    .await;
+    assert!(
+        matches!(outcome, DispatchOutcome::SkippedMuted),
+        "expected SkippedMuted; got {outcome:?}",
+    );
+}
+
+#[tokio::test]
+async fn sent_when_room_mute_mode_is_except_mentions() {
+    let fx = setup(true, true, true).await;
+    db::notifications::set_room_mute_mode(
+        &fx.state.chat,
+        &fx.recipient_id,
+        fx.room_id,
+        db::notifications::MuteMode::ExceptMentions,
+    )
+    .await
+    .unwrap();
+    let outcome = dispatch_mention_notification(
+        &fx.state,
+        &fx.recipient_id,
+        fx.message_id,
+        NotificationKind::Mention,
+        fx.room_id,
+        &fx.room_name,
+    )
+    .await;
+    assert!(
+        !matches!(
+            outcome,
+            DispatchOutcome::SkippedMuted | DispatchOutcome::SkippedDnd
+        ),
+        "except_mentions must still allow the mention email; got {outcome:?}",
+    );
+}
+
+#[tokio::test]
+async fn skipped_dnd_when_inside_quiet_hours_window() {
+    let fx = setup(true, true, true).await;
+    // A pause far in the future unconditionally suppresses regardless of
+    // the current instant, avoiding any timezone-window arithmetic here.
+    sqlx::query("UPDATE users SET dnd_paused_until = ? WHERE id = ?")
+        .bind("2999-01-01 00:00:00")
+        .bind(&fx.recipient_id)
+        .execute(&fx.state.auth)
+        .await
+        .unwrap();
+    let outcome = dispatch_mention_notification(
+        &fx.state,
+        &fx.recipient_id,
+        fx.message_id,
+        NotificationKind::Mention,
+        fx.room_id,
+        &fx.room_name,
+    )
+    .await;
+    assert!(
+        matches!(outcome, DispatchOutcome::SkippedDnd),
+        "expected SkippedDnd; got {outcome:?}",
+    );
+}
+
+#[tokio::test]
 async fn skipped_no_recipient_when_user_id_unknown() {
     let fx = setup(true, true, true).await;
     let outcome = dispatch_mention_notification(
