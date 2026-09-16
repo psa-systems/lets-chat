@@ -573,6 +573,14 @@
     // Lookup helper: returns the localized string for `k`, or `fb` (the English
     // literal kept at each call site) when the key is absent.
     window.__lcS = function (k, fb) { var v = window.__lcI18n[k]; return v == null ? fb : v; };
+    // Notify helper: routes through the shared toast once toast.js (loaded with
+    // `defer`) has run, and falls back to console.error plus a native alert so a
+    // failure is never silent while that script is still pending or failed to load.
+    window.__lcNotify = function (kind, msg) {
+      if (window.__lcToast) { window.__lcToast(kind, msg); return; }
+      try { console.error('lets-chat: ' + msg); } catch (e) {}
+      alert(msg);
+    };
   </script>
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">
   <link rel="stylesheet" href="/assets/main.css?v={{ asset_version }}">

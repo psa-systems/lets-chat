@@ -847,7 +847,7 @@
         if (!joined || !sfu) return;
         leave();
         var msg = window.__lcS('callConnectionFailed', 'The call connection failed.');
-        if (window.__lcToast) window.__lcToast('err', msg); else alert(msg);
+        window.__lcNotify('err', msg);
       },
       audioSink: function () {
         var el = document.getElementById('lc-huddle-sfu-audio-sink');

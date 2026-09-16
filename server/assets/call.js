@@ -124,9 +124,8 @@
   // LC-438: a localized toast (key+fallback via __lcS, %name% substituted), for
   // the call end-states that would otherwise be silent once the modal closes.
   function lcToast(kind, key, fallback, name) {
-    if (!window.__lcToast) return;
     var msg = (window.__lcS ? window.__lcS(key, fallback) : fallback).replace('%name%', name || '');
-    window.__lcToast(kind, msg);
+    window.__lcNotify(kind, msg);
   }
   // LC-875: shared with voice.js, huddle_popout.js and huddle_control.js so
   // the visible label, the tooltip and the accessible name never drift apart.
