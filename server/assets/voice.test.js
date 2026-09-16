@@ -126,6 +126,7 @@ function load() {
       stop: () => { sfuCalls.push('stop'); },
     },
     __lcToast: (kind, msg) => { toasts.push([kind, msg]); },
+    __lcNotify: (kind, msg) => { toasts.push([kind, msg]); },
     // LC-144: the mesh path takes its mic through the pinned-device module.
     LetsChatDevices: {
       getUserMedia: () => Promise.resolve({

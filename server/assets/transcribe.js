@@ -374,9 +374,7 @@
         return;
       }
       capturing = false;
-      if (window.__lcToast) {
-        window.__lcToast('err', window.__lcS('sttMicFailed', 'Could not start transcription. Try again.'));
-      }
+      window.__lcNotify('err', window.__lcS('sttMicFailed', 'Could not start transcription. Try again.'));
     });
   }
   function recordClip() {
