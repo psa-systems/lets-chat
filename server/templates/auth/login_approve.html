@@ -1,15 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Approve sign-in - Let's Chat{% endblock %}
+{% block title %}{{ "login-approve-title"|t }} - Let's Chat{% endblock %}
 
 {% block body %}
 <main class="min-h-screen flex items-center justify-center p-6">
   <form method="post" action="/auth/bunyip/approve"
         class="card lc-page-narrow space-y-4 p-6 text-center">
-    <h1 class="lc-display">Approve this sign-in</h1>
+    <h1 class="lc-display">{{ "login-approve-heading"|t }}</h1>
     <p class="text-sm text-content-muted">
-      This sign-in looked unfamiliar, so we emailed a 6-digit code to the
-      address on your account. Enter it below to finish signing in.
+      {{ "login-approve-intro"|t }}
     </p>
     {% if let Some(err) = error %}
     <div class="alert alert-danger text-left" role="alert">{{ err }}</div>
@@ -18,15 +17,14 @@
     {# LC-750 (F25): a real label rather than an aria-label, so the required
        marker has somewhere visible to live. `input-error` marks the field itself
        on a rejected code; the banner above carries the reason as text. #}
-    <label for="lc-approve-code" class="block text-left text-sm text-content-muted">6-digit approval code{% include "partials/required_mark.html" %}</label>
+    <label for="lc-approve-code" class="block text-left text-sm text-content-muted">{{ "login-approve-code-label"|t }}{% include "partials/required_mark.html" %}</label>
     <input id="lc-approve-code" type="text" name="code" inputmode="numeric" pattern="[0-9]*"
            autocomplete="one-time-code" maxlength="6" required aria-required="true" autofocus
            class="input w-full text-center text-lg tracking-widest{% if error.is_some() %} input-error{% endif %}"
            placeholder="000000">
-    <button type="submit" class="btn btn-primary w-full">Approve sign-in</button>
+    <button type="submit" class="btn btn-primary w-full">{{ "login-approve-submit"|t }}</button>
     <p class="text-xs text-content-subtle">
-      The code expires in 15 minutes. If this was not you, close this page - the
-      sign-in cannot complete without the code.
+      {{ "login-approve-expiry"|t }}
     </p>
     <p class="text-xs text-content-subtle" title="Built {{ build_date }}">v{{ app_version }} ({{ git_hash }})</p>
   </form>

@@ -6,6 +6,15 @@
 login-page-title = Iniciar sesión
 login-forgot-link = ¿Olvidaste tu contraseña?
 login-no-account = ¿No tienes cuenta?
+login-logo-alt = Logotipo
+
+## Aprobación de inicio de sesión (bunyip/approve)
+login-approve-title = Aprobar inicio de sesión
+login-approve-heading = Aprueba este inicio de sesión
+login-approve-intro = Este inicio de sesión nos pareció inusual, así que enviamos un código de 6 dígitos a la dirección de tu cuenta. Introdúcelo a continuación para terminar de iniciar sesión.
+login-approve-code-label = Código de aprobación de 6 dígitos
+login-approve-submit = Aprobar inicio de sesión
+login-approve-expiry = El código caduca en 15 minutos. Si no fuiste tú, cierra esta página: el inicio de sesión no puede completarse sin el código.
 
 ## Register
 register-page-title = Registrarse
