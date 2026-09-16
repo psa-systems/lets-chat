@@ -95,7 +95,7 @@ pub(crate) async fn build_panel(
             hand_raised: false,
         })
         .collect();
-    speakers.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+    speakers.sort_by_key(|a| a.label.to_lowercase());
 
     let mut listeners: Vec<StageMember> = roster
         .participants
