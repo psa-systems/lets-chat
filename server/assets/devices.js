@@ -183,10 +183,8 @@
            which is preferable to throwing out of the perf guard. */
       });
     } catch (e) { /* the effect just stays on; better than throwing */ }
-    if (window.__lcToast) {
-      window.__lcToast('info', window.__lcS('deviceBlurSlow',
-        'Background blur was turned off to keep your video smooth.'));
-    }
+    window.__lcNotify('info', window.__lcS('deviceBlurSlow',
+      'Background blur was turned off to keep your video smooth.'));
   }
 
   // ---- speaker routing ----------------------------------------------
