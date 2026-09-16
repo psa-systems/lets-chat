@@ -42,14 +42,17 @@ pub async fn post_read_all(
     headers: HeaderMap,
 ) -> Result<Html, AppError> {
     let is_admin = user.role == "admin";
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
 
     // The union of rooms with unread messages (rooms + DMs) and rooms with
     // unread mentions. Each source already scopes to the viewer's visible set.
     let mut room_ids: HashSet<i64> = HashSet::new();
-    for (room_id, _) in db::chat::list_room_unread_counts(&state.chat, &user.id, is_admin).await? {
+    for (room_id, _) in
+        db::chat::list_room_unread_counts(&state.chat, &user.id, is_admin, &blocked).await?
+    {
         room_ids.insert(room_id);
     }
-    for (room_id, _) in db::chat::list_dm_unread_counts(&state.chat, &user.id).await? {
+    for (room_id, _) in db::chat::list_dm_unread_counts(&state.chat, &user.id, &blocked).await? {
         room_ids.insert(room_id);
     }
     for (room_id, _) in

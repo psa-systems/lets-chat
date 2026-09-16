@@ -723,6 +723,7 @@ pub(crate) async fn load_sidebar(
     AppError,
 > {
     let is_admin = user.role == "admin";
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
 
     // Defense-in-depth (LC-415 follow-up): the whole-sidebar re-render routes
     // derive `current_enclave` from client-controlled headers (HX-Current-URL /
@@ -758,7 +759,7 @@ pub(crate) async fn load_sidebar(
     let (sidebar_rooms, sidebar_peers) = if let Some(eid) = current_enclave {
         let rooms = db::chat::list_rooms_in_enclave(&state.chat, eid, &user.id, is_admin).await?;
         let room_unreads: HashMap<i64, i64> =
-            db::chat::list_room_unread_counts(&state.chat, &user.id, is_admin)
+            db::chat::list_room_unread_counts(&state.chat, &user.id, is_admin, &blocked)
                 .await?
                 .into_iter()
                 .collect();
@@ -794,7 +795,7 @@ pub(crate) async fn load_sidebar(
     } else {
         let dm_rooms = db::chat::list_user_dm_rooms(&state.chat, &user.id).await?;
         let dm_unreads_by_room: HashMap<i64, i64> =
-            db::chat::list_dm_unread_counts(&state.chat, &user.id)
+            db::chat::list_dm_unread_counts(&state.chat, &user.id, &blocked)
                 .await?
                 .into_iter()
                 .collect();
@@ -1191,8 +1192,9 @@ pub(crate) async fn load_switcher(
     current_enclave: Option<i64>,
 ) -> Result<Vec<SwitcherEntry>, AppError> {
     let is_admin = user.role == "admin";
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
 
-    let dm_unread: i64 = db::chat::list_dm_unread_counts(&state.chat, &user.id)
+    let dm_unread: i64 = db::chat::list_dm_unread_counts(&state.chat, &user.id, &blocked)
         .await?
         .iter()
         .map(|(_, c)| *c)

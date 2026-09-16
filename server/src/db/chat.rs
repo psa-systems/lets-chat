@@ -1632,8 +1632,10 @@ pub async fn get_dm_read_state(
 pub async fn list_dm_unread_counts(
     pool: &sqlx::SqlitePool,
     user_id: &str,
+    blocked: &std::collections::HashSet<String>,
 ) -> Result<Vec<(i64, i64)>, sqlx::Error> {
-    let rows = sqlx::query(
+    let not_blocked = not_blocked_author_sql("m.user_id", blocked);
+    let sql = format!(
         "SELECT r.id AS room_id, \
                 COUNT(m.id) AS unread \
          FROM rooms r \
@@ -1645,14 +1647,15 @@ pub async fn list_dm_unread_counts(
           AND m.deleted_at IS NULL AND m.quarantined = 0 \
           AND m.parent_id IS NULL \
           AND m.id > COALESCE(s.last_read_message_id, 0) \
+          {not_blocked} \
          WHERE r.room_type = 'dm' \
-         GROUP BY r.id",
-    )
-    .bind(user_id)
-    .bind(user_id)
-    .bind(user_id)
-    .fetch_all(pool)
-    .await?;
+         GROUP BY r.id"
+    );
+    let mut q = sqlx::query(&sql).bind(user_id).bind(user_id).bind(user_id);
+    for id in blocked {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
     Ok(rows
         .into_iter()
         .map(|r| (r.get("room_id"), r.get::<i64, _>("unread")))
@@ -1704,6 +1707,28 @@ pub fn accessible_rooms_binds(is_admin: bool) -> usize {
     }
 }
 
+/// LC-903: SQL fragment excluding rows authored by anyone in `blocked` -
+/// mirrors `is_blocked_either_way` for list/aggregate queries. `user_blocks`
+/// lives in auth.db while these queries run against chat.db, so the fragment
+/// cannot join it directly: the caller fetches the blocked-id set once via
+/// `db::auth::list_blocked_ids_either_way` and passes it in here as a `NOT IN
+/// (...)` exclusion. `author_column` is the author-id column/alias at the
+/// call site (e.g. `"m.user_id"`). Returns an empty string, binding nothing,
+/// when the caller has no blocks - the common case, so most callers add no
+/// placeholders. Bind each id in `blocked` in iteration order immediately
+/// after splicing this in.
+pub fn not_blocked_author_sql(
+    author_column: &str,
+    blocked: &std::collections::HashSet<String>,
+) -> String {
+    if blocked.is_empty() {
+        String::new()
+    } else {
+        let placeholders = vec!["?"; blocked.len()].join(", ");
+        format!("AND {author_column} NOT IN ({placeholders})")
+    }
+}
+
 /// For each non-DM room visible to the user, count messages from other users
 /// that are newer than the caller's watermark in dm_read_state. The
 /// dm_read_state table is room-keyed, so we reuse it for non-DM rooms as well.
@@ -1714,7 +1739,9 @@ pub async fn list_room_unread_counts(
     pool: &sqlx::SqlitePool,
     user_id: &str,
     is_admin: bool,
+    blocked: &std::collections::HashSet<String>,
 ) -> Result<Vec<(i64, i64)>, sqlx::Error> {
+    let not_blocked = not_blocked_author_sql("m.user_id", blocked);
     let sql = format!(
         "SELECT r.id AS room_id, \
                 COUNT(m.id) AS unread \
@@ -1726,6 +1753,7 @@ pub async fn list_room_unread_counts(
           AND m.deleted_at IS NULL AND m.quarantined = 0 \
           AND m.parent_id IS NULL \
           AND m.id > COALESCE(s.last_read_message_id, 0) \
+          {not_blocked} \
          WHERE r.room_type != 'dm' \
            AND {access} \
          GROUP BY r.id",
@@ -1733,8 +1761,11 @@ pub async fn list_room_unread_counts(
     );
 
     // Bind order follows placeholder order: dm_read_state, messages author,
-    // then the access fragment's own placeholders.
+    // the not-blocked exclusion, then the access fragment's own placeholders.
     let mut q = sqlx::query(&sql).bind(user_id).bind(user_id);
+    for id in blocked {
+        q = q.bind(id);
+    }
     for _ in 0..accessible_rooms_binds(is_admin) {
         q = q.bind(user_id);
     }
@@ -1753,8 +1784,10 @@ pub async fn get_unread_count(
     pool: &sqlx::SqlitePool,
     user_id: &str,
     room_id: i64,
+    blocked: &std::collections::HashSet<String>,
 ) -> Result<i64, sqlx::Error> {
-    let row = sqlx::query(
+    let not_blocked = not_blocked_author_sql("m.user_id", blocked);
+    let sql = format!(
         "SELECT COUNT(m.id) AS unread \
          FROM messages m \
          LEFT JOIN dm_read_state s ON s.room_id = m.room_id AND s.user_id = ? \
@@ -1762,13 +1795,14 @@ pub async fn get_unread_count(
            AND m.user_id != ? \
            AND m.deleted_at IS NULL AND m.quarantined = 0 \
            AND m.parent_id IS NULL \
-           AND m.id > COALESCE(s.last_read_message_id, 0)",
-    )
-    .bind(user_id)
-    .bind(room_id)
-    .bind(user_id)
-    .fetch_one(pool)
-    .await?;
+           AND m.id > COALESCE(s.last_read_message_id, 0) \
+           {not_blocked}"
+    );
+    let mut q = sqlx::query(&sql).bind(user_id).bind(room_id).bind(user_id);
+    for id in blocked {
+        q = q.bind(id);
+    }
+    let row = q.fetch_one(pool).await?;
     Ok(row.get("unread"))
 }
 

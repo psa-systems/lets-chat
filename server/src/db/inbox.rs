@@ -25,6 +25,7 @@ pub async fn list_unread(
     pool: &SqlitePool,
     user_id: &str,
     is_admin: bool,
+    blocked: &std::collections::HashSet<String>,
     limit: i64,
     before_id: Option<i64>,
 ) -> Result<Vec<InboxRow>, sqlx::Error> {
@@ -36,6 +37,7 @@ pub async fn list_unread(
     // effect (every non-DM room, plus DMs they belong to); it was already
     // redundant, since `room_type = 'public'` implies `room_type != 'dm'`.
     let access_clause = crate::db::chat::accessible_rooms_sql(is_admin);
+    let not_blocked = crate::db::chat::not_blocked_author_sql("m.user_id", blocked);
     let cursor_clause = if before_id.is_some() {
         "AND m.id < ?"
     } else {
@@ -52,15 +54,20 @@ pub async fn list_unread(
             AND m.parent_id IS NULL \
             AND m.id > COALESCE(s.last_read_message_id, 0) \
             AND {access_clause} \
+            {not_blocked} \
             {cursor_clause} \
           ORDER BY m.created_at DESC, m.id DESC \
           LIMIT ?"
     );
     // Bind order follows placeholder order: dm_read_state, the author filter,
-    // then the access fragment's own placeholders, then cursor and limit.
+    // the access fragment's own placeholders, the not-blocked exclusion,
+    // then cursor and limit.
     let mut q = sqlx::query(&sql).bind(user_id).bind(user_id);
     for _ in 0..crate::db::chat::accessible_rooms_binds(is_admin) {
         q = q.bind(user_id);
+    }
+    for id in blocked {
+        q = q.bind(id);
     }
     if let Some(id) = before_id {
         q = q.bind(id);
