@@ -433,7 +433,6 @@ blocked-username-placeholder = username
 blocked-block-button = Block
 blocked-empty = You haven't blocked anyone.
 blocked-unblock = Unblock
-blocked-avatar-alt = Avatar
 
 ## LC-718: support chat bubble (epic LC-717)
 support-bubble-open = Need help? Ask our assistant
