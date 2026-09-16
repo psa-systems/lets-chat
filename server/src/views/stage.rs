@@ -10,6 +10,10 @@ use askama::Template; // LC-188: in-scope for the |t filter.
 pub struct StageMember {
     pub user_id: String,
     pub label: String,
+    /// LC-884: routes the roster avatar through `partials/avatar.html`.
+    pub avatar_ext: Option<String>,
+    pub status: String,
+    pub custom_status: Option<String>,
     /// Listener who has requested the floor (always false for speakers).
     pub hand_raised: bool,
 }
