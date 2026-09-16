@@ -48,7 +48,7 @@ A bot is a first-class non-human account. An admin creates one at **Admin -> Bot
 | GET  | `/api/v1/me` | (any valid token) | The token owner's identity (`id`, `username`, `role`). |
 | GET  | `/api/v1/rooms` | `rooms:read` | Non-DM rooms the user can see (`id`, `name`, `room_type`). |
 | GET  | `/api/v1/rooms/{room_id}/messages` | `messages:read` | Top-level messages in a room (`id`, `room_id`, `user_id`, `author`, `body`, `created_at`). |
-| POST | `/api/v1/rooms/{room_id}/messages` | `messages:write` | Post a message. JSON body `{"body": "..."}`. Returns the created message. Honors ban/mute + room access; broadcasts to connected clients. |
+| POST | `/api/v1/rooms/{room_id}/messages` | `messages:write` | Post a message. JSON body `{"body": "..."}`. Returns the created message. Enforces the same send gates as the web composer (ban/mute, room access, rate limit, per-enclave burst override, enclave ban, posting policy, slowmode, new-member cooldown, DM block, link filter); broadcasts to connected clients. A policy/ban/block denial is **403 Forbidden**, a rate-limit/slowmode/cooldown denial is **429 Too Many Requests** with a `Retry-After` header, and a blocked-link body is **400 Bad Request**. |
 
 Routes that do not appear here are not reachable with an API token.
 

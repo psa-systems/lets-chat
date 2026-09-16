@@ -729,34 +729,32 @@ pub async fn get_room(
     Ok(response)
 }
 
-pub async fn post_message(
-    State(state): State<AppState>,
-    AuthUser(user): AuthUser,
-    Path(room_id): Path<i64>,
-    axum::Form(form): axum::Form<MessageForm>,
-) -> Result<Response, AppError> {
-    let body = form.body.trim();
-    // An attachment alone (no body) is a valid send (image-only messages);
-    // both empty body AND no attachment is rejected.
-    if body.is_empty() && form.file_id.is_none() {
-        return Err(AppError::BadRequest("message body cannot be empty".into()));
-    }
-    check_message_length(body)?;
+/// LC-902: the send gates shared by the web composer (`post_message` below)
+/// and the bearer-token API (`crate::routes::api::post_message`), so a token
+/// cannot let its owner post anything the UI would refuse. Callers are
+/// responsible for the banned/muted check and room-access check themselves
+/// (both already had their own copies before this extraction); this covers
+/// everything after that: the LC-94 global rate limit, the LC-217
+/// per-enclave burst override, the LC-339 enclave ban, the LC-85 posting
+/// policy, LC-534 slowmode, the LC-551 new-member cooldown, and the DM block
+/// check. The link filter stays out (see `crate::routes::api::post_message`
+/// for why) - callers apply it themselves around the insert.
+///
+/// Returns `(enclave_id, new_member_enclave)`: `enclave_id` is the room's
+/// enclave (`None` for DMs), for callers that need it after the send (e.g.
+/// the Coyote Mode burst check); `new_member_enclave` is `Some(enclave_id)`
+/// only when the user is a "new" member there, for the caller to pass to
+/// `db::enclave::maybe_graduate` after a successful send.
+pub(crate) async fn check_send_gates(
+    state: &AppState,
+    user: &User,
+    room: &crate::models::Room,
+) -> Result<(Option<i64>, Option<i64>), AppError> {
+    let room_id = room.id;
 
-    // Banned/muted users cannot post anywhere. LC-535: a timed mute stops
-    // blocking once its expiry passes, decided by `mute_in_effect`.
-    if user.is_banned {
-        return Err(AppError::Forbidden);
-    }
-    if user.mute_in_effect() {
-        return Err(AppError::Forbidden);
-    }
-
-    // LC-94: per-user message rate limit. Cap is read from the
-    // settings KV (`rate_limit_messages`); '0' (or missing) = the
-    // feature is off, which is the safe default. The check runs
-    // before any DB work other than the cheap setting fetch so a
-    // spammer cannot make the server thrash on room/access lookups.
+    // LC-94: per-user message rate limit. Cap is read from the settings KV
+    // (`rate_limit_messages`); '0' (or missing) = the feature is off, which
+    // is the safe default.
     let msg_cap = crate::rate_limit::read_u32_setting(&state.settings, "rate_limit_messages").await;
     if let crate::rate_limit::Outcome::Deny { retry_after } =
         state
@@ -768,10 +766,6 @@ pub async fn post_message(
             retry_after,
         ));
     }
-
-    let room = db::chat::get_room(&state.chat, room_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
 
     // LC-217: per-enclave message rate-limit override. Layered AFTER the
     // global check so a non-zero per-enclave burst tightens the cap for
@@ -807,19 +801,11 @@ pub async fn post_message(
         }
     }
 
-    // Posting follows the same access predicate as reading. Site admins can
-    // post in any non-DM room; DMs require explicit room membership for both
-    // read and write. Enclave membership is required for non-DM rooms.
-    let is_admin = user.role == "admin";
-    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
-        return Err(AppError::Forbidden);
-    }
-
-    // LC-85: read-only / moderators-only rooms gate sends on the
-    // caller's effective role (LC-84). The compose box client-side
-    // already disables for callers below the bar; this server check
-    // catches forged POSTs.
-    if !can_post_with_policy(&state, &user, room_id, &room.posting_allowed_for).await? {
+    // LC-85: read-only / moderators-only rooms gate sends on the caller's
+    // effective role (LC-84). The compose box client-side already disables
+    // for callers below the bar; this server check catches forged POSTs
+    // (and, now, API callers).
+    if !can_post_with_policy(state, user, room_id, &room.posting_allowed_for).await? {
         return Err(AppError::Forbidden);
     }
 
@@ -846,10 +832,10 @@ pub async fn post_message(
 
     // LC-551: graduated trust. A "new" (ungraduated) enclave member who is not
     // owner/admin is held to a minimum interval between posts until they earn
-    // trust (graduation happens after a successful send, below). Blunts drive-by
-    // spam from a freshly-joined account without throttling established members.
-    // DMs (no enclave) and already-trusted members pay nothing. Captured here so
-    // the same boolean drives the post-send graduation check.
+    // trust (graduation happens after a successful send). Blunts drive-by
+    // spam from a freshly-joined account without throttling established
+    // members. DMs (no enclave) and already-trusted members pay nothing.
+    // Captured here so the caller's post-send graduation check can reuse it.
     let new_member_enclave: Option<i64> = match enclave_id_opt {
         Some(eid) if db::enclave::is_new_member(&state.chat, eid, &user.id).await? => Some(eid),
         _ => None,
@@ -881,6 +867,49 @@ pub async fn post_message(
             }
         }
     }
+
+    Ok((enclave_id_opt, new_member_enclave))
+}
+
+pub async fn post_message(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(room_id): Path<i64>,
+    axum::Form(form): axum::Form<MessageForm>,
+) -> Result<Response, AppError> {
+    let body = form.body.trim();
+    // An attachment alone (no body) is a valid send (image-only messages);
+    // both empty body AND no attachment is rejected.
+    if body.is_empty() && form.file_id.is_none() {
+        return Err(AppError::BadRequest("message body cannot be empty".into()));
+    }
+    check_message_length(body)?;
+
+    // Banned/muted users cannot post anywhere. LC-535: a timed mute stops
+    // blocking once its expiry passes, decided by `mute_in_effect`.
+    if user.is_banned {
+        return Err(AppError::Forbidden);
+    }
+    if user.mute_in_effect() {
+        return Err(AppError::Forbidden);
+    }
+
+    let room = db::chat::get_room(&state.chat, room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    // Posting follows the same access predicate as reading. Site admins can
+    // post in any non-DM room; DMs require explicit room membership for both
+    // read and write. Enclave membership is required for non-DM rooms.
+    let is_admin = user.role == "admin";
+    if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    // LC-902: rate limit, per-enclave burst, enclave ban, posting policy,
+    // slowmode, new-member cooldown, DM block - the gates shared with the
+    // API POST path (see `check_send_gates`).
+    let (enclave_id_opt, new_member_enclave) = check_send_gates(&state, &user, &room).await?;
 
     // Validate any claimed attachment BEFORE the message insert so a stolen
     // file_id from another user can't slip a new message through.
