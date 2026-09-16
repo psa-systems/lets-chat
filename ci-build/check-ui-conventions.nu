@@ -509,6 +509,84 @@ def offline-brand-name [] {
     } | flatten
 }
 
+# LC-875: a control that flips its `.lc-cbtn-label` text but not its
+# `aria-label` leaves the accessible name pointing at the old label (aria-label
+# overrides text content), so the two writes have to land in the same
+# function. Brace-matched rather than line-scoped: the enclosing function can
+# run many lines past the `.lc-cbtn-label` reference itself.
+def line-of [text: string, offset: int] {
+    ($text | str substring 0..$offset | str replace --all --regex '[^\n]' '' | str length) + 1
+}
+
+def enclosing-function-text [lines: list<string>, from_index: int] {
+    mut start = $from_index
+    mut found = -1
+    while $start >= 0 {
+        if ($lines | get $start) =~ '\bfunction\b' {
+            $found = $start
+            break
+        }
+        $start = $start - 1
+    }
+    if $found < 0 { return "" }
+    mut depth = 0
+    mut started = false
+    mut end = $found
+    mut i = $found
+    let n = ($lines | length)
+    while $i < $n {
+        let line = ($lines | get $i)
+        for c in ($line | split chars) {
+            if $c == "{" { $depth = $depth + 1; $started = true }
+            if $c == "}" { $depth = $depth - 1 }
+        }
+        if $started and $depth <= 0 {
+            $end = $i
+            break
+        }
+        $i = $i + 1
+    }
+    $lines | slice $found..$end | str join "\n"
+}
+
+# The variable a line binds to the `.lc-cbtn-label` span, whether by resolving
+# an existing one (`var l = btn.querySelector('.lc-cbtn-label')`) or by
+# stamping the class onto a freshly created one (`bl.className =
+# 'lc-cbtn-label'`); "" when the line only mentions the class in passing (a
+# comment, a CSS selector elsewhere in the file).
+def cbtn-label-var [line: string] {
+    let via_query = ($line | parse --regex "(?:var|let|const) (?<v>\\w+) = .*querySelector\\('\\.lc-cbtn-label'\\)")
+    if not ($via_query | is-empty) { return ($via_query | get v.0) }
+    let via_class = ($line | parse --regex "(?<v>\\w+)\\.className = .lc-cbtn-label.")
+    if not ($via_class | is-empty) { return ($via_class | get v.0) }
+    ""
+}
+
+def cbtn-label-missing-aria [] {
+    browser-asset-files | each {|file|
+        let text = (open --raw $file | decode utf-8)
+        let lines = ($text | lines)
+        $lines
+        | enumerate
+        | where {|row| $row.item =~ 'lc-cbtn-label' }
+        | each {|row|
+            let v = (cbtn-label-var $row.item)
+            if $v == "" {
+                []
+            } else {
+                let body = (enclosing-function-text $lines $row.index)
+                let write_pattern = $"($v)\\.textContent\\s*="
+                if ($body != "") and ($body =~ $write_pattern) and ($body !~ 'aria-label') {
+                    [$"($file):($row.index + 1): ($row.item | str trim)"]
+                } else {
+                    []
+                }
+            }
+        }
+        | flatten
+    } | flatten
+}
+
 # LC-891: the `window.__lcI18n` table entries in base.html.
 def i18n-table-entries [] {
     let file = "server/templates/base.html"
@@ -695,6 +773,12 @@ def rules [] {
             pending: null
             fix: "U+2014 (em dash) is banned repo-wide: use a hyphen, a colon, parentheses, or a period and a new sentence (internal/CLAUDE.md style rules, folded into this job by LC-749)"
             check: {|| scan-lines (tracked-text-files) $EM_DASH }
+        }
+        {
+            id: "cbtn-label-text-keeps-aria-label"
+            pending: null
+            fix: "a function that writes `.lc-cbtn-label` text must also write `aria-label` (and `data-lc-tip`) in the same function, or the tooltip and the accessible name go stale the moment the visible label flips; use the shared `setLabel` on `window.LetsChatRtc` (rtc_common.js) instead of a local copy (LC-875)"
+            check: {|| cbtn-label-missing-aria }
         }
     ]
 }

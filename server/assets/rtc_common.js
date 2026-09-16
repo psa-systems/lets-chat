@@ -37,6 +37,19 @@
     }).observe(bus, { childList: true });
   }
 
+  // LC-875: control buttons are icon + .lc-cbtn-label; set the label span so
+  // the leading icon survives (fall back to the button for plain-text ones),
+  // and keep aria-label and the tooltip in step with it, since aria-label
+  // overrides text content for the accessible name and a stale one silently
+  // outlives the label it used to match.
+  function setLabel(btn, text) {
+    if (!btn) return;
+    var l = btn.querySelector('.lc-cbtn-label');
+    if (l) l.textContent = text; else btn.textContent = text;
+    btn.setAttribute('aria-label', text);
+    btn.setAttribute('data-lc-tip', text);
+  }
+
   // Bind one delegated `click` listener on document.body that maps a control
   // selector to its handler. `map` is an object of `selector -> fn(el, event)`;
   // the first selector the clicked target is inside wins, and its handler runs
@@ -215,6 +228,7 @@
   window.LetsChatRtc = {
     watchBus: watchBus,
     bindControls: bindControls,
+    setLabel: setLabel,
     control: {
       normCoords: normCoords,
       modMask: modMask,
