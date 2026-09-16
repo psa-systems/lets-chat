@@ -235,8 +235,11 @@ struct PostMessageBody {
 }
 
 /// POST /api/v1/rooms/{id}/messages - post a message. Scope:
-/// `messages:write`. Honors the same room access + ban/mute gates as the
-/// web composer and broadcasts to connected clients.
+/// `messages:write`. LC-902: honors the exact same send gates as the web
+/// composer (rate limit, per-enclave burst, enclave ban, posting policy,
+/// slowmode, new-member cooldown, DM block, link filter) in addition to
+/// room access and ban/mute, so a bearer token cannot let its owner post
+/// anything they could not from the UI. Broadcasts to connected clients.
 async fn post_message(
     State(state): State<AppState>,
     auth: ApiAuth,
@@ -256,9 +259,38 @@ async fn post_message(
     // otherwise an unbounded-body amplification path.
     super::room::check_message_length(body)?;
     let room = require_room_access(&state, &auth, room_id).await?;
+    let (_, new_member_enclave) = super::room::check_send_gates(&state, &auth.user, &room).await?;
+
+    // LC-902: the link filter needs the post-insert message id to
+    // quarantine (see `routes::room::post_message`), which this endpoint
+    // has no post-insert tail for; take the same up-front block decision
+    // the web composer takes for `FilterAction::Block`, matching its
+    // `AppError::BadRequest` shape. `Quarantine` / `Warn` are moderation
+    // review paths tied to the web composer's fragment response and are
+    // out of scope here.
+    let link_filter_on = db::settings::get_setting(&state.settings, "link_filter_enabled")
+        .await?
+        .as_deref()
+        == Some("true");
+    if link_filter_on {
+        if let Some((rule, _)) =
+            db::anti_spam::find_match(&state.chat, &crate::links::extract_hosts(body)).await?
+        {
+            if rule.action == db::anti_spam::FilterAction::Block {
+                return Err(AppError::BadRequest(format!(
+                    "this message contains a link to a disallowed domain ({})",
+                    rule.pattern
+                )));
+            }
+        }
+    }
+
     let new_id = db::chat::insert_message(&state.chat, room_id, &auth.user.id, body).await?;
     let message =
         super::room::finalize_message_send(&state, &room, &auth.user, new_id, body, None).await?;
+    if let Some(eid) = new_member_enclave {
+        db::enclave::maybe_graduate(&state.chat, eid, &auth.user.id).await?;
+    }
     Ok(Json(ApiMessage {
         id: message.id,
         room_id: message.room_id,
