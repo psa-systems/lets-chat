@@ -28,7 +28,9 @@ struct TestApp {
     app: Router,
     viewer_id: String,
     viewer_session: String,
+    outsider_id: String,
     outsider_session: String,
+    auth: SqlitePool,
     chat: SqlitePool,
 }
 
@@ -54,6 +56,7 @@ async fn app_with_two_users() -> TestApp {
         .await
         .unwrap();
     let chat_for_test = chat.clone();
+    let auth_for_test = auth.clone();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
         geoip: None,
@@ -85,7 +88,9 @@ async fn app_with_two_users() -> TestApp {
         app,
         viewer_id,
         viewer_session,
+        outsider_id,
         outsider_session,
+        auth: auth_for_test,
         chat: chat_for_test,
     }
 }
@@ -375,5 +380,32 @@ async fn saved_page_hides_soft_deleted_messages() {
     assert!(
         !body.contains("soon to vanish"),
         "soft-deleted message leaked: {body}"
+    );
+}
+
+// LC-903: a message the viewer bookmarked from a peer they later blocked must
+// not surface on /saved, mirroring the room timeline.
+#[tokio::test]
+async fn saved_page_hides_messages_from_blocked_author() {
+    let t = app_with_two_users().await;
+    let room = seed_public_room(&t, "r").await;
+    let msg = seed_message(&t, room, &t.outsider_id, "bookmarked from a blocked peer").await;
+    send(
+        &t.app,
+        &t.viewer_session,
+        Method::POST,
+        &format!("/messages/{msg}/bookmark"),
+    )
+    .await;
+
+    db::auth::block_user(&t.auth, &t.viewer_id, &t.outsider_id)
+        .await
+        .unwrap();
+
+    let (status, body) = send(&t.app, &t.viewer_session, Method::GET, "/saved").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !body.contains("bookmarked from a blocked peer"),
+        "blocked author's message must not appear on /saved, got: {body}"
     );
 }

@@ -575,9 +575,10 @@ pub async fn get_room(
     // verbatim. Builder resolves author labels in a single bulk auth
     // lookup (see `routes::pinned::resolve_author_labels`).
     let pin_path = format!("/room/{room_id}/pins");
-    let pinned_strip_html = super::pinned::build_strip_fragment(&state, room_id, pin_path, false)
-        .await?
-        .render()?;
+    let pinned_strip_html =
+        super::pinned::build_strip_fragment(&state, &user.id, room_id, pin_path, false)
+            .await?
+            .render()?;
 
     // LC-568: Details panel "Members" / "Pinned" rows. Cheap direct queries
     // rather than reusing pinned_strip_html (that fragment always renders a
@@ -1514,7 +1515,7 @@ pub(crate) async fn finalize_message_send(
                     )
                 })
                 .collect();
-            fanout_mention_events(state, room, events).await;
+            fanout_mention_events(state, room, &author.id, events).await;
         }
     } else {
         // DM: implicit mention. Notify the peer regardless of subscription
@@ -1809,7 +1810,7 @@ pub(crate) async fn finalize_webhook_message_send(
                     )
                 })
                 .collect();
-            fanout_mention_events(state, room, events).await;
+            fanout_mention_events(state, room, "", events).await;
         }
     }
     Ok(())
@@ -1909,7 +1910,7 @@ pub(crate) async fn finalize_bridge_message_send(
                     )
                 })
                 .collect();
-            fanout_mention_events(state, room, events).await;
+            fanout_mention_events(state, room, "", events).await;
         }
     }
     Ok(())
@@ -1978,8 +1979,28 @@ pub(crate) async fn resolve_channel_targets(
 async fn fanout_mention_events(
     state: &AppState,
     room: &crate::models::Room,
+    author_id: &str,
     events: Vec<(String, ChatEvent)>,
 ) {
+    // LC-903: blocking is symmetric for visibility, so a recipient who has
+    // blocked the author (or been blocked by them) gets none of the WS
+    // toast, the push dispatch, or the email - the same silence the room
+    // timeline already gives them. Empty `author_id` (webhook/bridge
+    // synthetic actors) is never blocked.
+    let mut events = events;
+    if !author_id.is_empty() {
+        let mut kept = Vec::with_capacity(events.len());
+        for (user_id, event) in events {
+            if db::auth::is_blocked_either_way(&state.auth, &user_id, author_id)
+                .await
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            kept.push((user_id, event));
+        }
+        events = kept;
+    }
     for (user_id, event) in &events {
         state.hub.broadcast_to_user(user_id, event);
     }
@@ -2480,7 +2501,7 @@ pub async fn patch_message(
                     )
                 })
                 .collect();
-            fanout_mention_events(&state, edited_room, events).await;
+            fanout_mention_events(&state, edited_room, &user.id, events).await;
             // MentionCleared events are WS-only (no Push, no badge attention)
             // and cheap to fire inline. Keep them sequential.
             for t in &removed {
@@ -3326,7 +3347,7 @@ async fn notify_thread_followers(
         ));
     }
     if !events.is_empty() {
-        fanout_mention_events(state, room, events).await;
+        fanout_mention_events(state, room, &author.id, events).await;
     }
 }
 

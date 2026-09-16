@@ -33,7 +33,16 @@ pub async fn get_inbox(
     Query(q): Query<InboxQuery>,
 ) -> Result<Html, AppError> {
     let is_admin = user.role == "admin";
-    let rows = db::inbox::list_unread(&state.chat, &user.id, is_admin, PAGE_SIZE, q.before).await?;
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+    let rows = db::inbox::list_unread(
+        &state.chat,
+        &user.id,
+        is_admin,
+        &blocked,
+        PAGE_SIZE,
+        q.before,
+    )
+    .await?;
 
     // LC-685: the codebase-wide label rule (display name, else `@username`),
     // shared by the author and the DM peer below.

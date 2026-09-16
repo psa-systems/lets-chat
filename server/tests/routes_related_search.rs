@@ -242,6 +242,46 @@ async fn backfill_embeds_unvectored_history_and_drains() {
     assert_eq!(n2, 0, "nothing left to embed");
 }
 
+// LC-903: a conceptually-related message authored by a blocked peer must not
+// surface in the related list, mirroring the room timeline.
+#[tokio::test]
+async fn related_drops_message_from_blocked_author() {
+    let t = app(true).await;
+    let room = make_room(&t).await;
+    let alice_id: String = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
+        .fetch_one(&t.state.auth)
+        .await
+        .unwrap();
+    let bob_id = db::auth::create_user(&t.state.auth, "bob", "h")
+        .await
+        .unwrap();
+    let source = insert_embedded(
+        &t,
+        room,
+        &alice_id,
+        "the database migration failed on startup",
+    )
+    .await;
+    insert_embedded(
+        &t,
+        room,
+        &bob_id,
+        "our database schema keeps breaking today",
+    )
+    .await;
+
+    db::auth::block_user(&t.state.auth, &alice_id, &bob_id)
+        .await
+        .unwrap();
+
+    let (status, body) = get(&t, &format!("/messages/{source}/related")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !body.contains("database schema keeps breaking"),
+        "blocked author's message must not appear in related results: {body}"
+    );
+}
+
 /// Without an embeddings endpoint the backfill is a no-op.
 #[tokio::test]
 async fn backfill_is_a_noop_without_embeddings() {
