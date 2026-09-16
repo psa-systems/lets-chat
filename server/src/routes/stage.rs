@@ -56,22 +56,32 @@ pub(crate) async fn build_panel(
     let host = is_host(state, viewer, room_id).await;
 
     let ids: Vec<&str> = roster.participants.iter().map(|s| s.as_str()).collect();
-    let labels = if ids.is_empty() {
+    // LC-884: bulk-resolved via `user_identities_for_ids` (username, display
+    // name, avatar ext, status) so the roster avatars route through
+    // `partials/avatar.html` without an N+1 lookup per member.
+    let identities = if ids.is_empty() {
         Default::default()
     } else {
-        db::auth::display_names_for_ids(&state.auth, &ids)
+        db::auth::user_identities_for_ids(&state.auth, &ids)
             .await
             .unwrap_or_default()
     };
     let label_for = |uid: &str| -> String {
-        labels
+        identities
             .get(uid)
-            .map(|(uname, dname)| match dname.as_deref() {
-                Some(n) if !n.trim().is_empty() => n.to_string(),
-                _ => uname.clone(),
-            })
+            .map(|u| u.label().to_string())
             .unwrap_or_else(|| uid.to_string())
     };
+    let avatar_ext_for =
+        |uid: &str| -> Option<String> { identities.get(uid).and_then(|u| u.avatar_ext.clone()) };
+    let status_for = |uid: &str| -> String {
+        identities
+            .get(uid)
+            .map(|u| super::effective_status(state, uid, &u.status))
+            .unwrap_or_else(|| "offline".to_string())
+    };
+    let custom_status_for =
+        |uid: &str| -> Option<String> { identities.get(uid).and_then(|u| u.custom_status.clone()) };
 
     let mut speakers: Vec<StageMember> = roster
         .speakers
@@ -79,6 +89,9 @@ pub(crate) async fn build_panel(
         .map(|uid| StageMember {
             user_id: uid.clone(),
             label: label_for(uid),
+            avatar_ext: avatar_ext_for(uid),
+            status: status_for(uid),
+            custom_status: custom_status_for(uid),
             hand_raised: false,
         })
         .collect();
@@ -91,6 +104,9 @@ pub(crate) async fn build_panel(
         .map(|uid| StageMember {
             user_id: uid.clone(),
             label: label_for(uid),
+            avatar_ext: avatar_ext_for(uid),
+            status: status_for(uid),
+            custom_status: custom_status_for(uid),
             hand_raised: roster.hands.contains(uid),
         })
         .collect();

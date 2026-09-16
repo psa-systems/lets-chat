@@ -1355,11 +1355,16 @@ async fn render_blocked_list(
     let records = db::auth::list_blocked_users(&state.auth, &user.id).await?;
     let blocked: Vec<BlockedUserView> = records
         .into_iter()
-        .map(|r| BlockedUserView {
-            id: r.id,
-            username: r.username,
-            display_name: r.display_name,
-            avatar_ext: r.avatar_ext,
+        .map(|r| {
+            let status = super::effective_status(state, &r.id, &r.status);
+            BlockedUserView {
+                id: r.id,
+                username: r.username,
+                display_name: r.display_name,
+                avatar_ext: r.avatar_ext,
+                status,
+                custom_status: r.custom_status,
+            }
         })
         .collect();
     let page = BlockedListPage {
