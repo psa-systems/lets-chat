@@ -104,13 +104,9 @@
   function q(sel) { return root ? root.querySelector(sel) : null; }
   function grid() { return q('[data-lc-voice-grid]'); }
 
-  // LC-416: control buttons are now icon + .lc-cbtn-label; set the label span so
-  // the leading icon survives (fall back to the button for any plain-text one).
-  function setLabel(btn, text) {
-    if (!btn) return;
-    var l = btn.querySelector('.lc-cbtn-label');
-    if (l) l.textContent = text; else btn.textContent = text;
-  }
+  // LC-875: shared with call.js, huddle_popout.js and huddle_control.js so the
+  // visible label, the tooltip and the accessible name never drift apart.
+  var setLabel = window.LetsChatRtc.setLabel;
 
   // LC-402: build a participant tile. Theme-token styling lives in main.css
   // (.lc-voice-tile and friends); JS only sets the data-lc-* hooks + content.
