@@ -190,6 +190,9 @@ pub struct BlockedUserView {
     pub username: String,
     pub display_name: Option<String>,
     pub avatar_ext: Option<String>,
+    /// LC-884: routes the row avatar through `partials/avatar.html`.
+    pub status: String,
+    pub custom_status: Option<String>,
 }
 
 impl BlockedUserView {
