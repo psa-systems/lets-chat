@@ -1240,10 +1240,21 @@ pub async fn post_welcome_handle(
                 .into_response());
         }
     };
-    // Accepting the derived handle unchanged: just record the confirmation.
+    // Accepting the derived handle unchanged: confirm it, unless it has since
+    // fallen inside another account's reservation window (LC-913), in which
+    // case fall through to the same reserved-handle refusal as a real change.
     if handle == user.username {
-        db::auth::confirm_username(&state.auth, &user.id).await?;
-        return Ok(Redirect::to("/").into_response());
+        if db::auth::handle_available_for(&state.auth, &handle, &user.id).await? {
+            db::auth::confirm_username(&state.auth, &user.id).await?;
+            return Ok(Redirect::to("/").into_response());
+        }
+        return Ok(render_welcome_handle(
+            &state,
+            &handle,
+            Some("That handle is reserved right now. Choose another."),
+        )
+        .await?
+        .into_response());
     }
     match db::auth::change_username(&state.auth, &user.id, &handle, false, false).await {
         Ok(change) => {
