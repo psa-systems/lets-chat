@@ -36,7 +36,8 @@
 /// combined length plus the next chunk fits.
 pub fn build_snippet(body: &str) -> (String, String) {
     const MAX_CHARS: usize = 140;
-    let trimmed = body.trim();
+    let redacted = crate::views::markdown::redact_spoilers(body);
+    let trimmed = redacted.trim();
     let (truncated, truncated_did) = word_truncate(trimmed, MAX_CHARS);
     let plain = if truncated_did {
         format!("{truncated}...")
@@ -747,6 +748,17 @@ mod tests {
         let (plain, html) = build_snippet("Hello world");
         assert_eq!(plain, "Hello world");
         assert_eq!(html, "Hello world");
+    }
+
+    // LC-918: mention emails and the weekly digest redact spoilers in both
+    // the plaintext and HTML snippet forms.
+    #[test]
+    fn build_snippet_redacts_spoiler() {
+        let (plain, html) = build_snippet("intro ||secret|| outro");
+        assert!(plain.contains("[spoiler]"), "no placeholder: {plain}");
+        assert!(!plain.contains("secret"), "secret leaked in plain: {plain}");
+        assert!(html.contains("[spoiler]"), "no placeholder: {html}");
+        assert!(!html.contains("secret"), "secret leaked in html: {html}");
     }
 
     // ── LC-672: digest-gist prompt assembly + cleanup ─────────────────────────

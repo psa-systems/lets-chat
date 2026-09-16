@@ -2337,7 +2337,8 @@ fn author_label(user: &User) -> String {
 /// notification surface. Strips leading `@` chars from mention tokens so
 /// the snippet reads naturally; truncates at 140 chars with an ellipsis.
 fn build_snippet(body: &str) -> String {
-    let collapsed: String = body.split_whitespace().collect::<Vec<_>>().join(" ");
+    let redacted = crate::views::markdown::redact_spoilers(body);
+    let collapsed: String = redacted.split_whitespace().collect::<Vec<_>>().join(" ");
     let trimmed = collapsed.trim();
     let max = 140;
     if trimmed.chars().count() <= max {
@@ -2345,6 +2346,20 @@ fn build_snippet(body: &str) -> String {
     } else {
         let cut: String = trimmed.chars().take(max).collect();
         format!("{cut}...")
+    }
+}
+
+#[cfg(test)]
+mod build_snippet_tests {
+    use super::build_snippet;
+
+    // LC-918: the Mentioned event's snippet (consumed by both the WS payload
+    // and, via `push::payload::build`, the Web Push toast) redacts spoilers.
+    #[test]
+    fn build_snippet_redacts_spoiler() {
+        let out = build_snippet("intro ||secret|| outro");
+        assert!(out.contains("[spoiler]"), "no placeholder: {out}");
+        assert!(!out.contains("secret"), "secret leaked: {out}");
     }
 }
 
