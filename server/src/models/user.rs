@@ -152,6 +152,8 @@ pub struct UserIdentity {
     pub username: String,
     pub display_name: Option<String>,
     pub avatar_ext: Option<String>,
+    pub status: String,
+    pub custom_status: Option<String>,
 }
 
 impl UserIdentity {

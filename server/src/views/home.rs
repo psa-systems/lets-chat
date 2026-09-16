@@ -86,6 +86,10 @@ pub struct CatchUpRow {
     pub author_id: String,
     pub author_name: String,
     pub author_avatar_ext: Option<String>,
+    /// LC-884: routes the row avatar through `partials/avatar.html`, which
+    /// needs a live presence status alongside the id/name/ext it already had.
+    pub author_status: String,
+    pub author_custom_status: Option<String>,
 }
 
 impl CatchUpRow {
@@ -127,6 +131,9 @@ pub struct DmRow {
     /// First character seeds the initials avatar when `avatar_ext` is None.
     pub username: String,
     pub avatar_ext: Option<String>,
+    /// LC-884: routes the row avatar through `partials/avatar.html`.
+    pub status: String,
+    pub custom_status: Option<String>,
     pub unread: i64,
 }
 
