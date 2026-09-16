@@ -1438,7 +1438,7 @@ pub async fn user_identities_for_ids(
         .collect::<Vec<_>>()
         .join(",");
     let sql = format!(
-        "SELECT id, username, display_name, avatar_ext FROM users WHERE id IN ({placeholders})"
+        "SELECT id, username, display_name, avatar_ext, status, custom_status FROM users WHERE id IN ({placeholders})"
     );
     let mut q = sqlx::query(&sql);
     for id in ids {
@@ -1454,6 +1454,8 @@ pub async fn user_identities_for_ids(
                 username: r.get("username"),
                 display_name: r.get("display_name"),
                 avatar_ext: r.get("avatar_ext"),
+                status: r.get("status"),
+                custom_status: r.get("custom_status"),
             },
         );
     }
