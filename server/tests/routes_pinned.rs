@@ -384,6 +384,47 @@ async fn dm_either_party_can_pin_and_unpin() {
     assert_eq!(n, 0);
 }
 
+// LC-903: a pin authored by a blocked peer must not surface in either the
+// header strip or the full pins page, mirroring the room timeline.
+#[tokio::test]
+async fn blocked_author_pin_absent_from_strip_and_pins_page() {
+    let t = app_with_two_users("viewer", "peer").await;
+    let room = seed_public_room(&t, "general-room").await;
+    let msg = seed_message(&t, room, &t.peer_id, "pinned by a blocked peer").await;
+    db::pinned::pin_message(&t.chat, msg, room, &t.peer_id)
+        .await
+        .unwrap();
+    db::auth::block_user(&t.auth, &t.viewer_id, &t.peer_id)
+        .await
+        .unwrap();
+
+    let (status, strip_body) = send(
+        &t.app,
+        &t.viewer_session,
+        Method::GET,
+        &format!("/room/{room}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !strip_body.contains("pinned by a blocked peer"),
+        "blocked author's pin must not appear in the strip, got: {strip_body}"
+    );
+
+    let (status, page_body) = send(
+        &t.app,
+        &t.viewer_session,
+        Method::GET,
+        &format!("/room/{room}/pins"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !page_body.contains("pinned by a blocked peer"),
+        "blocked author's pin must not appear on the pins page, got: {page_body}"
+    );
+}
+
 #[tokio::test]
 async fn get_room_pins_lists_all_in_newest_first_order() {
     let t = app_with_two_users("viewer", "peer").await;
