@@ -2583,3 +2583,47 @@ async fn translation_cache_upsert_and_invalidate() {
         .unwrap()
         .is_none());
 }
+
+/// LC-914: two participants hitting POST .../transcript/start for the same
+/// room at the same instant must still end up sharing one session - the
+/// concurrent-write race `start_session`'s INSERT-first + unique-violation
+/// fallback (rather than the old read-then-insert) closes. The DB-level
+/// `created` flag that drives agent dispatch is covered directly in
+/// `db_transcripts.rs`; this covers the HTTP surface on top of it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_starts_for_one_room_share_a_single_session() {
+    let s = setup().await;
+
+    let app_a = s.app.clone();
+    let sess_a = s.a_session.clone();
+    let app_b = s.app.clone();
+    let sess_b = s.b_session.clone();
+    let uri = format!("/call/{}/transcript/start", s.dm_room);
+    let uri_b = uri.clone();
+    let (res_a, res_b) = tokio::join!(
+        tokio::spawn(async move { post(&app_a, &sess_a, &uri, None).await }),
+        tokio::spawn(async move { post(&app_b, &sess_b, &uri_b, None).await }),
+    );
+    let (status_a, body_a) = res_a.expect("join a");
+    let (status_b, body_b) = res_b.expect("join b");
+    assert_eq!(status_a, StatusCode::OK, "{body_a}");
+    assert_eq!(status_b, StatusCode::OK, "{body_b}");
+    assert_eq!(
+        parse_id(&body_a),
+        parse_id(&body_b),
+        "both concurrent starts must resolve to the same transcript id"
+    );
+
+    let active: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM call_transcripts WHERE room_id = ? AND status = 'active'",
+    )
+    .bind(s.dm_room)
+    .fetch_all(&s.chat)
+    .await
+    .unwrap();
+    assert_eq!(
+        active,
+        vec![parse_id(&body_a)],
+        "exactly one call_transcripts row must exist for the room"
+    );
+}
