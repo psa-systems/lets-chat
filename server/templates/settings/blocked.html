@@ -102,11 +102,13 @@
   <ul class="space-y-1 max-w-xl">
     {% for b in blocked %}
     <li class="flex items-center gap-3 p-2 rounded border border-border">
-      {% if b.avatar_ext.is_some() %}
-      <img src="{{ b.id|avatar_url }}" alt="{{ "blocked-avatar-alt"|t }}" class="h-8 w-8 rounded-full object-cover border border-border">
-      {% else %}
-      <div class="h-8 w-8 rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold text-sm">{% if let Some(c) = b.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
-      {% endif %}
+      {% let avatar_user_id = b.id.clone() %}
+      {% let avatar_username = b.username.clone() %}
+      {% let avatar_ext = b.avatar_ext.clone() %}
+      {% let avatar_status = b.status.clone() %}
+      {% let avatar_custom_status = b.custom_status.clone() %}
+      {% let avatar_size = "h-8 w-8 text-sm" %}
+      {% include "partials/avatar.html" %}
       <div class="min-w-0 flex-1">
         <div class="font-medium truncate">{{ b.label() }}</div>
         <div class="text-xs text-content-muted truncate">@{{ b.username }}</div>

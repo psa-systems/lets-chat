@@ -114,8 +114,14 @@
       <span class="text-xs text-content-muted" data-lc-voice-preview-heading>{% if huddle_participants.len() == 1 %}{{ "huddle-lobby-one"|t }}{% else %}{{ huddle_participants.len() }} {{ "huddle-lobby-other"|t }}{% endif %}</span>
       <div class="flex items-center gap-1" data-lc-voice-preview-names>
         {% for p in huddle_participants %}
-        <span data-lc-voice-preview-name="{{ p.user_id }}" data-lc-label="{{ p.label }}" data-lc-avatar-version="{{ p.user_id|avatar_version }}">
-          <img class="h-6 w-6 rounded-full object-cover" src="{{ p.user_id|avatar_url }}" alt="{{ p.label }}" title="{{ p.label }}">
+        <span data-lc-voice-preview-name="{{ p.user_id }}" data-lc-label="{{ p.label }}" data-lc-avatar-version="{{ p.user_id|avatar_version }}" title="{{ p.label }}">
+          {% let avatar_user_id = p.user_id.clone() %}
+          {% let avatar_username = p.label.clone() %}
+          {% let avatar_ext = p.avatar_ext.clone() %}
+          {% let avatar_status = p.status.clone() %}
+          {% let avatar_custom_status = p.custom_status.clone() %}
+          {% let avatar_size = "h-6 w-6 text-xs" %}
+          {% include "partials/avatar.html" %}
         </span>
         {% endfor %}
       </div>
