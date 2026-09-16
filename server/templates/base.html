@@ -171,12 +171,12 @@
           else localStorage.removeItem("lc-support-open");
         } catch (e) {}
         applySupport(next);
-        var root = document.querySelector("[data-lc-support-root]");
         // Opening clears the attention dot and fetches the thread; a closed
         // bubble issues no requests (live updates arrive via WS push).
         if (next) {
           if (window.__lcDismissSupportHint) window.__lcDismissSupportHint();
-          if (root) root.removeAttribute("data-lc-attention");
+          var launcherEl = document.querySelector("[data-lc-support-launcher]");
+          if (launcherEl) launcherEl.removeAttribute("data-lc-attention");
           if (window.htmx) {
             var t = document.getElementById("lc-support-thread");
             if (t) window.htmx.trigger(t, "lcopen");
@@ -310,11 +310,11 @@
         var tgt = e.detail && e.detail.target;
         if (tgt && tgt.id === "lc-support-thread" &&
             d.getAttribute("data-lc-support-open") !== "1") {
-          var r = document.querySelector("[data-lc-support-root]");
-          if (r) {
-            var n = parseInt(r.getAttribute("data-lc-attention"), 10) || 0;
+          var l = document.querySelector("[data-lc-support-launcher]");
+          if (l) {
+            var n = parseInt(l.getAttribute("data-lc-attention"), 10) || 0;
             n = n + 1;
-            r.setAttribute("data-lc-attention", n > 9 ? "9+" : String(n));
+            l.setAttribute("data-lc-attention", n > 9 ? "9+" : String(n));
           }
         }
       });
@@ -479,6 +479,8 @@
       callConnectionFailed: "{{ "js-call-connection-failed"|t }}",
       navFailed: "{{ "js-nav-failed"|t }}",
       sttMicFailed: "{{ "js-stt-mic-failed"|t }}",
+      sttUnsupported: "{{ "js-stt-unsupported"|t }}",
+      sttStartFailed: "{{ "js-stt-start-failed"|t }}",
       callDeclined: "{{ "js-call-declined"|t }}",
       callDeclinedBy: "{{ "js-call-declined-by"|t }}",
       huddleRingStarted: "{{ "js-huddle-ring-started"|t }}",
