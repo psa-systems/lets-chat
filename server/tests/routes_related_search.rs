@@ -107,9 +107,16 @@ async fn insert_embedded(t: &TestApp, room: i64, author: &str, body: &str) -> i6
         .await
         .unwrap();
     let vec = hash_embed(body, 64);
-    db::message_embeddings::upsert(&t.chat, id, room, vec.len() as i64, &vec_to_bytes(&vec))
-        .await
-        .unwrap();
+    db::message_embeddings::upsert(
+        &t.chat,
+        id,
+        room,
+        MockEmbeddingClient::default().model.as_str(),
+        vec.len() as i64,
+        &vec_to_bytes(&vec),
+    )
+    .await
+    .unwrap();
     id
 }
 
@@ -240,6 +247,59 @@ async fn backfill_embeds_unvectored_history_and_drains() {
         .await
         .unwrap();
     assert_eq!(n2, 0, "nothing left to embed");
+}
+
+// LC-911: a message embedded under a retired model must be re-queued by the
+// backfill even though it already has a row (the old `e.message_id IS NULL`
+// selector treated "has any embedding" as "done", so a model swap left every
+// pre-swap vector permanently stale with nothing to notice or repair it).
+#[tokio::test]
+async fn backfill_reembeds_messages_stored_under_a_stale_model() {
+    let t = app(true).await;
+    let room = make_room(&t).await;
+
+    let stale = db::chat::insert_message(&t.chat, room, "alice", "quarterly roadmap review")
+        .await
+        .unwrap();
+    let vec = hash_embed("quarterly roadmap review", 64);
+    db::message_embeddings::upsert(
+        &t.chat,
+        stale,
+        room,
+        "old-model",
+        vec.len() as i64,
+        &vec_to_bytes(&vec),
+    )
+    .await
+    .unwrap();
+
+    // `app(true)` configures `MockEmbeddingClient::default()`, whose model is
+    // "mock-model" - different from the "old-model" row above, so this message
+    // must be re-embedded even though it already has a stored vector.
+    let n = lets_chat::routes::related::run_embedding_backfill_tick(&t.state, 50)
+        .await
+        .unwrap();
+    assert_eq!(n, 1, "the stale-model row is re-queued for backfill");
+
+    let row_model: String =
+        sqlx::query_scalar("SELECT model FROM message_embeddings WHERE message_id = ?")
+            .bind(stale)
+            .fetch_one(&t.chat)
+            .await
+            .unwrap();
+    assert_eq!(
+        row_model, "mock-model",
+        "the vector is rewritten under the current model"
+    );
+
+    // Backlog drained: a second tick finds nothing left to do.
+    let n2 = lets_chat::routes::related::run_embedding_backfill_tick(&t.state, 50)
+        .await
+        .unwrap();
+    assert_eq!(
+        n2, 0,
+        "nothing left to re-embed once every row matches the current model"
+    );
 }
 
 // LC-903: a conceptually-related message authored by a blocked peer must not

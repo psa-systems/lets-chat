@@ -63,7 +63,15 @@ pub(crate) async fn embed_message(
         }
     };
     let bytes = embeddings::vec_to_bytes(&vec);
-    db::message_embeddings::upsert(&state.chat, message_id, room_id, vec.len() as i64, &bytes).await
+    db::message_embeddings::upsert(
+        &state.chat,
+        message_id,
+        room_id,
+        client.model_name(),
+        vec.len() as i64,
+        &bytes,
+    )
+    .await
 }
 
 /// LC-673: embed a batch of messages that have no embedding yet - history from
@@ -78,10 +86,11 @@ pub async fn run_embedding_backfill_tick(
     state: &AppState,
     batch: i64,
 ) -> Result<usize, sqlx::Error> {
-    if state.embedding_client.is_none() {
+    let Some(client) = state.embedding_client.clone() else {
         return Ok(0);
-    }
-    let pending = db::message_embeddings::list_unembedded(&state.chat, batch).await?;
+    };
+    let pending =
+        db::message_embeddings::list_unembedded(&state.chat, client.model_name(), batch).await?;
     let n = pending.len();
     for (id, room_id, body) in pending {
         embed_message(state, id, room_id, &body).await?;
@@ -151,16 +160,31 @@ pub async fn get_related(
     let candidates =
         db::message_embeddings::list_for_room(&state.chat, source.room_id, Some(message_id))
             .await?;
+    let mut mismatched = 0usize;
     let mut scored: Vec<(i64, f32)> = candidates
         .into_iter()
-        .map(|c| {
-            (
+        .filter_map(|c| {
+            if c.vec.len() != query_vec.len() {
+                mismatched += 1;
+                return None;
+            }
+            Some((
                 c.message_id,
                 embeddings::cosine_similarity(&query_vec, &c.vec),
-            )
+            ))
         })
         .filter(|(_, s)| *s >= MIN_SIMILARITY)
         .collect();
+    if mismatched > 0 {
+        // LC-911: a stale (pre-model-swap) vector cannot be compared to the
+        // current query vector; cosine_similarity would score it 0.0 and it
+        // would be silently dropped below the relevance floor with no signal.
+        tracing::warn!(
+            count = mismatched,
+            room_id = source.room_id,
+            "related-message ranking dropped embeddings: dimension mismatch, likely a stale embedding model"
+        );
+    }
     scored.sort_by(|a, b| b.1.total_cmp(&a.1));
     scored.truncate(TOP_K);
 

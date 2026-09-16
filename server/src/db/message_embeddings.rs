@@ -15,19 +15,25 @@ pub struct StoredEmbedding {
 
 /// Insert or replace the embedding for `message_id`. `vec` is the little-endian
 /// byte encoding from [`crate::embeddings::vec_to_bytes`]; `dim` is its length.
+/// `model` is the configured embeddings model name that produced `vec`
+/// (LC-911): the second cache key alongside `dim`, read back by
+/// [`list_unembedded`] so a model swap re-queues every message for backfill
+/// even when the dimensionality happens to match.
 pub async fn upsert(
     pool: &SqlitePool,
     message_id: i64,
     room_id: i64,
+    model: &str,
     dim: i64,
     vec: &[u8],
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT INTO message_embeddings (message_id, room_id, dim, vec) VALUES (?, ?, ?, ?) \
-         ON CONFLICT(message_id) DO UPDATE SET room_id = excluded.room_id, dim = excluded.dim, vec = excluded.vec, created_at = datetime('now')",
+        "INSERT INTO message_embeddings (message_id, room_id, model, dim, vec) VALUES (?, ?, ?, ?, ?) \
+         ON CONFLICT(message_id) DO UPDATE SET room_id = excluded.room_id, model = excluded.model, dim = excluded.dim, vec = excluded.vec, created_at = datetime('now')",
     )
     .bind(message_id)
     .bind(room_id)
+    .bind(model)
     .bind(dim)
     .bind(vec)
     .execute(pool)
@@ -57,22 +63,27 @@ pub async fn get(pool: &SqlitePool, message_id: i64) -> Result<Option<Vec<f32>>,
     }))
 }
 
-/// LC-673: up to `limit` visible, non-system messages with a non-empty body and
-/// no embedding yet, newest-first. Drives the embeddings backfill for history
-/// posted before an embeddings endpoint was configured. Matches the timeline's
-/// visibility filter (`deleted_at IS NULL AND quarantined = 0`) so the backfill
-/// never embeds a message the search would not surface anyway.
+/// LC-673/LC-911: up to `limit` visible, non-system messages with a non-empty
+/// body that either have no embedding yet, or whose stored embedding's `model`
+/// differs from `model` (a model swap, so the vector is stale even though a row
+/// exists), newest-first. Drives the embeddings backfill both for history
+/// posted before an embeddings endpoint was configured and for re-embedding
+/// after the configured model changes. Matches the timeline's visibility filter
+/// (`deleted_at IS NULL AND quarantined = 0`) so the backfill never embeds a
+/// message the search would not surface anyway.
 pub async fn list_unembedded(
     pool: &SqlitePool,
+    model: &str,
     limit: i64,
 ) -> Result<Vec<(i64, i64, String)>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT m.id, m.room_id, m.body FROM messages m \
          LEFT JOIN message_embeddings e ON e.message_id = m.id \
-         WHERE e.message_id IS NULL AND m.is_system = 0 \
+         WHERE (e.message_id IS NULL OR e.model <> ?) AND m.is_system = 0 \
            AND m.deleted_at IS NULL AND m.quarantined = 0 AND TRIM(m.body) <> '' \
          ORDER BY m.id DESC LIMIT ?",
     )
+    .bind(model)
     .bind(limit)
     .fetch_all(pool)
     .await?;

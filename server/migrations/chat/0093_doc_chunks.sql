@@ -7,8 +7,10 @@
 -- sidecar is keyed 1:1 to `messages(id)` with a mandatory `room_id` and is
 -- searched per-room, so it cannot hold room-less external documents. The vector
 -- storage format is shared though: `vec` is a little-endian f32 BLOB
--- (`embeddings::vec_to_bytes`) and `dim` its length, so a model swap that
--- changes dimensionality is detectable, exactly as in `message_embeddings`.
+-- (`embeddings::vec_to_bytes`) and `dim` its length. `dim` alone only catches a
+-- model swap that also changes dimensionality; migration 0099 (LC-911) adds a
+-- `model` column that is the actual detection mechanism, since a same-dimension
+-- model swap changes nothing `dim` can see.
 --
 -- `content_hash` is the SHA-256 of the source page's extracted text; every chunk
 -- of a page carries the same hash so a refresh can skip a page whose content is
