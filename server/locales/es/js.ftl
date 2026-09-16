@@ -41,6 +41,7 @@ js-huddle-control-busy = Otra persona ya tiene el control
 js-huddle-control-ended = Control finalizado
 js-huddle-control-requested = solicitó el control de tu pantalla
 js-huddle-control-active-suffix = está controlando tu pantalla
+js-huddle-control-refused = No se pudo conceder el control
 
 # Bandeja sin conexión (outbox.js)
 js-outbox-offline-queued = Sin conexión: %n% mensaje(s) en cola
