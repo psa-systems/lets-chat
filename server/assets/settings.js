@@ -43,29 +43,30 @@
   // (non-2xx like a 413 body cap, a 500, or a network drop), htmx would
   // otherwise swap nothing. Surface a generic error in that form's status slot
   // plus a toast so a Save can never complete with no feedback.
-  // LC-876: scoped to [data-lc-settings] so this net never fires alongside
-  // room/page.html's or admin/users.html's own scoped listeners for the same
-  // event - one failure, one toast.
+  // LC-876: scoped to forms that own a `.lc-set-status` slot, so this net never
+  // fires alongside room/page.html's or admin/users.html's own scoped listeners
+  // for the same event - one failure, one toast. Scoping on the slot rather
+  // than on [data-lc-settings] keeps every surface LC-739 promised this net to:
+  // enclave/settings.html, admin/settings.html, admin/anti_spam.html and
+  // room/manage.html carry the same slot outside that container.
   function errorNetInit() {
     function onErr(e) {
       var src = (e.detail && e.detail.elt) || e.target;
-      if (!src || !src.closest || !src.closest('[data-lc-settings]')) return;
-      var form = src.closest('form');
+      var form = src && src.closest && src.closest('form');
       var slot = form && form.querySelector('.lc-set-status');
+      if (!slot) return;
       var msg = (window.__lcS && window.__lcS('settingsSaveError', 'Could not save. Please try again.'))
         || 'Could not save. Please try again.';
-      if (slot) {
-        slot.replaceChildren();
-        var wrap = document.createElement('span');
-        wrap.className = 'lc-status lc-status--err';
-        var ico = document.createElement('span');
-        ico.className = 'lc-status-ico';
-        ico.setAttribute('aria-hidden', 'true');
-        ico.textContent = '!';
-        wrap.appendChild(ico);
-        wrap.appendChild(document.createTextNode(msg));
-        slot.appendChild(wrap);
-      }
+      slot.replaceChildren();
+      var wrap = document.createElement('span');
+      wrap.className = 'lc-status lc-status--err';
+      var ico = document.createElement('span');
+      ico.className = 'lc-status-ico';
+      ico.setAttribute('aria-hidden', 'true');
+      ico.textContent = '!';
+      wrap.appendChild(ico);
+      wrap.appendChild(document.createTextNode(msg));
+      slot.appendChild(wrap);
       window.__lcNotify('err', msg);
     }
     document.body.addEventListener('htmx:responseError', onErr);
