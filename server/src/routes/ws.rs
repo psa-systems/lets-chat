@@ -1183,10 +1183,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     if let Some(uid) = state.hub.disconnect(conn_id) {
         // LC-186 backstop: a hard WS drop never sends a `revoke`, so close any
         // remote-control session this user left open (call end, crash, network
-        // loss). The injector's own channel-drop/heartbeat release (LC-185)
-        // still handles the OS side; this only finalizes the audit row.
-        let _ =
-            db::remote_control_audit::end_sessions_for_user(&state.chat, &uid, "disconnect").await;
+        // loss) and tell the counterpart. LC-905: races `end_control_on_participant_gone`
+        // (spawned from `handle_voice_leave` just above) for the same row; the
+        // atomic close-and-return in `end_sessions_for_user` means only
+        // whichever commits first notifies.
+        end_control_sessions_for_disconnect(&state, &uid).await;
         // LC-393 backstop: a hard drop never sends /end, so finalize any
         // transcription session this user started (close + notify + post the
         // saved notice). Idempotent against a peer's explicit /end.
@@ -2703,7 +2704,7 @@ async fn relay_huddle_control_signal(
                 db::remote_control_audit::open_session(&state.chat, room_id).await,
                 Ok(Some(_))
             );
-            if busy_session || !state.hub.set_control_pending(room_id, &user.id) {
+            if busy_session || !state.hub.set_control_pending(room_id, &user.id, sharer) {
                 echo("busy", "controller_active_or_pending");
                 return;
             }
@@ -2717,9 +2718,11 @@ async fn relay_huddle_control_signal(
                 .iter()
                 .any(|s| s == &user.id)
             {
+                echo("unavailable", "not_sharing");
                 return;
             }
             let Some(requester) = state.hub.take_control_pending(room_id) else {
+                echo("unavailable", "no_pending_request");
                 return;
             };
             audit(&requester, "deny").await;
@@ -2732,10 +2735,12 @@ async fn relay_huddle_control_signal(
                 .iter()
                 .any(|s| s == &user.id)
             {
+                echo("unavailable", "not_sharing");
                 return;
             }
             let Some(requester) = state.hub.take_control_pending(room_id) else {
                 // Expired or never existed: nobody is waiting on this answer.
+                echo("unavailable", "no_pending_request");
                 return;
             };
             // The requester must still be in the huddle, still eligible, and
@@ -2746,15 +2751,18 @@ async fn relay_huddle_control_signal(
                 .iter()
                 .any(|u| u == &requester)
             {
+                echo("unavailable", "requester_gone");
                 return;
             }
             if !remote_control_allowed(&state.auth, &user.id, &requester).await {
+                echo("unavailable", "not_allowed");
                 return;
             }
             if matches!(
                 db::remote_control_audit::open_session(&state.chat, room_id).await,
                 Ok(Some(_))
             ) {
+                echo("unavailable", "controller_active");
                 return;
             }
             let _ =
@@ -2768,24 +2776,26 @@ async fn relay_huddle_control_signal(
             fanout_control_label(state, room_id, &user.id, controller_name, true);
         }
         "revoke" => {
-            let Ok(Some(sess)) = db::remote_control_audit::open_session(&state.chat, room_id).await
+            let Ok(Some(closed)) = db::remote_control_audit::end_session_for_participant(
+                &state.chat,
+                room_id,
+                &user.id,
+                "revoked",
+            )
+            .await
             else {
+                echo("unavailable", "no_active_session");
                 return;
             };
-            if sess.sharer_id != user.id && sess.controller_id != user.id {
-                return;
-            }
-            let _ = db::remote_control_audit::end_session_by_room(&state.chat, room_id, "revoked")
-                .await;
-            let other = if sess.sharer_id == user.id {
-                &sess.controller_id
+            let other = if closed.sharer_id == user.id {
+                &closed.controller_id
             } else {
-                &sess.sharer_id
+                &closed.sharer_id
             };
             audit(other, "revoke").await;
             relay_to(other, "revoke");
             // LC-855: clear the room-wide "is controlling" label.
-            fanout_control_label(state, room_id, &sess.sharer_id, String::new(), false);
+            fanout_control_label(state, room_id, &closed.sharer_id, String::new(), false);
         }
         _ => {}
     }
@@ -2827,82 +2837,125 @@ async fn resolve_display_name(state: &AppState, user_id: &str) -> String {
     }
 }
 
-/// LC-853: a sharer stopping their screen share auto-revokes any control
-/// session on it (there is nothing left to control - LC-186's rule, applied to
-/// the huddle). Also drops a pending request once no sharer remains to answer
-/// it; the requester's own timeout clears their UI.
-pub async fn end_control_on_share_stop(state: &AppState, room_id: i64, sharer_id: &str) {
-    if state.hub.voice_screen_sharers(room_id).is_empty() {
-        state.hub.take_control_pending(room_id);
-    }
-    let Ok(Some(sess)) = db::remote_control_audit::open_session(&state.chat, room_id).await else {
-        return;
+/// LC-855/LC-905: tell the counterpart of a just-closed session `revoke`,
+/// audit the event, and clear the room-wide "is controlling" label. Shared by
+/// every path that ends a session out from under one of its parties (share
+/// stop, soft leave, hard-disconnect backstop, explicit revoke), so all of
+/// them notify identically from the row `RETURNING` actually closed.
+async fn notify_control_session_ended(
+    state: &AppState,
+    room_id: i64,
+    actor_id: &str,
+    controller_id: &str,
+    sharer_id: &str,
+) {
+    let other = if sharer_id == actor_id {
+        controller_id
+    } else {
+        sharer_id
     };
-    if sess.sharer_id != sharer_id {
-        return;
-    }
     let _ =
-        db::remote_control_audit::end_session_by_room(&state.chat, room_id, "share_ended").await;
-    let _ = db::remote_control_audit::log_event(
-        &state.chat,
-        room_id,
-        sharer_id,
-        &sess.controller_id,
-        "revoke",
-    )
-    .await;
+        db::remote_control_audit::log_event(&state.chat, room_id, actor_id, other, "revoke").await;
     let event = ChatEvent::RemoteControlSignal {
         room_id,
-        to_user_id: sess.controller_id.clone(),
-        from_user_id: sharer_id.to_string(),
+        to_user_id: other.to_string(),
+        from_user_id: actor_id.to_string(),
         from_name: String::new(),
         kind: "revoke".to_string(),
     };
-    state.hub.broadcast_to_user(&sess.controller_id, &event);
-    // LC-855: clear the room-wide "is controlling" label.
-    fanout_control_label(state, room_id, &sess.sharer_id, String::new(), false);
+    state.hub.broadcast_to_user(other, &event);
+    fanout_control_label(state, room_id, sharer_id, String::new(), false);
+}
+
+/// LC-186/LC-905: the socket-disconnect backstop. Closes every control
+/// session `user_id` was party to (across every room, since a hard drop can
+/// happen mid-session in more than one huddle) and notifies each counterpart,
+/// mirroring `end_control_on_participant_gone`'s per-row notify so the two
+/// backstops behave identically regardless of which one wins a race.
+pub async fn end_control_sessions_for_disconnect(state: &AppState, user_id: &str) {
+    let Ok(closed) =
+        db::remote_control_audit::end_sessions_for_user(&state.chat, user_id, "disconnect").await
+    else {
+        return;
+    };
+    for sess in closed {
+        notify_control_session_ended(
+            state,
+            sess.room_id,
+            user_id,
+            &sess.controller_id,
+            &sess.sharer_id,
+        )
+        .await;
+    }
+}
+
+/// LC-853: a sharer stopping their screen share auto-revokes any control
+/// session on it (there is nothing left to control - LC-186's rule, applied to
+/// the huddle). LC-905: also releases a pending request aimed AT this sharer
+/// specifically (not merely when the room has no sharers left), answering the
+/// stranded requester `unavailable` rather than leaving them on the client
+/// timeout.
+pub async fn end_control_on_share_stop(state: &AppState, room_id: i64, sharer_id: &str) {
+    if let Some(requester) = state
+        .hub
+        .clear_control_pending_for_sharer(room_id, sharer_id)
+    {
+        let event = ChatEvent::RemoteControlSignal {
+            room_id,
+            to_user_id: requester.clone(),
+            from_user_id: requester.clone(),
+            from_name: String::new(),
+            kind: "unavailable".to_string(),
+        };
+        state.hub.broadcast_to_user(&requester, &event);
+    }
+    let Ok(Some(closed)) = db::remote_control_audit::end_session_by_sharer(
+        &state.chat,
+        room_id,
+        sharer_id,
+        "share_ended",
+    )
+    .await
+    else {
+        return;
+    };
+    notify_control_session_ended(
+        state,
+        room_id,
+        sharer_id,
+        &closed.controller_id,
+        &closed.sharer_id,
+    )
+    .await;
 }
 
 /// LC-853: a participant leaving the huddle ends any control session they were
 /// party to and notifies the counterpart. The WS-disconnect backstop
 /// (`end_sessions_for_user`) closes rows on a hard drop; this covers the soft
-/// leave, where the connection lives on but the call role is gone.
-async fn end_control_on_participant_gone(state: &AppState, room_id: i64, user_id: &str) {
-    let Ok(Some(sess)) = db::remote_control_audit::open_session(&state.chat, room_id).await else {
-        return;
-    };
-    if sess.sharer_id != user_id && sess.controller_id != user_id {
-        return;
-    }
-    let _ = db::remote_control_audit::end_session_by_room(&state.chat, room_id, "left_call").await;
-    let _ = db::remote_control_audit::log_event(
+/// leave, where the connection lives on but the call role is gone. LC-905: the
+/// close and the party check are one atomic statement (`end_session_for_participant`),
+/// so this and the disconnect backstop racing the same row can never both
+/// notify - whichever commits first gets `Some` back, the other `None`.
+pub async fn end_control_on_participant_gone(state: &AppState, room_id: i64, user_id: &str) {
+    let Ok(Some(closed)) = db::remote_control_audit::end_session_for_participant(
         &state.chat,
         room_id,
         user_id,
-        if sess.sharer_id == user_id {
-            &sess.controller_id
-        } else {
-            &sess.sharer_id
-        },
-        "revoke",
+        "left_call",
+    )
+    .await
+    else {
+        return;
+    };
+    notify_control_session_ended(
+        state,
+        room_id,
+        user_id,
+        &closed.controller_id,
+        &closed.sharer_id,
     )
     .await;
-    let sharer_id = sess.sharer_id.clone();
-    let other = if sess.sharer_id == user_id {
-        sess.controller_id
-    } else {
-        sess.sharer_id
-    };
-    let event = ChatEvent::RemoteControlSignal {
-        room_id,
-        to_user_id: other.clone(),
-        from_user_id: user_id.to_string(),
-        from_name: String::new(),
-        kind: "revoke".to_string(),
-    };
-    state.hub.broadcast_to_user(&other, &event);
-    // LC-855: clear the room-wide "is controlling" label.
-    fanout_control_label(state, room_id, &sharer_id, String::new(), false);
 }
 
 /// Render an inbound `RemoteControlSignal` into the `#lc-control-bus` OOB
@@ -3857,6 +3910,10 @@ pub mod test_support {
     // share-stop auto-revoke, so tests can drive the huddle consent state
     // machine without a WS framing harness. Same reasoning as the call helpers.
     pub use super::{end_control_on_share_stop, relay_control_signal, REMOTE_CONTROL_ENABLED_KEY};
+    // LC-905: the soft-leave and hard-disconnect control-session teardown
+    // paths, so a test can race them against each other and assert the
+    // "closes once, notifies once" guarantee without a real socket drop.
+    pub use super::{end_control_on_participant_gone, end_control_sessions_for_disconnect};
 }
 
 #[cfg(test)]
