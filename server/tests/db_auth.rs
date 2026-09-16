@@ -962,3 +962,42 @@ async fn mention_resolves_to_same_user_after_handle_change() {
         "resolves to the new handle"
     );
 }
+
+// LC-913 AC4: the previous owner can reclaim their own reserved handle
+// through the first-entry prompt's call shape too (reserve_old = false,
+// enforce_cooldown = false), not only the settings editor's.
+#[tokio::test]
+async fn owner_reclaims_reserved_handle_via_first_entry_call_shape() {
+    let pool = setup_pool().await;
+    let a = create_user(&pool, "juno", "").await.unwrap();
+    change_username(&pool, &a, "juniper", true, true)
+        .await
+        .expect("juno -> juniper reserves 'juno'");
+
+    let change = change_username(&pool, &a, "juno", false, false)
+        .await
+        .expect("owner reclaims via the first-entry call shape");
+    assert_eq!(change.new, "juno");
+}
+
+// LC-913 AC5: an expired reservation blocks nothing on the change_username
+// path either.
+#[tokio::test]
+async fn expired_reservation_does_not_block_change_username() {
+    let pool = setup_pool().await;
+    let a = create_user(&pool, "walt", "").await.unwrap();
+    sqlx::query(
+        "INSERT INTO reserved_usernames (username, user_id, reserved_until) \
+         VALUES ('skyler', ?, datetime('now', '-1 day'))",
+    )
+    .bind(&a)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let b = create_user(&pool, "flynn", "").await.unwrap();
+    let change = change_username(&pool, &b, "skyler", true, false)
+        .await
+        .expect("an expired reservation refuses no one");
+    assert_eq!(change.new, "skyler");
+}
