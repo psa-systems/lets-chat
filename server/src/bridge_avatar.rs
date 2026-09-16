@@ -20,6 +20,7 @@
 //! gate layered on top of that.
 
 use crate::db::bridge_avatar_proxies;
+use crate::uploads::ALLOWED_IMAGE_MIME as ALLOWED_MIME;
 use sqlx::SqlitePool;
 use std::path::Path;
 use std::time::Duration;
@@ -36,12 +37,6 @@ pub const MAX_BYTES: usize = 1 << 20; // 1 MiB
 /// here just means initials-forever for that one avatar; the daemon's
 /// next message still flows.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(5);
-
-/// Allowlist of magic-byte-sniffed MIME types. Same set the uploads
-/// pipeline accepts; `pipeline::process_image` would also reject anything
-/// else, but checking first avoids spinning up the decoder for clearly
-/// hostile input.
-const ALLOWED_MIME: &[&str] = &["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 pub async fn fetch_and_cache(chat: &SqlitePool, hash: &str, foreign_url: &str) {
     // LC-152: all URL validation (parse + scheme + host_resolves_public)
