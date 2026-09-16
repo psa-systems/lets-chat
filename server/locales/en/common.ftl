@@ -283,6 +283,7 @@ welcome-handle-intro = This is the name others see and mention you by. We have s
 welcome-handle-label = Handle
 welcome-handle-help = Letters, numbers, and _ - . only.
 welcome-handle-submit = Continue
+welcome-handle-logo-alt = Logo
 settings-email = Email
 settings-email-help = Used only for password reset. Leave blank to remove.
 settings-email-verified = Verified
@@ -432,6 +433,7 @@ blocked-username-placeholder = username
 blocked-block-button = Block
 blocked-empty = You haven't blocked anyone.
 blocked-unblock = Unblock
+blocked-avatar-alt = Avatar
 
 ## LC-718: support chat bubble (epic LC-717)
 support-bubble-open = Need help? Ask our assistant

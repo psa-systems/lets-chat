@@ -115,11 +115,10 @@
     return isBoosted(detail) && targetsMain(detail);
   }
   function navFailedToast() {
-    if (typeof window.__lcToast !== 'function') return;
     var msg = window.__lcS
       ? window.__lcS('navFailed', 'Could not load - connection issue. Try again.')
       : 'Could not load - connection issue. Try again.';
-    window.__lcToast('err', msg);
+    window.__lcNotify('err', msg);
   }
   document.body.addEventListener('htmx:sendError', function (evt) {
     if (isBoostedNav(evt.detail)) navFailedToast();

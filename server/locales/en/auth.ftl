@@ -8,6 +8,15 @@
 login-page-title = Sign in
 login-forgot-link = Forgot password?
 login-no-account = No account?
+login-logo-alt = Logo
+
+## Sign-in approval (bunyip/approve)
+login-approve-title = Approve sign-in
+login-approve-heading = Approve this sign-in
+login-approve-intro = This sign-in looked unfamiliar, so we emailed a 6-digit code to the address on your account. Enter it below to finish signing in.
+login-approve-code-label = 6-digit approval code
+login-approve-submit = Approve sign-in
+login-approve-expiry = The code expires in 15 minutes. If this was not you, close this page - the sign-in cannot complete without the code.
 
 ## Register
 register-page-title = Register
