@@ -162,18 +162,20 @@ pub async fn toggle_done(pool: &SqlitePool, item_id: i64, acting_user: &str) -> 
 }
 
 /// Self-claim toggle: if `user_id` already holds the item, release it;
-/// otherwise assign it to `user_id`. Self-claim only, so a user can never
-/// assign work to someone else.
-pub async fn toggle_claim(pool: &SqlitePool, item_id: i64, user_id: &str) -> sqlx::Result<()> {
-    sqlx::query(
+/// otherwise claim it, but only when it is currently unclaimed. An item held
+/// by another user is left untouched. Returns whether a row changed, so the
+/// caller can tell a real toggle from a no-op refusal.
+pub async fn toggle_claim(pool: &SqlitePool, item_id: i64, user_id: &str) -> sqlx::Result<bool> {
+    let res = sqlx::query(
         "UPDATE followup_items \
          SET assignee_id = CASE WHEN assignee_id = ? THEN NULL ELSE ? END \
-         WHERE id = ?",
+         WHERE id = ? AND (assignee_id IS NULL OR assignee_id = ?)",
     )
     .bind(user_id)
     .bind(user_id)
     .bind(item_id)
+    .bind(user_id)
     .execute(pool)
     .await?;
-    Ok(())
+    Ok(res.rows_affected() > 0)
 }

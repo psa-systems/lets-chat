@@ -122,14 +122,31 @@ pub async fn post_toggle(
     broadcast_and_render(&state, &user, message_id, room_id).await
 }
 
-/// POST /follow-up/{item_id}/claim - self-claim / release an item.
+/// POST /follow-up/{item_id}/claim - self-claim / release an item. Refuses
+/// (409) to take an item another user already holds instead of silently
+/// reassigning it.
 pub async fn post_claim(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(item_id): Path<i64>,
 ) -> Result<Html, AppError> {
     let (message_id, room_id) = require_item_access(&state, &user, item_id).await?;
-    db::followups::toggle_claim(&state.chat, item_id, &user.id).await?;
+    let changed = db::followups::toggle_claim(&state.chat, item_id, &user.id).await?;
+    if !changed {
+        let item = db::followups::item(&state.chat, item_id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        let holder = match item.assignee_id.as_deref() {
+            Some(uid) => db::auth::find_user_by_id(&state.auth, uid)
+                .await?
+                .map(|u| u.display_name.unwrap_or(u.username))
+                .unwrap_or_else(|| "(unknown)".to_string()),
+            None => "someone else".to_string(),
+        };
+        return Err(AppError::Conflict(format!(
+            "{holder} already has this item"
+        )));
+    }
     broadcast_and_render(&state, &user, message_id, room_id).await
 }
 
