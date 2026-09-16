@@ -11,6 +11,10 @@ use crate::views::layout::{SidebarPeer, SidebarRoom, SwitcherEntry};
 pub struct VoiceParticipant {
     pub user_id: String,
     pub label: String,
+    /// LC-884: routes the lobby avatar through `partials/avatar.html`.
+    pub avatar_ext: Option<String>,
+    pub status: String,
+    pub custom_status: Option<String>,
 }
 
 #[derive(Template)]

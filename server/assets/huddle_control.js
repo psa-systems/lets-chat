@@ -105,10 +105,7 @@
     var text = phase === 'requesting' ? str('callRequesting', 'Requesting...')
       : phase === 'controlling' ? str('callStopControlling', 'Stop controlling')
         : str('callRequestControl', 'Request control');
-    var label = btn.querySelector('[data-lc-huddle-control-request-label]');
-    if (label) label.textContent = text;
-    btn.setAttribute('aria-label', text);
-    btn.setAttribute('data-lc-tip', text);
+    window.LetsChatRtc.setLabel(btn, text);
   }
 
   // ---- LC-854 transport + input replay ------------------------------
