@@ -44,27 +44,40 @@ pub const LLM_AUDIENCE_KEY: &str = "llm_audience";
 
 /// True when the runtime LLM feature flag is ON. Read live from the settings KV
 /// store (no cache), so toggling in `/admin/settings` takes effect on the next
-/// request without a restart.
+/// request without a restart. LC-919: a read error is treated as OFF (already
+/// the restrictive value here) and logged, rather than silently swallowed.
 pub async fn flag_on(state: &AppState) -> bool {
-    db::settings::get_setting(&state.settings, LLM_ENABLED_KEY)
-        .await
-        .ok()
-        .flatten()
-        .as_deref()
-        == Some("true")
+    resolve_flag_on(db::settings::get_setting(&state.settings, LLM_ENABLED_KEY).await)
+}
+
+fn resolve_flag_on(result: Result<Option<String>, sqlx::Error>) -> bool {
+    match result {
+        Ok(v) => v.as_deref() == Some("true"),
+        Err(e) => {
+            tracing::warn!(error = %e, "llm_enabled setting read failed; treating flag as off");
+            false
+        }
+    }
 }
 
 /// LC-702: true when the AI audience is "everyone" (the default). Only the
 /// explicit `"staff"` value narrows the surface to privileged roles; an absent
-/// or any-other value reads as everyone, so the feature is open by default once
-/// the flag is on. Read live like [`flag_on`].
+/// value reads as everyone, so the feature is open by default once the flag is
+/// on. Read live like [`flag_on`]. LC-919: a read error narrows to staff (the
+/// restrictive value) and is logged, so it can never be mistaken for the
+/// absent-row open default.
 pub async fn audience_is_everyone(state: &AppState) -> bool {
-    db::settings::get_setting(&state.settings, LLM_AUDIENCE_KEY)
-        .await
-        .ok()
-        .flatten()
-        .as_deref()
-        != Some("staff")
+    resolve_audience_everyone(db::settings::get_setting(&state.settings, LLM_AUDIENCE_KEY).await)
+}
+
+fn resolve_audience_everyone(result: Result<Option<String>, sqlx::Error>) -> bool {
+    match result {
+        Ok(v) => v.as_deref() != Some("staff"),
+        Err(e) => {
+            tracing::warn!(error = %e, "llm_audience setting read failed; narrowing to staff");
+            false
+        }
+    }
 }
 
 /// Is `user` privileged to use AI in `room_id`'s context? Site admin OR enclave
@@ -187,5 +200,40 @@ pub async fn require_embeddings_in_room(
         Ok(())
     } else {
         Err(AppError::Forbidden)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flag_absent_row_is_off() {
+        assert!(!resolve_flag_on(Ok(None)));
+    }
+
+    #[test]
+    fn flag_true_row_is_on() {
+        assert!(resolve_flag_on(Ok(Some("true".to_string()))));
+    }
+
+    #[test]
+    fn flag_read_error_is_off() {
+        assert!(!resolve_flag_on(Err(sqlx::Error::RowNotFound)));
+    }
+
+    #[test]
+    fn audience_absent_row_is_everyone() {
+        assert!(resolve_audience_everyone(Ok(None)));
+    }
+
+    #[test]
+    fn audience_staff_row_narrows() {
+        assert!(!resolve_audience_everyone(Ok(Some("staff".to_string()))));
+    }
+
+    #[test]
+    fn audience_read_error_narrows_to_staff() {
+        assert!(!resolve_audience_everyone(Err(sqlx::Error::RowNotFound)));
     }
 }
