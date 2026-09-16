@@ -63,12 +63,26 @@ fn label_for(username: &str, display_name: Option<&str>) -> String {
 /// rendered HTML carries `hx-swap-oob="outerHTML"`.
 pub(crate) async fn build_strip_fragment(
     state: &AppState,
+    viewer_id: &str,
     room_id: i64,
     pin_path: String,
     oob: bool,
 ) -> Result<PinnedStripFragmentOwned, AppError> {
-    let pins = db::pinned::pins_for_room(&state.chat, room_id, STRIP_TOP_N).await?;
-    let total_count = db::pinned::count_for_room(&state.chat, room_id).await?;
+    // LC-903: pull every pin (not just the strip's top-N) so filtering out
+    // blocked authors below cannot leave the strip short of STRIP_TOP_N rows
+    // just because a blocked author's pin sorted ahead of visible ones.
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, viewer_id).await?;
+    let visible_pins: Vec<db::pinned::PinnedRow> =
+        db::pinned::pins_for_room(&state.chat, room_id, db::pinned::MAX_PINS_PER_ROOM)
+            .await?
+            .into_iter()
+            .filter(|p| !blocked.contains(&p.author_user_id))
+            .collect();
+    let total_count = visible_pins.len() as i64;
+    let pins: Vec<db::pinned::PinnedRow> = visible_pins
+        .into_iter()
+        .take(STRIP_TOP_N as usize)
+        .collect();
 
     let names = resolve_author_labels(state, &pins).await?;
     let top_pins: Vec<PinnedStripRow> = pins
@@ -282,7 +296,7 @@ async fn render_pin_response(
     }
     .render()?;
     let pin_path = pin_path_for_room(state, user, room_id).await?;
-    let strip_html = build_strip_fragment(state, room_id, pin_path, true)
+    let strip_html = build_strip_fragment(state, &user.id, room_id, pin_path, true)
         .await?
         .render()?;
     Ok(Html(format!("{bubble}{strip_html}")).into_response())
@@ -357,8 +371,13 @@ async fn render_pins_page(
     back_path: String,
     current_enclave: Option<i64>,
 ) -> Result<Html, AppError> {
-    let pins =
-        db::pinned::pins_for_room(&state.chat, room_id, db::pinned::MAX_PINS_PER_ROOM).await?;
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+    let pins: Vec<db::pinned::PinnedRow> =
+        db::pinned::pins_for_room(&state.chat, room_id, db::pinned::MAX_PINS_PER_ROOM)
+            .await?
+            .into_iter()
+            .filter(|p| !blocked.contains(&p.author_user_id))
+            .collect();
     let names = resolve_author_labels(state, &pins).await?;
     let rows: Vec<PinnedListRow> = pins
         .iter()

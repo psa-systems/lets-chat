@@ -27,6 +27,7 @@ struct TestApp {
     peer_id: String,
     peer_session: String,
     chat: SqlitePool,
+    auth: SqlitePool,
 }
 
 async fn app() -> TestApp {
@@ -52,6 +53,7 @@ async fn app() -> TestApp {
         .await
         .unwrap();
     let chat_for_test = chat.clone();
+    let auth_for_test = auth.clone();
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
         geoip: None,
@@ -86,6 +88,7 @@ async fn app() -> TestApp {
         peer_id,
         peer_session,
         chat: chat_for_test,
+        auth: auth_for_test,
     }
 }
 
@@ -158,6 +161,33 @@ async fn unread_message_appears_in_inbox() {
     assert!(
         body.contains("/room/1#msg-"),
         "expected deep-link to room 1, got: {body}"
+    );
+}
+
+// LC-903: a message from a blocked author must not surface in the inbox,
+// mirroring what the room timeline already hides.
+#[tokio::test]
+async fn blocked_author_message_absent_from_inbox() {
+    let t = app().await;
+    db::auth::block_user(&t.auth, &t.user_id, &t.peer_id)
+        .await
+        .unwrap();
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/room/1/messages")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={}", t.peer_session))
+        .body(Body::from("body=from+a+blocked+peer&file_id="))
+        .unwrap();
+    let resp = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    let (status, body) = get(&t.app, &t.session, "/inbox").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !body.contains("from a blocked peer"),
+        "blocked author's message must not appear in the inbox, got: {body}"
     );
 }
 

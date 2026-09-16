@@ -203,14 +203,15 @@ async fn build_dashboard(
 > {
     let is_admin = user.role == "admin";
     let chat = &state.chat;
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
 
     // Workspace-wide unread counts (every accessible room / DM, even at 0).
     let room_counts: HashMap<i64, i64> =
-        db::chat::list_room_unread_counts(chat, &user.id, is_admin)
+        db::chat::list_room_unread_counts(chat, &user.id, is_admin, &blocked)
             .await?
             .into_iter()
             .collect();
-    let dm_counts: HashMap<i64, i64> = db::chat::list_dm_unread_counts(chat, &user.id)
+    let dm_counts: HashMap<i64, i64> = db::chat::list_dm_unread_counts(chat, &user.id, &blocked)
         .await?
         .into_iter()
         .collect();
@@ -219,7 +220,8 @@ async fn build_dashboard(
     // Catch up + Direct messages: newest-first unread across the workspace,
     // one row per room (first occurrence = newest preview). DM rows resolve the
     // peer for the /dm/{peer} deep-link and the avatar, mirroring the inbox.
-    let inbox_rows = db::inbox::list_unread(chat, &user.id, is_admin, PREVIEW_SCAN, None).await?;
+    let inbox_rows =
+        db::inbox::list_unread(chat, &user.id, is_admin, &blocked, PREVIEW_SCAN, None).await?;
     let mut room_names: HashMap<i64, String> = HashMap::new();
     let mut catch_up: Vec<CatchUpRow> = Vec::new();
     // LC-704: source message id per catch-up row, kept parallel so a bodyless

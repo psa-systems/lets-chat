@@ -1,4 +1,5 @@
 use sqlx::SqlitePool;
+use std::collections::HashSet;
 
 mod common;
 
@@ -85,7 +86,7 @@ async fn unread_counts_peer_only_above_watermark() {
         .await
         .unwrap();
 
-    let counts = lets_chat::db::chat::list_dm_unread_counts(&pool, "user-a")
+    let counts = lets_chat::db::chat::list_dm_unread_counts(&pool, "user-a", &HashSet::new())
         .await
         .unwrap();
     let got = counts
@@ -98,7 +99,7 @@ async fn unread_counts_peer_only_above_watermark() {
     lets_chat::db::chat::upsert_dm_read(&pool, "user-a", room.id, m2)
         .await
         .unwrap();
-    let counts = lets_chat::db::chat::list_dm_unread_counts(&pool, "user-a")
+    let counts = lets_chat::db::chat::list_dm_unread_counts(&pool, "user-a", &HashSet::new())
         .await
         .unwrap();
     let got = counts
@@ -119,8 +120,87 @@ async fn unread_counts_only_dms_user_is_in() {
         .await
         .unwrap();
 
-    let counts = lets_chat::db::chat::list_dm_unread_counts(&pool, "user-a")
+    let counts = lets_chat::db::chat::list_dm_unread_counts(&pool, "user-a", &HashSet::new())
         .await
         .unwrap();
     assert!(counts.iter().all(|(r, _)| *r != room.id));
+}
+
+// LC-903: a message from a blocked author must not inflate the sidebar unread
+// badge, on all three of the counting queries.
+#[tokio::test]
+async fn list_dm_unread_counts_excludes_blocked_author() {
+    use lets_chat::db::chat;
+    let pool = setup_chat_pool().await;
+    let room = chat::create_dm_room(&pool, "dm-a-b", "user-a", "user-b")
+        .await
+        .unwrap();
+    chat::insert_message(&pool, room.id, "user-b", "hi")
+        .await
+        .unwrap();
+
+    let mut blocked = HashSet::new();
+    blocked.insert("user-b".to_string());
+    let counts = chat::list_dm_unread_counts(&pool, "user-a", &blocked)
+        .await
+        .unwrap();
+    let got = counts
+        .iter()
+        .find(|(r, _)| *r == room.id)
+        .map(|(_, c)| *c)
+        .unwrap_or(0);
+    assert_eq!(
+        got, 0,
+        "a blocked peer's DM message must not count as unread"
+    );
+}
+
+#[tokio::test]
+async fn list_room_unread_counts_excludes_blocked_author() {
+    use lets_chat::db::chat;
+    let pool = setup_chat_pool().await;
+    let room = chat::create_room(&pool, "general", None, "public", None, None)
+        .await
+        .unwrap();
+    chat::add_room_member(&pool, room, "user-a").await.unwrap();
+    chat::insert_message(&pool, room, "user-b", "hi")
+        .await
+        .unwrap();
+
+    let mut blocked = HashSet::new();
+    blocked.insert("user-b".to_string());
+    let counts = chat::list_room_unread_counts(&pool, "user-a", false, &blocked)
+        .await
+        .unwrap();
+    let got = counts
+        .iter()
+        .find(|(r, _)| *r == room)
+        .map(|(_, c)| *c)
+        .unwrap_or(0);
+    assert_eq!(
+        got, 0,
+        "a blocked author's message must not count as unread"
+    );
+}
+
+#[tokio::test]
+async fn get_unread_count_excludes_blocked_author() {
+    use lets_chat::db::chat;
+    let pool = setup_chat_pool().await;
+    let room = chat::create_room(&pool, "general", None, "public", None, None)
+        .await
+        .unwrap();
+    chat::insert_message(&pool, room, "user-b", "hi")
+        .await
+        .unwrap();
+
+    let mut blocked = HashSet::new();
+    blocked.insert("user-b".to_string());
+    let count = chat::get_unread_count(&pool, "user-a", room, &blocked)
+        .await
+        .unwrap();
+    assert_eq!(
+        count, 0,
+        "a blocked author's message must not count as unread"
+    );
 }

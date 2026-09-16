@@ -43,10 +43,12 @@ pub async fn get_activity(
         None => "all",
     };
 
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
     let raw = db::activity::feed_for_user(
         &state.chat,
         &user.id,
         user.role == "admin",
+        &blocked,
         tab_filter,
         PAGE_LIMIT,
     )

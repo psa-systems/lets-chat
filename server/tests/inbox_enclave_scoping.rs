@@ -11,6 +11,7 @@
 //! These tests pin the two queries to `is_room_accessible`, which is the
 //! predicate that decides the 403.
 use lets_chat::db;
+use std::collections::HashSet;
 
 mod common;
 
@@ -98,7 +99,7 @@ async fn inbox_hides_rooms_from_enclaves_the_viewer_is_not_in() {
     let fx = fixture().await;
     let (chat, insider, outsider, room_id) = (&fx.chat, &fx.insider, &fx.outsider, fx.room_id);
 
-    let insider_rows = db::inbox::list_unread(chat, insider, false, 50, None)
+    let insider_rows = db::inbox::list_unread(chat, insider, false, &HashSet::new(), 50, None)
         .await
         .unwrap();
     assert!(
@@ -106,7 +107,7 @@ async fn inbox_hides_rooms_from_enclaves_the_viewer_is_not_in() {
         "the enclave member should still see their own unread message"
     );
 
-    let outsider_rows = db::inbox::list_unread(chat, outsider, false, 50, None)
+    let outsider_rows = db::inbox::list_unread(chat, outsider, false, &HashSet::new(), 50, None)
         .await
         .unwrap();
     assert!(
@@ -132,7 +133,7 @@ async fn dashboard_counts_hide_rooms_from_enclaves_the_viewer_is_not_in() {
     let fx = fixture().await;
     let (chat, insider, outsider, room_id) = (&fx.chat, &fx.insider, &fx.outsider, fx.room_id);
 
-    let insider_counts = db::chat::list_room_unread_counts(chat, insider, false)
+    let insider_counts = db::chat::list_room_unread_counts(chat, insider, false, &HashSet::new())
         .await
         .unwrap();
     assert!(
@@ -140,7 +141,7 @@ async fn dashboard_counts_hide_rooms_from_enclaves_the_viewer_is_not_in() {
         "the enclave member should still get a count for their room"
     );
 
-    let outsider_counts = db::chat::list_room_unread_counts(chat, outsider, false)
+    let outsider_counts = db::chat::list_room_unread_counts(chat, outsider, false, &HashSet::new())
         .await
         .unwrap();
     assert!(
@@ -180,7 +181,7 @@ async fn private_room_still_needs_room_membership_within_the_enclave() {
         .await
         .unwrap();
 
-    let rows = db::inbox::list_unread(chat, outsider, false, 50, None)
+    let rows = db::inbox::list_unread(chat, outsider, false, &HashSet::new(), 50, None)
         .await
         .unwrap();
     assert!(
@@ -206,7 +207,7 @@ async fn site_admin_still_sees_every_channel() {
     let fx = fixture().await;
     let (chat, outsider, room_id) = (&fx.chat, &fx.outsider, fx.room_id);
 
-    let rows = db::inbox::list_unread(chat, outsider, true, 50, None)
+    let rows = db::inbox::list_unread(chat, outsider, true, &HashSet::new(), 50, None)
         .await
         .unwrap();
     assert!(
@@ -214,7 +215,7 @@ async fn site_admin_still_sees_every_channel() {
         "a site admin sees channels regardless of enclave membership"
     );
 
-    let counts = db::chat::list_room_unread_counts(chat, outsider, true)
+    let counts = db::chat::list_room_unread_counts(chat, outsider, true, &HashSet::new())
         .await
         .unwrap();
     assert!(
@@ -272,7 +273,7 @@ async fn activity_feed_hides_mentions_from_enclaves_the_viewer_is_not_in() {
     .await
     .unwrap();
 
-    let feed = db::activity::feed_for_user(chat, &fx.outsider, false, None, 50)
+    let feed = db::activity::feed_for_user(chat, &fx.outsider, false, &HashSet::new(), None, 50)
         .await
         .unwrap();
     assert!(
