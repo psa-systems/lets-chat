@@ -73,7 +73,7 @@ async fn claim_is_self_toggle() {
     let id = items(&pool, mid).await.unwrap()[0].id;
 
     // Claim -> assigned to me.
-    toggle_claim(&pool, id, "u2").await.unwrap();
+    assert!(toggle_claim(&pool, id, "u2").await.unwrap());
     assert_eq!(
         item(&pool, id)
             .await
@@ -84,7 +84,7 @@ async fn claim_is_self_toggle() {
         Some("u2")
     );
     // Same user claims again -> released.
-    toggle_claim(&pool, id, "u2").await.unwrap();
+    assert!(toggle_claim(&pool, id, "u2").await.unwrap());
     assert!(item(&pool, id)
         .await
         .unwrap()
@@ -92,7 +92,53 @@ async fn claim_is_self_toggle() {
         .assignee_id
         .is_none());
     // A different user can take an unclaimed item.
-    toggle_claim(&pool, id, "u3").await.unwrap();
+    assert!(toggle_claim(&pool, id, "u3").await.unwrap());
+    assert_eq!(
+        item(&pool, id)
+            .await
+            .unwrap()
+            .unwrap()
+            .assignee_id
+            .as_deref(),
+        Some("u3")
+    );
+}
+
+#[tokio::test]
+async fn claim_refuses_to_take_from_another_user() {
+    let pool = common::chat_pool().await;
+    let room = seed_room(&pool).await;
+    let mid = create(&pool, room, "u1", "t", None, &["A".to_string()])
+        .await
+        .unwrap();
+    let id = items(&pool, mid).await.unwrap()[0].id;
+
+    // u2 claims it.
+    assert!(toggle_claim(&pool, id, "u2").await.unwrap());
+
+    // u3 tries to take it from u2: no row changes, and u2 still holds it.
+    assert!(!toggle_claim(&pool, id, "u3").await.unwrap());
+    assert_eq!(
+        item(&pool, id)
+            .await
+            .unwrap()
+            .unwrap()
+            .assignee_id
+            .as_deref(),
+        Some("u2")
+    );
+
+    // u2 can still release their own item.
+    assert!(toggle_claim(&pool, id, "u2").await.unwrap());
+    assert!(item(&pool, id)
+        .await
+        .unwrap()
+        .unwrap()
+        .assignee_id
+        .is_none());
+
+    // Now unclaimed, u3 can claim it.
+    assert!(toggle_claim(&pool, id, "u3").await.unwrap());
     assert_eq!(
         item(&pool, id)
             .await
