@@ -90,13 +90,9 @@ async fn send_recap(
     }
 
     // Deliver as a DM from the assistant bot (reuse the existing 1:1 DM if any).
-    let room = match db::chat::find_dm_room(&state.chat, &bot.id, uid).await? {
-        Some(r) => r,
-        None => {
-            let name = format!("@{}", recipient.username);
-            db::chat::create_dm_room(&state.chat, &name, &bot.id, uid).await?
-        }
-    };
+    let name = format!("@{}", recipient.username);
+    let (room, _created) =
+        db::chat::find_or_create_dm_room(&state.chat, &name, &bot.id, uid).await?;
     let new_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &body).await?;
     crate::routes::room::finalize_message_send(state, &room, bot, new_id, &body, None).await?;
     Ok(true)
