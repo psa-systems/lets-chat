@@ -123,3 +123,73 @@ async fn test_dm_messages() {
     assert_eq!(msgs[0].body, "hello");
     assert_eq!(msgs[1].body, "hi back");
 }
+
+// LC-909: `create_dm_room`'s second, racing insert must fail the `dm_pairs`
+// UNIQUE constraint and hand back the winner's room instead of erroring or
+// leaving a second `dm` room behind for the pair.
+#[tokio::test]
+async fn test_create_dm_room_loses_race_returns_existing_room() {
+    let (_, chat_pool) = setup_pools().await;
+
+    let first = lets_chat::db::chat::create_dm_room(&chat_pool, "dm-a-b", "user-a", "user-b")
+        .await
+        .unwrap();
+
+    // A second creator for the same pair (e.g. a retry, or a second racing
+    // caller that also lost its find_dm_room check) must resolve to the
+    // existing room, not create a duplicate.
+    let second =
+        lets_chat::db::chat::create_dm_room(&chat_pool, "dm-a-b-again", "user-b", "user-a")
+            .await
+            .unwrap();
+    assert_eq!(second.id, first.id);
+
+    let dm_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms WHERE room_type = 'dm'")
+        .fetch_one(&chat_pool)
+        .await
+        .unwrap();
+    assert_eq!(dm_count, 1, "only one dm room must exist for the pair");
+}
+
+// LC-909: the exact race the assistant-bot support bubble hits - a WS-driven
+// re-render and an in-flight HTTP request both resolving `support_dm_room`
+// for a user with no bot DM yet. Both concurrent `find_or_create_dm_room`
+// calls must return the same room, and exactly one `dm` room must exist
+// joining the two users afterward.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_find_or_create_dm_room_yields_one_room() {
+    let (_, chat_pool) = setup_pools().await;
+
+    let pool_a = chat_pool.clone();
+    let pool_b = chat_pool.clone();
+    let (res_a, res_b) = tokio::join!(
+        tokio::spawn(async move {
+            lets_chat::db::chat::find_or_create_dm_room(&pool_a, "@bot", "bot", "carol").await
+        }),
+        tokio::spawn(async move {
+            lets_chat::db::chat::find_or_create_dm_room(&pool_b, "@bot", "bot", "carol").await
+        }),
+    );
+    let (room_a, _created_a) = res_a.expect("join a").expect("call a");
+    let (room_b, _created_b) = res_b.expect("join b").expect("call b");
+
+    assert_eq!(
+        room_a.id, room_b.id,
+        "both concurrent calls must resolve to the same room"
+    );
+
+    let dm_rooms: Vec<i64> = sqlx::query_scalar(
+        "SELECT r.id FROM rooms r \
+         JOIN room_members m1 ON m1.room_id = r.id AND m1.user_id = 'bot' \
+         JOIN room_members m2 ON m2.room_id = r.id AND m2.user_id = 'carol' \
+         WHERE r.room_type = 'dm'",
+    )
+    .fetch_all(&chat_pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        dm_rooms.len(),
+        1,
+        "exactly one dm room must join bot and carol, got: {dm_rooms:?}"
+    );
+}
