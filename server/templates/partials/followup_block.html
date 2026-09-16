@@ -18,21 +18,31 @@
     <div class="min-w-0 flex-1">
       <span class="{% if item.done %}line-through text-content-muted{% endif %}">{{ item.text }}</span>
       {# Self-claim toggle. Self-claim only: clicking assigns the item to you (or
-         releases it if you already hold it). #}
+         releases it if you already hold it). An item held by someone else is
+         rendered as a plain label, not a button: taking it from them is not an
+         action this control performs. #}
       <div class="mt-0.5">
+        {% if item.assigned_to_me %}
         <button type="button"
                 hx-post="/follow-up/{{ item.id }}/claim"
                 hx-target="#followup-{{ follow_up.message_id }}"
                 hx-swap="innerHTML"
-                class="btn btn-sm {% if item.assigned_to_me %}bg-accent-surface text-accent{% else %}btn-ghost{% endif %}">
-          {% if item.assigned_to_me %}
+                class="btn btn-sm bg-accent-surface text-accent">
           <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-hidden="true"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>{{ "followup-assigned-you"|t }}
-          {% else if let Some(label) = item.assignee_label.as_ref() %}
-          <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-hidden="true"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>{{ label }}
-          {% else %}
-          {{ "followup-claim"|t }}
-          {% endif %}
         </button>
+        {% else if let Some(label) = item.assignee_label.as_ref() %}
+        <span class="btn btn-sm btn-ghost cursor-default">
+          <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-hidden="true"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>{{ label }}
+        </span>
+        {% else %}
+        <button type="button"
+                hx-post="/follow-up/{{ item.id }}/claim"
+                hx-target="#followup-{{ follow_up.message_id }}"
+                hx-swap="innerHTML"
+                class="btn btn-sm btn-ghost">
+          {{ "followup-claim"|t }}
+        </button>
+        {% endif %}
       </div>
     </div>
   </div>
