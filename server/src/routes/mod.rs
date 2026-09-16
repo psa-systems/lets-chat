@@ -316,7 +316,7 @@ pub(crate) async fn room_seen_members_if_applicable(
             }
         })
         .collect();
-    out.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+    out.sort_by_key(|a| a.label.to_lowercase());
     Ok(Some(out))
 }
 
@@ -862,7 +862,7 @@ pub(crate) async fn load_sidebar(
             .into_iter()
             .map(|cat| {
                 let mut rooms = by_category.remove(&cat.id).unwrap_or_default();
-                rooms.sort_by(|a, b| a.0.cmp(&b.0));
+                rooms.sort_by_key(|a| a.0);
                 let rooms: Vec<SidebarRoom> = rooms.into_iter().map(|(_, r)| r).collect();
                 let unread_total: i64 = rooms
                     .iter()
