@@ -8,6 +8,7 @@ use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
 use lets_chat::{db, routes, state::AppState, ws::hub::Hub};
 use sqlx::SqlitePool;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -158,13 +159,13 @@ async fn read_all_clears_room_dm_unread_and_mentions() {
 
     // Sanity: alice starts with unread + a mention.
     assert_eq!(
-        db::chat::get_unread_count(&t.chat, &t.alice_id, 1)
+        db::chat::get_unread_count(&t.chat, &t.alice_id, 1, &HashSet::new())
             .await
             .unwrap(),
         2
     );
     assert_eq!(
-        db::chat::get_unread_count(&t.chat, &t.alice_id, dm.id)
+        db::chat::get_unread_count(&t.chat, &t.alice_id, dm.id, &HashSet::new())
             .await
             .unwrap(),
         1
@@ -185,14 +186,14 @@ async fn read_all_clears_room_dm_unread_and_mentions() {
 
     // Everything cleared.
     assert_eq!(
-        db::chat::get_unread_count(&t.chat, &t.alice_id, 1)
+        db::chat::get_unread_count(&t.chat, &t.alice_id, 1, &HashSet::new())
             .await
             .unwrap(),
         0,
         "room unread cleared",
     );
     assert_eq!(
-        db::chat::get_unread_count(&t.chat, &t.alice_id, dm.id)
+        db::chat::get_unread_count(&t.chat, &t.alice_id, dm.id, &HashSet::new())
             .await
             .unwrap(),
         0,
@@ -218,7 +219,7 @@ async fn read_all_is_idempotent() {
     let (s2, _) = post_read_all(&t.app, &t.alice_session).await;
     assert_eq!(s2, StatusCode::OK);
     assert_eq!(
-        db::chat::get_unread_count(&t.chat, &t.alice_id, 1)
+        db::chat::get_unread_count(&t.chat, &t.alice_id, 1, &HashSet::new())
             .await
             .unwrap(),
         0
@@ -260,7 +261,7 @@ async fn read_one_room_clears_only_that_room() {
 
     // Room 1 + its mention cleared.
     assert_eq!(
-        db::chat::get_unread_count(&t.chat, &t.alice_id, 1)
+        db::chat::get_unread_count(&t.chat, &t.alice_id, 1, &HashSet::new())
             .await
             .unwrap(),
         0,
@@ -275,7 +276,7 @@ async fn read_one_room_clears_only_that_room() {
     );
     // The DM is untouched.
     assert_eq!(
-        db::chat::get_unread_count(&t.chat, &t.alice_id, dm.id)
+        db::chat::get_unread_count(&t.chat, &t.alice_id, dm.id, &HashSet::new())
             .await
             .unwrap(),
         1,
@@ -314,7 +315,7 @@ async fn mark_unread_rewinds_the_watermark() {
         .await
         .unwrap();
     assert_eq!(
-        db::chat::get_unread_count(&t.chat, &t.alice_id, 1)
+        db::chat::get_unread_count(&t.chat, &t.alice_id, 1, &HashSet::new())
             .await
             .unwrap(),
         0
@@ -327,7 +328,7 @@ async fn mark_unread_rewinds_the_watermark() {
         "returns the sidebar fragment"
     );
     assert!(
-        db::chat::get_unread_count(&t.chat, &t.alice_id, 1)
+        db::chat::get_unread_count(&t.chat, &t.alice_id, 1, &HashSet::new())
             .await
             .unwrap()
             >= 1,

@@ -54,7 +54,13 @@ pub async fn get_room_highlights(
         return Err(AppError::NotFound);
     }
 
-    let highlights = db::highlights::top_reacted(&state.chat, room_id, WINDOW, LIMIT).await?;
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+    let highlights: Vec<db::highlights::Highlight> =
+        db::highlights::top_reacted(&state.chat, room_id, WINDOW, LIMIT)
+            .await?
+            .into_iter()
+            .filter(|h| !blocked.contains(&h.user_id))
+            .collect();
 
     // One bulk auth lookup for every distinct author label.
     let mut unique: HashSet<&str> = HashSet::new();

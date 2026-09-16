@@ -50,6 +50,7 @@ pub async fn feed_for_user(
     pool: &SqlitePool,
     user_id: &str,
     is_admin: bool,
+    blocked: &std::collections::HashSet<String>,
     tab: Option<ActivityKind>,
     limit: i64,
 ) -> Result<Vec<ActivityItem>, sqlx::Error> {
@@ -64,6 +65,7 @@ pub async fn feed_for_user(
     let mut out: Vec<ActivityItem> = Vec::new();
 
     if matches!(tab, None | Some(ActivityKind::Mention)) {
+        let not_blocked = crate::db::chat::not_blocked_author_sql("m.user_id", blocked);
         let sql = format!(
             "SELECT m.id AS message_id, m.room_id, m.user_id AS actor_user_id, m.created_at \
                FROM mentions men \
@@ -73,6 +75,7 @@ pub async fn feed_for_user(
                 AND m.deleted_at IS NULL AND m.quarantined = 0 \
                 AND m.user_id != ? \
                 AND {access} \
+                {not_blocked} \
               ORDER BY m.created_at DESC, m.id DESC \
               LIMIT ?",
             access = access,
@@ -80,6 +83,9 @@ pub async fn feed_for_user(
         let mut q = sqlx::query(&sql).bind(user_id).bind(user_id);
         for _ in 0..access_binds {
             q = q.bind(user_id);
+        }
+        for id in blocked {
+            q = q.bind(id);
         }
         let rows = q.bind(limit).fetch_all(pool).await?;
         for r in rows {
@@ -95,6 +101,7 @@ pub async fn feed_for_user(
     }
 
     if matches!(tab, None | Some(ActivityKind::Reply)) {
+        let not_blocked = crate::db::chat::not_blocked_author_sql("m.user_id", blocked);
         let sql = format!(
             "SELECT m.id AS message_id, m.room_id, m.user_id AS actor_user_id, m.created_at \
                FROM messages m \
@@ -105,6 +112,7 @@ pub async fn feed_for_user(
                 AND m.deleted_at IS NULL AND m.quarantined = 0 \
                 AND parent.deleted_at IS NULL \
                 AND {access} \
+                {not_blocked} \
               ORDER BY m.created_at DESC, m.id DESC \
               LIMIT ?",
             access = access,
@@ -112,6 +120,9 @@ pub async fn feed_for_user(
         let mut q = sqlx::query(&sql).bind(user_id).bind(user_id);
         for _ in 0..access_binds {
             q = q.bind(user_id);
+        }
+        for id in blocked {
+            q = q.bind(id);
         }
         let rows = q.bind(limit).fetch_all(pool).await?;
         for r in rows {
@@ -127,6 +138,7 @@ pub async fn feed_for_user(
     }
 
     if matches!(tab, None | Some(ActivityKind::Reaction)) {
+        let not_blocked = crate::db::chat::not_blocked_author_sql("mr.user_id", blocked);
         let sql = format!(
             "SELECT m.id AS message_id, m.room_id, mr.user_id AS actor_user_id, \
                     mr.emoji, mr.created_at \
@@ -137,6 +149,7 @@ pub async fn feed_for_user(
                 AND mr.user_id != ? \
                 AND m.deleted_at IS NULL AND m.quarantined = 0 \
                 AND {access} \
+                {not_blocked} \
               ORDER BY mr.created_at DESC \
               LIMIT ?",
             access = access,
@@ -144,6 +157,9 @@ pub async fn feed_for_user(
         let mut q = sqlx::query(&sql).bind(user_id).bind(user_id);
         for _ in 0..access_binds {
             q = q.bind(user_id);
+        }
+        for id in blocked {
+            q = q.bind(id);
         }
         let rows = q.bind(limit).fetch_all(pool).await?;
         for r in rows {

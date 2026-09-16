@@ -1215,7 +1215,10 @@ async fn render_unread_badge(
     viewer: &User,
     room: &models::Room,
 ) -> Option<String> {
-    let unread = db::chat::get_unread_count(&state.chat, &viewer.id, room.id)
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &viewer.id)
+        .await
+        .ok()?;
+    let unread = db::chat::get_unread_count(&state.chat, &viewer.id, room.id, &blocked)
         .await
         .ok()?;
     if room.room_type == "dm" {
@@ -3796,11 +3799,12 @@ async fn render_pin_event(
     } else {
         format!("/room/{room_id}/pins")
     };
-    let strip_html = super::pinned::build_strip_fragment(state, room_id, pin_path, true)
-        .await
-        .ok()?
-        .render()
-        .ok()?;
+    let strip_html =
+        super::pinned::build_strip_fragment(state, &viewer.id, room_id, pin_path, true)
+            .await
+            .ok()?
+            .render()
+            .ok()?;
     let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &viewer.id, message_id)
         .await
         .unwrap_or(false);
