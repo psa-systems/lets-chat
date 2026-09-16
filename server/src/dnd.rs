@@ -15,8 +15,8 @@
 //! current UTC instant explicitly.
 //!
 //! Suppression gates *out-of-app delivery only* (Web Push drops, the email
-//! digest holds). In-app activity records (LC-82) are written regardless; DND
-//! never hides history.
+//! digest holds, the per-message mention/DM email drops). In-app activity
+//! records (LC-82) are written regardless; DND never hides history.
 
 use chrono::{DateTime, Datelike, NaiveTime, TimeZone, Timelike, Utc, Weekday};
 use serde::{Deserialize, Serialize};

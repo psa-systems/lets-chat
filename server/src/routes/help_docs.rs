@@ -924,18 +924,18 @@ pub(crate) async fn notify_user_from_bot(
 /// A freshly created room nudges the user's sidebar (mirrors [`dm_from_bot`]).
 pub(crate) async fn support_dm_room(state: &AppState, user: &User) -> Result<Room, AppError> {
     let bot = super::assistant::assistant_bot(state).await?;
-    if let Some(r) = db::chat::find_dm_room(&state.chat, &bot.id, &user.id).await? {
-        return Ok(r);
-    }
     let name = format!("@{}", bot.username);
-    let room = db::chat::create_dm_room(&state.chat, &name, &bot.id, &user.id).await?;
-    state.hub.broadcast_to_user(
-        &user.id,
-        &crate::ws::events::ChatEvent::RoomMemberAdded {
-            room_id: room.id,
-            user_id: user.id.clone(),
-        },
-    );
+    let (room, created) =
+        db::chat::find_or_create_dm_room(&state.chat, &name, &bot.id, &user.id).await?;
+    if created {
+        state.hub.broadcast_to_user(
+            &user.id,
+            &crate::ws::events::ChatEvent::RoomMemberAdded {
+                room_id: room.id,
+                user_id: user.id.clone(),
+            },
+        );
+    }
     Ok(room)
 }
 
@@ -951,14 +951,9 @@ async fn dm_from_bot(
     recipient_username: &str,
     body: &str,
 ) -> Result<(), AppError> {
-    let (room, created) = match db::chat::find_dm_room(&state.chat, &bot.id, recipient_id).await? {
-        Some(r) => (r, false),
-        None => {
-            let name = format!("@{recipient_username}");
-            let r = db::chat::create_dm_room(&state.chat, &name, &bot.id, recipient_id).await?;
-            (r, true)
-        }
-    };
+    let name = format!("@{recipient_username}");
+    let (room, created) =
+        db::chat::find_or_create_dm_room(&state.chat, &name, &bot.id, recipient_id).await?;
     if created {
         // New DM: nudge the recipient's sidebar to pick it up live (mirrors routes::dm).
         state.hub.broadcast_to_user(

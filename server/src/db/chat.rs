@@ -1409,7 +1409,11 @@ pub async fn regenerate_invite_code(
     Ok(())
 }
 
-/// Find an existing DM room between two users.
+/// Find an existing DM room between two users. `dm_pairs` (LC-909) guarantees
+/// at most one `dm` room per pair going forward, but a pre-migration
+/// duplicate can still exist; `ORDER BY r.id LIMIT 1` makes the pick
+/// deterministic (the oldest room, matching the migration's backfill) rather
+/// than whichever row SQLite happens to return first.
 pub async fn find_dm_room(
     pool: &sqlx::SqlitePool,
     user_a: &str,
@@ -1420,7 +1424,8 @@ pub async fn find_dm_room(
          FROM rooms r \
          JOIN room_members m1 ON m1.room_id = r.id AND m1.user_id = ? \
          JOIN room_members m2 ON m2.room_id = r.id AND m2.user_id = ? \
-         WHERE r.room_type = 'dm'",
+         WHERE r.room_type = 'dm' \
+         ORDER BY r.id LIMIT 1",
     )
     .bind(user_a)
     .bind(user_b)
@@ -1430,34 +1435,88 @@ pub async fn find_dm_room(
     Ok(row.as_ref().map(map_room))
 }
 
-/// Create a DM room between two users.
+/// Create a DM room between two users, or return the winner's room if a
+/// concurrent caller created it first (LC-909). All inserts (`rooms`, both
+/// `room_members` rows, and the `dm_pairs` uniqueness row, ids sorted
+/// canonically) run in one transaction; a racing second creator fails the
+/// `dm_pairs` UNIQUE constraint, and this rolls its own insert back and
+/// re-resolves through `find_dm_room` instead of erroring.
 pub async fn create_dm_room(
     pool: &sqlx::SqlitePool,
     name: &str,
     user_a: &str,
     user_b: &str,
 ) -> Result<Room, sqlx::Error> {
+    let (user_lo, user_hi) = if user_a <= user_b {
+        (user_a, user_b)
+    } else {
+        (user_b, user_a)
+    };
+
+    let mut tx = pool.begin().await?;
+
     let result = sqlx::query("INSERT INTO rooms (name, room_type, created_by) VALUES (?, 'dm', ?)")
         .bind(name)
         .bind(user_a)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     let room_id = result.last_insert_rowid();
 
     sqlx::query("INSERT INTO room_members (room_id, user_id) VALUES (?, ?)")
         .bind(room_id)
         .bind(user_a)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     sqlx::query("INSERT INTO room_members (room_id, user_id) VALUES (?, ?)")
         .bind(room_id)
         .bind(user_b)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
-    get_room(pool, room_id)
-        .await?
-        .ok_or_else(|| sqlx::Error::RowNotFound)
+    let dm_pair = sqlx::query("INSERT INTO dm_pairs (room_id, user_lo, user_hi) VALUES (?, ?, ?)")
+        .bind(room_id)
+        .bind(user_lo)
+        .bind(user_hi)
+        .execute(&mut *tx)
+        .await;
+
+    match dm_pair {
+        Ok(_) => {
+            tx.commit().await?;
+            get_room(pool, room_id)
+                .await?
+                .ok_or(sqlx::Error::RowNotFound)
+        }
+        Err(e) if matches!(&e, sqlx::Error::Database(d) if d.is_unique_violation()) => {
+            tx.rollback().await?;
+            find_dm_room(pool, user_a, user_b)
+                .await?
+                .ok_or(sqlx::Error::RowNotFound)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Find-or-create a DM room between two users: the one find-then-create shape
+/// shared by `routes::dm`, `routes::help_docs::support_dm_room` /
+/// `dm_from_bot`, and `weekly_recap` (LC-909), so the race-safety in
+/// [`create_dm_room`] backs every call site instead of each reimplementing
+/// the pair. `name` is only used if a new room is created. The returned
+/// `bool` is `true` when `find_dm_room` found nothing and this call went on
+/// to (attempt to) create the room, so callers can gate a "new DM" sidebar
+/// nudge on it; it stays accurate even when the create call itself lost a
+/// race, since the winner already sent that nudge.
+pub async fn find_or_create_dm_room(
+    pool: &sqlx::SqlitePool,
+    name: &str,
+    user_a: &str,
+    user_b: &str,
+) -> Result<(Room, bool), sqlx::Error> {
+    if let Some(r) = find_dm_room(pool, user_a, user_b).await? {
+        return Ok((r, false));
+    }
+    let room = create_dm_room(pool, name, user_a, user_b).await?;
+    Ok((room, true))
 }
 
 /// List DM rooms for a user, returning Room + the other user's ID.
