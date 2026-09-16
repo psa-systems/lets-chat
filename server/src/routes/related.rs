@@ -166,10 +166,13 @@ pub async fn get_related(
 
     // Load the ranked messages (skipping any deleted since embedding), preserving
     // rank order, and resolve author labels in one bulk query.
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
     let mut msgs: Vec<RawMessage> = Vec::with_capacity(scored.len());
     for (id, _) in &scored {
         if let Some(m) = db::chat::get_message(&state.chat, *id).await? {
-            msgs.push(m);
+            if !blocked.contains(&m.user_id) {
+                msgs.push(m);
+            }
         }
     }
     let mut unique: HashSet<&str> = HashSet::new();

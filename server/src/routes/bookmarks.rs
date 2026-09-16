@@ -172,7 +172,13 @@ pub(crate) async fn build_saved_rows(
     state: &AppState,
     user: &User,
 ) -> Result<Vec<SavedListRow>, AppError> {
-    let rows = db::bookmarks::bookmarks_for_user(&state.chat, &user.id).await?;
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+    let rows: Vec<db::bookmarks::BookmarkRow> =
+        db::bookmarks::bookmarks_for_user(&state.chat, &user.id)
+            .await?
+            .into_iter()
+            .filter(|r| !blocked.contains(&r.author_user_id))
+            .collect();
 
     // LC-684: resolve each DM row's peer up front so the peer id can join the
     // author ids in ONE bulk display-name lookup. Pre-LC-684 the peer id was
