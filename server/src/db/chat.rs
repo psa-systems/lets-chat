@@ -2006,14 +2006,21 @@ pub async fn top_reaction_emojis(
     Ok(rows.into_iter().map(|r| r.get("emoji")).collect())
 }
 
+/// Characters FTS5 treats specially in a MATCH expression. Stripped from
+/// tokens by both [`sanitize_fts_query`] and [`fts_query_any`] so a token
+/// wrapped in double quotes can never smuggle an unbalanced quote or other
+/// FTS5 syntax into the MATCH argument.
+fn fts_special(c: char) -> bool {
+    matches!(c, '"' | '*' | '(' | ')' | '+' | '-' | '^' | ':')
+}
+
 /// Escape a raw user query string for safe use in an FTS5 MATCH expression.
 /// Splits on whitespace, strips FTS5 special characters from each token,
 /// and drops empty tokens. Returns None if no usable tokens remain.
 pub fn sanitize_fts_query(raw: &str) -> Option<String> {
-    let special = |c: char| matches!(c, '"' | '*' | '(' | ')' | '+' | '-' | '^' | ':');
     let tokens: Vec<String> = raw
         .split_whitespace()
-        .map(|t| t.replace(special, ""))
+        .map(|t| t.replace(fts_special, ""))
         .filter(|t| !t.is_empty())
         .collect();
     if tokens.is_empty() {
@@ -2048,12 +2055,15 @@ pub fn fts_query_any(raw: &str) -> Option<String> {
         "it", "he", "she", "they", "we", "any", "know", "there",
     ];
     // Trim FTS-special and punctuation from each word's edges ("david?" ->
-    // "david", "(david)" -> "david") while keeping internal characters.
+    // "david", "(david)" -> "david"), then strip any FTS5-special character
+    // that survives in the interior ("6\"x8\"" -> "6x8"). Without this a
+    // token like `6"x8"` keeps its inner quote, and wrapping it below in
+    // double quotes hands FTS5 an unbalanced-quote MATCH argument.
     let clean: Vec<String> = raw
         .split_whitespace()
         .map(|t| {
             t.trim_matches(|c: char| !c.is_alphanumeric() && c != '_')
-                .to_string()
+                .replace(fts_special, "")
         })
         .filter(|t| !t.is_empty())
         .collect();
