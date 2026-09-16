@@ -240,7 +240,7 @@ pub async fn get_unfurl_image(
     Ok((
         StatusCode::OK,
         [
-            (header::CONTENT_TYPE, content_type),
+            (header::CONTENT_TYPE, content_type.to_string()),
             // Match the preview row's 24h TTL. Private: it is per-viewer
             // AuthUser-gated content, so it must not sit in a shared cache.
             (
@@ -248,6 +248,13 @@ pub async fn get_unfurl_image(
                 format!("private, max-age={PREVIEW_TTL_SECS}"),
             ),
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
+            // LC-904: belt-and-suspenders alongside the sniffed-and-allowlisted
+            // Content-Type; even a browser that mis-handles the type header
+            // is told this response is content to display, not to navigate to.
+            (
+                header::CONTENT_DISPOSITION,
+                "inline; filename=\"preview\"".to_string(),
+            ),
         ],
         bytes,
     )
@@ -255,10 +262,15 @@ pub async fn get_unfurl_image(
 }
 
 /// LC-857: fetch a remote image through the SSRF-guarded client, following
-/// redirects, gating on an `image/*` content-type and capping the body. Returns
-/// `(content_type, bytes)` or `None` on any failure/rejection. Mirrors the
-/// unfurl fetch loop (`http_client::outbound_get` re-checks SSRF per hop).
-async fn fetch_image(url: &str) -> Option<(String, Vec<u8>)> {
+/// redirects, and capping the body. LC-904: the served Content-Type is
+/// determined by sniffing the downloaded bytes against
+/// `crate::uploads::ALLOWED_IMAGE_MIME`, never by trusting the remote
+/// server's claimed header (a remote can claim `image/png` for an SVG
+/// document with an inline `<script>`, and this route serves same-origin).
+/// Returns `(sniffed_content_type, bytes)` or `None` on any failure/rejection.
+/// Mirrors the unfurl fetch loop (`http_client::outbound_get` re-checks SSRF
+/// per hop).
+async fn fetch_image(url: &str) -> Option<(&'static str, Vec<u8>)> {
     let start = Url::parse(url).ok()?;
     if !matches!(start.scheme(), "http" | "https") {
         return None;
@@ -296,8 +308,10 @@ async fn fetch_image(url: &str) -> Option<(String, Vec<u8>)> {
     if !resp.status().is_success() {
         return None;
     }
-    // Only real images; drop any `; charset=` parameter for the served value.
-    let base_ctype = resp
+    // Cheap advisory pre-filter only: a foreign server's claimed Content-Type
+    // is not trusted for anything past "is this worth downloading at all".
+    // Drop any `; charset=` parameter before comparing.
+    let claimed_ctype = resp
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
@@ -307,7 +321,7 @@ async fn fetch_image(url: &str) -> Option<(String, Vec<u8>)> {
         .unwrap_or("")
         .trim()
         .to_lowercase();
-    if !base_ctype.starts_with("image/") {
+    if !claimed_ctype.starts_with("image/") {
         return None;
     }
     let mut body = Vec::with_capacity(64 * 1024);
@@ -324,7 +338,22 @@ async fn fetch_image(url: &str) -> Option<(String, Vec<u8>)> {
     if body.is_empty() {
         return None;
     }
-    Some((base_ctype, body))
+    let content_type = sniff_served_content_type(&body)?;
+    Some((content_type, body))
+}
+
+/// LC-904: sniff `body`'s magic bytes and return the served Content-Type only
+/// if it is in the shared raster allowlist, independent of whatever the
+/// remote server's Content-Type header claimed. Returns `None` when the sniff
+/// yields nothing (unrecognized bytes) or a type outside the allowlist -
+/// notably `image/svg+xml`, which `infer` (and browsers) treat as an XML
+/// document rather than a raster image.
+fn sniff_served_content_type(body: &[u8]) -> Option<&'static str> {
+    let sniffed = infer::get(body)?.mime_type();
+    crate::uploads::ALLOWED_IMAGE_MIME
+        .iter()
+        .find(|&&allowed| allowed == sniffed)
+        .copied()
 }
 
 /// LC-857: a `url_hash` is a lowercase sha256 hex string (see `hash_url`).
@@ -439,6 +468,42 @@ mod tests {
                 "{raw} must be rejected"
             );
         }
+    }
+
+    fn tiny_png() -> Vec<u8> {
+        use image::ImageEncoder;
+        let img = image::RgbaImage::from_pixel(1, 1, image::Rgba([0, 0, 0, 0]));
+        let mut buf = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut buf)
+            .write_image(&img, 1, 1, image::ExtendedColorType::Rgba8)
+            .unwrap();
+        buf
+    }
+
+    const SVG_WITH_SCRIPT: &[u8] =
+        br#"<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.cookie)</script></svg>"#;
+
+    #[test]
+    fn svg_body_is_refused_regardless_of_claimed_header() {
+        // LC-904: the served type is a function of the BYTES, never of the
+        // remote server's claimed Content-Type. An SVG document (which a
+        // browser renders and scripts, not just displays) must be refused
+        // whether the foreign server claimed `image/svg+xml` or lied and
+        // claimed `image/png`; `sniff_served_content_type` takes no header
+        // argument at all, so both claims collapse to the same sniff.
+        assert_eq!(sniff_served_content_type(SVG_WITH_SCRIPT), None);
+    }
+
+    #[test]
+    fn png_body_is_served_as_png_even_if_header_claims_otherwise() {
+        // The served type comes from sniffing, so a remote claiming
+        // `image/jpeg` for actual PNG bytes still serves as `image/png`.
+        assert_eq!(sniff_served_content_type(&tiny_png()), Some("image/png"));
+    }
+
+    #[test]
+    fn unrecognized_bytes_are_refused() {
+        assert_eq!(sniff_served_content_type(b"not an image at all"), None);
     }
 
     #[test]
