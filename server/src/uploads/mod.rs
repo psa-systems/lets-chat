@@ -1,6 +1,15 @@
 pub mod pipeline;
 pub mod sweep;
 
+/// LC-904: the only raster image MIME types this app will ever serve back
+/// from a foreign fetch, determined by sniffing bytes rather than trusting
+/// the foreign server's claimed Content-Type. Shared by `bridge_avatar` and
+/// `routes::unfurl` so the two foreign-image-fetch paths cannot drift apart
+/// on what counts as safe. `image/svg+xml` is deliberately absent: it is an
+/// XML document a browser can render (and script) as a document, not a
+/// raster image.
+pub const ALLOWED_IMAGE_MIME: &[&str] = &["image/png", "image/jpeg", "image/gif", "image/webp"];
+
 /// Process-wide cap on concurrent image-pipeline tasks. Decode + re-encode
 /// is memory-hungry; without a cap a burst of large uploads could OOM the
 /// server. Tune here if operator-side load tells a different story.
