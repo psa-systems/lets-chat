@@ -319,7 +319,7 @@ async fn the_unread_badge_of_the_opened_room_is_cleared_by_the_refresh() {
     let badge_id = format!("id=\"unread-room-{}\"", fx.other_room);
     assert!(
         before.contains(&format!(
-            "{badge_id} data-lc-unread class=\"lc-count-pill\">3<"
+            "{badge_id} data-lc-unread class=\"lc-count-pill\" aria-label=\"3 unread\">3<"
         )),
         "the room not yet opened shows its unread count, got:\n{before}"
     );

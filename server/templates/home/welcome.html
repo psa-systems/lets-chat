@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% import "partials/unread_badge.html" as unread_badge %}
 
 {% block title %}{{ "home-page-title"|t }} - Let's Chat{% endblock %}
 
@@ -134,7 +135,8 @@
         <section class="card lc-home-card overflow-hidden p-0">
           <header class="lc-home-card-head">
             <h3 class="lc-h3">{{ "home-dash-catchup"|t }}</h3>
-            {% if !catch_up.is_empty() %}<span class="lc-count-pill">{{ catch_up.len() }}</span>{% endif %}
+            {% let catchup_noun = "home-dash-catchup"|t %}
+            {% call unread_badge::badge(catch_up.len(), catchup_noun, "normal") %}
           </header>
           <ul class="divide-y divide-border">
             {% for r in catch_up %}
@@ -156,7 +158,8 @@
                   </span>
                   <span class="block truncate lc-small text-content-muted">{{ r.preview }}</span>
                 </span>
-                {% if r.unread > 0 %}<span class="lc-count-pill" aria-label="{{ r.unread }} {{ "home-dash-unread-aria"|t }}">{{ r.unread }}</span>{% endif %}
+                {% let row_unread_noun = "home-dash-unread-aria"|t %}
+                {% call unread_badge::badge(r.unread, row_unread_noun, "normal") %}
               </a>
             </li>
             {% endfor %}
@@ -175,7 +178,8 @@
         <section class="card lc-home-card overflow-hidden p-0">
           <header class="lc-home-card-head">
             <h3 class="lc-h3">{{ "home-dash-dms"|t }}</h3>
-            <span class="lc-count-pill">{{ dms.len() }}</span>
+            {% let dms_noun = "home-dash-dms"|t %}
+            {% call unread_badge::badge(dms.len(), dms_noun, "normal") %}
           </header>
           <ul class="divide-y divide-border">
             {% for r in dms %}
@@ -190,7 +194,8 @@
                 {% let avatar_size = "h-8 w-8 text-sm" %}
                 {% include "partials/avatar.html" %}
                 <span class="min-w-0 flex-1 truncate font-medium text-content">{{ r.label }}</span>
-                {% if r.unread > 0 %}<span class="lc-count-pill" aria-label="{{ r.unread }} {{ "home-dash-unread-aria"|t }}">{{ r.unread }}</span>{% endif %}
+                {% let row_unread_noun = "home-dash-unread-aria"|t %}
+                {% call unread_badge::badge(r.unread, row_unread_noun, "normal") %}
               </a>
             </li>
             {% endfor %}
@@ -203,14 +208,16 @@
         <section class="card lc-home-card overflow-hidden p-0">
           <header class="lc-home-card-head">
             <h3 class="lc-h3">{{ "home-dash-mentions"|t }}</h3>
-            <span class="lc-count-pill">{{ mentions.len() }}</span>
+            {% let mentions_noun = "home-dash-mentions"|t %}
+            {% call unread_badge::badge(mentions.len(), mentions_noun, "normal") %}
           </header>
           <ul class="divide-y divide-border">
             {% for r in mentions %}
             <li>
               <a href="/room/{{ r.room_id }}" class="lc-home-row">
                 <span class="min-w-0 flex-1 truncate font-medium text-content">{{ r.name }}</span>
-                <span class="lc-count-pill" aria-label="{{ r.count }} {{ "home-dash-mentions-aria"|t }}">{{ r.count }}</span>
+                {% let row_mentions_noun = "home-dash-mentions-aria"|t %}
+                {% call unread_badge::badge(r.count, row_mentions_noun, "normal") %}
               </a>
             </li>
             {% endfor %}
@@ -223,7 +230,8 @@
         <section class="card lc-home-card overflow-hidden p-0">
           <header class="lc-home-card-head">
             <h3 class="lc-h3">{{ "home-dash-threads"|t }}</h3>
-            <span class="lc-count-pill">{{ threads.len() }}</span>
+            {% let threads_noun = "home-dash-threads"|t %}
+            {% call unread_badge::badge(threads.len(), threads_noun, "normal") %}
           </header>
           <ul class="divide-y divide-border">
             {% for r in threads %}
@@ -233,7 +241,8 @@
                   <span class="block truncate font-medium text-content">{{ r.room_name }}</span>
                   <span class="block truncate lc-small text-content-muted">{{ r.preview }}</span>
                 </span>
-                {% if r.unread > 0 %}<span class="lc-count-pill" aria-label="{{ r.unread }} {{ "home-dash-replies-aria"|t }}">{{ r.unread }}</span>{% endif %}
+                {% let row_replies_noun = "home-dash-replies-aria"|t %}
+                {% call unread_badge::badge(r.unread, row_replies_noun, "normal") %}
               </a>
             </li>
             {% endfor %}
@@ -246,7 +255,8 @@
         <section class="card lc-home-card overflow-hidden p-0">
           <header class="lc-home-card-head">
             <h3 class="lc-h3">{{ "home-dash-drafts"|t }}</h3>
-            <span class="lc-count-pill">{{ drafts.len() }}</span>
+            {% let drafts_noun = "home-dash-drafts"|t %}
+            {% call unread_badge::badge(drafts.len(), drafts_noun, "normal") %}
           </header>
           <ul class="divide-y divide-border">
             {% for r in drafts %}
@@ -362,9 +372,8 @@
           <span class="min-w-0 flex-1">
             <span class="flex items-center gap-2">
               <span class="lc-h3">{{ "home-action-invitations-title"|t }}</span>
-              {% if pending_invites > 0 %}
-              <span class="inline-flex items-center justify-center rounded-full bg-danger px-2 text-xs font-semibold text-danger-content">{{ pending_invites }}</span>
-              {% endif %}
+              {% let invites_noun = "sidebar-invitations-pending"|t %}
+              {% call unread_badge::badge(pending_invites, invites_noun, "alert") %}
             </span>
             <span class="block lc-small text-content-muted">{{ "home-action-invitations-desc"|t }}</span>
           </span>

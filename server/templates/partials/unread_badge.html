@@ -1,5 +1,20 @@
 {% if unread > 0 && mute_mode == "none" %}
-<span id="unread-{{ kind }}-{{ id }}" data-lc-unread class="lc-count-pill">{{ unread }}</span>
+<span id="unread-{{ kind }}-{{ id }}" data-lc-unread class="lc-count-pill" aria-label="{{ unread }} {{ "home-dash-unread-aria"|t }}">{{ unread }}</span>
 {% else %}
 <span id="unread-{{ kind }}-{{ id }}" data-lc-unread></span>
 {% endif %}
+
+{# LC-889: the shared count-badge component. Every numeric badge in the app
+   renders through this macro (or the row markup above, which needs the extra
+   `id`/zero-placeholder machinery the OOB unread swaps depend on) so there is
+   one place that owns the pill markup and its accessible label. `variant`
+   selects the extra class: "alert" for danger-red badges (support / invite
+   counts), "rail" for the enclave-rail placement, "normal" for the plain pill.
+   `noun` is the already-translated word describing what is being counted
+   ("unread", "mentions", ...); the label reads "{count} {noun}" so a screen
+   reader never announces a bare numeral. #}
+{% macro badge(count, noun, variant) %}
+{% if count > 0 %}
+<span class="lc-count-pill{% if variant == "alert" %} lc-count-pill--alert{% else if variant == "rail" %} lc-rail-badge{% endif %}" aria-label="{{ count }} {{ noun }}">{{ count }}</span>
+{% endif %}
+{% endmacro %}
