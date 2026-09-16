@@ -449,7 +449,7 @@
     var ok = !!SR || (sttServer && !!MR);
     if (!ok) {
       var msg = (toggleEl && toggleEl.getAttribute('data-lc-unsupported')) ||
-        'Live transcription is not supported in this browser.';
+        window.__lcS('sttUnsupported', 'Live transcription is not supported in this browser.');
       alert(msg);
       return;
     }
@@ -466,7 +466,7 @@
     }).then(function (r) {
       if (!r.ok) {
         try { console.warn('lets-chat: transcription start failed', r.status); } catch (e) {}
-        alert('Could not start transcription (error ' + r.status + ').');
+        alert(window.__lcS('sttStartFailed', 'Could not start transcription (error %status%).').replace('%status%', r.status));
         return null;
       }
       return r.json();
