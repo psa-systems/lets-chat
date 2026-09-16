@@ -6,10 +6,14 @@
 //!
 //! 1. Recipient has a verified email address.
 //! 2. Recipient has `notify_email_activity_enabled = 1`.
-//! 3. SMTP mailer is configured (`state.mailer.is_some()`).
-//! 4. Per-recipient rate limit (`RateLimitKind::EmailMentionNotification`,
+//! 3. Recipient is not inside a configured Do Not Disturb window
+//!    (`dnd::is_suppressed`).
+//! 4. Recipient has not muted the room (`room_mute_mode`, dropped on
+//!    `MuteMode::All`).
+//! 5. SMTP mailer is configured (`state.mailer.is_some()`).
+//! 6. Per-recipient rate limit (`RateLimitKind::EmailMentionNotification`,
 //!    20/minute).
-//! 5. Original message still exists (race: the mention path can interleave
+//! 7. Original message still exists (race: the mention path can interleave
 //!    with a delete).
 //!
 //! On all-gates-pass it mints a reply token via [`db::reply_tokens`],
@@ -47,6 +51,10 @@ pub enum DispatchOutcome {
     SkippedNoEmail,
     SkippedUnverified,
     SkippedOptOut,
+    /// Recipient is inside a configured Do Not Disturb window.
+    SkippedDnd,
+    /// Recipient has muted this room (`MuteMode::All`).
+    SkippedMuted,
     SkippedRateLimit,
     /// Recipient lookup failed (no user row). Race with user delete.
     SkippedNoRecipient,
@@ -111,6 +119,15 @@ pub async fn dispatch_mention_notification(
     }
     if !recipient.notify_email_activity_enabled {
         return DispatchOutcome::SkippedOptOut;
+    }
+    if crate::dnd::is_suppressed(&recipient, chrono::Utc::now()) {
+        return DispatchOutcome::SkippedDnd;
+    }
+    let mute_mode = db::notifications::room_mute_mode(&state.chat, recipient_user_id, room_id)
+        .await
+        .unwrap_or(db::notifications::MuteMode::None);
+    if !mute_mode.allows_room_mention() {
+        return DispatchOutcome::SkippedMuted;
     }
 
     // 2. Mailer gate.
