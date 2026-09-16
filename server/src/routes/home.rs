@@ -249,11 +249,14 @@ async fn build_dashboard(
                 .clone()
                 .filter(|s| !s.trim().is_empty())
                 .unwrap_or_else(|| format!("@{}", peer.username));
+            let status = super::effective_status(state, &peer_id, &peer.status);
             dms.push(DmRow {
                 peer_id,
                 label,
                 username: peer.username,
                 avatar_ext: peer.avatar_ext,
+                status,
+                custom_status: peer.custom_status,
                 unread: *dm_counts.get(&row.room_id).unwrap_or(&0),
             });
         } else if catch_up.len() < CARD_CAP {
@@ -261,9 +264,18 @@ async fn build_dashboard(
             // avatar. One lookup per shown row (cap 6), mirroring how the DM rows
             // above resolve their peer. A deleted author falls back to initials.
             let author = db::auth::find_user_by_id(&state.auth, &row.author_user_id).await?;
-            let (author_name, author_avatar_ext) = match author {
-                Some(a) => (a.username, a.avatar_ext),
-                None => (row.author_user_id.clone(), None),
+            let (author_name, author_avatar_ext, author_status, author_custom_status) = match author
+            {
+                Some(a) => {
+                    let status = super::effective_status(state, &row.author_user_id, &a.status);
+                    (a.username, a.avatar_ext, status, a.custom_status)
+                }
+                None => (
+                    row.author_user_id.clone(),
+                    None,
+                    "offline".to_string(),
+                    None,
+                ),
             };
             catch_up_msg_ids.push(row.message_id);
             catch_up.push(CatchUpRow {
@@ -275,6 +287,8 @@ async fn build_dashboard(
                 author_id: row.author_user_id.clone(),
                 author_name,
                 author_avatar_ext,
+                author_status,
+                author_custom_status,
             });
         }
     }

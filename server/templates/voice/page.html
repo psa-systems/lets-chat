@@ -97,28 +97,9 @@
 
     {# isolated destructive action #}
     <div class="lc-callbar-group lc-callbar-group--end">
-      {# LC-825: floating reactions (see room/huddle.html for the same control). #}
-      <span class="lc-react-wrap hidden" data-lc-react-wrap>
-        <button type="button" data-lc-voice-react aria-haspopup="true" aria-expanded="false"
-                aria-label="{{ "voice-react"|t }}" data-lc-tip="{{ "voice-react"|t }}" data-lc-tip-pos="bottom" class="lc-cbtn">
-          <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/></svg></span>
-          <span class="lc-cbtn-label">{{ "voice-react"|t }}</span>
-        </button>
-        <div data-lc-react-tray role="toolbar" aria-label="{{ "voice-react-tray"|t }}" hidden class="card lc-react-tray">
-          <div class="lc-react-row" data-lc-react-row>
-            <button type="button" data-lc-react-emoji="👍" class="lc-emoji-cell" tabindex="-1">👍</button>
-            <button type="button" data-lc-react-emoji="🎉" class="lc-emoji-cell" tabindex="-1">🎉</button>
-            <button type="button" data-lc-react-emoji="❤️" class="lc-emoji-cell" tabindex="-1">❤️</button>
-            <button type="button" data-lc-react-emoji="😂" class="lc-emoji-cell" tabindex="-1">😂</button>
-            <button type="button" data-lc-react-emoji="😮" class="lc-emoji-cell" tabindex="-1">😮</button>
-            <button type="button" data-lc-react-emoji="😢" class="lc-emoji-cell" tabindex="-1">😢</button>
-            <button type="button" data-lc-react-emoji="🤔" class="lc-emoji-cell" tabindex="-1">🤔</button>
-            <button type="button" data-lc-react-emoji="👏" class="lc-emoji-cell" tabindex="-1">👏</button>
-            <button type="button" data-lc-react-more aria-label="{{ "voice-react-more"|t }}" data-lc-tip="{{ "voice-react-more"|t }}" data-lc-tip-pos="bottom" class="lc-emoji-cell lc-react-more" tabindex="-1">+</button>
-          </div>
-          <div data-lc-react-picker-slot></div>
-        </div>
-      </span>
+      {# LC-825/LC-880: floating reactions (partials/react_tray.html). #}
+      {% let tip_pos = "bottom" %}
+      {% include "partials/react_tray.html" %}
       {# LC-853: huddle remote-control consent UI (request button + sharer
          prompt + active banner), behind the workspace switch. #}
       {% if remote_control_enabled %}
@@ -158,7 +139,13 @@
       <div class="lc-voice-lobby-avatars" data-lc-voice-preview-names>
         {% for p in participants %}
         <span class="lc-voice-lobby-chip" data-lc-voice-preview-name="{{ p.user_id }}" data-lc-label="{{ p.label }}" data-lc-avatar-version="{{ p.user_id|avatar_version }}">
-          <img class="lc-voice-lobby-avatar" src="{{ p.user_id|avatar_url }}" alt="{{ p.label }}">
+          {% let avatar_user_id = p.user_id.clone() %}
+          {% let avatar_username = p.label.clone() %}
+          {% let avatar_ext = p.avatar_ext.clone() %}
+          {% let avatar_status = p.status.clone() %}
+          {% let avatar_custom_status = p.custom_status.clone() %}
+          {% let avatar_size = "h-14 w-14 text-xs" %}
+          {% include "partials/avatar.html" %}
           <span class="lc-voice-lobby-name">{{ p.label }}</span>
         </span>
         {% endfor %}

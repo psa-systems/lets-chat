@@ -128,13 +128,9 @@
     var msg = (window.__lcS ? window.__lcS(key, fallback) : fallback).replace('%name%', name || '');
     window.__lcToast(kind, msg);
   }
-  // LC-416: control buttons are icon + .lc-cbtn-label; update the label span so
-  // the leading icon survives (fall back to the button for plain-text ones).
-  function setLabel(btn, text) {
-    if (!btn) return;
-    var l = btn.querySelector('.lc-cbtn-label');
-    if (l) l.textContent = text; else btn.textContent = text;
-  }
+  // LC-875: shared with voice.js, huddle_popout.js and huddle_control.js so
+  // the visible label, the tooltip and the accessible name never drift apart.
+  var setLabel = window.LetsChatRtc.setLabel;
 
   // ---- focus trap (modal dialog discipline) -------------------------
   // Exactly one trap is active at a time. installDialogTrap migrates from
