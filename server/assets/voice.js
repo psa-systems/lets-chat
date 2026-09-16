@@ -799,7 +799,7 @@
       window.__lcSessionRoom = cfg.roomId;
       try { document.dispatchEvent(new CustomEvent('lc:rtc-session-started', { detail: { surface: 'voice', room: cfg.roomId } })); } catch (e) {}
     }).catch(function () {
-      alert(window.__lcS('callNoMic', 'Could not access your microphone.'));
+      window.__lcNotify('err', window.__lcS('callNoMic', 'Could not access your microphone.'));
     });
   }
 
@@ -828,7 +828,7 @@
         // Media never came up (SDK, token, or connection). The mesh is not a
         // fallback here - the server told us this room is SFU - so surface it
         // and leave, rather than sit in a call that carries no audio.
-        alert(window.__lcS('callConnectionFailed', 'The call connection failed.'));
+        window.__lcNotify('err', window.__lcS('callConnectionFailed', 'The call connection failed.'));
         leave();
       }
     });
@@ -913,7 +913,7 @@
       // not hearing them) rather than believing they are live.
       micError: function () {
         try {
-          alert(window.__lcS('callMicToggleFailed',
+          window.__lcNotify('err', window.__lcS('callMicToggleFailed',
             'Could not change your microphone. Try muting and unmuting again.'));
         } catch (e) {}
       },
@@ -1106,7 +1106,7 @@
         if (sv) { sv.srcObject = null; sv.srcObject = localStream; }
         updateTileMedia(cfg.selfId);
         setCameraBtn();
-      }).catch(function () { alert(window.__lcS('callNoCamera', 'Could not access your camera.')); });
+      }).catch(function () { window.__lcNotify('err', window.__lcS('callNoCamera', 'Could not access your camera.')); });
     }
   }
 
@@ -1176,7 +1176,7 @@
     if (!joined || !localStream) return;
     if (isSharingScreen()) { endScreenShare(); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      alert(window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
+      window.__lcNotify('err', window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
       return;
     }
     navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }).then(function (dstream) {
