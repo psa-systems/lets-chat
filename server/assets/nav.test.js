@@ -23,6 +23,7 @@ function load() {
     lcCloseNav: () => { closed.count += 1; },
     // LC-867: capture toasts + resolve strings to their English fallback.
     __lcToast: (kind, msg) => { toasts.push([kind, msg]); },
+    __lcNotify: (kind, msg) => { toasts.push([kind, msg]); },
     __lcS: (_k, fb) => fb,
   };
   const document = {
