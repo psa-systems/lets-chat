@@ -1528,19 +1528,10 @@ pub async fn load_invitation_cards(
                 });
         // A deleted / unknown inviter must still not leak a UUID: fall back to a
         // neutral label the template localizes.
-        let (inviter_name, inviter_avatar_ext, inviter_status, inviter_custom_status) =
-            match identities.get(&l.invited_by) {
-                Some(u) => {
-                    let status = super::effective_status(state, &l.invited_by, &u.status);
-                    (
-                        u.label().to_string(),
-                        u.avatar_ext.clone(),
-                        status,
-                        u.custom_status.clone(),
-                    )
-                }
-                None => (String::new(), None, "offline".to_string(), None),
-            };
+        let (inviter_name, inviter_avatar_ext) = match identities.get(&l.invited_by) {
+            Some(u) => (u.label().to_string(), u.avatar_ext.clone()),
+            None => (String::new(), None),
+        };
         cards.push(crate::views::enclave::InvitationCard {
             id: l.id,
             enclave_id: l.enclave_id,
@@ -1551,8 +1542,6 @@ pub async fn load_invitation_cards(
             inviter_id: l.invited_by,
             inviter_name,
             inviter_avatar_ext,
-            inviter_status,
-            inviter_custom_status,
         });
     }
     Ok(cards)
