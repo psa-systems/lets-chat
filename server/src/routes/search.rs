@@ -108,16 +108,31 @@ async fn semantic_rows(
     let candidates = db::message_embeddings::list_for_room(&state.chat, room_id, None)
         .await
         .ok()?;
+    let mut mismatched = 0usize;
     let mut scored: Vec<(i64, f32)> = candidates
         .into_iter()
-        .map(|c| {
-            (
+        .filter_map(|c| {
+            if c.vec.len() != query_vec.len() {
+                mismatched += 1;
+                return None;
+            }
+            Some((
                 c.message_id,
                 crate::embeddings::cosine_similarity(&query_vec, &c.vec),
-            )
+            ))
         })
         .filter(|(_, s)| *s >= SEMANTIC_MIN_SIMILARITY)
         .collect();
+    if mismatched > 0 {
+        // LC-911: a stale (pre-model-swap) vector cannot be compared to the
+        // current query vector; cosine_similarity would score it 0.0 and it
+        // would be silently dropped below the relevance floor with no signal.
+        tracing::warn!(
+            count = mismatched,
+            room_id,
+            "semantic search ranking dropped embeddings: dimension mismatch, likely a stale embedding model"
+        );
+    }
     scored.sort_by(|a, b| b.1.total_cmp(&a.1));
     scored.truncate(SEMANTIC_LIMIT);
     let ids: Vec<i64> = scored.into_iter().map(|(id, _)| id).collect();

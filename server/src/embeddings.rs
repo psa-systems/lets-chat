@@ -74,6 +74,12 @@ impl std::fmt::Display for EmbeddingError {
 #[async_trait]
 pub trait EmbeddingClient: Send + Sync {
     async fn embed(&self, text: &str) -> Result<Vec<f32>, EmbeddingError>;
+
+    /// The configured model identity. Stored alongside every vector
+    /// (`doc_chunks.model` / `message_embeddings.model`) as a second cache key
+    /// so a model swap - same dimension or not - is detected on the next
+    /// comparison instead of silently degrading ranking (LC-911).
+    fn model_name(&self) -> &str;
 }
 
 /// Production client: `/v1/embeddings` POST to the operator's endpoint via the
@@ -130,6 +136,10 @@ impl EmbeddingClient for ReqwestEmbeddingClient {
         }
         Ok(vec)
     }
+
+    fn model_name(&self) -> &str {
+        &self.cfg.model
+    }
 }
 
 /// Cosine similarity in `[-1, 1]`. Returns `0.0` for a length mismatch or a
@@ -176,11 +186,15 @@ pub fn bytes_to_vec(b: &[u8]) -> Vec<f32> {
 /// paths be tested without a live model.
 pub struct MockEmbeddingClient {
     pub dim: usize,
+    pub model: String,
 }
 
 impl Default for MockEmbeddingClient {
     fn default() -> Self {
-        Self { dim: 64 }
+        Self {
+            dim: 64,
+            model: "mock-model".to_string(),
+        }
     }
 }
 
@@ -209,6 +223,10 @@ pub fn hash_embed(text: &str, dim: usize) -> Vec<f32> {
 impl EmbeddingClient for MockEmbeddingClient {
     async fn embed(&self, text: &str) -> Result<Vec<f32>, EmbeddingError> {
         Ok(hash_embed(text, self.dim))
+    }
+
+    fn model_name(&self) -> &str {
+        &self.model
     }
 }
 
