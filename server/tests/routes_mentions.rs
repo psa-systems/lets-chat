@@ -30,9 +30,12 @@ async fn open_pool(name: &str) -> SqlitePool {
 struct TestApp {
     app: Router,
     session: String,
+    peer_session: String,
     viewer_id: String,
     peer_id: String,
     chat: SqlitePool,
+    auth: SqlitePool,
+    push_mock: Arc<lets_chat::push::MockPushClient>,
 }
 
 /// Build a router with `viewer` (admin) and `peer` as members of the seeded
@@ -56,11 +59,14 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
         .await
         .unwrap();
     let session = db::auth::create_session(&auth, &viewer_id).await.unwrap();
+    let peer_session = db::auth::create_session(&auth, &peer_id).await.unwrap();
     db::enclave::backfill_general_membership(&auth, &chat)
         .await
         .unwrap();
     let chat_for_test = chat.clone();
+    let auth_for_test = auth.clone();
     let bg = lets_chat::bg::spawn(auth.clone());
+    let push_mock = Arc::new(lets_chat::push::MockPushClient::default());
     let state = AppState {
         geoip: None,
         login_approval_enabled: false,
@@ -73,8 +79,11 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
         activity_ledger: lets_chat::auth::new_last_seen_ledger(),
         bg: bg.clone(),
         secret_key: Some(Arc::new([0u8; 32])),
-        vapid: None,
-        push_client: std::sync::Arc::new(lets_chat::push::MockPushClient::default()),
+        vapid: Some(std::sync::Arc::new(lets_chat::db::vapid::VapidKeypair {
+            public_key_b64url: "BPlaceholderpublickey".to_string(),
+            private_key_bytes: vec![1u8; 32],
+        })),
+        push_client: push_mock.clone() as Arc<dyn lets_chat::push::PushClient>,
         apns_client: None,
         fcm_client: None,
         mailer: None,
@@ -90,9 +99,12 @@ async fn app_with_two_users(viewer: &str, peer: &str) -> TestApp {
     TestApp {
         app,
         session,
+        peer_session,
         viewer_id,
         peer_id,
         chat: chat_for_test,
+        auth: auth_for_test,
+        push_mock,
     }
 }
 
@@ -397,6 +409,81 @@ async fn send_message_with_mention_inserts_row() {
     assert_eq!(status, StatusCode::NO_CONTENT);
     let n = count_mentions_for_user(&t.chat, &t.peer_id).await;
     assert_eq!(n, 1, "expected one mention row for alice");
+}
+
+/// Yields a few times so the fan-out's spawned push/email tasks land before
+/// assertions run.
+async fn drain_spawns() {
+    for _ in 0..10 {
+        tokio::task::yield_now().await;
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+}
+
+// LC-903: when the mentioning author is blocked by (or has blocked) the
+// mentioned user, fanout_mention_events must drop that recipient before the
+// push dispatch, mirroring the silence the room timeline already gives them.
+#[tokio::test]
+async fn mention_from_blocked_author_sends_no_push() {
+    let t = app_with_two_users("viewer", "alice").await;
+    // viewer blocks alice (the peer); alice is the blocked user, viewer the
+    // blocker. Wire viewer up to receive push so a dispatch would be visible.
+    db::auth::set_notification_prefs(&t.auth, &t.viewer_id, true, false, true, false)
+        .await
+        .unwrap();
+    db::push_subscriptions::insert_or_replace(
+        &t.auth,
+        &t.viewer_id,
+        "https://e1.example/x",
+        "p256dh-test",
+        "auth-test",
+        Some("ua"),
+    )
+    .await
+    .unwrap();
+    db::auth::block_user(&t.auth, &t.viewer_id, &t.peer_id)
+        .await
+        .unwrap();
+
+    // The blocked user (alice) @-mentions the blocker (viewer).
+    let status = post_message(&t.app, &t.peer_session, 1, "@viewer hi").await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    drain_spawns().await;
+
+    assert!(
+        t.push_mock.sent.lock().await.is_empty(),
+        "blocked recipient must receive no push dispatch"
+    );
+}
+
+// Control: without the block, the same mention does dispatch a push, so the
+// suppression above is attributable to the block and not some other gate.
+#[tokio::test]
+async fn mention_without_block_sends_push() {
+    let t = app_with_two_users("viewer", "alice").await;
+    db::auth::set_notification_prefs(&t.auth, &t.viewer_id, true, false, true, false)
+        .await
+        .unwrap();
+    db::push_subscriptions::insert_or_replace(
+        &t.auth,
+        &t.viewer_id,
+        "https://e1.example/x",
+        "p256dh-test",
+        "auth-test",
+        Some("ua"),
+    )
+    .await
+    .unwrap();
+
+    let status = post_message(&t.app, &t.peer_session, 1, "@viewer hi").await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    drain_spawns().await;
+
+    assert_eq!(
+        t.push_mock.sent.lock().await.len(),
+        1,
+        "unblocked mention should dispatch a push"
+    );
 }
 
 #[tokio::test]

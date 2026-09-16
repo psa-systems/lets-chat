@@ -416,9 +416,10 @@ pub async fn get_dm(
     // Pre-render the pinned strip. The DM strip's "See all" link uses
     // the dm-keyed URL so the navigation lands on `/dm/{peer_id}/pins`.
     let pin_path = format!("/dm/{}/pins", peer.id);
-    let pinned_strip_html = super::pinned::build_strip_fragment(&state, room.id, pin_path, false)
-        .await?
-        .render()?;
+    let pinned_strip_html =
+        super::pinned::build_strip_fragment(&state, &user.id, room.id, pin_path, false)
+            .await?
+            .render()?;
 
     // LC-64: server-persisted draft restore + 60-day lazy cleanup, same
     // shape as the room handler. DMs share the `message_drafts` table

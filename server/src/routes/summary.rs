@@ -159,7 +159,8 @@ pub async fn open_catch_me_up(
         .await?
         .ok_or(AppError::NotFound)?;
     require_access(&state, &user, room_id).await?;
-    let unread_count = db::chat::get_unread_count(&state.chat, &user.id, room_id).await?;
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+    let unread_count = db::chat::get_unread_count(&state.chat, &user.id, room_id, &blocked).await?;
     html(&CatchMeUpPanel {
         room_id,
         unread_count,
@@ -319,8 +320,16 @@ pub async fn summarize_home(
     let target_id = "home-summary-body".to_string();
 
     let is_admin = user.role == "admin";
-    let rows =
-        db::inbox::list_unread(&state.chat, &user.id, is_admin, WORKSPACE_SCAN, None).await?;
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
+    let rows = db::inbox::list_unread(
+        &state.chat,
+        &user.id,
+        is_admin,
+        &blocked,
+        WORKSPACE_SCAN,
+        None,
+    )
+    .await?;
     if rows.is_empty() {
         // The entry point is hidden when nothing is unread; this covers the race
         // where the last unread was read elsewhere between render and click. A
