@@ -124,17 +124,12 @@
   // LC-438: a localized toast (key+fallback via __lcS, %name% substituted), for
   // the call end-states that would otherwise be silent once the modal closes.
   function lcToast(kind, key, fallback, name) {
-    if (!window.__lcToast) return;
     var msg = (window.__lcS ? window.__lcS(key, fallback) : fallback).replace('%name%', name || '');
-    window.__lcToast(kind, msg);
+    window.__lcNotify(kind, msg);
   }
-  // LC-416: control buttons are icon + .lc-cbtn-label; update the label span so
-  // the leading icon survives (fall back to the button for plain-text ones).
-  function setLabel(btn, text) {
-    if (!btn) return;
-    var l = btn.querySelector('.lc-cbtn-label');
-    if (l) l.textContent = text; else btn.textContent = text;
-  }
+  // LC-875: shared with voice.js, huddle_popout.js and huddle_control.js so
+  // the visible label, the tooltip and the accessible name never drift apart.
+  var setLabel = window.LetsChatRtc.setLabel;
 
   // ---- focus trap (modal dialog discipline) -------------------------
   // Exactly one trap is active at a time. installDialogTrap migrates from
@@ -550,7 +545,7 @@
         if (phase !== 'idle') { teardown(); return; }
         becomeCaller();
       }).catch(function () {
-        alert(window.__lcS('callNoMicCamera', 'Could not access your microphone or camera.'));
+        window.__lcNotify('err', window.__lcS('callNoMicCamera', 'Could not access your microphone or camera.'));
         teardown();
       });
   }
@@ -588,7 +583,7 @@
         signal('accept');
         incoming = null;
       }).catch(function () {
-        alert(window.__lcS('callNoMicCamera', 'Could not access your microphone or camera.'));
+        window.__lcNotify('err', window.__lcS('callNoMicCamera', 'Could not access your microphone or camera.'));
         signal('reject');
         teardown();
       });
@@ -654,7 +649,7 @@
         if (pc) pc.addTrack(vtrack, localStream);
         refreshLocalVideo();
         setCameraBtn();
-      }).catch(function () { alert(window.__lcS('callNoCamera', 'Could not access your camera.')); });
+      }).catch(function () { window.__lcNotify('err', window.__lcS('callNoCamera', 'Could not access your camera.')); });
     }
   }
 
@@ -726,7 +721,7 @@
     if (phase === 'idle' || !localStream) return;
     if (isSharingScreen()) { endScreenShare(); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      alert(window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
+      window.__lcNotify('err', window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
       return;
     }
     if (!pc) return;
