@@ -787,6 +787,36 @@ async fn server_stt_audio_records_segment() {
 /// value, so concurrent writes in the parallel binary are benign.
 const AGENT_TOKEN: &str = "test-agent-secret";
 
+/// LC-813: POST a server-capture clip with an explicit `X-Duration-Secs`
+/// header, otherwise identical to `post_agent`.
+async fn post_agent_with_duration(
+    app: &Router,
+    uri: &str,
+    token: Option<&str>,
+    speaker_id: Option<&str>,
+    duration_secs: &str,
+    body: &[u8],
+) -> (StatusCode, String) {
+    let mut req = Request::builder()
+        .method(Method::POST)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "audio/webm")
+        .header("X-Duration-Secs", duration_secs);
+    if let Some(t) = token {
+        req = req.header(header::AUTHORIZATION, format!("Bearer {t}"));
+    }
+    if let Some(s) = speaker_id {
+        req = req.header("X-Speaker-Id", s);
+    }
+    let req = req.body(Body::from(body.to_vec())).unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
 async fn open_voice_session(s: &Setup) -> i64 {
     let (conn, _rx, _) = s.hub.connect(&s.b_id, "bob");
     s.hub.voice_join(conn, s.voice_room);
@@ -867,6 +897,100 @@ async fn agent_clip_rejects_speaker_outside_the_room() {
     assert_eq!(st, StatusCode::FORBIDDEN);
     let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
     assert!(segs.is_empty(), "no segment stored for a non-participant");
+}
+
+#[tokio::test]
+async fn agent_clip_duration_header_fills_in_when_engine_has_no_segments() {
+    // LC-921: a plain STT endpoint returns no segments, so the engine's own
+    // duration is 0; the agent's X-Duration-Secs becomes the stored duration.
+    std::env::set_var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN", AGENT_TOKEN);
+    let mock: Arc<dyn lets_chat::stt::SttClient> =
+        Arc::new(lets_chat::stt::MockSttClient::text("agent heard bob"));
+    let s = setup_with_stt(Some(mock)).await;
+    let tid = open_voice_session(&s).await;
+
+    let (st, _) = post_agent_with_duration(
+        &s.app,
+        &format!("/call/transcript/{tid}/agent-clip"),
+        Some(AGENT_TOKEN),
+        Some(&s.b_id),
+        "4.5",
+        b"fake-track-audio",
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs.len(), 1);
+    assert_eq!(segs[0].duration_ms, 4500);
+}
+
+#[tokio::test]
+async fn agent_clip_duration_header_loses_to_engine_segments() {
+    // LC-921: the engine's own timings are the more accurate signal (no
+    // leading/trailing silence), so they win over the agent's wall-clock header
+    // whenever the engine actually returned segments.
+    std::env::set_var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN", AGENT_TOKEN);
+    let mock: Arc<dyn lets_chat::stt::SttClient> = Arc::new(lets_chat::stt::MockSttClient {
+        canned: "agent heard bob".to_string(),
+        canned_segments: vec![lets_chat::stt::SttSegment {
+            start: 0.0,
+            end: 3.0,
+            text: "agent heard bob".to_string(),
+        }],
+        ..Default::default()
+    });
+    let s = setup_with_stt(Some(mock)).await;
+    let tid = open_voice_session(&s).await;
+
+    let (st, _) = post_agent_with_duration(
+        &s.app,
+        &format!("/call/transcript/{tid}/agent-clip"),
+        Some(AGENT_TOKEN),
+        Some(&s.b_id),
+        "4.5",
+        b"fake-track-audio",
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs.len(), 1);
+    assert_eq!(
+        segs[0].duration_ms, 3000,
+        "engine timings win over the header"
+    );
+}
+
+#[tokio::test]
+async fn agent_clip_duration_header_invalid_values_store_zero() {
+    // LC-921: a missing, blank, negative, or unparseable X-Duration-Secs must
+    // not fail the request - it just leaves the duration at 0.
+    std::env::set_var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN", AGENT_TOKEN);
+    let mock: Arc<dyn lets_chat::stt::SttClient> =
+        Arc::new(lets_chat::stt::MockSttClient::text("agent heard bob"));
+    let s = setup_with_stt(Some(mock)).await;
+    let tid = open_voice_session(&s).await;
+    let uri = format!("/call/transcript/{tid}/agent-clip");
+
+    // Missing header entirely.
+    let (st, _) = post_agent(&s.app, &uri, Some(AGENT_TOKEN), Some(&s.b_id), b"a").await;
+    assert_eq!(st, StatusCode::OK);
+
+    for bad in ["", "  ", "-1", "not-a-number"] {
+        let (st, _) =
+            post_agent_with_duration(&s.app, &uri, Some(AGENT_TOKEN), Some(&s.b_id), bad, b"a")
+                .await;
+        assert_eq!(
+            st,
+            StatusCode::OK,
+            "bad X-Duration-Secs {bad:?} still succeeds"
+        );
+    }
+
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs.len(), 5);
+    for seg in segs {
+        assert_eq!(seg.duration_ms, 0);
+    }
 }
 
 /// LC-860: once the server-capture agent is covering a room it owns the
