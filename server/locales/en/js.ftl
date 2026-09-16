@@ -147,3 +147,7 @@ js-nav-failed = Could not load - connection issue. Try again.
 # Fast/Accurate engine (the browser engine had not released the device yet), so
 # a switch that stopped capturing is not silent (transcribe.js).
 js-stt-mic-failed = Could not start transcription. Try again.
+# LC-888: the two remaining un-keyed transcribe.js alerts - unsupported browser
+# engine, and the start-session request itself failing.
+js-stt-unsupported = Live transcription is not supported in this browser.
+js-stt-start-failed = Could not start transcription (error %status%).
