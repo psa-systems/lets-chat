@@ -60,5 +60,5 @@ test('the frame-rate floor drops blur and informs the user', () => {
   assert.match(src, /BLUR_FPS_FLOOR/, 'a frame-rate floor is defined');
   assert.match(src, /requestVideoFrameCallback/, 'delivered frames are measured');
   assert.match(src, /applyConstraints\(\{\s*advanced:\s*\[\{\s*backgroundBlur:\s*false/, 'drops the effect live');
-  assert.match(src, /__lcToast[\s\S]*deviceBlurSlow/, 'tells the user');
+  assert.match(src, /__lcNotify[\s\S]*deviceBlurSlow/, 'tells the user');
 });

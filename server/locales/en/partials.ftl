@@ -62,6 +62,9 @@ sidebar-category-add = Add
 switcher-nav-label = Enclaves
 switcher-enclave-settings = Enclave settings
 switcher-discover = Discover or create enclaves
+# LC-889: noun for the rail count badge (Home tile / enclave tiles), which
+# blends unread messages and pending invitations into one number.
+switcher-unread-aria = unread and pending invitations
 # LC-871: state-specific copy for the single sidebar toggle - the tooltip names
 # what THIS click does in the current state, not both directions at once.
 sidebar-toggle-collapse = Collapse sidebar
