@@ -104,13 +104,9 @@
   function q(sel) { return root ? root.querySelector(sel) : null; }
   function grid() { return q('[data-lc-voice-grid]'); }
 
-  // LC-416: control buttons are now icon + .lc-cbtn-label; set the label span so
-  // the leading icon survives (fall back to the button for any plain-text one).
-  function setLabel(btn, text) {
-    if (!btn) return;
-    var l = btn.querySelector('.lc-cbtn-label');
-    if (l) l.textContent = text; else btn.textContent = text;
-  }
+  // LC-875: shared with call.js, huddle_popout.js and huddle_control.js so the
+  // visible label, the tooltip and the accessible name never drift apart.
+  var setLabel = window.LetsChatRtc.setLabel;
 
   // LC-402: build a participant tile. Theme-token styling lives in main.css
   // (.lc-voice-tile and friends); JS only sets the data-lc-* hooks + content.
@@ -407,6 +403,11 @@
       }
     }
     // LC-416: rebuild the avatar chips (same structure the server renders).
+    // LC-884: the avatar itself (wrapper + img + presence dot) mirrors
+    // partials/avatar.html so a live rebuild looks identical to the initial
+    // server render. A participant showing up here is, by definition,
+    // connected right now, so the dot defaults to online; ws/user_status_update.html
+    // corrects it in place the moment a real status broadcast arrives.
     names.replaceChildren();
     ids.forEach(function (uid) {
       var label = participants[uid] || uid;
@@ -414,14 +415,23 @@
       chip.className = 'lc-voice-lobby-chip';
       chip.setAttribute('data-lc-voice-preview-name', uid);
       chip.setAttribute('data-lc-label', label);
+      var avatarWrap = document.createElement('span');
+      avatarWrap.className = 'relative inline-block shrink-0';
       var img = document.createElement('img');
       img.className = 'lc-voice-lobby-avatar';
+      img.loading = 'lazy';
       img.src = avatarUrl(uid);
-      img.alt = label;
+      img.alt = '';
+      var dot = document.createElement('span');
+      dot.setAttribute('data-user-status', uid);
+      dot.setAttribute('aria-label', 'Online');
+      dot.className = 'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-surface-elevated bg-success';
+      avatarWrap.appendChild(img);
+      avatarWrap.appendChild(dot);
       var nm = document.createElement('span');
       nm.className = 'lc-voice-lobby-name';
       nm.textContent = label;
-      chip.appendChild(img);
+      chip.appendChild(avatarWrap);
       chip.appendChild(nm);
       names.appendChild(chip);
     });
