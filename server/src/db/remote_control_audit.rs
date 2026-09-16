@@ -118,40 +118,123 @@ pub async fn open_session(pool: &SqlitePool, room_id: i64) -> sqlx::Result<Optio
 }
 
 /// Close the open session for a room (kill-switch / revoke / auto-revoke).
-/// No-op if none is open.
+/// Returns the row it actually closed, `None` if none was open - the RETURNING
+/// clause makes the read and the write atomic, so a caller can notify from the
+/// return value instead of a separate `open_session` read that could race a
+/// concurrent closer.
 pub async fn end_session_by_room(
     pool: &SqlitePool,
     room_id: i64,
     reason: &str,
-) -> sqlx::Result<()> {
-    sqlx::query(
+) -> sqlx::Result<Option<OpenSession>> {
+    let row = sqlx::query(
         "UPDATE remote_control_sessions
          SET ended_at = datetime('now'), end_reason = ?2
-         WHERE room_id = ?1 AND ended_at IS NULL",
+         WHERE room_id = ?1 AND ended_at IS NULL
+         RETURNING controller_id, sharer_id",
     )
     .bind(room_id)
     .bind(reason)
-    .execute(pool)
-    .await
-    .map(|_| ())
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| OpenSession {
+        controller_id: r.get("controller_id"),
+        sharer_id: r.get("sharer_id"),
+    }))
 }
 
-/// Close every open session a user participates in (controller or sharer).
-/// The socket-disconnect backstop: a hard WS drop never sends a `revoke`, so
-/// without this an interrupted session would stay open forever.
+/// Close the room's open session only if `sharer_id` is the sharer of it (not
+/// merely a party to it). Used by the share-stop auto-revoke, which must not
+/// end a session where the stopping user was only the controller.
+pub async fn end_session_by_sharer(
+    pool: &SqlitePool,
+    room_id: i64,
+    sharer_id: &str,
+    reason: &str,
+) -> sqlx::Result<Option<OpenSession>> {
+    let row = sqlx::query(
+        "UPDATE remote_control_sessions
+         SET ended_at = datetime('now'), end_reason = ?3
+         WHERE room_id = ?1 AND ended_at IS NULL AND sharer_id = ?2
+         RETURNING controller_id, sharer_id",
+    )
+    .bind(room_id)
+    .bind(sharer_id)
+    .bind(reason)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| OpenSession {
+        controller_id: r.get("controller_id"),
+        sharer_id: r.get("sharer_id"),
+    }))
+}
+
+/// Close the room's open session only if `user_id` is a party to it
+/// (controller or sharer). The WHERE clause is the whole authorization *and*
+/// the whole idempotency guard in one atomic statement: two concurrent callers
+/// racing the same drop (e.g. the soft-leave handler and the hard-disconnect
+/// backstop) can both run this, but `ended_at IS NULL` means only the first to
+/// commit actually closes the row and gets `Some` back - the loser gets `None`
+/// and must notify nobody.
+pub async fn end_session_for_participant(
+    pool: &SqlitePool,
+    room_id: i64,
+    user_id: &str,
+    reason: &str,
+) -> sqlx::Result<Option<OpenSession>> {
+    let row = sqlx::query(
+        "UPDATE remote_control_sessions
+         SET ended_at = datetime('now'), end_reason = ?3
+         WHERE room_id = ?1 AND ended_at IS NULL
+         AND (controller_id = ?2 OR sharer_id = ?2)
+         RETURNING controller_id, sharer_id",
+    )
+    .bind(room_id)
+    .bind(user_id)
+    .bind(reason)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| OpenSession {
+        controller_id: r.get("controller_id"),
+        sharer_id: r.get("sharer_id"),
+    }))
+}
+
+/// One session `end_sessions_for_user` actually closed, with the room it was
+/// in (a user may be mid-session in more than one huddle at once).
+pub struct ClosedSession {
+    pub room_id: i64,
+    pub controller_id: String,
+    pub sharer_id: String,
+}
+
+/// Close every open session a user participates in (controller or sharer),
+/// returning each one actually closed. The socket-disconnect backstop: a hard
+/// WS drop never sends a `revoke`, so without this an interrupted session
+/// would stay open forever. Same atomicity as `end_session_for_participant`:
+/// the `ended_at IS NULL` guard means a session another writer already closed
+/// (e.g. the soft-leave handler winning the same race) is not returned here.
 pub async fn end_sessions_for_user(
     pool: &SqlitePool,
     user_id: &str,
     reason: &str,
-) -> sqlx::Result<()> {
-    sqlx::query(
+) -> sqlx::Result<Vec<ClosedSession>> {
+    let rows = sqlx::query(
         "UPDATE remote_control_sessions
          SET ended_at = datetime('now'), end_reason = ?2
-         WHERE ended_at IS NULL AND (controller_id = ?1 OR sharer_id = ?1)",
+         WHERE ended_at IS NULL AND (controller_id = ?1 OR sharer_id = ?1)
+         RETURNING room_id, controller_id, sharer_id",
     )
     .bind(user_id)
     .bind(reason)
-    .execute(pool)
-    .await
-    .map(|_| ())
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| ClosedSession {
+            room_id: r.get("room_id"),
+            controller_id: r.get("controller_id"),
+            sharer_id: r.get("sharer_id"),
+        })
+        .collect())
 }
