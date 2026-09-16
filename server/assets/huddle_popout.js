@@ -45,10 +45,7 @@
     var b = root.querySelector('[data-lc-huddle-popout]');
     if (!b) return;
     var txt = on ? S('huddleBringBack', 'Bring back') : S('huddlePopOut', 'Pop out');
-    var l = b.querySelector('.lc-cbtn-label');
-    if (l) l.textContent = txt; else b.textContent = txt;
-    b.setAttribute('aria-label', txt);
-    b.setAttribute('data-lc-tip', txt);
+    window.LetsChatRtc.setLabel(b, txt);
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
   function makePlaceholder() {
@@ -67,8 +64,8 @@
     b.className = 'lc-cbtn ml-auto';
     var bl = document.createElement('span');
     bl.className = 'lc-cbtn-label';
-    bl.textContent = S('huddleBringBack', 'Bring back');
     b.appendChild(bl);
+    window.LetsChatRtc.setLabel(b, S('huddleBringBack', 'Bring back'));
     bar.appendChild(lab);
     bar.appendChild(b);
     ph.appendChild(bar);

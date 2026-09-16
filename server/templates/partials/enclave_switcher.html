@@ -1,3 +1,4 @@
+{% import "partials/unread_badge.html" as unread_badge %}
 {# LC-576: the rail itself does NOT scroll. Only the enclave list does (the inner
    .lc-rail-scroll below). When the whole rail was one scroll container, a long
    enough enclave list pushed the foot utilities - settings, shortcuts, and the
@@ -28,9 +29,8 @@
       <path d="M9.293 2.293a1 1 0 011.414 0l7 7A1 1 0 0117 11h-1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-3a1 1 0 00-1-1H9a1 1 0 00-1 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-6H3a1 1 0 01-.707-1.707l7-7z"/>
     </svg>
     {% endif %}
-    {% if e.unread + e.pending_invites > 0 %}
-    <span class="lc-rail-badge">{{ e.unread + e.pending_invites }}</span>
-    {% endif %}
+    {% let rail_noun = "switcher-unread-aria"|t %}
+    {% call unread_badge::badge(e.unread + e.pending_invites, rail_noun, "rail") %}
   </a>
   {% endif %}{% endfor %}
   {# LC-726: admin-only Support tile. Present in the shared rail on every page, so
@@ -77,9 +77,8 @@
     {% else %}
     <span class="font-semibold">{{ e.initial }}</span>
     {% endif %}
-    {% if e.unread + e.pending_invites > 0 %}
-    <span class="lc-rail-badge">{{ e.unread + e.pending_invites }}</span>
-    {% endif %}
+    {% let rail_noun = "switcher-unread-aria"|t %}
+    {% call unread_badge::badge(e.unread + e.pending_invites, rail_noun, "rail") %}
   </a>
   {# LC-143 / LC-576: the enclave-settings gear used to hang off the active tile
      here. It now lives beside the enclave NAME, in the sidebar's org dropdown

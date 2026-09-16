@@ -93,10 +93,6 @@
         <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.75A2.75 2.75 0 014.75 2h10.5A2.75 2.75 0 0118 4.75v7.5A2.75 2.75 0 0115.25 15H8.06l-3.03 2.78A.75.75 0 013.75 17.2V15A2.75 2.75 0 011 12.25v-7.5A.75.75 0 002 4.75zm3.5 2.5a.75.75 0 000 1.5h7a.75.75 0 000-1.5h-7zm0 3a.75.75 0 000 1.5h4a.75.75 0 000-1.5h-4z" clip-rule="evenodd"/></svg></span>
         <span class="lc-cbtn-label">{{ "voice-transcript-panel"|t }}</span>
       </button>
-    </div>
-
-    {# isolated destructive action #}
-    <div class="lc-callbar-group lc-callbar-group--end">
       {# LC-825/LC-880: floating reactions (partials/react_tray.html). #}
       {% let tip_pos = "bottom" %}
       {% include "partials/react_tray.html" %}
@@ -105,6 +101,10 @@
       {% if remote_control_enabled %}
       {% include "partials/huddle_control.html" %}
       {% endif %}
+    </div>
+
+    {# isolated destructive action #}
+    <div class="lc-callbar-group lc-callbar-group--end">
       <button type="button" data-lc-voice-leave
               aria-label="{{ "voice-leave"|t }}" data-lc-tip="{{ "voice-leave"|t }}" data-lc-tip-pos="bottom"
               class="hidden lc-cbtn lc-cbtn--leave">
@@ -139,7 +139,13 @@
       <div class="lc-voice-lobby-avatars" data-lc-voice-preview-names>
         {% for p in participants %}
         <span class="lc-voice-lobby-chip" data-lc-voice-preview-name="{{ p.user_id }}" data-lc-label="{{ p.label }}" data-lc-avatar-version="{{ p.user_id|avatar_version }}">
-          <img class="lc-voice-lobby-avatar" src="{{ p.user_id|avatar_url }}" alt="{{ p.label }}">
+          {% let avatar_user_id = p.user_id.clone() %}
+          {% let avatar_username = p.label.clone() %}
+          {% let avatar_ext = p.avatar_ext.clone() %}
+          {% let avatar_status = p.status.clone() %}
+          {% let avatar_custom_status = p.custom_status.clone() %}
+          {% let avatar_size = "h-14 w-14 text-xs" %}
+          {% include "partials/avatar.html" %}
           <span class="lc-voice-lobby-name">{{ p.label }}</span>
         </span>
         {% endfor %}
