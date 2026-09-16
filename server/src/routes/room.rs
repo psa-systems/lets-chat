@@ -197,17 +197,30 @@ async fn get_voice_room(
     ) = super::load_chrome(state, user, Some(enclave_id)).await?;
     let mut participants = Vec::new();
     for uid in state.hub.voice_room_users(room.id) {
-        let label = db::auth::find_user_by_id(&state.auth, &uid)
-            .await?
+        let record = db::auth::find_user_by_id(&state.auth, &uid).await?;
+        let label = record
+            .as_ref()
             .map(|r| {
                 r.display_name
+                    .clone()
                     .filter(|s| !s.trim().is_empty())
-                    .unwrap_or(r.username)
+                    .unwrap_or_else(|| r.username.clone())
             })
             .unwrap_or_else(|| "(unknown)".to_string());
+        let (avatar_ext, status, custom_status) = match &record {
+            Some(r) => (
+                r.avatar_ext.clone(),
+                super::effective_status(state, &uid, &r.status),
+                r.custom_status.clone(),
+            ),
+            None => (None, "offline".to_string(), None),
+        };
         participants.push(crate::views::voice::VoiceParticipant {
             user_id: uid,
             label,
+            avatar_ext,
+            status,
+            custom_status,
         });
     }
     let page = crate::views::voice::VoicePage {
@@ -615,17 +628,30 @@ pub async fn get_room(
             if uid == user.id {
                 continue;
             }
-            let label = db::auth::find_user_by_id(&state.auth, &uid)
-                .await?
+            let record = db::auth::find_user_by_id(&state.auth, &uid).await?;
+            let label = record
+                .as_ref()
                 .map(|r| {
                     r.display_name
+                        .clone()
                         .filter(|s| !s.trim().is_empty())
-                        .unwrap_or(r.username)
+                        .unwrap_or_else(|| r.username.clone())
                 })
                 .unwrap_or_else(|| "(unknown)".to_string());
+            let (avatar_ext, status, custom_status) = match &record {
+                Some(r) => (
+                    r.avatar_ext.clone(),
+                    super::effective_status(&state, &uid, &r.status),
+                    r.custom_status.clone(),
+                ),
+                None => (None, "offline".to_string(), None),
+            };
             huddle_participants.push(crate::views::voice::VoiceParticipant {
                 user_id: uid,
                 label,
+                avatar_ext,
+                status,
+                custom_status,
             });
         }
     }

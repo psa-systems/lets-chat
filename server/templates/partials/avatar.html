@@ -12,10 +12,13 @@
      rings the elevated surface so the dot reads correctly on both light and
      dark backgrounds. The JS in ws/user_status_update.html toggles the same
      four classes; keep them in sync.
-     LC-896: an empty avatar_user_id means "no presence" (e.g. the invitations
+     LC-896: an empty avatar_status means "no presence" (e.g. the invitations
      card's inviter, who has no live status and no WS target), so the dot is
-     skipped entirely rather than publishing the raw id for nothing. #}
-  {% if !avatar_user_id.is_empty() %}
+     skipped entirely rather than publishing the raw id for nothing. Keyed on
+     the status, not on avatar_user_id, because the id above still builds the
+     image URL; the @here / @channel and group rows in mention_popover.html
+     carry both empty and so lose the dot either way. #}
+  {% if !avatar_status.is_empty() %}
   <span data-user-status="{{ avatar_user_id }}" aria-label="{% if avatar_status == "dnd" %}{{ "partials-status-dnd"|t }}{% else if avatar_status == "idle" || avatar_status == "away" %}{{ "partials-status-away"|t }}{% else if avatar_status == "offline" %}{{ "partials-status-offline"|t }}{% else %}{{ "partials-status-online"|t }}{% endif %}" class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-surface-elevated {% if avatar_status == "dnd" %}bg-danger{% else if avatar_status == "idle" || avatar_status == "away" %}bg-warning{% else if avatar_status == "offline" %}bg-content-subtle{% else %}bg-success{% endif %}"></span>
   {% endif %}
 </span>

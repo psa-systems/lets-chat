@@ -28,10 +28,12 @@
         <div class="mt-1 text-xs text-content-muted">{{ "invitations-members"|tn(card.members()) }}</div>
         {# Inviter, resolved to a friendly name + avatar (LC-772 bug: was a UUID).
            The inviter is not presence-bearing (no live status, no WS target),
-           so avatar_user_id is bound empty: partials/avatar.html (LC-896) skips
-           the presence dot whenever that id is empty. #}
+           so avatar_status is bound empty: partials/avatar.html (LC-896) skips
+           the presence dot, and with it the data-user-status id, whenever the
+           status is empty. The id itself still has to be bound, because the
+           partial builds the image URL from it. #}
         <div class="mt-2 flex items-center gap-2">
-          {% let avatar_user_id = String::new() %}
+          {% let avatar_user_id = card.inviter_id.clone() %}
           {% let avatar_username = card.inviter_name.clone() %}
           {% let avatar_ext = card.inviter_avatar_ext.clone() %}
           {% let avatar_status = String::new() %}
