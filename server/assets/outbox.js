@@ -93,7 +93,7 @@
         hint.textContent = window.__lcS('outboxOfflineIdle', 'Offline - messages will send when you reconnect');
         hint.classList.remove('hidden');
       } else if (pending.length) {
-        hint.textContent = window.__lcS('outboxSending', 'Sending %n% queued message(s)…').replace('%n%', pending.length);
+        hint.textContent = window.__lcS('outboxSending', 'Sending %n% queued message(s)...').replace('%n%', pending.length);
         hint.classList.remove('hidden');
       } else {
         hint.textContent = '';
@@ -114,7 +114,7 @@
         ? (pending.length
             ? window.__lcS('outboxQueuedOffline', '%n% message(s) queued while offline').replace('%n%', pending.length)
             : window.__lcS('outboxYouAreOffline', 'You are offline'))
-        : window.__lcS('outboxDelivering', 'Delivering %n% queued message(s)…').replace('%n%', pending.length);
+        : window.__lcS('outboxDelivering', 'Delivering %n% queued message(s)...').replace('%n%', pending.length);
       html +=
         '<div class="px-3 py-2 text-xs text-content">' + escapeHtml(msg) + '</div>';
     }

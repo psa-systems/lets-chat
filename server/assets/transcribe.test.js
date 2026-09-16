@@ -137,6 +137,7 @@ function loadRich(opts) {
     LetsChatMedia: { audio: () => ({}) },
     __lcSessionRoom: 7,
     __lcToast: (kind, msg) => { toasts.push([kind, msg]); },
+    __lcNotify: (kind, msg) => { toasts.push([kind, msg]); },
     __lcS: (_k, fb) => fb,
   };
   const document = {

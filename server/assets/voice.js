@@ -104,13 +104,9 @@
   function q(sel) { return root ? root.querySelector(sel) : null; }
   function grid() { return q('[data-lc-voice-grid]'); }
 
-  // LC-416: control buttons are now icon + .lc-cbtn-label; set the label span so
-  // the leading icon survives (fall back to the button for any plain-text one).
-  function setLabel(btn, text) {
-    if (!btn) return;
-    var l = btn.querySelector('.lc-cbtn-label');
-    if (l) l.textContent = text; else btn.textContent = text;
-  }
+  // LC-875: shared with call.js, huddle_popout.js and huddle_control.js so the
+  // visible label, the tooltip and the accessible name never drift apart.
+  var setLabel = window.LetsChatRtc.setLabel;
 
   // LC-402: build a participant tile. Theme-token styling lives in main.css
   // (.lc-voice-tile and friends); JS only sets the data-lc-* hooks + content.
@@ -803,7 +799,7 @@
       window.__lcSessionRoom = cfg.roomId;
       try { document.dispatchEvent(new CustomEvent('lc:rtc-session-started', { detail: { surface: 'voice', room: cfg.roomId } })); } catch (e) {}
     }).catch(function () {
-      alert(window.__lcS('callNoMic', 'Could not access your microphone.'));
+      window.__lcNotify('err', window.__lcS('callNoMic', 'Could not access your microphone.'));
     });
   }
 
@@ -832,7 +828,7 @@
         // Media never came up (SDK, token, or connection). The mesh is not a
         // fallback here - the server told us this room is SFU - so surface it
         // and leave, rather than sit in a call that carries no audio.
-        alert(window.__lcS('callConnectionFailed', 'The call connection failed.'));
+        window.__lcNotify('err', window.__lcS('callConnectionFailed', 'The call connection failed.'));
         leave();
       }
     });
@@ -851,7 +847,7 @@
         if (!joined || !sfu) return;
         leave();
         var msg = window.__lcS('callConnectionFailed', 'The call connection failed.');
-        if (window.__lcToast) window.__lcToast('err', msg); else alert(msg);
+        window.__lcNotify('err', msg);
       },
       audioSink: function () {
         var el = document.getElementById('lc-huddle-sfu-audio-sink');
@@ -917,7 +913,7 @@
       // not hearing them) rather than believing they are live.
       micError: function () {
         try {
-          alert(window.__lcS('callMicToggleFailed',
+          window.__lcNotify('err', window.__lcS('callMicToggleFailed',
             'Could not change your microphone. Try muting and unmuting again.'));
         } catch (e) {}
       },
@@ -1110,7 +1106,7 @@
         if (sv) { sv.srcObject = null; sv.srcObject = localStream; }
         updateTileMedia(cfg.selfId);
         setCameraBtn();
-      }).catch(function () { alert(window.__lcS('callNoCamera', 'Could not access your camera.')); });
+      }).catch(function () { window.__lcNotify('err', window.__lcS('callNoCamera', 'Could not access your camera.')); });
     }
   }
 
@@ -1180,7 +1176,7 @@
     if (!joined || !localStream) return;
     if (isSharingScreen()) { endScreenShare(); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      alert(window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
+      window.__lcNotify('err', window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
       return;
     }
     navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }).then(function (dstream) {
