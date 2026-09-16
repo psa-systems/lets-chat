@@ -52,6 +52,17 @@ function load(opts) {
     innerWidth: 1280,
     innerHeight: 800,
     __lcS: (k, fb) => fb,
+    // LC-875: huddle_popout.js sets its button/placeholder labels through the
+    // shared rtc_common.js implementation now, not a local copy.
+    LetsChatRtc: {
+      setLabel: (btn, text) => {
+        if (!btn) return;
+        const l = btn.querySelector('.lc-cbtn-label');
+        if (l) l.textContent = text; else btn.textContent = text;
+        btn.setAttribute('aria-label', text);
+        btn.setAttribute('data-lc-tip', text);
+      },
+    },
   };
   if (opts && opts.pip) {
     window.documentPictureInPicture = {

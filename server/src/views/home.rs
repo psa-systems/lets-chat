@@ -86,6 +86,10 @@ pub struct CatchUpRow {
     pub author_id: String,
     pub author_name: String,
     pub author_avatar_ext: Option<String>,
+    /// LC-884: routes the row avatar through `partials/avatar.html`, which
+    /// needs a live presence status alongside the id/name/ext it already had.
+    pub author_status: String,
+    pub author_custom_status: Option<String>,
 }
 
 impl CatchUpRow {
@@ -95,10 +99,9 @@ impl CatchUpRow {
         crate::views::room::to_iso_utc(&self.created_at)
     }
 
-    /// LC-703: the date portion (`YYYY-MM-DD`) shown as the visible row time.
-    /// The app has no client-side relative-time formatter, so a clean date is
-    /// the honest fallback; the `<time datetime>` wrapper upgrades for free if
-    /// one is added later.
+    /// LC-703: the date portion (`YYYY-MM-DD`) shown as the server-rendered
+    /// fallback row time. LC-890: the `<time data-lc-ts>` wrapper upgrades
+    /// this to the shared relative-time formatter on the client.
     pub fn day(&self) -> &str {
         self.created_at.get(..10).unwrap_or(&self.created_at)
     }
@@ -128,6 +131,9 @@ pub struct DmRow {
     /// First character seeds the initials avatar when `avatar_ext` is None.
     pub username: String,
     pub avatar_ext: Option<String>,
+    /// LC-884: routes the row avatar through `partials/avatar.html`.
+    pub status: String,
+    pub custom_status: Option<String>,
     pub unread: i64,
 }
 

@@ -11,7 +11,10 @@
 #   - raw numbered palette utilities in `server/assets/**/*.js`
 #     -> ci-build/check-asset-color-tokens.nu (LC-735, LC-736)
 #   - U+2026 in the locale catalogs
-#     -> ci-build/check-locale-ellipsis.nu (LC-750)
+#     -> ci-build/check-locale-ellipsis.nu (LC-750); the `no-ellipsis-outside-
+#        locales` rule below is that same spelling rule widened to the
+#        templates and browser scripts, so the two together cover every
+#        first-party surface except `sw.js`'s truncation marker (LC-891)
 #
 # A rule whose class is not clear yet carries `pending: "<issue>"`. It runs and
 # prints its hits on every run but does not fail the build until that issue
@@ -107,6 +110,33 @@ const CALLOUT_TONES = ["success" "warning" "danger"]
 const ALL_SIDES_BORDER = '(^| )border( |$)'
 
 const EM_DASH = "\u{2014}"
+
+# LC-891: the ellipsis spelling rule widened past the locale catalogs. Same
+# two spellings `check-locale-ellipsis.nu` rejects, checked against the
+# templates and the browser scripts instead.
+const ELLIPSIS_CHAR = "\u{2026}"
+const ELLIPSIS_ENTITY = "&#8230;"
+
+# LC-891: any `.lc-*` selector defined at the start of a line in main.css is a
+# component class; matched on the bare prefix (not a word boundary) against
+# the templates, the browser scripts and the Rust markup sources, so a name
+# built by string concatenation (`'lc-set-avatar-fallback-' + id`) still
+# counts as reachable.
+const LC_CLASS_SELECTOR = '^\.(?<name>lc-[a-z0-9-]+)'
+
+# LC-891: a `base.html` `window.__lcI18n` table entry, matched whole-line so a
+# key commented out or reshaped some other way does not count.
+const I18N_TABLE_ENTRY = '^\s*(?<key>[a-zA-Z_][a-zA-Z0-9_]*):\s*"\{\{\s*"[a-z0-9-]+"\|t\s*\}\}",?\s*$'
+
+# LC-891: a call site for a table key: direct (`window.__lcS('key', ...)`), or
+# through one of the file-local wrappers that just forward to it - `S(k, fb)`
+# (call_reactions.js, huddle_popout.js), `s(key, fallback)` (huddle_ring.js),
+# `str(key, fallback)` (huddle_control.js) - or as the second argument to
+# `lcToast(kind, key, fallback, name)` (call.js). `\b` keeps `S(` / `s(` from
+# matching as part of a longer identifier or `window.__lcToast(`, which takes
+# no key at all.
+const I18N_KEY_CALL = '\b(__lcS|S|s|str)\(\s*[\x27"](?<key>[a-zA-Z0-9_]+)[\x27"]'
+const I18N_TOAST_KEY_CALL = '\blcToast\(\s*[\x27"][^\x27"]*[\x27"]\s*,\s*[\x27"](?<key>[a-zA-Z0-9_]+)[\x27"]'
 
 # LC-748: the service worker's offline fallback. It is a standalone document
 # outside the template layer, so nothing else here covers it: it must stay
@@ -312,6 +342,47 @@ def dead-classes [] {
     $DEAD_CLASSES | each {|name| scan-lines $files $name } | flatten | sort
 }
 
+# LC-891: the general form of `dead-classes` above - any `.lc-*` component
+# class in main.css, not just the six names LC-744 already closed - swept over
+# the same three surfaces Tailwind (and the Rust markup) actually scans.
+def dead-lc-css-selectors [] {
+    let file = "server/assets/main.css"
+    let selectors = (
+        open --raw $file | decode utf-8 | lines | enumerate
+        | each {|row|
+            let m = ($row.item | parse --regex $LC_CLASS_SELECTOR)
+            if ($m | is-empty) { null } else { {line: ($row.index + 1), name: $m.0.name, text: ($row.item | str trim)} }
+        }
+        | where {|x| $x != null }
+    )
+    let haystacks = (
+        (template-files | append (browser-asset-files) | append (rust-markup-files))
+        | each {|f| open --raw $f | decode utf-8 }
+    )
+    # The bare prefix: a BEM modifier (`lc-status--ok`, `lc-tx-badge--dm`) is
+    # usually built by template interpolation (`lc-status--{% if ok %}ok{%
+    # else %}err{% endif %}`), so the literal full name never appears in one
+    # piece; checking the part before the modifier's `--` is what keeps that
+    # reachable while still catching a base name nothing refers to at all.
+    let bases = ($selectors | each {|s| ($s.name | split row "--" | first) } | uniq)
+    let dead_bases = ($bases | where {|b| not ($haystacks | any {|t| $t | str contains $b }) })
+    $selectors
+    | where {|s| ($s.name | split row "--" | first) in $dead_bases }
+    | each {|s| $"($file):($s.line): ($s.text)" }
+}
+
+# LC-891: the same ellipsis spelling rule `check-locale-ellipsis.nu` enforces
+# on the catalogs, widened to the templates and browser scripts. `sw.js` is
+# excluded: its one U+2026 is a truncation marker on a notification preview,
+# not prose that should match the catalog spelling.
+def ellipsis-outside-locales [] {
+    let files = (
+        (template-files | append (browser-asset-files))
+        | where {|f| ($f | path basename) != "sw.js" }
+    )
+    (scan-lines $files $ELLIPSIS_CHAR) | append (scan-lines $files $ELLIPSIS_ENTITY) | sort
+}
+
 def per-page-widths [] {
     let files = (template-files | where {|f| ($f | path basename) != "landing.html" })
     scan-lines $files $CENTERED_WIDTH
@@ -408,6 +479,25 @@ def raw-nul-bytes [] {
     } | flatten
 }
 
+# LC-881: a `:focus-visible` rule that turns off the default outline has to
+# replace it with the shared ring, or a keyboard user cannot tell "focused"
+# from "hover" (the resize handle) or from "nothing" (a roving-tabindex menu).
+# Matched on the selector-to-brace block so a `:focus-visible` selector with an
+# unrelated declaration block (e.g. `:focus-visible::before`, which only ever
+# recolors the pseudo-element) does not trip the rule.
+def focus-visible-rings [] {
+    let file = "server/assets/main.css"
+    let text = (open --raw $file | decode utf-8)
+    $text
+    | parse --regex '(?s)(?<selector>[^{}]+)\{(?<body>[^{}]*)\}'
+    | where {|rule| ($rule.selector | str contains ":focus-visible") and ($rule.body =~ 'outline:\s*none') and ($rule.body !~ 'box-shadow') }
+    | each {|rule|
+        let selector = ($rule.selector | str trim | str replace --all "\n" ' ')
+        let body = ($rule.body | str trim | str replace --all "\n" ' ')
+        $"($file): selector `($selector)`, body `($body)`"
+    }
+}
+
 def offline-brand-name [] {
     $OFFLINE_ASSETS | each {|file|
         open --raw $file
@@ -417,6 +507,137 @@ def offline-brand-name [] {
         | where {|row| ($row.item | str contains $REPO_NAME) and ($row.item !~ $COMMENT_LINE) }
         | each {|row| $"($file):($row.index + 1): ($row.item | str trim)" }
     } | flatten
+}
+
+# LC-875: a control that flips its `.lc-cbtn-label` text but not its
+# `aria-label` leaves the accessible name pointing at the old label (aria-label
+# overrides text content), so the two writes have to land in the same
+# function. Brace-matched rather than line-scoped: the enclosing function can
+# run many lines past the `.lc-cbtn-label` reference itself.
+def line-of [text: string, offset: int] {
+    ($text | str substring 0..$offset | str replace --all --regex '[^\n]' '' | str length) + 1
+}
+
+def enclosing-function-text [lines: list<string>, from_index: int] {
+    mut start = $from_index
+    mut found = -1
+    while $start >= 0 {
+        if ($lines | get $start) =~ '\bfunction\b' {
+            $found = $start
+            break
+        }
+        $start = $start - 1
+    }
+    if $found < 0 { return "" }
+    mut depth = 0
+    mut started = false
+    mut end = $found
+    mut i = $found
+    let n = ($lines | length)
+    while $i < $n {
+        let line = ($lines | get $i)
+        for c in ($line | split chars) {
+            if $c == "{" { $depth = $depth + 1; $started = true }
+            if $c == "}" { $depth = $depth - 1 }
+        }
+        if $started and $depth <= 0 {
+            $end = $i
+            break
+        }
+        $i = $i + 1
+    }
+    $lines | slice $found..$end | str join "\n"
+}
+
+# The variable a line binds to the `.lc-cbtn-label` span, whether by resolving
+# an existing one (`var l = btn.querySelector('.lc-cbtn-label')`) or by
+# stamping the class onto a freshly created one (`bl.className =
+# 'lc-cbtn-label'`); "" when the line only mentions the class in passing (a
+# comment, a CSS selector elsewhere in the file).
+def cbtn-label-var [line: string] {
+    let via_query = ($line | parse --regex "(?:var|let|const) (?<v>\\w+) = .*querySelector\\('\\.lc-cbtn-label'\\)")
+    if not ($via_query | is-empty) { return ($via_query | get v.0) }
+    let via_class = ($line | parse --regex "(?<v>\\w+)\\.className = .lc-cbtn-label.")
+    if not ($via_class | is-empty) { return ($via_class | get v.0) }
+    ""
+}
+
+def cbtn-label-missing-aria [] {
+    browser-asset-files | each {|file|
+        let text = (open --raw $file | decode utf-8)
+        let lines = ($text | lines)
+        $lines
+        | enumerate
+        | where {|row| $row.item =~ 'lc-cbtn-label' }
+        | each {|row|
+            let v = (cbtn-label-var $row.item)
+            if $v == "" {
+                []
+            } else {
+                let body = (enclosing-function-text $lines $row.index)
+                let write_pattern = $"($v)\\.textContent\\s*="
+                if ($body != "") and ($body =~ $write_pattern) and ($body !~ 'aria-label') {
+                    [$"($file):($row.index + 1): ($row.item | str trim)"]
+                } else {
+                    []
+                }
+            }
+        }
+        | flatten
+    } | flatten
+}
+
+# LC-891: the `window.__lcI18n` table entries in base.html.
+def i18n-table-entries [] {
+    let file = "server/templates/base.html"
+    open --raw $file | decode utf-8 | lines | enumerate
+    | each {|row|
+        let m = ($row.item | parse --regex $I18N_TABLE_ENTRY)
+        if ($m | is-empty) { null } else { {file: $file, line: ($row.index + 1), key: $m.0.key, text: ($row.item | str trim)} }
+    }
+    | where {|x| $x != null }
+}
+
+# LC-891: every table key a browser script or an inline template `<script>`
+# actually calls (direct or through one of the file-local wrappers); several
+# partials (composer.html, picker.html) call `window.__lcS` from a `<script>`
+# block of their own rather than from `server/assets`, so the sweep has to
+# cover the templates too, the same set `markup-files` already names for the
+# palette and fake-link-button rules.
+def used-i18n-keys [] {
+    markup-files | each {|file|
+        open --raw $file | decode utf-8 | lines | enumerate
+        | each {|row|
+            let direct = ($row.item | parse --regex $I18N_KEY_CALL | each {|m| {file: $file, line: ($row.index + 1), key: $m.key} })
+            let toast = ($row.item | parse --regex $I18N_TOAST_KEY_CALL | each {|m| {file: $file, line: ($row.index + 1), key: $m.key} })
+            $direct | append $toast
+        }
+        | flatten
+    } | flatten
+}
+
+# LC-891: the key-pairing rule from both directions - a table entry nothing
+# calls, and a call site whose key has no table entry (a broken lookup, not
+# just a dead one).
+def i18n-key-pairing [] {
+    let table = (i18n-table-entries)
+    let used = (used-i18n-keys)
+    let table_keys = ($table | get key | uniq)
+    # A table entry is dead only if its key never shows up as a quoted string
+    # anywhere in the browser scripts. Broader than `used-i18n-keys`, which
+    # only understands the known call shapes: some keys reach `__lcS` through
+    # an indirection table (`voice.js`'s `QUALITY_LABEL` map, keyed by
+    # connection state, values are table keys) that no fixed set of call
+    # patterns fully covers, and a false "dead" here breaks the build, while a
+    # false "live" just leaves a genuinely dead entry for the next pass.
+    let asset_text = (markup-files | each {|f| open --raw $f | decode utf-8 } | str join "\n")
+    let dead_entries = (
+        $table
+        | where {|t| not (($asset_text | str contains $"'($t.key)'") or ($asset_text | str contains $'"($t.key)"')) }
+        | each {|t| $"($t.file):($t.line): ($t.text)" }
+    )
+    let orphan_calls = ($used | where {|u| $u.key not-in $table_keys } | each {|u| $"($u.file):($u.line): __lcS\(\"($u.key)\"\) has no base.html table entry" })
+    $dead_entries | append $orphan_calls
 }
 
 def rules [] {
@@ -464,6 +685,12 @@ def rules [] {
             check: {|| dead-classes }
         }
         {
+            id: "no-dead-lc-css-selectors"
+            pending: null
+            fix: "a `.lc-*` class defined in main.css with no literal hit in the templates, browser scripts or Rust markup sources has no caller left; delete the selector, or its consumer if the deletion was the miss (LC-891)"
+            check: {|| dead-lc-css-selectors }
+        }
+        {
             id: "page-width-from-a-helper"
             pending: null
             fix: "center a content column with `lc-page-narrow` (login / error / short forms), `lc-page-medium` (settings and content) or `lc-page-wide` (admin tables), not a per-page `mx-auto max-w-*`; landing.html is the one marketing page excluded (LC-744)"
@@ -506,6 +733,12 @@ def rules [] {
             check: {|| bare-timestamps }
         }
         {
+            id: "focus-visible-rings"
+            pending: null
+            fix: "a `:focus-visible` rule that sets `outline: none` must also set `box-shadow` (the shared `0 0 0 2px var(--ring)` ring); otherwise a keyboard user cannot tell focus from hover or from nothing at all (LC-881)"
+            check: {|| focus-visible-rings }
+        }
+        {
             id: "offline-page-brand-name"
             pending: null
             fix: $"the offline page and the push fallback title say \"Let's Chat\", the name every other user-visible surface uses; \"($REPO_NAME)\" is the repo, and belongs only in a comment \(LC-748\)"
@@ -518,6 +751,18 @@ def rules [] {
             check: {|| scan-lines ["server/assets/offline.html"] $LIGHT_ONLY_SCHEME }
         }
         {
+            id: "no-ellipsis-outside-locales"
+            pending: null
+            fix: "write three periods, not U+2026 or `&#8230;`; the catalogs spell it that way and `check-locale-ellipsis.nu` guards them, this rule is the same spelling over the templates and browser scripts. `sw.js` is exempt: its one U+2026 is a truncation marker, not prose (LC-891)"
+            check: {|| ellipsis-outside-locales }
+        }
+        {
+            id: "i18n-keys-are-paired"
+            pending: null
+            fix: "every `window.__lcI18n` entry in base.html needs a caller in the templates or server/assets, and every `__lcS`-family call site needs a matching base.html entry; delete whichever side of the pair is now the leftover (LC-891)"
+            check: {|| i18n-key-pairing }
+        }
+        {
             id: "no-raw-nul-bytes"
             pending: null
             fix: "write the byte as a language escape (`\\u0000` in a JS string literal), never as a raw control character: a literal NUL makes every grep-family tool treat the whole file as binary and skip it, so a grep-based gate over the directory reads nothing and still passes (LC-757)"
@@ -528,6 +773,12 @@ def rules [] {
             pending: null
             fix: "U+2014 (em dash) is banned repo-wide: use a hyphen, a colon, parentheses, or a period and a new sentence (internal/CLAUDE.md style rules, folded into this job by LC-749)"
             check: {|| scan-lines (tracked-text-files) $EM_DASH }
+        }
+        {
+            id: "cbtn-label-text-keeps-aria-label"
+            pending: null
+            fix: "a function that writes `.lc-cbtn-label` text must also write `aria-label` (and `data-lc-tip`) in the same function, or the tooltip and the accessible name go stale the moment the visible label flips; use the shared `setLabel` on `window.LetsChatRtc` (rtc_common.js) instead of a local copy (LC-875)"
+            check: {|| cbtn-label-missing-aria }
         }
     ]
 }
