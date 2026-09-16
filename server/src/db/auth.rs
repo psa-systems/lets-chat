@@ -2111,6 +2111,39 @@ pub async fn username_exists(pool: &SqlitePool, username: &str) -> Result<bool, 
     Ok(n > 0)
 }
 
+/// LC-913: the one availability predicate for a handle, shared by every path
+/// that assigns one: provisioning (`pick_username`), the welcome prompt's
+/// accept-unchanged branch, and `change_username`. A handle is unavailable to
+/// `user_id` when a live `users` row other than `user_id` already holds it,
+/// or when an unexpired `reserved_usernames` row holds it for a different
+/// account. Provisioning, which has no `user_id` yet, passes an id no live
+/// account can ever have (empty string) so any standing reservation blocks
+/// it. Generic over the executor so `change_username` can run this inside its
+/// transaction and keep the check race-free with the write that follows it.
+pub async fn handle_available_for<'e, E>(
+    executor: E,
+    handle: &str,
+    user_id: &str,
+) -> Result<bool, sqlx::Error>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    let available: bool = sqlx::query_scalar(
+        "SELECT NOT EXISTS (SELECT 1 FROM users WHERE username = ? COLLATE NOCASE AND id != ?) \
+           AND NOT EXISTS (SELECT 1 FROM reserved_usernames \
+                             WHERE username = ? COLLATE NOCASE \
+                               AND reserved_until > datetime('now') \
+                               AND user_id != ?)",
+    )
+    .bind(handle)
+    .bind(user_id)
+    .bind(handle)
+    .bind(user_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(available)
+}
+
 // ── LC-766: deliberate chat handles ────────────────────────────────────────
 
 /// A released handle stays reserved for its previous owner for this many days,
@@ -2246,27 +2279,20 @@ pub async fn change_username(
         }
     }
 
-    // Taken by another live account?
-    let taken: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM users WHERE username = ? COLLATE NOCASE AND id != ?",
-    )
-    .bind(new_username)
-    .bind(user_id)
-    .fetch_one(&mut *tx)
-    .await?;
-    if taken > 0 {
-        return Err(ChangeHandleError::Taken);
-    }
-
-    // Reserved by a different account (still within its window)?
-    let reserved_by: Option<String> = sqlx::query_scalar(
-        "SELECT user_id FROM reserved_usernames \
-          WHERE username = ? COLLATE NOCASE AND reserved_until > datetime('now')",
-    )
-    .bind(new_username)
-    .fetch_optional(&mut *tx)
-    .await?;
-    if matches!(reserved_by, Some(ref uid) if uid != user_id) {
+    // Taken by another live account, or reserved by a different account still
+    // within its window? Run through the shared predicate, inside this
+    // transaction, so the check stays race-free with the write below.
+    if !handle_available_for(&mut *tx, new_username, user_id).await? {
+        let taken: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM users WHERE username = ? COLLATE NOCASE AND id != ?",
+        )
+        .bind(new_username)
+        .bind(user_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if taken > 0 {
+            return Err(ChangeHandleError::Taken);
+        }
         return Err(ChangeHandleError::Reserved);
     }
 

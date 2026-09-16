@@ -288,6 +288,202 @@ async fn claiming_a_ticket_opens_a_shared_channel() {
     assert_eq!(support_rooms, 1, "claim is idempotent; no duplicate room");
 }
 
+// LC-910: a claim must still succeed for a requester whose account was deleted
+// while the ticket sat in the queue (LC-908 does not purge support_tickets).
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn claiming_a_ticket_tolerates_a_deleted_requester() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+
+    let admin = db::auth::create_user(&auth, "admin", "h").await.unwrap();
+    sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+        .bind(&admin)
+        .execute(&auth)
+        .await
+        .unwrap();
+    let requester = db::auth::create_user(&auth, "member", "h").await.unwrap();
+    db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    let admin_session = db::auth::create_session(&auth, &admin).await.unwrap();
+
+    let ticket_id = db::support_tickets::create(&chat, &requester, Some(1), "general", "help me")
+        .await
+        .unwrap();
+
+    // The requester's account is gone by the time an admin gets to the ticket.
+    db::auth::delete_user(&auth, &requester).await.unwrap();
+
+    let app: Router = routes::build_router(state_from(auth.clone(), chat.clone(), settings));
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/admin/support/{ticket_id}/claim"))
+        .header(header::COOKIE, format!("session={admin_session}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let support_rooms: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM rooms WHERE name LIKE 'Support:%'")
+            .fetch_one(&chat)
+            .await
+            .unwrap();
+    assert_eq!(support_rooms, 1, "one support room created");
+
+    let ticket = db::support_tickets::get(&chat, ticket_id)
+        .await
+        .unwrap()
+        .expect("ticket still exists");
+    assert_eq!(ticket.status, "claimed");
+}
+
+// LC-910: a failure while building the support channel must leave the ticket
+// exactly as it was: still open, still in the queue, no audit row written.
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn failed_channel_creation_leaves_the_ticket_open() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+
+    let admin = db::auth::create_user(&auth, "admin", "h").await.unwrap();
+    sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+        .bind(&admin)
+        .execute(&auth)
+        .await
+        .unwrap();
+    let requester = db::auth::create_user(&auth, "member", "h").await.unwrap();
+    db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    let admin_session = db::auth::create_session(&auth, &admin).await.unwrap();
+
+    let ticket_id = db::support_tickets::create(&chat, &requester, Some(1), "general", "help me")
+        .await
+        .unwrap();
+
+    // Force channel creation to fail partway through: `claim_ticket` seeds the
+    // new room with a message after creating it and adding members, so
+    // dropping `messages` makes that insert fail deterministically without
+    // touching anything the earlier, successful steps depend on.
+    sqlx::query("DROP TABLE messages")
+        .execute(&chat)
+        .await
+        .unwrap();
+
+    let app: Router = routes::build_router(state_from(auth.clone(), chat.clone(), settings));
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/admin/support/{ticket_id}/claim"))
+        .header(header::COOKIE, format!("session={admin_session}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert!(
+        res.status().is_server_error() || res.status().is_client_error(),
+        "channel creation failure surfaces as an error, got {}",
+        res.status()
+    );
+
+    // The ticket was left exactly as it was: still open, still in the queue.
+    assert_eq!(db::support_tickets::count_open(&chat).await.unwrap(), 1);
+    let ticket = db::support_tickets::get(&chat, ticket_id)
+        .await
+        .unwrap()
+        .expect("ticket still exists");
+    assert_eq!(ticket.status, "open");
+
+    // No audit row was written for a claim that never completed.
+    let audit_rows: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM mod_actions WHERE action='support_claimed' AND target_user=?",
+    )
+    .bind(format!("ticket#{ticket_id}"))
+    .fetch_one(&chat)
+    .await
+    .unwrap();
+    assert_eq!(audit_rows, 0, "no audit row for a failed claim");
+}
+
+// LC-910: two admins racing to claim the same ticket must produce exactly one
+// channel-creating winner, and the loser must not see an error page.
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn concurrent_claims_have_exactly_one_winner() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+
+    let admin = db::auth::create_user(&auth, "admin", "h").await.unwrap();
+    let admin2 = db::auth::create_user(&auth, "admin2", "h").await.unwrap();
+    for a in [&admin, &admin2] {
+        sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+            .bind(a)
+            .execute(&auth)
+            .await
+            .unwrap();
+    }
+    let requester = db::auth::create_user(&auth, "member", "h").await.unwrap();
+    db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    let admin_session = db::auth::create_session(&auth, &admin).await.unwrap();
+    let admin2_session = db::auth::create_session(&auth, &admin2).await.unwrap();
+
+    let ticket_id = db::support_tickets::create(&chat, &requester, Some(1), "general", "help me")
+        .await
+        .unwrap();
+
+    let app: Router =
+        routes::build_router(state_from(auth.clone(), chat.clone(), settings.clone()));
+
+    let claim = |session: String| {
+        let app = app.clone();
+        async move {
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri(format!("/admin/support/{ticket_id}/claim"))
+                .header(header::COOKIE, format!("session={session}"))
+                .body(Body::empty())
+                .unwrap();
+            app.oneshot(req).await.unwrap()
+        }
+    };
+
+    let (res1, res2) = tokio::join!(claim(admin_session), claim(admin2_session));
+
+    // Neither admin sees an error page: the loser gets the queue OOB refresh
+    // (LC-910 builds the channel before flipping status, so both attempts may
+    // successfully create their own room; only one becomes the ticket's
+    // official channel, and the other is logged as orphaned).
+    assert_eq!(res1.status(), StatusCode::OK);
+    assert_eq!(res2.status(), StatusCode::OK);
+
+    assert_eq!(db::support_tickets::count_open(&chat).await.unwrap(), 0);
+    let ticket = db::support_tickets::get(&chat, ticket_id)
+        .await
+        .unwrap()
+        .expect("ticket still exists");
+    assert_eq!(ticket.status, "claimed");
+
+    // Exactly one admin's claim was recorded as the winner: one audit row.
+    let audit_rows: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM mod_actions WHERE action='support_claimed' AND target_user=?",
+    )
+    .bind(format!("ticket#{ticket_id}"))
+    .fetch_one(&chat)
+    .await
+    .unwrap();
+    assert_eq!(
+        audit_rows, 1,
+        "exactly one channel-creating winner is audited"
+    );
+}
+
 // LC-726: pending support requests surface outside the admin section - an
 // admin-only rail tile (every page) and a Home dashboard card - so an admin does
 // not have to be in /admin to see the queue. A non-admin sees neither.

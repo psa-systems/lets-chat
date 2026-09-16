@@ -1843,56 +1843,80 @@ pub async fn post_support_resolve(
     super::support::render_support_oob(&state).await
 }
 
-/// `POST /admin/support/{id}/claim` - claim an open ticket. Opens a dedicated
-/// private support channel joining the requester, this admin, and the assistant
-/// bot (seeded with the request), DMs the requester a link to it, audits the
-/// claim, and live-updates every admin queue. A ticket already claimed or
-/// resolved by another admin is a no-op (the `status='open'` guard on
-/// `set_status` lets exactly one admin win).
+/// `POST /admin/support/{id}/claim` - claim an open ticket. Builds the
+/// dedicated private support channel (joining the requester, this admin, and
+/// the assistant bot, seeded with the request) BEFORE flipping the ticket's
+/// status, so a failure anywhere in channel creation leaves the ticket
+/// untouched: still `open`, still in the queue (LC-910). Only once the channel
+/// exists do we flip the status and write the audit row, DM the requester a
+/// link to it, and live-update every admin queue. A ticket already claimed or
+/// resolved by another admin (whether before we started or while we were
+/// building the channel) is a no-op: the `status='open'` guard on
+/// `set_status` lets exactly one admin win, and the loser's now-orphaned
+/// channel is logged rather than surfaced as an error.
 pub async fn post_support_claim(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
     Path(id): Path<i64>,
 ) -> Result<axum::response::Response, AppError> {
     use axum::response::IntoResponse;
-    // Fetch first so we still have the requester + origin after the status flip.
     let ticket = db::support_tickets::get(&state.chat, id).await?;
-    let updated = db::support_tickets::set_status(&state.chat, id, "claimed", &user.id).await?;
-    if let (true, Some(t)) = (updated, ticket) {
-        let (room_id, room_name) = super::support::claim_ticket(&state, &t, &user).await?;
-        db::moderation::log_mod_action(
-            &state.chat,
-            "support_claimed",
-            &format!("ticket#{id}"),
-            &user.id,
-            None,
-            None,
-            None,
-        )
-        .await?;
-        let dm = format!(
-            "_An admin is now helping you with your support request (#{id}) in [{room_name}](/room/{room_id})._"
-        );
-        if let Err(e) = super::help_docs::notify_user_from_bot(&state, &t.requester_id, &dm).await {
-            tracing::warn!(error = %e, ticket = id, "failed to notify requester of claim");
+    let ticket = match ticket {
+        Some(t) if t.status == "open" => t,
+        _ => {
+            // Already gone, claimed, or resolved: nothing to claim.
+            return Ok(super::support::render_support_oob(&state)
+                .await?
+                .into_response());
         }
-        super::support::broadcast_support_changed(&state);
-        // LC-725: send the acting admin straight into the freshly-created support
-        // channel (they are a member, so it opens cleanly) instead of leaving them
-        // on the queue with the ticket silently gone. Every other admin tab still
-        // gets the queue OOB refresh via the broadcast above.
-        return Ok((
-            axum::http::StatusCode::OK,
-            [(
-                axum::http::header::HeaderName::from_static("hx-redirect"),
-                format!("/room/{room_id}"),
-            )],
-        )
+    };
+
+    let (room_id, room_name) = super::support::claim_ticket(&state, &ticket, &user).await?;
+
+    let updated = db::support_tickets::set_status(&state.chat, id, "claimed", &user.id).await?;
+    if !updated {
+        // Another admin won the flip while we were building the channel above.
+        // The ticket is theirs; our channel is orphaned. Log it and just refresh
+        // this admin's queue instead of erroring the loser out.
+        tracing::warn!(
+            ticket = id,
+            room_id,
+            "support channel orphaned: ticket claimed by another admin during channel creation"
+        );
+        return Ok(super::support::render_support_oob(&state)
+            .await?
             .into_response());
     }
-    // Race: another admin claimed it first. Just refresh this admin's queue.
-    Ok(super::support::render_support_oob(&state)
-        .await?
+
+    db::moderation::log_mod_action(
+        &state.chat,
+        "support_claimed",
+        &format!("ticket#{id}"),
+        &user.id,
+        None,
+        None,
+        None,
+    )
+    .await?;
+    let dm = format!(
+        "_An admin is now helping you with your support request (#{id}) in [{room_name}](/room/{room_id})._"
+    );
+    if let Err(e) = super::help_docs::notify_user_from_bot(&state, &ticket.requester_id, &dm).await
+    {
+        tracing::warn!(error = %e, ticket = id, "failed to notify requester of claim");
+    }
+    super::support::broadcast_support_changed(&state);
+    // LC-725: send the acting admin straight into the freshly-created support
+    // channel (they are a member, so it opens cleanly) instead of leaving them
+    // on the queue with the ticket silently gone. Every other admin tab still
+    // gets the queue OOB refresh via the broadcast above.
+    Ok((
+        axum::http::StatusCode::OK,
+        [(
+            axum::http::header::HeaderName::from_static("hx-redirect"),
+            format!("/room/{room_id}"),
+        )],
+    )
         .into_response())
 }
 

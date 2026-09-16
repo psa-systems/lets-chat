@@ -148,3 +148,17 @@ pub async fn distinct_products(pool: &SqlitePool) -> Result<Vec<String>, sqlx::E
         .await?;
     Ok(rows.into_iter().map(|r| r.get("product")).collect())
 }
+
+/// Distinct source URLs currently stored for a product (LC-917: the run's prune
+/// step diffs this against the URLs visited during the run to find pages that
+/// left the product's index).
+pub async fn list_source_urls(
+    pool: &SqlitePool,
+    product: &str,
+) -> Result<Vec<String>, sqlx::Error> {
+    let rows = sqlx::query("SELECT DISTINCT source_url FROM doc_chunks WHERE product = ?")
+        .bind(product)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(|r| r.get("source_url")).collect())
+}
