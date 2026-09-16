@@ -4883,6 +4883,10 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-transcript.hidden { transform: translateX(100%); visibility: hidden; }
 #main { transition: padding-right 0.2s ease; }
 body.lc-transcript-open #main { padding-right: 20rem; }
+/* LC-883: the transcript drawer sits on top of the fixed support launcher's
+   right/bottom-right corner at desktop widths. Shift the launcher left by the
+   drawer's width so it stays reachable while the transcript is open. */
+body.lc-transcript-open .lc-support-root { right: calc(1.25rem + 20rem); }
 
 /* ---- LC-416: transcript empty state ------------------------------------- */
 /* Shown until the first caption line lands (#lc-caption-log is the OOB target;
@@ -5099,6 +5103,9 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
        bottom, so it never covers the controls and respects the home-bar inset.
        (The right-padding reservation on #main is dropped here.) */
     body.lc-transcript-open #main { padding-right: 0; }
+    /* LC-883: below the bottom-sheet breakpoint the drawer no longer reserves
+       side space, so undo the desktop launcher shift too. */
+    body.lc-transcript-open .lc-support-root { right: 1.25rem; }
     .lc-transcript {
         top: auto;
         left: 0;
@@ -6331,7 +6338,7 @@ html[data-lc-support-open] .lc-support-panel { display: flex; }
    badge in the corner (the count comes from `data-lc-attention`, set by
    base.html); it clears on the next open. */
 .lc-support-launcher { position: relative; }
-.lc-support-root[data-lc-attention] .lc-support-launcher::after {
+.lc-support-launcher[data-lc-attention]::after {
     content: attr(data-lc-attention);
     position: absolute;
     top: -0.25rem;
