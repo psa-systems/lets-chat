@@ -27,14 +27,23 @@
         {% endif %}{% endif %}
         <div class="mt-1 text-xs text-content-muted">{{ "invitations-members"|tn(card.members()) }}</div>
         {# Inviter, resolved to a friendly name + avatar (LC-772 bug: was a UUID).
-           Stays hand-rolled: partials/avatar.html always emits the presence dot's
-           data-user-status="<user id>", which LC-772 forbids here (LC-896). #}
+           The inviter is not presence-bearing (no live status, no WS target),
+           so avatar_status is bound empty: partials/avatar.html (LC-896) skips
+           the presence dot, and with it the data-user-status id, whenever the
+           status is empty. The id itself still has to be bound, because the
+           partial builds the image URL from it. #}
         <div class="mt-2 flex items-center gap-2">
-          {% if card.inviter_avatar_ext.is_some() %}
-          <img src="{{ card.inviter_id|avatar_url }}" alt="" class="h-6 w-6 shrink-0 rounded-full object-cover">
-          {% else %}
-          <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-xs font-semibold text-content">{{ card.inviter_initial() }}</div>
-          {% endif %}
+          {% let avatar_user_id = card.inviter_id.clone() %}
+          {% let avatar_username = card.inviter_name.clone() %}
+          {% let avatar_ext = card.inviter_avatar_ext.clone() %}
+          {% let avatar_status = String::new() %}
+          {# Askama's `let` can't take a bare `None` (its Option<_> type is then
+             unconstrained) or a type annotation/turbofish to pin it, so this
+             derives a same-typed `None` from a field already Option<String>:
+             `xor` of two equal options is always None. #}
+          {% let avatar_custom_status = card.inviter_avatar_ext.clone().xor(card.inviter_avatar_ext.clone()) %}
+          {% let avatar_size = "h-6 w-6 text-xs" %}
+          {% include "partials/avatar.html" %}
           <span class="min-w-0 truncate text-xs text-content-muted">{{ "invitations-invited-by"|t }} {% if card.inviter_name.is_empty() %}{{ "invitations-inviter-unknown"|t }}{% else %}{{ card.inviter_name }}{% endif %}</span>
         </div>
       </div>
