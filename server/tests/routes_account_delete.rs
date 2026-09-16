@@ -455,3 +455,493 @@ async fn delete_drops_solo_owned_enclave() {
         .unwrap();
     assert!(enc_still.is_none(), "solo-owned enclave must be removed");
 }
+
+// LC-908: `purge_user_chat` originally covered 17 tables by name and relied
+// on cascade for the rest. The chat schema has since grown past that; this
+// seeds every table the audit found uncovered and asserts none of them keep
+// a row (or a dangling actor reference) for the deleted user.
+#[tokio::test]
+async fn delete_wipes_lc908_gap_tables() {
+    let t = app_with_user().await;
+
+    let general_id: i64 = sqlx::query_scalar("SELECT id FROM enclaves WHERE name='General'")
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+    let room_id =
+        db::chat::create_room(&t.chat, "gap-room", None, "public", None, Some(general_id))
+            .await
+            .unwrap();
+    // A message authored by someone else, so the user's footprint on it
+    // (vote, ack, report, tag override) has no cascade path.
+    let other_msg = db::chat::insert_message(&t.chat, room_id, &t.peer_id, "someone else's poll")
+        .await
+        .unwrap();
+
+    // poll_votes: user votes on someone else's poll.
+    sqlx::query("INSERT INTO polls (message_id, question) VALUES (?, 'q?')")
+        .bind(other_msg)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+    let option_id: i64 = sqlx::query_scalar(
+        "INSERT INTO poll_options (message_id, position, text) VALUES (?, 0, 'yes') RETURNING id",
+    )
+    .bind(other_msg)
+    .fetch_one(&t.chat)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO poll_votes (option_id, user_id) VALUES (?, ?)")
+        .bind(option_id)
+        .bind(&t.user_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+
+    // saved_searches
+    sqlx::query("INSERT INTO saved_searches (user_id, query) VALUES (?, 'from:bob')")
+        .bind(&t.user_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+
+    // thread_followers / thread_muters, keyed off the other user's message.
+    sqlx::query("INSERT INTO thread_followers (user_id, parent_id, room_id) VALUES (?, ?, ?)")
+        .bind(&t.user_id)
+        .bind(other_msg)
+        .bind(room_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO thread_muters (user_id, parent_id, room_id) VALUES (?, ?, ?)")
+        .bind(&t.user_id)
+        .bind(other_msg)
+        .bind(room_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+
+    // kudos: given and received.
+    sqlx::query("INSERT INTO kudos (giver_id, receiver_id, room_id) VALUES (?, ?, ?)")
+        .bind(&t.user_id)
+        .bind(&t.peer_id)
+        .bind(room_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO kudos (giver_id, receiver_id, room_id) VALUES (?, ?, ?)")
+        .bind(&t.peer_id)
+        .bind(&t.user_id)
+        .bind(room_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+
+    // message_acks: user acknowledges someone else's message.
+    sqlx::query("INSERT INTO message_acks (message_id, user_id) VALUES (?, ?)")
+        .bind(other_msg)
+        .bind(&t.user_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+
+    // canned_responses
+    sqlx::query(
+        "INSERT INTO canned_responses (user_id, name, body) VALUES (?, 'hi', 'hello there')",
+    )
+    .bind(&t.user_id)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+
+    // room_role_overrides: the user holds a grant, and separately issued
+    // one to the peer that must survive with the issuer reference cleared.
+    sqlx::query(
+        "INSERT INTO room_role_overrides (room_id, user_id, role, assigned_by) \
+         VALUES (?, ?, 'moderator', ?)",
+    )
+    .bind(room_id)
+    .bind(&t.user_id)
+    .bind(&t.peer_id)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO room_role_overrides (room_id, user_id, role, assigned_by) \
+         VALUES (?, ?, 'moderator', ?)",
+    )
+    .bind(room_id)
+    .bind(&t.peer_id)
+    .bind(&t.user_id)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+
+    // room_nicknames
+    sqlx::query("INSERT INTO room_nicknames (room_id, user_id, nickname) VALUES (?, ?, 'Al')")
+        .bind(room_id)
+        .bind(&t.user_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+
+    // user_group_members
+    let group_id: i64 = sqlx::query_scalar(
+        "INSERT INTO user_groups (enclave_id, name, created_by) VALUES (?, 'friends', ?) \
+         RETURNING id",
+    )
+    .bind(general_id)
+    .bind(&t.peer_id)
+    .fetch_one(&t.chat)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO user_group_members (group_id, user_id) VALUES (?, ?)")
+        .bind(group_id)
+        .bind(&t.user_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+
+    // message_reports: the user reports someone else's message, and
+    // separately handled a report the peer filed.
+    sqlx::query(
+        "INSERT INTO message_reports (message_id, room_id, reporter_id, category) \
+         VALUES (?, ?, ?, 'spam')",
+    )
+    .bind(other_msg)
+    .bind(room_id)
+    .bind(&t.user_id)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+    // Anchored on a peer-authored message (not the user's own) so this row
+    // survives the top-of-transaction `messages` delete and actually
+    // exercises the new `handled_by` clear below, rather than cascading
+    // away for free.
+    let peer_msg_2 = db::chat::insert_message(&t.chat, room_id, &t.peer_id, "flag me")
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO message_reports (message_id, room_id, reporter_id, handled_by, category) \
+         VALUES (?, ?, ?, ?, 'spam')",
+    )
+    .bind(peer_msg_2)
+    .bind(room_id)
+    .bind(&t.peer_id)
+    .bind(&t.user_id)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+
+    // followups / followup_items: the user created one list (anchored on a
+    // peer message so it survives the top-of-transaction messages delete),
+    // and self-claimed + closed out an item on someone else's list.
+    sqlx::query("INSERT INTO followups (message_id, created_by) VALUES (?, ?)")
+        .bind(peer_msg_2)
+        .bind(&t.user_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO followups (message_id, created_by) VALUES (?, ?)")
+        .bind(other_msg)
+        .bind(&t.peer_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO followup_items (message_id, position, text, assignee_id, done, done_by) \
+         VALUES (?, 0, 'do the thing', ?, 1, ?)",
+    )
+    .bind(other_msg)
+    .bind(&t.user_id)
+    .bind(&t.user_id)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+
+    // user_storage_quotas
+    sqlx::query("INSERT INTO user_storage_quotas (user_id, quota_bytes) VALUES (?, 1000)")
+        .bind(&t.user_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+
+    // message_tag_overrides: the user moderated someone else's message.
+    sqlx::query(
+        "INSERT INTO message_tag_overrides (message_id, hidden, actor_user) VALUES (?, 1, ?)",
+    )
+    .bind(other_msg)
+    .bind(&t.user_id)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+
+    // enclave_last_room
+    sqlx::query("INSERT INTO enclave_last_room (user_id, enclave_id, room_id) VALUES (?, ?, ?)")
+        .bind(&t.user_id)
+        .bind(general_id)
+        .bind(room_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+
+    let (status, body, _) =
+        post_delete(&t.app, &t.session, &form(PASSWORD, "delete my account")).await;
+    assert!(
+        status.is_redirection(),
+        "expected redirect, got {status}: {}",
+        String::from_utf8_lossy(&body)
+    );
+
+    async fn count(pool: &SqlitePool, sql: &str, id: &str) -> i64 {
+        sqlx::query_scalar(sql)
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    for (label, sql) in [
+        (
+            "poll_votes",
+            "SELECT COUNT(*) FROM poll_votes WHERE user_id = ?",
+        ),
+        (
+            "saved_searches",
+            "SELECT COUNT(*) FROM saved_searches WHERE user_id = ?",
+        ),
+        (
+            "thread_followers",
+            "SELECT COUNT(*) FROM thread_followers WHERE user_id = ?",
+        ),
+        (
+            "thread_muters",
+            "SELECT COUNT(*) FROM thread_muters WHERE user_id = ?",
+        ),
+        (
+            "kudos (giver)",
+            "SELECT COUNT(*) FROM kudos WHERE giver_id = ?",
+        ),
+        (
+            "kudos (receiver)",
+            "SELECT COUNT(*) FROM kudos WHERE receiver_id = ?",
+        ),
+        (
+            "message_acks",
+            "SELECT COUNT(*) FROM message_acks WHERE user_id = ?",
+        ),
+        (
+            "canned_responses",
+            "SELECT COUNT(*) FROM canned_responses WHERE user_id = ?",
+        ),
+        (
+            "room_role_overrides (user)",
+            "SELECT COUNT(*) FROM room_role_overrides WHERE user_id = ?",
+        ),
+        (
+            "room_role_overrides (assigned_by)",
+            "SELECT COUNT(*) FROM room_role_overrides WHERE assigned_by = ?",
+        ),
+        (
+            "room_nicknames",
+            "SELECT COUNT(*) FROM room_nicknames WHERE user_id = ?",
+        ),
+        (
+            "user_group_members",
+            "SELECT COUNT(*) FROM user_group_members WHERE user_id = ?",
+        ),
+        (
+            "message_reports (reporter)",
+            "SELECT COUNT(*) FROM message_reports WHERE reporter_id = ?",
+        ),
+        (
+            "message_reports (handled_by)",
+            "SELECT COUNT(*) FROM message_reports WHERE handled_by = ?",
+        ),
+        (
+            "followups",
+            "SELECT COUNT(*) FROM followups WHERE created_by = ?",
+        ),
+        (
+            "followup_items (assignee)",
+            "SELECT COUNT(*) FROM followup_items WHERE assignee_id = ?",
+        ),
+        (
+            "followup_items (done_by)",
+            "SELECT COUNT(*) FROM followup_items WHERE done_by = ?",
+        ),
+        (
+            "user_storage_quotas",
+            "SELECT COUNT(*) FROM user_storage_quotas WHERE user_id = ?",
+        ),
+        (
+            "message_tag_overrides",
+            "SELECT COUNT(*) FROM message_tag_overrides WHERE actor_user = ?",
+        ),
+        (
+            "enclave_last_room",
+            "SELECT COUNT(*) FROM enclave_last_room WHERE user_id = ?",
+        ),
+    ] {
+        assert_eq!(
+            count(&t.chat, sql, &t.user_id).await,
+            0,
+            "{label} kept a row for the deleted user"
+        );
+    }
+
+    // The peer's grant survives; only the issuer reference was cleared.
+    let peer_override_by: String =
+        sqlx::query_scalar("SELECT assigned_by FROM room_role_overrides WHERE user_id = ?")
+            .bind(&t.peer_id)
+            .fetch_one(&t.chat)
+            .await
+            .unwrap();
+    assert_eq!(peer_override_by, "");
+
+    // The peer's followup list survives with the item unassigned and
+    // its completion actor cleared, not deleted outright.
+    let items: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM followup_items WHERE message_id = ?")
+        .bind(other_msg)
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+    assert_eq!(
+        items, 1,
+        "peer's followup item should survive, just unassigned"
+    );
+}
+
+// LC-908: schema-walking guard. `purge_user_chat` enumerates tables by name,
+// which silently goes stale as `chat.db` grows (that staleness is exactly
+// how this issue's 16-table gap happened). This walks the live schema for
+// every column shaped like a user reference and requires each one to be
+// either wiped/neutralised by `purge_user_chat` (see the matching entries in
+// `PURGED_COLUMNS`, one per `sqlx::query` there) or explicitly annotated in
+// `RETAINED_COLUMNS` with why it is allowed to keep a deleted user's id.
+// Adding a new table with a matching column and no entry in either list
+// fails this test.
+#[tokio::test]
+async fn chat_user_columns_are_purged_or_allowlisted() {
+    let chat = common::pool("chat").await;
+
+    // (table, column) pairs `purge_user_chat` deletes outright or clears to
+    // NULL / empty. Kept in the same order as the statements in
+    // `server/src/routes/account.rs` for easy cross-checking.
+    const PURGED_COLUMNS: &[(&str, &str)] = &[
+        ("messages", "user_id"),
+        ("message_reactions", "user_id"),
+        ("bookmarks", "user_id"),
+        ("pinned_messages", "pinned_by"),
+        ("scheduled_messages", "user_id"),
+        ("reminders", "user_id"),
+        ("message_drafts", "user_id"),
+        ("custom_emojis", "uploaded_by"),
+        // Personal-scoped rows always have user_id == uploaded_by (see
+        // `db::custom_emojis::insert_for_user`), so the uploaded_by delete
+        // above removes them too.
+        ("custom_emojis", "user_id"),
+        ("room_members", "user_id"),
+        ("room_notification_settings", "user_id"),
+        ("dm_read_state", "user_id"),
+        ("enclave_members", "user_id"),
+        ("enclave_invitations", "invited_by"),
+        ("mod_actions", "target_user"),
+        ("poll_votes", "user_id"),
+        ("saved_searches", "user_id"),
+        ("thread_followers", "user_id"),
+        ("thread_muters", "user_id"),
+        ("kudos", "giver_id"),
+        ("kudos", "receiver_id"),
+        ("message_acks", "user_id"),
+        ("canned_responses", "user_id"),
+        ("room_role_overrides", "user_id"),
+        ("room_role_overrides", "assigned_by"),
+        ("room_nicknames", "user_id"),
+        ("user_group_members", "user_id"),
+        ("message_reports", "reporter_id"),
+        ("message_reports", "handled_by"),
+        ("followups", "created_by"),
+        ("followup_items", "assignee_id"),
+        ("followup_items", "done_by"),
+        ("user_storage_quotas", "user_id"),
+        ("message_tag_overrides", "actor_user"),
+        ("enclave_last_room", "user_id"),
+    ];
+
+    // (table, column) pairs intentionally left holding a user id after
+    // account delete, with the reason. These are resource/attribution or
+    // audit-trail columns describing who created or actioned a durable row,
+    // not the user's own profile or content footprint.
+    const RETAINED_COLUMNS: &[(&str, &str)] = &[
+        ("branding", "updated_by"),
+        ("bridges", "created_by"),
+        ("call_transcripts", "started_by"),
+        ("email_inboxes", "created_by"),
+        ("enclaves", "created_by"),
+        ("incoming_webhooks", "created_by"),
+        ("link_filter_quarantine", "reviewed_by"),
+        ("link_filter_rules", "created_by"),
+        ("message_ack_required", "required_by"),
+        ("messages", "deleted_by"),
+        // Pre-existing convention (see the comment in purge_user_chat):
+        // the actor of a moderation action stays on the audit trail.
+        ("mod_actions", "actor_user"),
+        ("outgoing_webhooks", "created_by"),
+        ("room_automations", "created_by"),
+        ("room_feeds", "created_by"),
+        ("rooms", "created_by"),
+        ("rooms", "wiki_updated_by"),
+        ("slash_commands_custom", "created_by"),
+        ("support_tickets", "handled_by"),
+        ("transcript_segments", "user_id"),
+        ("user_groups", "created_by"),
+        ("voice_events", "user_id"),
+        // LC-908 audit follow-up, deferred as LC-923: these two are
+        // genuinely user-keyed and not yet purged.
+        ("enclave_bans", "user_id"),
+        ("reply_tokens", "user_id"),
+    ];
+
+    let tables: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' \
+         ORDER BY name",
+    )
+    .fetch_all(&chat)
+    .await
+    .unwrap();
+
+    let is_user_shaped = |col: &str| {
+        col == "user_id"
+            || col.ends_with("_by")
+            || col.ends_with("_user")
+            || col == "giver_id"
+            || col == "receiver_id"
+            || col == "reporter_id"
+            || col == "assignee_id"
+    };
+
+    let mut uncovered = Vec::new();
+    for table in &tables {
+        let cols: Vec<String> =
+            sqlx::query_scalar(&format!("SELECT name FROM pragma_table_info('{table}')"))
+                .fetch_all(&chat)
+                .await
+                .unwrap();
+        for col in cols {
+            if !is_user_shaped(&col) {
+                continue;
+            }
+            let pair = (table.as_str(), col.as_str());
+            if !PURGED_COLUMNS.contains(&pair) && !RETAINED_COLUMNS.contains(&pair) {
+                uncovered.push(format!("{table}.{col}"));
+            }
+        }
+    }
+
+    assert!(
+        uncovered.is_empty(),
+        "chat.db has user-id column(s) not covered by purge_user_chat or an \
+         annotated allowlist entry: {uncovered:?}"
+    );
+}

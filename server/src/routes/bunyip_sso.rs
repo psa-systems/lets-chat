@@ -474,12 +474,15 @@ async fn pick_username(
         .unwrap_or("user")
         .to_string();
     let base = sanitize_username(&base);
-    if !db::auth::username_exists(&state.auth, &base).await? {
+    // LC-913: no account exists yet, so pass an id no live user can ever have;
+    // a standing reservation on `base` is then treated exactly like a taken
+    // handle and the suffix loop below moves past it.
+    if db::auth::handle_available_for(&state.auth, &base, "").await? {
         return Ok(base);
     }
     for n in 2..=5u32 {
         let candidate = format!("{base}-{n}");
-        if !db::auth::username_exists(&state.auth, &candidate).await? {
+        if db::auth::handle_available_for(&state.auth, &candidate, "").await? {
             return Ok(candidate);
         }
     }
@@ -913,5 +916,75 @@ mod tests {
             "",
             "the row stays unlinked"
         );
+    }
+
+    // LC-913 AC2: a handle released by a rename stays reserved for 30 days, so
+    // provisioning a brand-new SSO user must not hand it straight back out.
+    #[tokio::test]
+    async fn provisioning_skips_a_reserved_handle() {
+        let state = test_state().await;
+        let alice = db::auth::create_user(&state.auth, "alice", "")
+            .await
+            .unwrap();
+        db::auth::change_username(&state.auth, &alice, "alice-writes", true, true)
+            .await
+            .expect("alice renames, reserving 'alice'");
+
+        let info = UserInfo {
+            sub: "sub-bob".to_string(),
+            email: Some("bob@example.com".to_string()),
+            email_verified: Some(true),
+            preferred_username: Some("alice".to_string()),
+            name: None,
+        };
+        let bob = resolve_or_provision_user(&state, "sub-bob", &info)
+            .await
+            .expect("bob still provisions, just not as @alice");
+
+        let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id = ?")
+            .bind(&bob)
+            .fetch_one(&state.auth)
+            .await
+            .unwrap();
+        assert_ne!(
+            username, "alice",
+            "the reserved handle must not be handed to a new account"
+        );
+    }
+
+    // LC-913 AC5: an expired reservation must not block provisioning from
+    // deriving the handle it once covered.
+    #[tokio::test]
+    async fn provisioning_ignores_an_expired_reservation() {
+        let state = test_state().await;
+        let alice = db::auth::create_user(&state.auth, "alice", "")
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO reserved_usernames (username, user_id, reserved_until) \
+             VALUES ('carol', ?, datetime('now', '-1 day'))",
+        )
+        .bind(&alice)
+        .execute(&state.auth)
+        .await
+        .unwrap();
+
+        let info = UserInfo {
+            sub: "sub-carol".to_string(),
+            email: Some("carol@example.com".to_string()),
+            email_verified: Some(true),
+            preferred_username: Some("carol".to_string()),
+            name: None,
+        };
+        let carol = resolve_or_provision_user(&state, "sub-carol", &info)
+            .await
+            .expect("carol provisions");
+
+        let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id = ?")
+            .bind(&carol)
+            .fetch_one(&state.auth)
+            .await
+            .unwrap();
+        assert_eq!(username, "carol", "an expired reservation blocks nothing");
     }
 }
