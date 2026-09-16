@@ -80,31 +80,9 @@
         <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.75A2.75 2.75 0 014.75 2h10.5A2.75 2.75 0 0118 4.75v7.5A2.75 2.75 0 0115.25 15H8.06l-3.03 2.78A.75.75 0 013.75 17.2V15A2.75 2.75 0 011 12.25v-7.5A.75.75 0 002 4.75zm3.5 2.5a.75.75 0 000 1.5h7a.75.75 0 000-1.5h-7zm0 3a.75.75 0 000 1.5h4a.75.75 0 000-1.5h-4z" clip-rule="evenodd"/></svg></span>
         <span class="lc-cbtn-label">{{ "voice-transcript-panel"|t }}</span>
       </button>
-      {# LC-825: floating reactions. The toggle opens a quick-tray of the user's
-         top emoji (call_reactions.js reorders these eight from
-         /api/reactions/frequent); More loads the existing emoji picker fragment
-         into the tray. Hidden until joined like the other in-call controls. #}
-      <span class="lc-react-wrap hidden" data-lc-react-wrap>
-        <button type="button" data-lc-voice-react aria-haspopup="true" aria-expanded="false"
-                aria-label="{{ "voice-react"|t }}" data-lc-tip="{{ "voice-react"|t }}" data-lc-tip-pos="top" class="lc-cbtn">
-          <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/></svg></span>
-          <span class="lc-cbtn-label">{{ "voice-react"|t }}</span>
-        </button>
-        <div data-lc-react-tray role="toolbar" aria-label="{{ "voice-react-tray"|t }}" hidden class="card lc-react-tray">
-          <div class="lc-react-row" data-lc-react-row>
-            <button type="button" data-lc-react-emoji="👍" class="lc-emoji-cell" tabindex="-1">👍</button>
-            <button type="button" data-lc-react-emoji="🎉" class="lc-emoji-cell" tabindex="-1">🎉</button>
-            <button type="button" data-lc-react-emoji="❤️" class="lc-emoji-cell" tabindex="-1">❤️</button>
-            <button type="button" data-lc-react-emoji="😂" class="lc-emoji-cell" tabindex="-1">😂</button>
-            <button type="button" data-lc-react-emoji="😮" class="lc-emoji-cell" tabindex="-1">😮</button>
-            <button type="button" data-lc-react-emoji="😢" class="lc-emoji-cell" tabindex="-1">😢</button>
-            <button type="button" data-lc-react-emoji="🤔" class="lc-emoji-cell" tabindex="-1">🤔</button>
-            <button type="button" data-lc-react-emoji="👏" class="lc-emoji-cell" tabindex="-1">👏</button>
-            <button type="button" data-lc-react-more aria-label="{{ "voice-react-more"|t }}" data-lc-tip="{{ "voice-react-more"|t }}" data-lc-tip-pos="top" class="lc-emoji-cell lc-react-more" tabindex="-1">+</button>
-          </div>
-          <div data-lc-react-picker-slot></div>
-        </div>
-      </span>
+      {# LC-825/LC-880: floating reactions (partials/react_tray.html). #}
+      {% let tip_pos = "top" %}
+      {% include "partials/react_tray.html" %}
       {# LC-822: pop the live huddle out into its own always-on-top window (a
          floating panel where the browser has no Document Picture-in-Picture).
          huddle_popout.js owns it and flips the label to Bring back while out;
@@ -136,8 +114,14 @@
       <span class="text-xs text-content-muted" data-lc-voice-preview-heading>{% if huddle_participants.len() == 1 %}{{ "huddle-lobby-one"|t }}{% else %}{{ huddle_participants.len() }} {{ "huddle-lobby-other"|t }}{% endif %}</span>
       <div class="flex items-center gap-1" data-lc-voice-preview-names>
         {% for p in huddle_participants %}
-        <span data-lc-voice-preview-name="{{ p.user_id }}" data-lc-label="{{ p.label }}" data-lc-avatar-version="{{ p.user_id|avatar_version }}">
-          <img class="h-6 w-6 rounded-full object-cover" src="{{ p.user_id|avatar_url }}" alt="{{ p.label }}" title="{{ p.label }}">
+        <span data-lc-voice-preview-name="{{ p.user_id }}" data-lc-label="{{ p.label }}" data-lc-avatar-version="{{ p.user_id|avatar_version }}" title="{{ p.label }}">
+          {% let avatar_user_id = p.user_id.clone() %}
+          {% let avatar_username = p.label.clone() %}
+          {% let avatar_ext = p.avatar_ext.clone() %}
+          {% let avatar_status = p.status.clone() %}
+          {% let avatar_custom_status = p.custom_status.clone() %}
+          {% let avatar_size = "h-6 w-6 text-xs" %}
+          {% include "partials/avatar.html" %}
         </span>
         {% endfor %}
       </div>

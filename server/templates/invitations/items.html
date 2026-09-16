@@ -26,7 +26,9 @@
         <p class="mt-1 line-clamp-2 text-sm text-content-muted">{{ d }}</p>
         {% endif %}{% endif %}
         <div class="mt-1 text-xs text-content-muted">{{ "invitations-members"|tn(card.members()) }}</div>
-        {# Inviter, resolved to a friendly name + avatar (LC-772 bug: was a UUID). #}
+        {# Inviter, resolved to a friendly name + avatar (LC-772 bug: was a UUID).
+           Stays hand-rolled: partials/avatar.html always emits the presence dot's
+           data-user-status="<user id>", which LC-772 forbids here (LC-896). #}
         <div class="mt-2 flex items-center gap-2">
           {% if card.inviter_avatar_ext.is_some() %}
           <img src="{{ card.inviter_id|avatar_url }}" alt="" class="h-6 w-6 shrink-0 rounded-full object-cover">

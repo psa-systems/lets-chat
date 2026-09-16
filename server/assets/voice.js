@@ -403,6 +403,11 @@
       }
     }
     // LC-416: rebuild the avatar chips (same structure the server renders).
+    // LC-884: the avatar itself (wrapper + img + presence dot) mirrors
+    // partials/avatar.html so a live rebuild looks identical to the initial
+    // server render. A participant showing up here is, by definition,
+    // connected right now, so the dot defaults to online; ws/user_status_update.html
+    // corrects it in place the moment a real status broadcast arrives.
     names.replaceChildren();
     ids.forEach(function (uid) {
       var label = participants[uid] || uid;
@@ -410,14 +415,23 @@
       chip.className = 'lc-voice-lobby-chip';
       chip.setAttribute('data-lc-voice-preview-name', uid);
       chip.setAttribute('data-lc-label', label);
+      var avatarWrap = document.createElement('span');
+      avatarWrap.className = 'relative inline-block shrink-0';
       var img = document.createElement('img');
       img.className = 'lc-voice-lobby-avatar';
+      img.loading = 'lazy';
       img.src = avatarUrl(uid);
-      img.alt = label;
+      img.alt = '';
+      var dot = document.createElement('span');
+      dot.setAttribute('data-user-status', uid);
+      dot.setAttribute('aria-label', 'Online');
+      dot.className = 'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-surface-elevated bg-success';
+      avatarWrap.appendChild(img);
+      avatarWrap.appendChild(dot);
       var nm = document.createElement('span');
       nm.className = 'lc-voice-lobby-name';
       nm.textContent = label;
-      chip.appendChild(img);
+      chip.appendChild(avatarWrap);
       chip.appendChild(nm);
       names.appendChild(chip);
     });
