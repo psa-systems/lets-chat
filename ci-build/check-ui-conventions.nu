@@ -408,6 +408,25 @@ def raw-nul-bytes [] {
     } | flatten
 }
 
+# LC-881: a `:focus-visible` rule that turns off the default outline has to
+# replace it with the shared ring, or a keyboard user cannot tell "focused"
+# from "hover" (the resize handle) or from "nothing" (a roving-tabindex menu).
+# Matched on the selector-to-brace block so a `:focus-visible` selector with an
+# unrelated declaration block (e.g. `:focus-visible::before`, which only ever
+# recolors the pseudo-element) does not trip the rule.
+def focus-visible-rings [] {
+    let file = "server/assets/main.css"
+    let text = (open --raw $file | decode utf-8)
+    $text
+    | parse --regex '(?s)(?<selector>[^{}]+)\{(?<body>[^{}]*)\}'
+    | where {|rule| ($rule.selector | str contains ":focus-visible") and ($rule.body =~ 'outline:\s*none') and ($rule.body !~ 'box-shadow') }
+    | each {|rule|
+        let selector = ($rule.selector | str trim | str replace --all "\n" ' ')
+        let body = ($rule.body | str trim | str replace --all "\n" ' ')
+        $"($file): selector `($selector)`, body `($body)`"
+    }
+}
+
 def offline-brand-name [] {
     $OFFLINE_ASSETS | each {|file|
         open --raw $file
@@ -504,6 +523,12 @@ def rules [] {
             pending: null
             fix: "render a timestamp as `<time datetime=\"{{ x|iso }}\" title=\"{{ x }}\">{{ x }}</time>`; a bare string gives assistive technology no machine-readable instant and cannot take the LC-314 relative-time upgrade. Add `data-lc-ts` on the seven feed-like surfaces (activity, inbox, pins, saved, related, search results, transcripts list) and leave it off the admin audit tables, where the exact stamp is the point (LC-746)"
             check: {|| bare-timestamps }
+        }
+        {
+            id: "focus-visible-rings"
+            pending: null
+            fix: "a `:focus-visible` rule that sets `outline: none` must also set `box-shadow` (the shared `0 0 0 2px var(--ring)` ring); otherwise a keyboard user cannot tell focus from hover or from nothing at all (LC-881)"
+            check: {|| focus-visible-rings }
         }
         {
             id: "offline-page-brand-name"

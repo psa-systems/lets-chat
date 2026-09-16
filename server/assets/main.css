@@ -3236,10 +3236,13 @@ html[data-lc-details="collapsed"] #details-panel { display: none; }
     text-align: left;
     color: var(--content);
 }
-.lc-menu-item:hover,
+.lc-menu-item:hover {
+    background-color: var(--surface-sunken);
+}
 .lc-menu-item:focus-visible {
     background-color: var(--surface-sunken);
     outline: none;
+    box-shadow: 0 0 0 2px var(--ring);
 }
 .lc-menu-item svg {
     width: 1rem;
@@ -4413,7 +4416,7 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-huddle-resize:hover::before,
 .lc-huddle-resize:focus-visible::before,
 .lc-huddle--resizing .lc-huddle-resize::before { background: var(--accent); }
-.lc-huddle-resize:focus-visible { outline: none; }
+.lc-huddle-resize:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
 /* No handle while collapsed (nothing to size) or audio-only (chips do not grow). */
 .lc-huddle--collapsed .lc-huddle-resize,
 .lc-huddle:not(:has([data-media="video"], [data-screen])) .lc-huddle-resize { display: none; }
