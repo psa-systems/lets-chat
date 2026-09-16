@@ -1,5 +1,8 @@
+{# LC-889: mirrors partials/unread_badge.html's row markup (lc-count-pill, not
+   the ad hoc classes this used to carry) so a live badge update never flashes
+   a different pill style than the initial page render. #}
 {% if unread > 0 && mute_mode == "none" %}
-<span id="unread-{{ kind }}-{{ id }}" data-lc-unread hx-swap-oob="outerHTML" class="ml-auto text-xs bg-accent text-accent-content rounded px-2">{{ unread }}</span>
+<span id="unread-{{ kind }}-{{ id }}" data-lc-unread hx-swap-oob="outerHTML" class="lc-count-pill" aria-label="{{ unread }} {{ "home-dash-unread-aria"|t }}">{{ unread }}</span>
 {% else %}
 <span id="unread-{{ kind }}-{{ id }}" data-lc-unread hx-swap-oob="outerHTML"></span>
 {% endif %}

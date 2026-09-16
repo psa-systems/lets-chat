@@ -62,6 +62,7 @@ sidebar-category-add = Añadir
 switcher-nav-label = Enclaves
 switcher-enclave-settings = Ajustes del enclave
 switcher-discover = Descubrir o crear enclaves
+switcher-unread-aria = mensajes sin leer e invitaciones pendientes
 # LC-871: state-specific copy for the single sidebar toggle - the tooltip names
 # what THIS click does in the current state, not both directions at once.
 sidebar-toggle-collapse = Contraer barra lateral
