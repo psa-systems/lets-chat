@@ -176,7 +176,18 @@ async fn build_context(state: &AppState, room: &Room, question: &str) -> Result<
     // sanitizes to nothing (only stop-symbols) just yields no message context;
     // the wiki/description still ground the answer.
     if let Some(fts) = db::chat::fts_query_any(question) {
-        let hits = db::chat::fts_room_context(&state.chat, room.id, &fts, RETRIEVAL_LIMIT).await?;
+        let hits =
+            match db::chat::fts_room_context(&state.chat, room.id, &fts, RETRIEVAL_LIMIT).await {
+                Ok(hits) => hits,
+                Err(e) => {
+                    // A malformed MATCH argument (or any other retrieval failure) means
+                    // "no message context", not a failed answer: the wiki/description
+                    // still ground the reply, and the caller sees a real response
+                    // instead of a 500 from an unmapped AppError.
+                    tracing::warn!(error = %e, room_id = room.id, "fts retrieval failed");
+                    Vec::new()
+                }
+            };
         if !hits.is_empty() {
             let author_ids: Vec<&str> = hits
                 .iter()
