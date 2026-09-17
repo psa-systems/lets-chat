@@ -4,7 +4,8 @@
 //! `call_ring.rs`, so the policy is tested without a WS framing harness.
 
 use lets_chat::routes::test_support::{
-    end_control_on_share_stop, relay_control_signal, REMOTE_CONTROL_ENABLED_KEY,
+    end_control_on_participant_gone, end_control_on_share_stop,
+    end_control_sessions_for_disconnect, relay_control_signal, REMOTE_CONTROL_ENABLED_KEY,
 };
 use lets_chat::state::AppState;
 use lets_chat::ws::events::ChatEvent;
@@ -410,5 +411,177 @@ async fn per_room_disable_blocks_requests_under_the_workspace_switch() {
     assert_eq!(
         control_kinds_to(&drain(&mut alice_rx).await, &s.alice.id),
         vec!["request"]
+    );
+}
+
+// ---- LC-905: teardown race, silent grant refusal, stale pending slot -------
+
+#[tokio::test]
+async fn racing_teardown_paths_close_and_notify_exactly_once() {
+    let s = setup().await;
+    enable(&s).await;
+    let mut alice_rx = join(&s, &s.alice, true);
+    let mut bob_rx = join(&s, &s.bob, false);
+
+    relay_control_signal(&s.state, &s.bob, "Bob", s.room, "request").await;
+    relay_control_signal(&s.state, &s.alice, "Alice", s.room, "grant").await;
+    drain(&mut alice_rx).await;
+    drain(&mut bob_rx).await;
+    assert_eq!(open_session_count(&s.chat, s.room).await, 1);
+
+    // Bob's connection drops: the soft-leave handler and the hard-disconnect
+    // backstop both race to close the same open session row.
+    end_control_on_participant_gone(&s.state, s.room, &s.bob.id).await;
+    end_control_sessions_for_disconnect(&s.state, &s.bob.id).await;
+
+    assert_eq!(open_session_count(&s.chat, s.room).await, 0);
+    // Alice (the counterpart) is told exactly once, not twice - whichever
+    // path actually closed the row is the only one that notifies.
+    assert_eq!(
+        control_kinds_to(&drain(&mut alice_rx).await, &s.alice.id),
+        vec!["revoke"]
+    );
+}
+
+#[tokio::test]
+async fn disconnect_backstop_notifies_counterpart_and_clears_the_room_label() {
+    let s = setup().await;
+    enable(&s).await;
+    let mut alice_rx = join(&s, &s.alice, true);
+    let mut bob_rx = join(&s, &s.bob, false);
+    let mut carol_rx = join(&s, &s.carol, false);
+
+    relay_control_signal(&s.state, &s.bob, "Bob", s.room, "request").await;
+    relay_control_signal(&s.state, &s.alice, "Alice", s.room, "grant").await;
+    drain(&mut alice_rx).await;
+    drain(&mut bob_rx).await;
+    drain(&mut carol_rx).await;
+
+    // Alice's socket hard-drops without ever sending a `revoke`: the
+    // disconnect backstop alone must close the row and tell bob directly.
+    end_control_sessions_for_disconnect(&s.state, &s.alice.id).await;
+
+    assert_eq!(open_session_count(&s.chat, s.room).await, 0);
+    assert_eq!(
+        control_kinds_to(&drain(&mut bob_rx).await, &s.bob.id),
+        vec!["revoke"]
+    );
+    let labels = control_labels(&drain(&mut carol_rx).await);
+    assert!(
+        labels.iter().any(|(_, active)| !*active),
+        "the disconnect backstop clears the room-wide control label too: {labels:?}"
+    );
+}
+
+#[tokio::test]
+async fn grant_refused_by_mutual_block_answers_the_sharer_not_the_requester() {
+    let s = setup().await;
+    enable(&s).await;
+    let mut alice_rx = join(&s, &s.alice, true);
+    let mut bob_rx = join(&s, &s.bob, false);
+
+    relay_control_signal(&s.state, &s.bob, "Bob", s.room, "request").await;
+    drain(&mut alice_rx).await;
+
+    // Bob blocks alice after requesting but before she answers.
+    db::auth::block_user(&s.state.auth, &s.bob.id, &s.alice.id)
+        .await
+        .unwrap();
+
+    relay_control_signal(&s.state, &s.alice, "Alice", s.room, "grant").await;
+    assert_eq!(open_session_count(&s.chat, s.room).await, 0);
+    // The SHARER, who sent the grant and already committed to it locally, is
+    // the one answered - not the requester, who is never told anything here.
+    assert_eq!(
+        control_kinds_to(&drain(&mut alice_rx).await, &s.alice.id),
+        vec!["unavailable"]
+    );
+    assert!(control_kinds_to(&drain(&mut bob_rx).await, &s.bob.id).is_empty());
+}
+
+#[tokio::test]
+async fn grant_with_no_pending_request_answers_the_sharer_instead_of_silence() {
+    let s = setup().await;
+    enable(&s).await;
+    let mut alice_rx = join(&s, &s.alice, true);
+
+    relay_control_signal(&s.state, &s.alice, "Alice", s.room, "grant").await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut alice_rx).await, &s.alice.id),
+        vec!["unavailable"]
+    );
+    assert_eq!(open_session_count(&s.chat, s.room).await, 0);
+}
+
+#[tokio::test]
+async fn share_stop_releases_pending_slot_for_its_own_sharer_and_answers_requester() {
+    let s = setup().await;
+    enable(&s).await;
+    let mut alice_rx = join(&s, &s.alice, true);
+    let mut bob_rx = join(&s, &s.bob, false);
+    let mut carol_rx = join(&s, &s.carol, false);
+    let _dave_rx = join(&s, &s.outsider, false);
+
+    // Bob requests while alice is the sole sharer: the pending slot is aimed
+    // at alice specifically.
+    relay_control_signal(&s.state, &s.bob, "Bob", s.room, "request").await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut alice_rx).await, &s.alice.id),
+        vec!["request"]
+    );
+
+    // Carol starts sharing too: two sharers now, bob's request still pending
+    // against alice alone.
+    s.hub.set_voice_screen(s.room, &s.carol.id, true);
+
+    // Alice stops sharing: the slot named her, so it releases even though
+    // carol still shares - and bob is answered instead of left on his timer.
+    s.hub.set_voice_screen(s.room, &s.alice.id, false);
+    end_control_on_share_stop(&s.state, s.room, &s.alice.id).await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut bob_rx).await, &s.bob.id),
+        vec!["unavailable"],
+        "the stranded requester is answered instead of timing out"
+    );
+
+    // Dave now requests carol's screen, the sole remaining sharer: accepted,
+    // not refused busy by the stale slot.
+    relay_control_signal(&s.state, &s.outsider, "Dave", s.room, "request").await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut carol_rx).await, &s.carol.id),
+        vec!["request"],
+        "the released slot must not block a later, answerable request"
+    );
+}
+
+#[tokio::test]
+async fn share_stop_does_not_release_a_pending_slot_aimed_at_another_sharer() {
+    let s = setup().await;
+    enable(&s).await;
+    let mut alice_rx = join(&s, &s.alice, true);
+    let mut bob_rx = join(&s, &s.bob, false);
+    let mut carol_rx = join(&s, &s.carol, false);
+
+    // Bob requests while alice is the sole sharer: pending aimed at alice.
+    relay_control_signal(&s.state, &s.bob, "Bob", s.room, "request").await;
+    drain(&mut alice_rx).await;
+
+    // Carol starts sharing, then stops again: unrelated to bob's pending
+    // request, which must survive her share stop.
+    s.hub.set_voice_screen(s.room, &s.carol.id, true);
+    s.hub.set_voice_screen(s.room, &s.carol.id, false);
+    end_control_on_share_stop(&s.state, s.room, &s.carol.id).await;
+    assert!(
+        control_kinds_to(&drain(&mut bob_rx).await, &s.bob.id).is_empty(),
+        "carol's unrelated share stop must not answer bob's still-live request"
+    );
+
+    // Alice is again the sole sharer, and the slot is still held: a fresh
+    // request from carol is refused busy rather than routed as a fresh prompt.
+    relay_control_signal(&s.state, &s.carol, "Carol", s.room, "request").await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut carol_rx).await, &s.carol.id),
+        vec!["busy"],
+        "bob's pending request aimed at alice must survive carol's unrelated share stop"
     );
 }

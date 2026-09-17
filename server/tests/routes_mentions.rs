@@ -411,15 +411,6 @@ async fn send_message_with_mention_inserts_row() {
     assert_eq!(n, 1, "expected one mention row for alice");
 }
 
-/// Yields a few times so the fan-out's spawned push/email tasks land before
-/// assertions run.
-async fn drain_spawns() {
-    for _ in 0..10 {
-        tokio::task::yield_now().await;
-    }
-    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-}
-
 // LC-903: when the mentioning author is blocked by (or has blocked) the
 // mentioned user, fanout_mention_events must drop that recipient before the
 // push dispatch, mirroring the silence the room timeline already gives them.
@@ -448,7 +439,10 @@ async fn mention_from_blocked_author_sends_no_push() {
     // The blocked user (alice) @-mentions the blocker (viewer).
     let status = post_message(&t.app, &t.peer_session, 1, "@viewer hi").await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    drain_spawns().await;
+    // Negative assertion: no positive control effect to poll on in this
+    // test, so this is a bounded settle window, not a deadline poll. See
+    // common::settle.
+    common::settle().await;
 
     assert!(
         t.push_mock.sent.lock().await.is_empty(),
@@ -477,7 +471,10 @@ async fn mention_without_block_sends_push() {
 
     let status = post_message(&t.app, &t.peer_session, 1, "@viewer hi").await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    drain_spawns().await;
+    common::eventually("push dispatched for unblocked mention", || async {
+        t.push_mock.sent.lock().await.len() == 1
+    })
+    .await;
 
     assert_eq!(
         t.push_mock.sent.lock().await.len(),
