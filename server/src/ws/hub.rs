@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -122,6 +122,11 @@ pub struct Hub {
     /// clip capture, since the agent already transcribes every track (without it
     /// the browser and the agent both run whisper on the same speaker).
     transcript_agents: DashMap<i64, i64>,
+    /// LC-928: transcript_id -> (user_id -> resolved display label), scoped to
+    /// one call session so a speaker's label is looked up at most once per
+    /// session instead of once per live caption. Cleared when the session
+    /// finalizes (mirrors `transcript_agents`'s lifetime).
+    speaker_labels: DashMap<i64, HashMap<String, String>>,
 }
 
 /// LC-853: one pending huddle control request (see `Hub::control_pending`).
@@ -172,6 +177,7 @@ impl Hub {
             voice_screens: DashMap::new(),
             control_pending: DashMap::new(),
             transcript_agents: DashMap::new(),
+            speaker_labels: DashMap::new(),
         }
     }
 
@@ -367,6 +373,28 @@ impl Hub {
     /// use it to suppress their own per-client capture (the agent covers them).
     pub fn transcript_agent_active(&self, room_id: i64) -> bool {
         self.transcript_agents.contains_key(&room_id)
+    }
+
+    /// The cached display label for `user_id` in call session `transcript_id`,
+    /// if this session has already resolved one.
+    pub fn cached_speaker_label(&self, transcript_id: i64, user_id: &str) -> Option<String> {
+        self.speaker_labels
+            .get(&transcript_id)
+            .and_then(|labels| labels.get(user_id).cloned())
+    }
+
+    /// Cache `label` as `user_id`'s resolved display label for the rest of
+    /// call session `transcript_id`.
+    pub fn cache_speaker_label(&self, transcript_id: i64, user_id: &str, label: String) {
+        self.speaker_labels
+            .entry(transcript_id)
+            .or_default()
+            .insert(user_id.to_string(), label);
+    }
+
+    /// Drop the cached speaker labels for `transcript_id` (on session finalize).
+    pub fn clear_speaker_labels(&self, transcript_id: i64) {
+        self.speaker_labels.remove(&transcript_id);
     }
 
     /// Claim the room's pending-request slot for `requester_id`, aimed at
