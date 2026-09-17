@@ -256,6 +256,95 @@ async fn purge_user_chat(chat: &SqlitePool, user_id: &str) -> Result<(), AppErro
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
+    // LC-908: the remaining user-scoped tables the original enumeration
+    // missed. See `chat_user_columns_are_purged_or_allowlisted` in
+    // `tests/routes_account_delete.rs` for the schema-walking guard that
+    // keeps this list complete as new tables are added.
+    sqlx::query("DELETE FROM poll_votes WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM saved_searches WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM thread_followers WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM thread_muters WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM kudos WHERE giver_id = ? OR receiver_id = ?")
+        .bind(user_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM message_acks WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM canned_responses WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM room_role_overrides WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    // A grant issued by this user against a room they no longer belong to
+    // (or never belonged to) stays as a row; only the issuer reference is
+    // cleared, matching the mod_actions actor-preservation convention but
+    // without leaving a dangling user id an admin UI could render.
+    sqlx::query("UPDATE room_role_overrides SET assigned_by = '' WHERE assigned_by = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM room_nicknames WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM user_group_members WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM message_reports WHERE reporter_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE message_reports SET handled_by = NULL WHERE handled_by = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    // Deleting the followups row cascades to its followup_items (FK on
+    // followup_items.message_id ON DELETE CASCADE); this only covers lists
+    // the user created. Items they self-claimed or checked off in someone
+    // else's list are cleared separately below.
+    sqlx::query("DELETE FROM followups WHERE created_by = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE followup_items SET assignee_id = NULL WHERE assignee_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE followup_items SET done_by = NULL WHERE done_by = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM user_storage_quotas WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM message_tag_overrides WHERE actor_user = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM enclave_last_room WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
     tx.commit().await?;
     Ok(())
 }

@@ -329,6 +329,10 @@
         break;
       case 'unavailable':
         if (phase === 'requesting') endControlling(str('callControlUnavailable', 'Remote control is not available in this call'));
+        // LC-905: the sharer's own grant was refused server-side (e.g. the
+        // requester and sharer now block each other) after the optimistic
+        // grant already armed the injector and showed the banner - undo it.
+        if (grantedTo) endGrant(str('huddleControlRefused', 'Control could not be granted'));
         break;
       case 'revoke':
         // Either role: the sharer ended our control, or our controller (or
@@ -373,6 +377,11 @@
         announce('');
       } else {
         if (uid === grantedTo) endGrant(str('huddleControlEnded', 'Control ended'));
+        // LC-905: mirrors the grantedTo line above for the controller side -
+        // the sharer we control left without sending a revoke (hard drop),
+        // so end our own controlling role rather than waiting on a server
+        // frame that a dropped socket never sends.
+        if (uid === controllingSharer) endControlling(str('huddleControlEnded', 'Control ended'));
         // LC-855: the pending requester left before we answered - dismiss the
         // sharer's prompt so it does not linger naming someone who is gone.
         if (uid === pendingFrom) hidePrompt();
