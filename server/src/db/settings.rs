@@ -45,3 +45,34 @@ pub async fn get_all_settings(pool: &SqlitePool) -> Result<Vec<(String, String)>
         .map(|r| (r.get("key"), r.get("value")))
         .collect())
 }
+
+/// LC-927: settings key used as a single-flight lock so the admin-forced
+/// reindex and the scheduled tick can never run `help_docs::reindex_all_inner`
+/// at the same time (they would otherwise interleave `delete_by_source` /
+/// `upsert` writes and race the source-prune "not visited this run" set).
+const REINDEX_LOCK_KEY: &str = "help_docs_reindex_lock";
+
+/// Try to acquire the reindex single-flight lock. Returns `true` if this
+/// caller now holds it (the caller must call [`release_reindex_lock`] on
+/// every exit path once it is done), `false` if another run already holds it.
+/// The `INSERT ... ON CONFLICT DO NOTHING` is atomic under SQLite's
+/// single-writer semantics, so two overlapping callers can never both win.
+pub async fn try_acquire_reindex_lock(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
+    let res = sqlx::query(
+        "INSERT INTO settings (key, value) VALUES (?, '1') ON CONFLICT(key) DO NOTHING",
+    )
+    .bind(REINDEX_LOCK_KEY)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() == 1)
+}
+
+/// Release the reindex single-flight lock. Idempotent: safe to call even when
+/// the lock is not currently held.
+pub async fn release_reindex_lock(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM settings WHERE key = ?")
+        .bind(REINDEX_LOCK_KEY)
+        .execute(pool)
+        .await?;
+    Ok(())
+}

@@ -372,7 +372,7 @@ pub struct IndexReport {
 /// sources are set. Writes a human-readable status line to
 /// [`HELP_DOCS_STATUS_KEY`] and returns the report.
 pub async fn reindex_all(state: &AppState, force: bool) -> Result<IndexReport, AppError> {
-    reindex_all_inner(state, force, None).await
+    reindex_all_guarded(state, force, None).await
 }
 
 /// Test seam: an index run that uses the caller's `reqwest::Client` directly for
@@ -385,7 +385,29 @@ pub async fn reindex_all_unchecked(
     force: bool,
     client: &reqwest::Client,
 ) -> Result<IndexReport, AppError> {
-    reindex_all_inner(state, force, Some(client)).await
+    reindex_all_guarded(state, force, Some(client)).await
+}
+
+/// LC-927: single-flight guard around [`reindex_all_inner`]. The admin-forced
+/// reindex (`routes::admin::post_help_docs_reindex`) and the scheduled tick
+/// (`run_refresh_tick`) both funnel through here; without it, two overlapping
+/// runs could interleave `delete_by_source`/`upsert` writes and race the
+/// source-prune "not visited this run" computation. A second call made while
+/// one is in flight is rejected outright (a no-op default report) rather than
+/// queued: a queued second run would have no benefit over the first
+/// completing.
+async fn reindex_all_guarded(
+    state: &AppState,
+    force: bool,
+    test_client: Option<&reqwest::Client>,
+) -> Result<IndexReport, AppError> {
+    if !db::settings::try_acquire_reindex_lock(&state.settings).await? {
+        set_status(state, "Skipped: a reindex is already running.").await;
+        return Ok(IndexReport::default());
+    }
+    let result = reindex_all_inner(state, force, test_client).await;
+    db::settings::release_reindex_lock(&state.settings).await?;
+    result
 }
 
 async fn reindex_all_inner(
