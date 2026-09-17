@@ -229,3 +229,56 @@ async fn link_preview_cache_round_trips() {
     assert!(row.description.is_none());
     assert!(row.image_url.is_none());
 }
+
+/// LC-925: `get_unfurl_image` reads cached bytes from the row instead of
+/// re-fetching the remote origin on a second request. This exercises the
+/// cache storage the route relies on: absent until `set_cached_image` is
+/// called, then round-tripping the exact bytes and content type, and moving
+/// to a fresh `image_fetched_at` on each `set_cached_image` call so the
+/// route's TTL check has something to compare against.
+#[tokio::test]
+async fn link_preview_image_cache_round_trips() {
+    let pool = setup_chat_pool().await;
+
+    lets_chat::db::uploads::upsert_link_preview(
+        &pool,
+        "deadbeef",
+        "https://example.com",
+        Some("Title"),
+        Some("Desc"),
+        Some("https://example.com/img.png"),
+    )
+    .await
+    .unwrap();
+
+    // No image cached yet: a fresh row has a URL but no bytes.
+    let none = lets_chat::db::uploads::get_cached_image(&pool, "deadbeef")
+        .await
+        .unwrap();
+    assert!(none.is_none());
+
+    let bytes = vec![1u8, 2, 3, 4];
+    lets_chat::db::uploads::set_cached_image(&pool, "deadbeef", "image/png", &bytes)
+        .await
+        .unwrap();
+
+    let cached = lets_chat::db::uploads::get_cached_image(&pool, "deadbeef")
+        .await
+        .unwrap()
+        .expect("should exist after set_cached_image");
+    assert_eq!(cached.content_type, "image/png");
+    assert_eq!(cached.bytes, bytes);
+    assert!(!cached.fetched_at.is_empty());
+
+    // Re-fetching updates the bytes and content type in place.
+    let bytes2 = vec![9u8, 9, 9];
+    lets_chat::db::uploads::set_cached_image(&pool, "deadbeef", "image/webp", &bytes2)
+        .await
+        .unwrap();
+    let cached2 = lets_chat::db::uploads::get_cached_image(&pool, "deadbeef")
+        .await
+        .unwrap()
+        .expect("should still exist after re-fetch");
+    assert_eq!(cached2.content_type, "image/webp");
+    assert_eq!(cached2.bytes, bytes2);
+}

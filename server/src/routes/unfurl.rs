@@ -2,7 +2,7 @@
 use crate::i18n::filters; // LC-188: in-scope for the |t/|tn template filters.
 use askama::Template;
 use axum::extract::{Path, Query, State};
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
@@ -213,10 +213,17 @@ pub async fn get_unfurl(
 /// row for this hash (a URL the unfurler already fetched and sanitized), not an
 /// arbitrary caller-supplied URL. Any failure is a 404, never a 5xx, so a dead
 /// thumbnail reads as "no image" (and the template's onerror hides the box).
+///
+/// LC-925: the fetched, sniffed bytes are cached on the row itself (keyed by
+/// this same `url_hash`) so a second request within `PREVIEW_TTL_SECS`, from
+/// any viewer, is served from the DB instead of re-fetching the remote
+/// origin. `ETag: "<url_hash>"` lets a client's own revalidation short-circuit
+/// to a 304 before either the cache or the remote fetch is touched.
 pub async fn get_unfurl_image(
     State(state): State<AppState>,
     AuthUser(_user): AuthUser,
     Path(url_hash): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Response, AppError> {
     if !is_valid_hash(&url_hash) {
         return Err(AppError::NotFound);
@@ -234,19 +241,34 @@ pub async fn get_unfurl_image(
     }) else {
         return Err(AppError::NotFound);
     };
-    let Some((content_type, bytes)) = fetch_image(&image_url).await else {
-        return Err(AppError::NotFound);
+
+    let etag = format!("\"{url_hash}\"");
+    if if_none_match(&headers, &etag) {
+        return Ok(not_modified(&etag));
+    }
+
+    let (content_type, bytes) = match db::uploads::get_cached_image(&state.chat, &url_hash).await? {
+        Some(cached) if !is_expired(&cached.fetched_at) => (cached.content_type, cached.bytes),
+        _ => {
+            let Some((content_type, bytes)) = fetch_image(&image_url).await else {
+                return Err(AppError::NotFound);
+            };
+            db::uploads::set_cached_image(&state.chat, &url_hash, content_type, &bytes).await?;
+            (content_type.to_string(), bytes)
+        }
     };
+
     Ok((
         StatusCode::OK,
         [
-            (header::CONTENT_TYPE, content_type.to_string()),
+            (header::CONTENT_TYPE, content_type),
             // Match the preview row's 24h TTL. Private: it is per-viewer
             // AuthUser-gated content, so it must not sit in a shared cache.
             (
                 header::CACHE_CONTROL,
                 format!("private, max-age={PREVIEW_TTL_SECS}"),
             ),
+            (header::ETAG, etag),
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
             // LC-904: belt-and-suspenders alongside the sniffed-and-allowlisted
             // Content-Type; even a browser that mis-handles the type header
@@ -259,6 +281,34 @@ pub async fn get_unfurl_image(
         bytes,
     )
         .into_response())
+}
+
+/// True when one of the client's `If-None-Match` tags equals `etag`, or the
+/// wildcard `*`. Mirrors `routes::avatar::if_none_match`.
+fn if_none_match(headers: &HeaderMap, etag: &str) -> bool {
+    headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| {
+            v.split(',').any(|t| {
+                let t = t.trim();
+                t == etag || t == "*"
+            })
+        })
+}
+
+fn not_modified(etag: &str) -> Response {
+    (
+        StatusCode::NOT_MODIFIED,
+        [
+            (
+                header::CACHE_CONTROL,
+                format!("private, max-age={PREVIEW_TTL_SECS}"),
+            ),
+            (header::ETAG, etag.to_string()),
+        ],
+    )
+        .into_response()
 }
 
 /// LC-857: fetch a remote image through the SSRF-guarded client, following
@@ -504,6 +554,24 @@ mod tests {
     #[test]
     fn unrecognized_bytes_are_refused() {
         assert_eq!(sniff_served_content_type(b"not an image at all"), None);
+    }
+
+    #[test]
+    fn conditional_get_matches_etag_or_wildcard() {
+        let etag = "\"deadbeef\"";
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag.parse().unwrap());
+        assert!(if_none_match(&headers, etag));
+
+        let mut wildcard = axum::http::HeaderMap::new();
+        wildcard.insert(header::IF_NONE_MATCH, "*".parse().unwrap());
+        assert!(if_none_match(&wildcard, etag));
+
+        let mut mismatched = axum::http::HeaderMap::new();
+        mismatched.insert(header::IF_NONE_MATCH, "\"other\"".parse().unwrap());
+        assert!(!if_none_match(&mismatched, etag));
+
+        assert!(!if_none_match(&axum::http::HeaderMap::new(), etag));
     }
 
     #[test]
