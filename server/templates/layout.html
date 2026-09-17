@@ -1919,3 +1919,19 @@ if (window.__lcSyncSidebarToggles) {
 })();
 </script>
 {% endblock %}
+
+{# LC-929: the signed-in shell is the only surface that can start or join a
+   call/huddle, so it's the only base.html extender that fills in the
+   call/voice/huddle bundle base.html leaves empty. #}
+{% block call_bundle %}
+  <script src="/assets/call.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/voice.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/huddle_control.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/huddle_popout.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/call_reactions.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/huddle_sfu.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/stage.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/huddle_ring.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/stage_media.js?v={{ asset_version }}" defer></script>
+  <script src="/assets/transcribe.js?v={{ asset_version }}" defer></script>
+{% endblock %}
