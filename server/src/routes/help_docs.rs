@@ -517,7 +517,8 @@ async fn index_page(
     }
     let hash = page_hash(&page.sections);
     if !force {
-        if let Ok(Some(existing)) = db::doc_chunks::source_content_hash(&state.chat, page_url).await
+        if let Ok(Some(existing)) =
+            db::doc_chunks::source_content_hash(&state.chat, page_url, client.model_name()).await
         {
             if existing == hash {
                 return Ok(PageOutcome::Unchanged);
@@ -552,6 +553,7 @@ async fn index_page(
             i as i64,
             &body,
             &hash,
+            client.model_name(),
             dim,
             &vec,
         )
@@ -746,11 +748,28 @@ pub async fn build_support_answer(
         };
     }
 
+    let mut mismatched = 0usize;
     let mut scored: Vec<(f32, db::doc_chunks::DocChunk)> = chunks
         .into_iter()
-        .map(|c| (embeddings::cosine_similarity(&query_vec, &c.vec), c))
+        .filter_map(|c| {
+            if c.vec.len() != query_vec.len() {
+                mismatched += 1;
+                return None;
+            }
+            Some((embeddings::cosine_similarity(&query_vec, &c.vec), c))
+        })
         .filter(|(s, _)| *s >= MIN_SIMILARITY)
         .collect();
+    if mismatched > 0 {
+        // LC-911: a stale (pre-model-swap) chunk vector cannot be compared to
+        // the current query vector; cosine_similarity would score it 0.0 and it
+        // would be silently dropped below the relevance floor with no signal,
+        // which is exactly the "I couldn't find anything, forever" failure mode.
+        tracing::warn!(
+            count = mismatched,
+            "support docs ranking dropped chunks: dimension mismatch, likely a stale embedding model"
+        );
+    }
     scored.sort_by(|a, b| b.0.total_cmp(&a.0));
     scored.truncate(TOP_K);
 

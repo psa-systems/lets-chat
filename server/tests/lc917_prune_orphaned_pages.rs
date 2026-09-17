@@ -244,6 +244,7 @@ async fn page_with_no_sections_is_pruned_and_counted_as_an_error() {
         0,
         "old content",
         "oldhash",
+        embeddings::EmbeddingClient::model_name(&mock),
         vec.len() as i64,
         &embeddings::vec_to_bytes(&vec),
     )

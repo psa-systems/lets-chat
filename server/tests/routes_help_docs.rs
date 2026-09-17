@@ -73,6 +73,7 @@ async fn seed_chunk(
         0,
         body,
         "hash0",
+        client.model_name(),
         vec.len() as i64,
         &bytes,
     )
@@ -240,6 +241,123 @@ async fn support_answer_flags_unconfigured_knowledge_base_role_aware() {
     assert!(
         admin_body.contains("no documentation configured"),
         "explains the empty knowledge base to the admin, got: {admin_body}"
+    );
+}
+
+// LC-911: a chunk embedded at one dimension (a stale vector left behind by a
+// prior embedding model) cannot be compared to a query embedded at another
+// (the current model). Before this fix `cosine_similarity` silently scored
+// the pair `0.0` and it vanished below the relevance floor with no signal, so
+// an operator model swap looked identical to "nothing in the docs" forever.
+// Assert the ranking site now logs a single mismatch warning for the scan
+// (not a silent drop) and still answers honestly rather than crashing.
+#[tokio::test(flavor = "current_thread")]
+async fn support_answer_logs_a_dimension_mismatch_instead_of_silently_dropping() {
+    let state = state_with_embeddings().await;
+    // Seed a chunk at a different dimension than `state`'s query-time embedder
+    // (64-dim `MockEmbeddingClient::default()`) will use, simulating a stale
+    // pre-model-swap vector.
+    let stale_client = MockEmbeddingClient {
+        dim: 32,
+        model: "old-model".to_string(),
+    };
+    let vec = stale_client
+        .embed("Database\nSet DATABASE_URL to configure the postgres connection string.")
+        .await
+        .unwrap();
+    let bytes = embeddings::vec_to_bytes(&vec);
+    db::doc_chunks::upsert(
+        &state.chat,
+        "mokosh-server",
+        "https://a8n.systems/apps/mokosh-server/docs/configuration",
+        "Configuration",
+        "Database",
+        0,
+        "Set DATABASE_URL to configure the postgres connection string.",
+        "hash0",
+        stale_client.model_name(),
+        vec.len() as i64,
+        &bytes,
+    )
+    .await
+    .unwrap();
+
+    let capture = common::CapturingSubscriber::default();
+    let events = capture.events.clone();
+    let llm = MockLlmClient {
+        canned: "This should never be shown.".into(),
+    };
+    let body = {
+        let _guard = tracing::subscriber::set_default(capture);
+        lets_chat::routes::help_docs::build_support_answer(
+            &state,
+            "how do I configure the postgres database connection?",
+            "> alice: how do I configure the postgres database connection?",
+            false,
+            &llm,
+        )
+        .await
+    };
+
+    assert!(
+        body.contains("couldn't find anything about that in the product documentation"),
+        "a dimension-mismatched chunk cannot be ranked, so retrieval is honestly empty, got: {body}"
+    );
+    let logged = events.lock().unwrap();
+    assert!(
+        logged
+            .iter()
+            .any(|e| e.contains("dimension mismatch") && e.contains("count=1")),
+        "expected one warn log naming the mismatch count, got: {logged:?}"
+    );
+}
+
+// LC-911: `source_content_hash` is the exact mechanism `index_page` consults
+// to decide whether a page's content is "unchanged" and can be skipped
+// without re-embedding. It now takes the configured model name as a second
+// cache key, so a stored chunk from a retired model must not satisfy a lookup
+// for the newly configured model even though the page's text (and therefore
+// its content hash) has not changed - the docs indexer's unchanged-skip must
+// stop firing and the page must be treated as work to do, exactly what drives
+// `index_page`'s `Unchanged` vs. re-embed branch on every full reindex.
+#[tokio::test]
+async fn content_hash_skip_stops_firing_after_a_model_change() {
+    let state = state_with_embeddings().await;
+    let url = "https://a8n.systems/apps/mokosh-server/docs/configuration";
+    seed_chunk(
+        &state,
+        "mokosh-server",
+        url,
+        "Configuration",
+        "Database",
+        "Set DATABASE_URL to configure the postgres database connection string.",
+    )
+    .await;
+
+    let hash = db::doc_chunks::source_content_hash(&state.chat, url, "mock-model")
+        .await
+        .unwrap()
+        .expect("chunk indexed under the configured model");
+
+    // Same model, same text: the skip fires (reindex would report Unchanged).
+    assert_eq!(
+        db::doc_chunks::source_content_hash(&state.chat, url, "mock-model")
+            .await
+            .unwrap(),
+        Some(hash),
+        "unchanged content under the same model is still skippable"
+    );
+
+    // The operator swaps the configured model. The stored row's `model` no
+    // longer matches, so the lookup must miss - the docs indexer's
+    // unchanged-skip stops firing and the page is re-embedded on the next
+    // full reindex, even though its text never changed.
+    assert_eq!(
+        db::doc_chunks::source_content_hash(&state.chat, url, "new-model")
+            .await
+            .unwrap(),
+        None,
+        "a model change must make the content-hash skip miss and force a re-embed"
     );
 }
 
