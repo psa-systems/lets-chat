@@ -264,18 +264,23 @@ async fn bubble_enabled(state: &AppState, user: &User) -> bool {
         && ai_gate::allowed_workspace(state, user).await
 }
 
-/// `GET /support/bubble` - the launcher + panel markup, loaded once per page by a
-/// tiny `hx-get` slot in the layout. Returns empty when the assistant is not
-/// usable for the viewer, so the bubble self-gates without threading a flag
-/// through every page's template context.
-async fn get_bubble(
-    State(state): State<AppState>,
-    AuthUser(user): AuthUser,
-) -> Result<Html, AppError> {
-    if !bubble_enabled(&state, &user).await {
-        return Ok(Html(String::new()));
+/// LC-926: the launcher + panel markup for `user`, or an empty string when the
+/// assistant is not usable for them. Shared by the `GET /support/bubble`
+/// fragment endpoint and `inject_branding_css` (routes/branding.rs), which
+/// splices this into `#lc-support-slot` on every full-page response so first
+/// paint needs no separate round trip.
+pub(crate) async fn bubble_html(state: &AppState, user: &User) -> String {
+    if !bubble_enabled(state, user).await {
+        return String::new();
     }
-    html(&BubbleView)
+    crate::views::render_template(&BubbleView).unwrap_or_default()
+}
+
+/// `GET /support/bubble` - the launcher + panel markup. Nothing fetches this on
+/// load anymore (LC-926 inlines it server-side instead), kept as a direct
+/// fragment endpoint.
+async fn get_bubble(State(state): State<AppState>, AuthUser(user): AuthUser) -> Html {
+    Html(bubble_html(&state, &user).await)
 }
 
 /// Build the compact thread view for the viewer's support DM: participant-only

@@ -95,6 +95,65 @@ async fn bubble_is_empty_when_ai_disabled() {
     );
 }
 
+/// LC-926: a full page load must inline the bubble's initial markup itself, so
+/// the browser never has to fire a follow-up `GET /support/bubble` for first
+/// paint. `#lc-support-slot` no longer carries `hx-get`/`hx-trigger` at all.
+#[tokio::test]
+async fn home_page_inlines_the_bubble_with_no_hx_get() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+    let (_uid, session) = member_session(&auth).await;
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
+    let app: Router = routes::build_router(state(auth, chat, settings, true));
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let page = body_string(res).await;
+    assert!(
+        !page.contains("hx-get=\"/support/bubble\""),
+        "the slot must not fetch itself on load anymore, got: {page}"
+    );
+    assert!(
+        page.contains("lc-support-launcher") && page.contains("id=\"lc-support-slot\">"),
+        "the launcher markup must be inlined into the slot at first paint, got: {page}"
+    );
+}
+
+/// LC-926: when the assistant is not usable for the viewer, the inlined slot
+/// stays empty rather than rendering broken/self-gated markup.
+#[tokio::test]
+async fn home_page_leaves_the_slot_empty_when_ai_disabled() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+    let (_uid, session) = member_session(&auth).await;
+    // AI configured but the runtime flag is OFF, mirroring bubble_is_empty_when_ai_disabled.
+    let app: Router = routes::build_router(state(auth, chat, settings, true));
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let page = body_string(res).await;
+    assert!(
+        page.contains("id=\"lc-support-slot\"></div>"),
+        "the slot must stay empty when the assistant is disabled, got: {page}"
+    );
+}
+
 #[tokio::test]
 async fn bubble_renders_and_send_drives_support() {
     let auth = common::pool("auth").await;
