@@ -323,6 +323,7 @@ async fn record_and_broadcast(
 /// its own "not configured" ordering, and the caller builds the
 /// [`crate::stt::SttRequest`] (it owns the clip bytes + the language hint, which
 /// differ by path). Design notes: LC-810.
+#[allow(clippy::too_many_arguments)]
 async fn ingest_clip(
     state: &AppState,
     room: &Room,
@@ -331,6 +332,7 @@ async fn ingest_clip(
     stt: &dyn crate::stt::SttClient,
     req: crate::stt::SttRequest,
     origin: Origin,
+    fallback_duration_ms: Option<i64>,
 ) -> Result<(), AppError> {
     // LC-592: live captions are the heaviest producer (one clip per 5 seconds
     // per speaker), so they are rate-limited alongside stored attachments.
@@ -360,14 +362,24 @@ async fn ingest_clip(
         }
     };
     // LC-591: store the real spoken length from the engine's segment timings so
-    // the WebVTT export can use it instead of a synthetic cue duration.
+    // the WebVTT export can use it instead of a synthetic cue duration. LC-921:
+    // the engine measures speech, so it wins whenever it has a timing; the
+    // caller's fallback (the agent's own wall-clock clip duration) only covers
+    // engines that return no segments, since it also carries leading/trailing
+    // silence the engine's timings would have excluded.
+    let engine_duration_ms = result.duration_ms();
+    let duration_ms = if engine_duration_ms > 0 {
+        engine_duration_ms
+    } else {
+        fallback_duration_ms.unwrap_or(0)
+    };
     record_and_broadcast(
         state,
         room,
         transcript_id,
         speaker,
         &result.text,
-        result.duration_ms(),
+        duration_ms,
         origin,
     )
     .await
@@ -484,13 +496,13 @@ pub async fn start(
 ) -> Result<Json<Value>, AppError> {
     let room = fetch_call_room(&state, room_id).await?;
     require_participant(&state, &user, &room).await?;
-    // LC-814: dispatch the agent only when THIS call opens a NEW session, not
-    // when a later joiner re-hits start (which returns the already-open one), so
-    // the SFU room gets exactly one agent.
-    let is_new_session = db::transcripts::open_session_for_room(&state.chat, room_id)
-        .await?
-        .is_none();
-    let session = db::transcripts::start_session(&state.chat, room_id, &user.id).await?;
+    // LC-814 / LC-914: dispatch the agent only when THIS call opens a NEW
+    // session, not when a later joiner re-hits start (which joins the
+    // already-open one). `start_session` reports this from the same insert
+    // that opened (or found) the session, rather than a separate read that
+    // races two concurrent starts into both seeing "no session yet".
+    let (session, is_new_session) =
+        db::transcripts::start_session(&state.chat, room_id, &user.id).await?;
     let by = label_for(&state, &user.id).await;
     let tid = session.id;
     broadcast_to_members(&state, &room, |to| ChatEvent::TranscriptStarted {
@@ -626,6 +638,7 @@ pub async fn audio(
         stt.as_ref(),
         req,
         Origin::Browser,
+        None,
     )
     .await?;
     Ok(Html(String::new()))
@@ -694,6 +707,19 @@ pub async fn agent_clip(
         .map(str::trim)
         .filter(|s| !s.is_empty());
     let language = x_language.or(speaker.locale.as_deref());
+    // LC-921: the agent measures each clip's real wall-clock duration sample by
+    // sample and sends it as X-Duration-Secs. That is a fallback under the
+    // engine's own segment timings (see `ingest_clip`), not a replacement,
+    // because it includes leading/trailing silence the engine's timings would
+    // have excluded. Anything that does not parse as a finite, positive number
+    // of seconds is dropped rather than failing the request.
+    let fallback_duration_ms = headers
+        .get("x-duration-secs")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|secs| secs.is_finite() && *secs > 0.0)
+        .map(|secs| (secs * 1000.0).round() as i64);
     let req = crate::stt::SttRequest::new(body.to_vec(), content_type)
         .with_language(language)
         .with_timeout_secs(crate::stt::LIVE_CLIP_TIMEOUT_SECS);
@@ -706,6 +732,7 @@ pub async fn agent_clip(
         stt.as_ref(),
         req,
         Origin::Agent,
+        fallback_duration_ms,
     )
     .await?;
     Ok(Html(String::new()))
@@ -750,15 +777,23 @@ async fn finalize(state: &AppState, room: &Room, transcript_id: i64) {
     }
 }
 
-/// LC-393 Phase 2 backstop: when a voice channel empties, finalize any session
-/// still open for it (save + post the notice) - the equivalent of the per-user
-/// disconnect backstop for the shared-channel case.
+/// LC-393 Phase 2 backstop: when a voice channel empties, finalize every
+/// session still open for it (save + post the notice) - the equivalent of the
+/// per-user disconnect backstop for the shared-channel case. LC-914: loops
+/// over every active row rather than only the newest, so a pre-migration
+/// duplicate (or any other path that left more than one active row) is fully
+/// closed out instead of leaving a stale one behind.
 pub async fn finalize_open_for_room(state: &AppState, room_id: i64) {
-    let Ok(Some(session)) = db::transcripts::open_session_for_room(&state.chat, room_id).await
-    else {
+    let Ok(sessions) = db::transcripts::open_sessions_for_room(&state.chat, room_id).await else {
         return;
     };
-    if let Ok(room) = fetch_call_room(state, room_id).await {
+    if sessions.is_empty() {
+        return;
+    }
+    let Ok(room) = fetch_call_room(state, room_id).await else {
+        return;
+    };
+    for session in sessions {
         finalize(state, &room, session.id).await;
     }
 }
@@ -1612,5 +1647,119 @@ mod echo_tests {
             &v(&["let us ship the fix today"])
         ));
         assert!(!is_echo_of("let us ship the fix today", &[]));
+    }
+}
+
+/// LC-914: `finalize_open_for_room` is a private route-layer fn (called from
+/// `ws.rs`'s room-empty backstop), so it is exercised here directly rather
+/// than through the full HTTP + WS stack an external integration test would
+/// need to simulate a voice channel emptying.
+#[cfg(test)]
+mod finalize_open_for_room_tests {
+    use super::*;
+    use crate::ws::hub::Hub;
+    use sqlx::SqlitePool;
+    use std::sync::Arc;
+
+    async fn chat_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/chat")
+            .run(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    async fn test_state() -> AppState {
+        let auth = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/auth")
+            .run(&auth)
+            .await
+            .unwrap();
+        AppState {
+            geoip: None,
+            login_approval_enabled: false,
+            bg: crate::bg::spawn(auth.clone()),
+            auth,
+            chat: chat_pool().await,
+            settings: {
+                let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+                sqlx::migrate!("./migrations/settings")
+                    .run(&pool)
+                    .await
+                    .unwrap();
+                pool
+            },
+            hub: Arc::new(Hub::new()),
+            asset_version: "test".into(),
+            last_seen_ledger: crate::auth::new_last_seen_ledger(),
+            activity_ledger: crate::auth::new_last_seen_ledger(),
+            secret_key: None,
+            vapid: None,
+            push_client: Arc::new(crate::push::MockPushClient::default()),
+            apns_client: None,
+            fcm_client: None,
+            mailer: None,
+            base_url: "http://localhost:8080".to_string(),
+            ice_servers: "[]".to_string(),
+            rate_limits: crate::rate_limit::RateLimits::new(),
+            bunyip_sso: None,
+            stt_client: None,
+            llm_client: None,
+            embedding_client: None,
+        }
+    }
+
+    /// LC-914 AC: `finalize_open_for_room` must close EVERY active session for
+    /// the room, not only the newest. In steady state the
+    /// `idx_call_transcripts_one_open` unique index makes more than one active
+    /// row per room impossible, so this constructs the pre-migration-style
+    /// pathological state the migration's dedupe step also had to handle (two
+    /// active rows for one room) by dropping that index for the test, the same
+    /// way a database that predates this migration could have reached it.
+    #[tokio::test]
+    async fn closes_every_active_session_not_only_the_newest() {
+        let state = test_state().await;
+        let room_id = db::chat::create_room(&state.chat, "voicechan", None, "public", None, None)
+            .await
+            .unwrap();
+
+        // Simulate a pre-migration database: without the unique index, two
+        // active rows can coexist for the same room.
+        sqlx::query("DROP INDEX idx_call_transcripts_one_open")
+            .execute(&state.chat)
+            .await
+            .unwrap();
+        let (older, _) = db::transcripts::start_session(&state.chat, room_id, "alice")
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO call_transcripts (room_id, started_by, status) VALUES (?, ?, 'active')",
+        )
+        .bind(room_id)
+        .bind("bob")
+        .execute(&state.chat)
+        .await
+        .unwrap();
+
+        let active_before = db::transcripts::open_sessions_for_room(&state.chat, room_id)
+            .await
+            .unwrap();
+        assert_eq!(active_before.len(), 2, "both active rows exist going in");
+
+        finalize_open_for_room(&state, room_id).await;
+
+        let active_after = db::transcripts::open_sessions_for_room(&state.chat, room_id)
+            .await
+            .unwrap();
+        assert!(
+            active_after.is_empty(),
+            "every active session must be closed, not only the newest: {active_after:?}"
+        );
+        let older_now = db::transcripts::get(&state.chat, older.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(older_now.status, "ended");
     }
 }
