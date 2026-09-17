@@ -94,24 +94,56 @@ pub async fn open_session_for_room(
 
 /// Open a session for a call, or return the one already open for the room so a
 /// second participant toggling transcription joins the existing session rather
-/// than forking a duplicate.
+/// than forking a duplicate. Returns `(session, created)`, where `created` is
+/// true only for the call that actually inserted the row: this INSERTs first
+/// and falls back to the existing session on the `idx_call_transcripts_one_open`
+/// unique violation (LC-914), instead of reading-then-inserting, so two
+/// concurrent starts for the same room can never both see "no session yet".
+/// The caller derives the agent-dispatch decision from `created` rather than a
+/// separate read of its own.
 pub async fn start_session(
     pool: &SqlitePool,
     room_id: i64,
     started_by: &str,
-) -> sqlx::Result<Transcript> {
-    if let Some(existing) = open_session_for_room(pool, room_id).await? {
-        return Ok(existing);
-    }
-    let id = sqlx::query(&format!(
+) -> sqlx::Result<(Transcript, bool)> {
+    let inserted = sqlx::query(&format!(
         "INSERT INTO call_transcripts (room_id, started_by, started_at) VALUES (?, ?, {NOW_MS})"
     ))
     .bind(room_id)
     .bind(started_by)
     .execute(pool)
-    .await?
-    .last_insert_rowid();
-    get(pool, id).await?.ok_or(sqlx::Error::RowNotFound)
+    .await;
+    let id = match inserted {
+        Ok(res) => res.last_insert_rowid(),
+        Err(sqlx::Error::Database(d)) if d.is_unique_violation() => {
+            let existing = open_session_for_room(pool, room_id)
+                .await?
+                .ok_or(sqlx::Error::RowNotFound)?;
+            return Ok((existing, false));
+        }
+        Err(e) => return Err(e),
+    };
+    let session = get(pool, id).await?.ok_or(sqlx::Error::RowNotFound)?;
+    Ok((session, true))
+}
+
+/// Every session currently open (`status = 'active'`) for a room, oldest
+/// first. The unique index keeps this to at most one row in steady state, but
+/// `finalize_open_for_room` must still close every row a pre-migration
+/// duplicate (or any other path) left active, not just the newest.
+pub async fn open_sessions_for_room(
+    pool: &SqlitePool,
+    room_id: i64,
+) -> sqlx::Result<Vec<Transcript>> {
+    let rows = sqlx::query(
+        "SELECT id, room_id, started_by, started_at, ended_at, status, summary \
+         FROM call_transcripts WHERE room_id = ? AND status = 'active' \
+         ORDER BY id ASC",
+    )
+    .bind(room_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.iter().map(map_transcript).collect())
 }
 
 /// Fetch a session by id.
