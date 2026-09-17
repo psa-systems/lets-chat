@@ -65,15 +65,21 @@ pub(crate) async fn build_support_views(state: &AppState) -> Result<Vec<SupportV
     Ok(views)
 }
 
-/// LC-716: create the dedicated support channel for a claimed ticket and return
-/// `(room_id, room_name)`. The channel is a private room in the General enclave
-/// (both parties are General members) joining the requester, the claiming
-/// `admin`, and the assistant bot; it is seeded with a bot message carrying the
-/// original request so the admin has context immediately. Both humans get a
-/// per-user sidebar nudge so the room appears live (the bot needs none). It is
-/// NOT broadcast to the enclave, so the private support channel stays visible
-/// only to its members. The caller has already flipped the ticket to `claimed`
-/// (guarded), so this runs at most once per ticket.
+/// LC-716: create the dedicated support channel for a ticket being claimed and
+/// return `(room_id, room_name)`. The channel is a private room in the General
+/// enclave (both parties are General members) joining the claiming `admin` and
+/// the assistant bot, plus the requester when their account still exists; it
+/// is seeded with a bot message carrying the original request so the admin has
+/// context immediately. Every human member gets a per-user sidebar nudge so the
+/// room appears live (the bot needs none). It is NOT broadcast to the enclave,
+/// so the private support channel stays visible only to its members.
+///
+/// LC-910: this runs BEFORE the ticket is flipped to `claimed`, so the caller
+/// can leave the ticket untouched if this fails. The requester may no longer
+/// exist (their account was deleted while the ticket sat in the queue); that
+/// is tolerated rather than failed, since deleting an account has already left
+/// the ticket orphaned by design (LC-908) and treating a missing requester as
+/// a claim failure would strand the row exactly as described in LC-910.
 #[cfg(feature = "standalone")]
 pub(crate) async fn claim_ticket(
     state: &AppState,
@@ -81,14 +87,12 @@ pub(crate) async fn claim_ticket(
     admin: &crate::models::User,
 ) -> Result<(i64, String), AppError> {
     let bot = super::assistant::assistant_bot(state).await?;
-    let requester = db::auth::find_user_by_id(&state.auth, &ticket.requester_id)
-        .await?
-        .ok_or_else(|| AppError::BadRequest("the requester no longer exists".into()))?;
-    let requester_label = label_for(&requester);
+    let requester = db::auth::find_user_by_id(&state.auth, &ticket.requester_id).await?;
+    let requester_label = match &requester {
+        Some(rec) => label_for(rec),
+        None => "(unknown)".to_string(),
+    };
 
-    // Unique per ticket so a second request from the same user cannot collide on
-    // the room name.
-    let room_name = format!("Support: {requester_label} (#{})", ticket.id);
     let invite_code: String = {
         use rand::Rng;
         rand::thread_rng()
@@ -97,6 +101,16 @@ pub(crate) async fn claim_ticket(
             .map(char::from)
             .collect()
     };
+    // Suffixed with a slice of the (unique) invite code, not just the ticket id:
+    // two admins can now race to claim the same open ticket (LC-910 builds the
+    // channel before flipping status), and a bare ticket-id name would collide
+    // on the per-enclave unique index the moment both attempts try to create
+    // "Support: <requester> (#<id>)" at once.
+    let room_name = format!(
+        "Support: {requester_label} (#{}-{})",
+        ticket.id,
+        &invite_code[..4]
+    );
     let enclave_id = db::enclave::get_general_id(&state.chat).await?;
     let room_id = db::chat::create_room(
         &state.chat,
@@ -107,7 +121,11 @@ pub(crate) async fn claim_ticket(
         enclave_id,
     )
     .await?;
-    for uid in [&ticket.requester_id, &admin.id, &bot.id] {
+    let mut member_ids: Vec<&String> = vec![&admin.id, &bot.id];
+    if requester.is_some() {
+        member_ids.push(&ticket.requester_id);
+    }
+    for uid in &member_ids {
         db::chat::add_room_member(&state.chat, room_id, uid).await?;
     }
 
@@ -123,19 +141,32 @@ pub(crate) async fn claim_ticket(
     } else {
         format!(" originally in #{}", ticket.room_name)
     };
-    let seed = format!(
-        "\u{1f198} **Support request #{}**\n\n{requester_label} asked for a human{origin}. \
-         {admin_label} is now helping here.\n\n> {}",
-        ticket.id, ticket.body
-    );
+    let seed = if requester.is_some() {
+        format!(
+            "\u{1f198} **Support request #{}**\n\n{requester_label} asked for a human{origin}. \
+             {admin_label} is now helping here.\n\n> {}",
+            ticket.id, ticket.body
+        )
+    } else {
+        format!(
+            "\u{1f198} **Support request #{}**\n\n_The requester's account no longer exists._{origin}. \
+             {admin_label} is now helping here.\n\n> {}",
+            ticket.id, ticket.body
+        )
+    };
     let room = db::chat::get_room(&state.chat, room_id)
         .await?
         .ok_or_else(|| AppError::Internal("support room vanished after creation".into()))?;
     let msg_id = db::chat::insert_message(&state.chat, room_id, &bot.id, &seed).await?;
     super::room::finalize_message_send(state, &room, &bot, msg_id, &seed, None).await?;
 
-    // Nudge both humans' sidebars so the new channel shows up without a reload.
-    for uid in [&ticket.requester_id, &admin.id] {
+    // Nudge every human member's sidebar so the new channel shows up without a
+    // reload (the bot needs none; a deleted requester gets no nudge either).
+    let nudge_ids: Vec<&String> = member_ids
+        .into_iter()
+        .filter(|uid| **uid != bot.id)
+        .collect();
+    for uid in nudge_ids {
         state.hub.broadcast_to_user(
             uid,
             &ChatEvent::RoomMemberAdded {
