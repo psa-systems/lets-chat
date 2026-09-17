@@ -134,6 +134,10 @@ pub async fn inject_branding_css(
     req: axum::extract::Request,
     next: Next,
 ) -> Response {
+    // LC-926: the viewer for the support-bubble splice below, read before `req`
+    // moves into `next.run` (set by `inject_user`, which runs outside this
+    // layer - see routes/mod.rs).
+    let user = req.extensions().get::<crate::models::User>().cloned();
     // LC-776: static files never carry a <head>, so the branding query on
     // that path is pure waste. Mirrors the `/assets/` exemption
     // `enforce_maintenance_mode` already has.
@@ -233,6 +237,25 @@ pub async fn inject_branding_css(
             out.push_str(&injected[..idx]);
             out.push_str(&badge);
             out.push_str(&injected[idx..]);
+            out
+        }
+        _ => injected,
+    };
+    // LC-926: fill the empty `#lc-support-slot` (layout.html) in-place so first
+    // paint of the support bubble needs no follow-up `GET /support/bubble`.
+    // Rides the same full-page rewrite as the branding/badge splices above; only
+    // pages that render the shell (an authed `user` extension) carry the slot at
+    // all, so an anonymous response (login, maintenance) is left untouched.
+    const SUPPORT_SLOT: &str = "<div id=\"lc-support-slot\"></div>";
+    let injected = match (&user, injected.find(SUPPORT_SLOT)) {
+        (Some(user), Some(idx)) => {
+            let bubble = crate::routes::support_panel::bubble_html(&state, user).await;
+            let mut out = String::with_capacity(injected.len() + bubble.len());
+            out.push_str(&injected[..idx]);
+            out.push_str("<div id=\"lc-support-slot\">");
+            out.push_str(&bubble);
+            out.push_str("</div>");
+            out.push_str(&injected[idx + SUPPORT_SLOT.len()..]);
             out
         }
         _ => injected,

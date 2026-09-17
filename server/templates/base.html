@@ -598,16 +598,10 @@
   <script src="/assets/mute-state.js?v={{ asset_version }}" defer></script>
   <script src="/assets/devices.js?v={{ asset_version }}" defer></script>
   <script src="/assets/rtc_common.js?v={{ asset_version }}" defer></script>
-  <script src="/assets/call.js?v={{ asset_version }}" defer></script>
-  <script src="/assets/voice.js?v={{ asset_version }}" defer></script>
-  <script src="/assets/huddle_control.js?v={{ asset_version }}" defer></script>
-  <script src="/assets/huddle_popout.js?v={{ asset_version }}" defer></script>
-  <script src="/assets/call_reactions.js?v={{ asset_version }}" defer></script>
-  <script src="/assets/huddle_sfu.js?v={{ asset_version }}" defer></script>
-  <script src="/assets/stage.js?v={{ asset_version }}" defer></script>
-  <script src="/assets/huddle_ring.js?v={{ asset_version }}" defer></script>
-  <script src="/assets/stage_media.js?v={{ asset_version }}" defer></script>
-  <script src="/assets/transcribe.js?v={{ asset_version }}" defer></script>
+  {# LC-929: the call/voice/huddle bundle is only usable once signed in, so
+     base.html leaves this block empty and only layout.html (the signed-in
+     shell) overrides it. Keeps it off login/landing/error/etc. #}
+  {% block call_bundle %}{% endblock %}
   <script src="/assets/sidebar_dnd.js?v={{ asset_version }}" defer></script>
   <script src="/assets/sidebar_jump.js?v={{ asset_version }}" defer></script>
   <script src="/assets/outbox.js?v={{ asset_version }}" defer></script>
