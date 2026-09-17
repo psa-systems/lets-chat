@@ -24,7 +24,8 @@ const SNIPPET_MAX_CHARS: usize = 80;
 /// when possible so the cut does not split a word. Newlines collapse to
 /// single spaces - the strip line is single-line by design.
 fn snippet_for(body: &str) -> String {
-    let collapsed: String = body
+    let redacted = crate::views::markdown::redact_spoilers(body);
+    let collapsed: String = redacted
         .chars()
         .map(|c| {
             if c.is_control() || c == '\n' || c == '\r' {
@@ -421,4 +422,19 @@ async fn render_pins_page(
         pins: rows,
     };
     html(&page)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // LC-918: the pinned strip is the highest-exposure spoiler surface (shown
+    // to every viewer at all times), so it must redact rather than print the
+    // hidden text.
+    #[test]
+    fn snippet_for_redacts_spoiler() {
+        let out = snippet_for("intro ||secret|| outro");
+        assert!(out.contains("[spoiler]"), "no placeholder: {out}");
+        assert!(!out.contains("secret"), "secret leaked: {out}");
+    }
 }

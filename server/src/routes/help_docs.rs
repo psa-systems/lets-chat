@@ -322,12 +322,25 @@ fn page_hash(sections: &[(String, String)]) -> String {
 
 /// Fetch a URL's body as text via the SSRF-checked outbound GET (the docs sites
 /// are public hosts), capped and timed. Returns the body or a short error label.
-async fn fetch_text(url: &str) -> Result<String, String> {
-    let req = crate::http_client::outbound_get(url)
-        .await
-        .map_err(|e| e.to_string())?
-        .timeout(std::time::Duration::from_secs(FETCH_TIMEOUT_SECS));
-    let resp = req.send().await.map_err(|e| e.to_string())?;
+/// `test_client`, when set, bypasses the SSRF guard so a test can target a
+/// loopback receiver; production callers always pass `None`.
+async fn fetch_text(url: &str, test_client: Option<&reqwest::Client>) -> Result<String, String> {
+    let timeout = std::time::Duration::from_secs(FETCH_TIMEOUT_SECS);
+    let resp = match test_client {
+        Some(client) => client
+            .get(url)
+            .timeout(timeout)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?,
+        None => {
+            let req = crate::http_client::outbound_get(url)
+                .await
+                .map_err(|e| e.to_string())?
+                .timeout(timeout);
+            req.send().await.map_err(|e| e.to_string())?
+        }
+    };
     if !resp.status().is_success() {
         return Err(format!("status {}", resp.status().as_u16()));
     }
@@ -345,6 +358,10 @@ pub struct IndexReport {
     pub unchanged: usize,
     pub errors: usize,
     pub removed: u64,
+    /// LC-917: chunks deleted because their page left its source's index
+    /// (dropped or renamed), counted separately from `removed` (whole products
+    /// dropped from the configured sources).
+    pub removed_pages: u64,
 }
 
 /// Re-index every configured documentation source into `doc_chunks`. When
@@ -355,6 +372,27 @@ pub struct IndexReport {
 /// sources are set. Writes a human-readable status line to
 /// [`HELP_DOCS_STATUS_KEY`] and returns the report.
 pub async fn reindex_all(state: &AppState, force: bool) -> Result<IndexReport, AppError> {
+    reindex_all_inner(state, force, None).await
+}
+
+/// Test seam: an index run that uses the caller's `reqwest::Client` directly for
+/// fetching the index pages and sub-pages, bypassing the SSRF guard so the
+/// pruning tests can target a loopback receiver. Production always uses
+/// `reindex_all`.
+#[doc(hidden)]
+pub async fn reindex_all_unchecked(
+    state: &AppState,
+    force: bool,
+    client: &reqwest::Client,
+) -> Result<IndexReport, AppError> {
+    reindex_all_inner(state, force, Some(client)).await
+}
+
+async fn reindex_all_inner(
+    state: &AppState,
+    force: bool,
+    test_client: Option<&reqwest::Client>,
+) -> Result<IndexReport, AppError> {
     let mut report = IndexReport::default();
     let Some(client) = state.embedding_client.clone() else {
         set_status(state, "Not indexed: no embeddings endpoint is configured.").await;
@@ -375,7 +413,7 @@ pub async fn reindex_all(state: &AppState, force: bool) -> Result<IndexReport, A
 
     for source in &sources {
         report.products += 1;
-        let index_html = match fetch_text(&source.index_url).await {
+        let index_html = match fetch_text(&source.index_url, test_client).await {
             Ok(h) => h,
             Err(e) => {
                 tracing::warn!(url = %source.index_url, error = %e, "help docs index fetch failed");
@@ -384,16 +422,47 @@ pub async fn reindex_all(state: &AppState, force: bool) -> Result<IndexReport, A
             }
         };
         let links = parse_index_links(&index_html, &source.index_url);
+        let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
         for page_url in links {
-            match index_page(state, &*client, &source.product, &page_url, force).await {
+            match index_page(
+                state,
+                &*client,
+                &source.product,
+                &page_url,
+                force,
+                test_client,
+            )
+            .await
+            {
                 Ok(PageOutcome::Indexed(n)) => {
                     report.pages += 1;
                     report.chunks += n;
+                    visited.insert(page_url);
                 }
-                Ok(PageOutcome::Unchanged) => report.unchanged += 1,
+                Ok(PageOutcome::Unchanged) => {
+                    report.unchanged += 1;
+                    visited.insert(page_url);
+                }
                 Err(e) => {
                     tracing::warn!(url = %page_url, error = %e, "help docs page index failed");
                     report.errors += 1;
+                }
+            }
+        }
+
+        // LC-917: the index fetch for this source just succeeded (a failed
+        // fetch `continue`s above, skipping this), so this source is
+        // authoritative for its product right now - any page previously
+        // stored for the product that this run did not visit has left the
+        // index (dropped or renamed) and its chunks are stale.
+        if let Ok(existing) = db::doc_chunks::list_source_urls(&state.chat, &source.product).await {
+            for url in existing {
+                if !visited.contains(&url)
+                    && db::doc_chunks::delete_by_source(&state.chat, &url)
+                        .await
+                        .is_ok()
+                {
+                    report.removed_pages += 1;
                 }
             }
         }
@@ -430,13 +499,21 @@ async fn index_page(
     product: &str,
     page_url: &str,
     force: bool,
+    test_client: Option<&reqwest::Client>,
 ) -> Result<PageOutcome, AppError> {
-    let html = fetch_text(page_url)
+    let html = fetch_text(page_url, test_client)
         .await
         .map_err(|e| AppError::Internal(format!("fetch {page_url}: {e}")))?;
     let page = parse_page(&html);
     if page.sections.is_empty() {
-        return Ok(PageOutcome::Indexed(0));
+        // LC-917: a page that lost its sections (markup change, blanked page) is
+        // not "indexed with zero chunks" - it must not keep citing stale content
+        // that no longer exists on the page, so its old chunks are removed and
+        // this counts as an error rather than a successful (empty) index.
+        db::doc_chunks::delete_by_source(&state.chat, page_url).await?;
+        return Err(AppError::Internal(format!(
+            "no sections extracted: {page_url}"
+        )));
     }
     let hash = page_hash(&page.sections);
     if !force {
@@ -488,8 +565,15 @@ async fn index_page(
 impl IndexReport {
     fn summary(&self) -> String {
         format!(
-            "Indexed {} product(s), {} page(s), {} chunk(s); {} unchanged, {} error(s), {} pruned.",
-            self.products, self.pages, self.chunks, self.unchanged, self.errors, self.removed
+            "Indexed {} product(s), {} page(s), {} chunk(s); {} unchanged, {} error(s), \
+             {} product(s) pruned, {} page(s) pruned.",
+            self.products,
+            self.pages,
+            self.chunks,
+            self.unchanged,
+            self.errors,
+            self.removed,
+            self.removed_pages
         )
     }
 }

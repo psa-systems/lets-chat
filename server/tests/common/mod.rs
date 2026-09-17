@@ -11,6 +11,7 @@
 #![allow(dead_code)]
 
 use sqlx::SqlitePool;
+use std::time::Duration;
 
 /// In-memory `auth.db` pool with all auth migrations applied.
 pub async fn auth_pool() -> SqlitePool {
@@ -98,4 +99,39 @@ impl tracing::Subscriber for CapturingSubscriber {
     }
     fn enter(&self, _span: &tracing::span::Id) {}
     fn exit(&self, _span: &tracing::span::Id) {}
+}
+
+/// Poll `f` every 10ms until it returns `true`, or panic with `what` after a
+/// 5s deadline. Use this for any assertion on a side effect produced by a
+/// detached `tokio::spawn` task (e.g. push fan-out sends / DB writes): those
+/// tasks race the test's own execution, so a fixed sleep before asserting is
+/// inherently flaky under load, while polling to a fixed point is not.
+pub async fn eventually<F, Fut>(what: &str, mut f: F)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        if f().await {
+            return;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            panic!("timed out waiting for: {what}");
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+/// Bounded settle window for asserting the ABSENCE of a spawned-task side
+/// effect (e.g. "no push was sent", "token was not deleted"). Polling cannot
+/// prove a negative, so this is a fixed wait, not a deadline poll: use it
+/// only when there is no positive condition to poll instead, and prefer
+/// pairing it with an `eventually` on a control effect in the same test when
+/// one exists, so a stalled runtime cannot produce a false-negative pass.
+pub async fn settle() {
+    for _ in 0..10 {
+        tokio::task::yield_now().await;
+    }
+    tokio::time::sleep(Duration::from_millis(20)).await;
 }

@@ -6,10 +6,7 @@
 -- background when an operator embeddings endpoint is configured.
 --
 -- `vec` is a little-endian f32 BLOB (see `embeddings::vec_to_bytes`); `dim` is
--- the vector length, which only catches a model swap that also changes
--- dimensionality. Migration 0099 (LC-911) adds a `model` column that is the
--- actual detection mechanism, since a same-dimension model swap changes
--- nothing `dim` can see.
+-- the vector length so a model swap that changes dimensionality is detectable.
 -- ON DELETE CASCADE ties the embedding to its message: a hard-deleted or
 -- self-destructed (LC-547) message drops its embedding automatically.
 CREATE TABLE message_embeddings (

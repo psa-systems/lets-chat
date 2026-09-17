@@ -62,6 +62,21 @@ async fn fetch_call_room(state: &AppState, room_id: i64) -> Result<Room, AppErro
     Ok(room)
 }
 
+/// LC-915: which SFU surface admitted a non-DM caller, mirroring the OR
+/// precedence in `require_participant` - mesh checked first because it is
+/// in-memory, stage only consulted when mesh does not already admit. A room
+/// hosting both a Stage and a huddle at once therefore resolves to whichever
+/// gate actually admitted the starter, not to some fixed choice.
+fn admitted_surface(in_mesh: bool, is_stage_speaker: bool) -> Option<crate::livekit::Surface> {
+    if in_mesh {
+        Some(crate::livekit::Surface::Huddle)
+    } else if is_stage_speaker {
+        Some(crate::livekit::Surface::Stage)
+    } else {
+        None
+    }
+}
+
 /// Gate for mutating the live session (start / segment / end): the caller must
 /// be an active PARTICIPANT, not merely able to see the room. A DM member is a
 /// participant; for a voice channel OR a huddle the caller must currently be
@@ -77,22 +92,35 @@ async fn fetch_call_room(state: &AppState, room_id: i64) -> Result<Room, AppErro
 /// Stage speaker is absent from `voice_room_users` and was refused here. The
 /// mesh check runs first because it is in-memory and covers every other
 /// surface; only a caller it rejects pays for the stage lookup.
-async fn require_participant(state: &AppState, user: &User, room: &Room) -> Result<(), AppError> {
-    let ok = if room.room_type == "dm" {
-        db::chat::is_room_member(&state.chat, room.id, &user.id).await?
-    } else {
-        state
-            .hub
-            .voice_room_users(room.id)
-            .iter()
-            .any(|u| u == &user.id)
-            || is_stage_speaker(state, room, user).await?
-    };
-    if ok {
-        Ok(())
-    } else {
-        Err(AppError::Forbidden)
+///
+/// LC-915: returns WHICH surface admitted the caller (`None` for a DM, which
+/// has no SFU surface at all), so a caller that needs to know - the dispatch
+/// gate - can name the room the caller is actually IN instead of guessing.
+async fn require_participant(
+    state: &AppState,
+    user: &User,
+    room: &Room,
+) -> Result<Option<crate::livekit::Surface>, AppError> {
+    if room.room_type == "dm" {
+        return if db::chat::is_room_member(&state.chat, room.id, &user.id).await? {
+            Ok(None)
+        } else {
+            Err(AppError::Forbidden)
+        };
     }
+    let in_mesh = state
+        .hub
+        .voice_room_users(room.id)
+        .iter()
+        .any(|u| u == &user.id);
+    let is_speaker = if in_mesh {
+        false
+    } else {
+        is_stage_speaker(state, room, user).await?
+    };
+    admitted_surface(in_mesh, is_speaker)
+        .map(Some)
+        .ok_or(AppError::Forbidden)
 }
 
 /// LC-597: does `user` currently hold the floor on `room`'s stage?
@@ -323,6 +351,7 @@ async fn record_and_broadcast(
 /// its own "not configured" ordering, and the caller builds the
 /// [`crate::stt::SttRequest`] (it owns the clip bytes + the language hint, which
 /// differ by path). Design notes: LC-810.
+#[allow(clippy::too_many_arguments)]
 async fn ingest_clip(
     state: &AppState,
     room: &Room,
@@ -331,6 +360,7 @@ async fn ingest_clip(
     stt: &dyn crate::stt::SttClient,
     req: crate::stt::SttRequest,
     origin: Origin,
+    fallback_duration_ms: Option<i64>,
 ) -> Result<(), AppError> {
     // LC-592: live captions are the heaviest producer (one clip per 5 seconds
     // per speaker), so they are rate-limited alongside stored attachments.
@@ -360,14 +390,24 @@ async fn ingest_clip(
         }
     };
     // LC-591: store the real spoken length from the engine's segment timings so
-    // the WebVTT export can use it instead of a synthetic cue duration.
+    // the WebVTT export can use it instead of a synthetic cue duration. LC-921:
+    // the engine measures speech, so it wins whenever it has a timing; the
+    // caller's fallback (the agent's own wall-clock clip duration) only covers
+    // engines that return no segments, since it also carries leading/trailing
+    // silence the engine's timings would have excluded.
+    let engine_duration_ms = result.duration_ms();
+    let duration_ms = if engine_duration_ms > 0 {
+        engine_duration_ms
+    } else {
+        fallback_duration_ms.unwrap_or(0)
+    };
     record_and_broadcast(
         state,
         room,
         transcript_id,
         speaker,
         &result.text,
-        result.duration_ms(),
+        duration_ms,
         origin,
     )
     .await
@@ -419,28 +459,40 @@ fn bearer(headers: &HeaderMap) -> Option<&str> {
         .filter(|s| !s.is_empty())
 }
 
-/// LC-814: dispatch is attempted only for an SFU-huddle call - any non-DM room,
-/// which rides the LiveKit SFU when LiveKit is configured - and only when the
-/// agent is fully configured. A DM is always the 1:1 mesh, so there is no SFU to
-/// tap; it keeps its per-client capture.
-fn should_dispatch_agent(room_type: &str, dispatch_ready: bool) -> bool {
-    dispatch_ready && room_type != "dm"
+/// LC-915 (was LC-814): dispatch is attempted only when the session's starter
+/// was admitted through a real SFU surface - `require_participant` returns
+/// `None` for a DM (no SFU there, just the 1:1 mesh) and `Some` for a Stage or
+/// huddle admission - and only when the agent is fully configured. This used to
+/// read "any non-DM room", which silently equated "not a DM" with "a huddle"
+/// and so hardcoded the huddle room even for a Stage-admitted caller.
+fn should_dispatch_agent(surface: Option<crate::livekit::Surface>, dispatch_ready: bool) -> bool {
+    dispatch_ready && surface.is_some()
 }
 
-/// LC-814 (LC-810 stage 2): best-effort dispatch of the transcription agent for
-/// a newly-opened SFU-huddle session. Spawned so it never blocks or fails
-/// `start`; on any error the call simply degrades to the existing per-client
-/// capture (and the LC-765 notice). The agent reads the transcript id + callback
-/// base from the job metadata and posts per-track clips back to the LC-813
+/// LC-814 (LC-810 stage 2), surface-aware since LC-915: best-effort dispatch of
+/// the transcription agent for a newly-opened SFU session, into the SAME
+/// LiveKit room `surface` names - the room the session's starter was actually
+/// admitted into, never a guess. Spawned so it never blocks or fails `start`;
+/// on any error the call simply degrades to the existing per-client capture
+/// (and the LC-765 notice). The agent reads the transcript id + callback base
+/// from the job metadata and posts per-track clips back to the LC-813
 /// `agent-clip` route.
-fn maybe_dispatch_agent(state: &AppState, room: &Room, transcript_id: i64) {
-    if !should_dispatch_agent(&room.room_type, crate::livekit::transcribe_dispatch_ready()) {
+fn maybe_dispatch_agent(
+    state: &AppState,
+    room: &Room,
+    transcript_id: i64,
+    surface: Option<crate::livekit::Surface>,
+) {
+    if !should_dispatch_agent(surface, crate::livekit::transcribe_dispatch_ready()) {
         return;
     }
+    let Some(surface) = surface else {
+        return;
+    };
     let Some(cfg) = crate::livekit::LiveKitConfig::from_env() else {
         return;
     };
-    let room_name = crate::livekit::room_name(crate::livekit::Surface::Huddle, room.id);
+    let room_name = crate::livekit::room_name(surface, room.id);
     let metadata = json!({
         "transcript_id": transcript_id,
         "base_url": state.base_url,
@@ -483,14 +535,14 @@ pub async fn start(
     Path(room_id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
     let room = fetch_call_room(&state, room_id).await?;
-    require_participant(&state, &user, &room).await?;
-    // LC-814: dispatch the agent only when THIS call opens a NEW session, not
-    // when a later joiner re-hits start (which returns the already-open one), so
-    // the SFU room gets exactly one agent.
-    let is_new_session = db::transcripts::open_session_for_room(&state.chat, room_id)
-        .await?
-        .is_none();
-    let session = db::transcripts::start_session(&state.chat, room_id, &user.id).await?;
+    let surface = require_participant(&state, &user, &room).await?;
+    // LC-814 / LC-914: dispatch the agent only when THIS call opens a NEW
+    // session, not when a later joiner re-hits start (which joins the
+    // already-open one). `start_session` reports this from the same insert
+    // that opened (or found) the session, rather than a separate read that
+    // races two concurrent starts into both seeing "no session yet".
+    let (session, is_new_session) =
+        db::transcripts::start_session(&state.chat, room_id, &user.id).await?;
     let by = label_for(&state, &user.id).await;
     let tid = session.id;
     broadcast_to_members(&state, &room, |to| ChatEvent::TranscriptStarted {
@@ -501,7 +553,7 @@ pub async fn start(
     })
     .await;
     if is_new_session {
-        maybe_dispatch_agent(&state, &room, tid);
+        maybe_dispatch_agent(&state, &room, tid, surface);
     }
     Ok(Json(json!({ "transcript_id": tid })))
 }
@@ -626,6 +678,7 @@ pub async fn audio(
         stt.as_ref(),
         req,
         Origin::Browser,
+        None,
     )
     .await?;
     Ok(Html(String::new()))
@@ -694,6 +747,19 @@ pub async fn agent_clip(
         .map(str::trim)
         .filter(|s| !s.is_empty());
     let language = x_language.or(speaker.locale.as_deref());
+    // LC-921: the agent measures each clip's real wall-clock duration sample by
+    // sample and sends it as X-Duration-Secs. That is a fallback under the
+    // engine's own segment timings (see `ingest_clip`), not a replacement,
+    // because it includes leading/trailing silence the engine's timings would
+    // have excluded. Anything that does not parse as a finite, positive number
+    // of seconds is dropped rather than failing the request.
+    let fallback_duration_ms = headers
+        .get("x-duration-secs")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|secs| secs.is_finite() && *secs > 0.0)
+        .map(|secs| (secs * 1000.0).round() as i64);
     let req = crate::stt::SttRequest::new(body.to_vec(), content_type)
         .with_language(language)
         .with_timeout_secs(crate::stt::LIVE_CLIP_TIMEOUT_SECS);
@@ -706,6 +772,7 @@ pub async fn agent_clip(
         stt.as_ref(),
         req,
         Origin::Agent,
+        fallback_duration_ms,
     )
     .await?;
     Ok(Html(String::new()))
@@ -750,15 +817,23 @@ async fn finalize(state: &AppState, room: &Room, transcript_id: i64) {
     }
 }
 
-/// LC-393 Phase 2 backstop: when a voice channel empties, finalize any session
-/// still open for it (save + post the notice) - the equivalent of the per-user
-/// disconnect backstop for the shared-channel case.
+/// LC-393 Phase 2 backstop: when a voice channel empties, finalize every
+/// session still open for it (save + post the notice) - the equivalent of the
+/// per-user disconnect backstop for the shared-channel case. LC-914: loops
+/// over every active row rather than only the newest, so a pre-migration
+/// duplicate (or any other path that left more than one active row) is fully
+/// closed out instead of leaving a stale one behind.
 pub async fn finalize_open_for_room(state: &AppState, room_id: i64) {
-    let Ok(Some(session)) = db::transcripts::open_session_for_room(&state.chat, room_id).await
-    else {
+    let Ok(sessions) = db::transcripts::open_sessions_for_room(&state.chat, room_id).await else {
         return;
     };
-    if let Ok(room) = fetch_call_room(state, room_id).await {
+    if sessions.is_empty() {
+        return;
+    }
+    let Ok(room) = fetch_call_room(state, room_id).await else {
+        return;
+    };
+    for session in sessions {
         finalize(state, &room, session.id).await;
     }
 }
@@ -1542,18 +1617,56 @@ mod agent_token_tests {
 
 #[cfg(test)]
 mod dispatch_tests {
-    use super::should_dispatch_agent;
+    use super::{admitted_surface, should_dispatch_agent};
+    use crate::livekit::{room_name, Surface};
 
     #[test]
-    fn dispatch_only_for_non_dm_and_when_ready() {
-        // LC-814: an SFU huddle (any non-DM) with the agent configured -> dispatch.
-        assert!(should_dispatch_agent("public", true));
-        assert!(should_dispatch_agent("enclave", true));
-        // A DM is always the 1:1 mesh: never dispatch.
-        assert!(!should_dispatch_agent("dm", true));
-        // Agent not configured: never dispatch, whatever the room.
-        assert!(!should_dispatch_agent("public", false));
-        assert!(!should_dispatch_agent("dm", false));
+    fn dispatch_only_with_a_real_surface_and_when_ready() {
+        // A resolved surface (Stage or Huddle) with the agent configured -> dispatch.
+        assert!(should_dispatch_agent(Some(Surface::Stage), true));
+        assert!(should_dispatch_agent(Some(Surface::Huddle), true));
+        // No surface (a DM: `require_participant` returns `None`) -> never dispatch.
+        assert!(!should_dispatch_agent(None, true));
+        // Agent not configured: never dispatch, whatever the surface.
+        assert!(!should_dispatch_agent(Some(Surface::Stage), false));
+        assert!(!should_dispatch_agent(None, false));
+    }
+
+    /// LC-915: a session opened by a stage speaker resolves the Stage's own
+    /// LiveKit room, not the huddle's - the defect this issue closes (the old
+    /// gate hardcoded `Surface::Huddle` for every non-DM caller).
+    #[test]
+    fn stage_speaker_admission_dispatches_into_the_stage_room() {
+        let surface = admitted_surface(/* in_mesh */ false, /* is_stage_speaker */ true);
+        assert_eq!(surface, Some(Surface::Stage));
+        assert_eq!(room_name(surface.unwrap(), 42), "stage-42");
+    }
+
+    /// A session opened by a live mesh participant resolves the huddle's room.
+    #[test]
+    fn mesh_participant_admission_dispatches_into_the_huddle_room() {
+        let surface = admitted_surface(/* in_mesh */ true, /* is_stage_speaker */ false);
+        assert_eq!(surface, Some(Surface::Huddle));
+        assert_eq!(room_name(surface.unwrap(), 42), "huddle-42");
+    }
+
+    /// A DM has no SFU surface at all: `require_participant`'s DM branch never
+    /// calls `admitted_surface` and always resolves `None`, so dispatch is
+    /// skipped outright instead of guessing a room.
+    #[test]
+    fn dm_has_no_surface_and_dispatches_nothing() {
+        assert!(!should_dispatch_agent(None, true));
+    }
+
+    /// LC-915: a room hosting both a Stage and a huddle at once - the surface
+    /// follows whichever gate actually admitted the starter, not the room's
+    /// shape. Mesh is checked first (it's in-memory), so a starter who is BOTH
+    /// a live mesh participant and a stage speaker lands in the huddle they
+    /// actually joined.
+    #[test]
+    fn with_both_rosters_populated_the_surface_follows_the_admitting_gate() {
+        assert_eq!(admitted_surface(true, true), Some(Surface::Huddle));
+        assert_eq!(admitted_surface(false, true), Some(Surface::Stage));
     }
 }
 
@@ -1612,5 +1725,119 @@ mod echo_tests {
             &v(&["let us ship the fix today"])
         ));
         assert!(!is_echo_of("let us ship the fix today", &[]));
+    }
+}
+
+/// LC-914: `finalize_open_for_room` is a private route-layer fn (called from
+/// `ws.rs`'s room-empty backstop), so it is exercised here directly rather
+/// than through the full HTTP + WS stack an external integration test would
+/// need to simulate a voice channel emptying.
+#[cfg(test)]
+mod finalize_open_for_room_tests {
+    use super::*;
+    use crate::ws::hub::Hub;
+    use sqlx::SqlitePool;
+    use std::sync::Arc;
+
+    async fn chat_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/chat")
+            .run(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    async fn test_state() -> AppState {
+        let auth = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/auth")
+            .run(&auth)
+            .await
+            .unwrap();
+        AppState {
+            geoip: None,
+            login_approval_enabled: false,
+            bg: crate::bg::spawn(auth.clone()),
+            auth,
+            chat: chat_pool().await,
+            settings: {
+                let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+                sqlx::migrate!("./migrations/settings")
+                    .run(&pool)
+                    .await
+                    .unwrap();
+                pool
+            },
+            hub: Arc::new(Hub::new()),
+            asset_version: "test".into(),
+            last_seen_ledger: crate::auth::new_last_seen_ledger(),
+            activity_ledger: crate::auth::new_last_seen_ledger(),
+            secret_key: None,
+            vapid: None,
+            push_client: Arc::new(crate::push::MockPushClient::default()),
+            apns_client: None,
+            fcm_client: None,
+            mailer: None,
+            base_url: "http://localhost:8080".to_string(),
+            ice_servers: "[]".to_string(),
+            rate_limits: crate::rate_limit::RateLimits::new(),
+            bunyip_sso: None,
+            stt_client: None,
+            llm_client: None,
+            embedding_client: None,
+        }
+    }
+
+    /// LC-914 AC: `finalize_open_for_room` must close EVERY active session for
+    /// the room, not only the newest. In steady state the
+    /// `idx_call_transcripts_one_open` unique index makes more than one active
+    /// row per room impossible, so this constructs the pre-migration-style
+    /// pathological state the migration's dedupe step also had to handle (two
+    /// active rows for one room) by dropping that index for the test, the same
+    /// way a database that predates this migration could have reached it.
+    #[tokio::test]
+    async fn closes_every_active_session_not_only_the_newest() {
+        let state = test_state().await;
+        let room_id = db::chat::create_room(&state.chat, "voicechan", None, "public", None, None)
+            .await
+            .unwrap();
+
+        // Simulate a pre-migration database: without the unique index, two
+        // active rows can coexist for the same room.
+        sqlx::query("DROP INDEX idx_call_transcripts_one_open")
+            .execute(&state.chat)
+            .await
+            .unwrap();
+        let (older, _) = db::transcripts::start_session(&state.chat, room_id, "alice")
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO call_transcripts (room_id, started_by, status) VALUES (?, ?, 'active')",
+        )
+        .bind(room_id)
+        .bind("bob")
+        .execute(&state.chat)
+        .await
+        .unwrap();
+
+        let active_before = db::transcripts::open_sessions_for_room(&state.chat, room_id)
+            .await
+            .unwrap();
+        assert_eq!(active_before.len(), 2, "both active rows exist going in");
+
+        finalize_open_for_room(&state, room_id).await;
+
+        let active_after = db::transcripts::open_sessions_for_room(&state.chat, room_id)
+            .await
+            .unwrap();
+        assert!(
+            active_after.is_empty(),
+            "every active session must be closed, not only the newest: {active_after:?}"
+        );
+        let older_now = db::transcripts::get(&state.chat, older.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(older_now.status, "ended");
     }
 }
