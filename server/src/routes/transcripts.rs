@@ -43,6 +43,23 @@ async fn label_for(state: &AppState, user_id: &str) -> String {
     }
 }
 
+/// LC-928: like [`label_for`], but for the live-caption hot path, where the
+/// same speaker's label would otherwise be re-resolved on every single
+/// caption of a call. Caches the result in the hub for the rest of this call
+/// session (`transcript_id`); the cache is dropped when the session finalizes
+/// (see `finalize` / `finalize_open_for_user`), so a later call re-resolves it
+/// (picking up any display-name change made mid-session-to-session).
+async fn cached_label_for(state: &AppState, transcript_id: i64, user_id: &str) -> String {
+    if let Some(label) = state.hub.cached_speaker_label(transcript_id, user_id) {
+        return label;
+    }
+    let label = label_for(state, user_id).await;
+    state
+        .hub
+        .cache_speaker_label(transcript_id, user_id, label.clone());
+    label
+}
+
 /// Fetch the room and confirm it is a call-capable surface: a DM (1:1 calls,
 /// LC-393 Phase 1), a voice channel (`is_voice`, Phase 2), or a group room
 /// hosting an ad-hoc huddle (LC-553).
@@ -166,15 +183,15 @@ async fn require_access(state: &AppState, user: &User, room: &Room) -> Result<()
 /// - Enclave voice channel: the current mesh participants. Scoping to them keeps
 ///   a member who never joined from being auto-captured.
 /// - DM (1:1 call): both members.
-/// - Ad-hoc huddle in a text room: the mesh participants (`voice_room_users`) -
-///   which is exactly who `require_participant` admits - UNIONED with the room's
-///   members. LC-791: a huddle can live in an ENCLAVE text room, and enclave
-///   rooms have no per-room `room_members` rows (access is enclave-scoped), so
-///   `list_room_member_ids` alone returned a set that excluded the actual
-///   participants. Their captions were stored but broadcast to no one, so live
-///   captions never appeared (the saved transcript still had them). Unioning in
-///   `voice_room_users` guarantees every participant receives their own caption,
-///   while a plain group room still reaches its members as before.
+/// - Ad-hoc huddle in a text room: the mesh participants (`voice_room_users`),
+///   same as the `is_voice` branch. LC-791 had unioned in the room's members
+///   too (needed because an ENCLAVE room has no `room_members` rows, so
+///   `list_room_member_ids` alone excluded the actual participants there), but
+///   that also fanned every caption out to non-participant members of a
+///   regular group room hosting a small huddle - a privacy exposure, not just
+///   extra cost (LC-928). `voice_room_users` alone already contains every
+///   participant regardless of room type, so it satisfies LC-791 without
+///   reintroducing the leak.
 async fn recipients(state: &AppState, room: &Room) -> Vec<String> {
     if room.is_voice {
         state.hub.voice_room_users(room.id)
@@ -183,16 +200,7 @@ async fn recipients(state: &AppState, room: &Room) -> Vec<String> {
             .await
             .unwrap_or_default()
     } else {
-        let mut set = state.hub.voice_room_users(room.id);
-        for m in db::chat::list_room_member_ids(&state.chat, room.id)
-            .await
-            .unwrap_or_default()
-        {
-            if !set.contains(&m) {
-                set.push(m);
-            }
-        }
-        set
+        state.hub.voice_room_users(room.id)
     }
 }
 
@@ -328,7 +336,7 @@ async fn record_and_broadcast(
         )
         .await?;
     }
-    let speaker = label_for(state, &user.id).await;
+    let speaker = cached_label_for(state, transcript_id, &user.id).await;
     broadcast_to_members(state, room, |to| ChatEvent::TranscriptSegment {
         room_id: room.id,
         to_user_id: to,
@@ -806,6 +814,8 @@ async fn finalize(state: &AppState, room: &Room, transcript_id: i64) {
     // room is stale. Clear it before the end broadcast so a later session in the
     // same room starts from a clean (no-agent) state.
     state.hub.clear_transcript_agent(room.id);
+    // LC-928: drop this session's cached speaker labels along with it.
+    state.hub.clear_speaker_labels(transcript_id);
     broadcast_to_members(state, room, |to| ChatEvent::TranscriptEnded {
         room_id: room.id,
         to_user_id: to,
@@ -850,8 +860,10 @@ pub async fn finalize_open_for_user(state: &AppState, user_id: &str) {
             if let Ok(Some(room)) = db::chat::get_room(&state.chat, session.room_id).await {
                 // end_session already transitioned (it's in `closed`), so just
                 // broadcast end + post the notice. LC-859: also clear any
-                // agent marker, mirroring finalize().
+                // agent marker, mirroring finalize(). LC-928: same for the
+                // cached speaker labels.
                 state.hub.clear_transcript_agent(room.id);
+                state.hub.clear_speaker_labels(tid);
                 broadcast_to_members(state, &room, |to| ChatEvent::TranscriptEnded {
                     room_id: room.id,
                     to_user_id: to,
@@ -1839,5 +1851,142 @@ mod finalize_open_for_room_tests {
             .unwrap()
             .unwrap();
         assert_eq!(older_now.status, "ended");
+    }
+}
+
+/// LC-928: `recipients`' huddle branch (a non-`is_voice`, non-DM room) and the
+/// speaker-label cache used by the live-caption hot path.
+#[cfg(test)]
+mod huddle_recipients_and_label_cache_tests {
+    use super::*;
+    use crate::ws::hub::Hub;
+    use sqlx::SqlitePool;
+    use std::sync::Arc;
+
+    async fn chat_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/chat")
+            .run(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    async fn test_state() -> AppState {
+        let auth = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/auth")
+            .run(&auth)
+            .await
+            .unwrap();
+        AppState {
+            geoip: None,
+            login_approval_enabled: false,
+            bg: crate::bg::spawn(auth.clone()),
+            auth,
+            chat: chat_pool().await,
+            settings: {
+                let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+                sqlx::migrate!("./migrations/settings")
+                    .run(&pool)
+                    .await
+                    .unwrap();
+                pool
+            },
+            hub: Arc::new(Hub::new()),
+            asset_version: "test".into(),
+            last_seen_ledger: crate::auth::new_last_seen_ledger(),
+            activity_ledger: crate::auth::new_last_seen_ledger(),
+            secret_key: None,
+            vapid: None,
+            push_client: Arc::new(crate::push::MockPushClient::default()),
+            apns_client: None,
+            fcm_client: None,
+            mailer: None,
+            base_url: "http://localhost:8080".to_string(),
+            ice_servers: "[]".to_string(),
+            rate_limits: crate::rate_limit::RateLimits::new(),
+            bunyip_sso: None,
+            stt_client: None,
+            llm_client: None,
+            embedding_client: None,
+        }
+    }
+
+    /// LC-928 AC: a huddle in a group room must deliver captions only to
+    /// `voice_room_users`, not to every room member. Regression test for the
+    /// bug: a non-participant room member ("carol") who never joined the
+    /// huddle must be absent from `recipients`, while the actual participant
+    /// ("alice") is present.
+    #[tokio::test]
+    async fn huddle_recipients_excludes_non_participant_room_members() {
+        let state = test_state().await;
+        let room_id = db::chat::create_room(&state.chat, "huddle-room", None, "public", None, None)
+            .await
+            .unwrap();
+        db::chat::add_room_member(&state.chat, room_id, "alice")
+            .await
+            .unwrap();
+        db::chat::add_room_member(&state.chat, room_id, "carol")
+            .await
+            .unwrap();
+
+        // Only alice actually joins the huddle's voice mesh.
+        let (conn_id, _rx, _) = state.hub.connect("alice", "alice");
+        state.hub.voice_join(conn_id, room_id);
+
+        let room = db::chat::get_room(&state.chat, room_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!room.is_voice, "huddle room must not be flagged is_voice");
+        assert_eq!(room.room_type, "public");
+
+        let got = recipients(&state, &room).await;
+        assert_eq!(got, vec!["alice".to_string()]);
+        assert!(
+            !got.contains(&"carol".to_string()),
+            "non-participant room member must not receive huddle captions: {got:?}"
+        );
+    }
+
+    /// LC-928 AC: a speaker's label is resolved at most once per call
+    /// session. Verified by changing the username AFTER the first resolution
+    /// and confirming the second call still returns the cached (stale) value
+    /// instead of re-querying auth.db.
+    #[tokio::test]
+    async fn cached_label_for_resolves_at_most_once_per_session() {
+        let state = test_state().await;
+        let room_id = db::chat::create_room(&state.chat, "dmish", None, "public", None, None)
+            .await
+            .unwrap();
+        let (session, _) = db::transcripts::start_session(&state.chat, room_id, "alice")
+            .await
+            .unwrap();
+        let user_id = db::auth::create_user(&state.auth, "alice", "")
+            .await
+            .unwrap();
+
+        let first = cached_label_for(&state, session.id, &user_id).await;
+        assert_eq!(first, "alice");
+
+        sqlx::query("UPDATE users SET username = 'renamed' WHERE id = ?")
+            .bind(&user_id)
+            .execute(&state.auth)
+            .await
+            .unwrap();
+
+        let second = cached_label_for(&state, session.id, &user_id).await;
+        assert_eq!(
+            second, "alice",
+            "second lookup within the same session must hit the cache, not re-resolve"
+        );
+
+        // A different call session must resolve again (the cache is scoped to
+        // the session, not the user forever): use a distinct transcript_id
+        // rather than a second real session, since the one-open-session-per-
+        // room index would just hand back the same session.id.
+        let other_session_id = session.id + 1;
+        let fourth = cached_label_for(&state, other_session_id, &user_id).await;
+        assert_eq!(fourth, "renamed");
     }
 }
