@@ -124,58 +124,94 @@ fn link_scheme_is_safe(dest: &str) -> bool {
     }
 }
 
-/// LC-290: spoiler pass. Splits a (non-code, non-link) text run on `||...||`
-/// pairs, runs every non-spoiler segment AND each spoiler's inner text through
-/// the normal `render_math_in_text` pipeline (so math/mentions/emoji/links work
-/// inside and around a spoiler), and wraps each spoiler's inner HTML in a
-/// click-to-reveal box. An unterminated `||` is emitted literally. No
-/// locale-dependent text is produced, so the content-keyed markdown cache stays
-/// correct across locales. Code never reaches this function (code spans/blocks
-/// are intercepted before the text branch), so `||` inside code stays literal.
+/// A run of text split on `||...||` pairs by [`scan_spoilers`].
+enum SpoilerPart<'a> {
+    /// Text outside any spoiler pair (possibly empty).
+    Plain(&'a str),
+    /// The inner text of a `||...||` pair, pipes stripped.
+    Spoiler(&'a str),
+}
+
+/// LC-290 / LC-918: the single scanner for `||...||` pairs, shared by
+/// [`render_with_spoilers`] and [`redact_spoilers`] so the two surfaces can
+/// never disagree about what counts as a spoiler. An unterminated `||` (no
+/// closer, or an empty `||||`) is reported as a literal `Plain("||")` and
+/// scanning resumes after it, so a later real pair on the same line still
+/// matches. Code never reaches this function (code spans/blocks are
+/// intercepted before the text branch), so `||` inside code stays literal.
+fn scan_spoilers<'a>(text: &'a str, mut emit: impl FnMut(SpoilerPart<'a>)) {
+    let mut rest = text;
+    loop {
+        let Some(open) = rest.find("||") else {
+            emit(SpoilerPart::Plain(rest));
+            break;
+        };
+        emit(SpoilerPart::Plain(&rest[..open]));
+        let after_open = &rest[open + 2..];
+        match after_open.find("||") {
+            // Non-empty inner: a spoiler.
+            Some(close) if close > 0 => {
+                emit(SpoilerPart::Spoiler(&after_open[..close]));
+                rest = &after_open[close + 2..];
+            }
+            // No closer (or empty `||||`): the opening `||` is literal; keep
+            // scanning the remainder so a later real pair still renders.
+            _ => {
+                emit(SpoilerPart::Plain("||"));
+                rest = after_open;
+            }
+        }
+    }
+}
+
+/// LC-290: spoiler pass. Runs every non-spoiler segment AND each spoiler's
+/// inner text through the normal `render_math_in_text` pipeline (so
+/// math/mentions/emoji/links work inside and around a spoiler), and wraps
+/// each spoiler's inner HTML in a click-to-reveal box. No locale-dependent
+/// text is produced, so the content-keyed markdown cache stays correct
+/// across locales.
 fn render_with_spoilers(
     text: &str,
     mentions: &[MentionRef],
     emojis: &[EmojiRef],
     channels: &[ChannelRef],
 ) -> String {
-    if !text.contains("||") {
-        return math::render_math_in_text(text, mentions, emojis, channels);
-    }
     let mut out = String::new();
-    let mut rest = text;
-    loop {
-        let Some(open) = rest.find("||") else {
-            out.push_str(&math::render_math_in_text(rest, mentions, emojis, channels));
-            break;
-        };
-        out.push_str(&math::render_math_in_text(
-            &rest[..open],
-            mentions,
-            emojis,
-            channels,
-        ));
-        let after_open = &rest[open + 2..];
-        match after_open.find("||") {
-            // Non-empty inner: a spoiler.
-            Some(close) if close > 0 => {
-                let inner =
-                    math::render_math_in_text(&after_open[..close], mentions, emojis, channels);
-                out.push_str(
-                    "<span class=\"lc-spoiler\" data-lc-spoiler tabindex=\"0\">\
-                     <span class=\"lc-spoiler-inner\">",
-                );
-                out.push_str(&inner);
-                out.push_str("</span></span>");
-                rest = &after_open[close + 2..];
-            }
-            // No closer (or empty `||||`): the opening `||` is literal; keep
-            // scanning the remainder so a later real pair still renders.
-            _ => {
-                out.push_str("||");
-                rest = after_open;
-            }
+    scan_spoilers(text, |part| match part {
+        SpoilerPart::Plain(s) => {
+            out.push_str(&math::render_math_in_text(s, mentions, emojis, channels));
         }
-    }
+        SpoilerPart::Spoiler(s) => {
+            let inner = math::render_math_in_text(s, mentions, emojis, channels);
+            out.push_str(
+                "<span class=\"lc-spoiler\" data-lc-spoiler tabindex=\"0\">\
+                 <span class=\"lc-spoiler-inner\">",
+            );
+            out.push_str(&inner);
+            out.push_str("</span></span>");
+        }
+    });
+    out
+}
+
+/// LC-918: redact spoilers for preview/notification surfaces that show a
+/// shortened, out-of-context slice of a body (dashboard cards, `/inbox`, the
+/// pinned strip, room highlights, email digests, and push/WS notification
+/// snippets). Driven by the same [`scan_spoilers`] scanner as
+/// `render_with_spoilers`, so a spoiler never renders on one surface and
+/// leaks in plain text on another: every `||...||` pair, inner text
+/// included, becomes the literal placeholder `[spoiler]`; an unterminated
+/// `||` is left literal, matching the renderer. The placeholder is not
+/// translated: a push payload is built once and cloned per subscription, so
+/// a locale-dependent value would leak the wrong locale to some recipients.
+/// Callers run this before truncating, so a spoiler is never cut mid-way
+/// into a still-revealing partial word.
+pub fn redact_spoilers(body: &str) -> String {
+    let mut out = String::with_capacity(body.len());
+    scan_spoilers(body, |part| match part {
+        SpoilerPart::Plain(s) => out.push_str(s),
+        SpoilerPart::Spoiler(_) => out.push_str("[spoiler]"),
+    });
     out
 }
 
@@ -455,10 +491,11 @@ pub fn render_login_body(body: &str) -> String {
 /// anchor inside a row that is itself a link. Empty when the body has no text
 /// (e.g. an attachment-only message) so the caller can substitute a label.
 pub fn plain_line(body: &str, max_chars: usize) -> String {
+    let redacted = redact_spoilers(body);
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TABLES);
-    let parser = Parser::new_ext(body, options);
+    let parser = Parser::new_ext(&redacted, options);
     let mut text = String::new();
     for ev in parser {
         match ev {
@@ -1034,6 +1071,33 @@ mod tests {
         let out = render("a || b without close", &[], &[]);
         assert!(!out.contains("lc-spoiler"), "spurious spoiler: {out}");
         assert!(out.contains("||"), "literal marker dropped: {out}");
+    }
+
+    // LC-918: redact_spoilers replaces a spoiler pair with the placeholder
+    // and drops the inner text entirely.
+    #[test]
+    fn redact_spoilers_replaces_pair() {
+        let out = redact_spoilers("a ||secret|| b");
+        assert_eq!(out, "a [spoiler] b");
+        assert!(!out.contains("secret"), "inner text leaked: {out}");
+    }
+
+    // LC-918: matches the renderer's rule that an unterminated `||` is left
+    // literal rather than swallowed.
+    #[test]
+    fn redact_spoilers_leaves_unterminated_marker_literal() {
+        let out = redact_spoilers("a || b without close");
+        assert_eq!(out, "a || b without close");
+    }
+
+    // LC-918: plain_line (dashboard / Catch up row / /inbox previews) redacts
+    // before it truncates, so the placeholder survives and the secret never
+    // does.
+    #[test]
+    fn plain_line_redacts_spoiler() {
+        let out = plain_line("intro ||secret|| outro", 120);
+        assert!(out.contains("[spoiler]"), "no placeholder: {out}");
+        assert!(!out.contains("secret"), "secret leaked: {out}");
     }
 
     // LC-703: a markdown link collapses to its label text (the dashboard bug -
