@@ -258,6 +258,42 @@ async fn main_is_the_history_element_so_a_restore_never_touches_the_socket() {
 }
 
 // ---------------------------------------------------------------------------
+// LC-924: a boosted nav does not pay for chrome the client discards.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_boosted_get_skips_the_sidebar_chrome_a_full_load_still_renders() {
+    let a = setup_app().await;
+    let room = format!("/room/{}", a.room_id);
+
+    // The room's name renders both in `#main` (the room header) and in the
+    // sidebar's nav row, so a full (non-boosted) load prints it more than
+    // once.
+    let (_, full) = get(&a, &room, &[]).await;
+    let full_count = full.matches("general").count();
+    assert!(
+        full_count >= 2,
+        "a full load renders the room name in both #main and the sidebar row, got {full_count} in:\n{full}"
+    );
+
+    // The boosted equivalent still renders the whole page (hx-select="#main"
+    // needs it to select from), but `hx-select` throws the sidebar away
+    // client-side, so the server must not have spent a render building the
+    // sidebar row: only the #main occurrence(s) should remain.
+    let (status, boosted) = get(&a, &room, &[("HX-Request", "true"), ("HX-Boosted", "true")]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        boosted.contains(MAIN),
+        "a boosted navigation still renders the whole page, got:\n{boosted}"
+    );
+    let boosted_count = boosted.matches("general").count();
+    assert!(
+        boosted_count < full_count,
+        "a boosted navigation must not build the sidebar chrome `hx-select` discards: expected fewer than {full_count} occurrences of the room name, got {boosted_count} in:\n{boosted}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // LC-842: a control nested in a boosted anchor never inherits its target.
 // ---------------------------------------------------------------------------
 
