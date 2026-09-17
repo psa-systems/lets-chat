@@ -246,6 +246,117 @@ async fn single_choice_moves_and_toggles() {
         .is_empty());
 }
 
+/// LC-907: two concurrent single-choice votes for different options from the
+/// same user must not both land; exactly one `poll_votes` row survives.
+#[tokio::test]
+async fn single_choice_concurrent_votes_leave_exactly_one_row() {
+    let t = app().await;
+    let room = seed_room(&t).await;
+    let mid = db::polls::create(
+        &t.chat,
+        room,
+        &t.alice,
+        "Pick one",
+        &["A".into(), "B".into()],
+        false,
+        false,
+        None,
+    )
+    .await
+    .unwrap();
+    let opts = option_ids(&t.chat, mid).await;
+
+    let app_a = t.app.clone();
+    let app_b = t.app.clone();
+    let sess = t.alice_session.clone();
+    let sess2 = t.alice_session.clone();
+    let uri_a = format!("/poll/{mid}/vote");
+    let uri_b = uri_a.clone();
+    let body_a = format!("option_id={}", opts[0]);
+    let body_b = format!("option_id={}", opts[1]);
+
+    let (ra, rb) = tokio::join!(
+        tokio::spawn(async move { send(&app_a, Some(&sess), Method::POST, &uri_a, &body_a).await }),
+        tokio::spawn(
+            async move { send(&app_b, Some(&sess2), Method::POST, &uri_b, &body_b).await }
+        ),
+    );
+    ra.unwrap();
+    rb.unwrap();
+
+    let mine = db::polls::user_votes(&t.chat, mid, &t.alice).await.unwrap();
+    assert_eq!(
+        mine.len(),
+        1,
+        "single-choice poll must hold at most one vote per user, got {mine:?}"
+    );
+}
+
+/// LC-907: a user left holding two votes from before the fix (e.g. from the
+/// pre-transaction race) is reduced to exactly one by their next vote, and
+/// the toggle-off path stays reachable afterward.
+#[tokio::test]
+async fn single_choice_repairs_preexisting_double_vote() {
+    let t = app().await;
+    let room = seed_room(&t).await;
+    let mid = db::polls::create(
+        &t.chat,
+        room,
+        &t.alice,
+        "Pick one",
+        &["A".into(), "B".into()],
+        false,
+        false,
+        None,
+    )
+    .await
+    .unwrap();
+    let opts = option_ids(&t.chat, mid).await;
+
+    // Simulate the pre-fix race: alice ends up with rows for both options.
+    db::polls::add_vote(&t.chat, opts[0], &t.alice)
+        .await
+        .unwrap();
+    db::polls::add_vote(&t.chat, opts[1], &t.alice)
+        .await
+        .unwrap();
+    assert_eq!(
+        db::polls::user_votes(&t.chat, mid, &t.alice)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+
+    // Next vote for B reduces her to exactly one vote (B).
+    send(
+        &t.app,
+        Some(&t.alice_session),
+        Method::POST,
+        &format!("/poll/{mid}/vote"),
+        &format!("option_id={}", opts[1]),
+    )
+    .await;
+    assert_eq!(
+        db::polls::user_votes(&t.chat, mid, &t.alice).await.unwrap(),
+        vec![opts[1]]
+    );
+
+    // Voting B again toggles it off (the toggle-off path is reachable again).
+    send(
+        &t.app,
+        Some(&t.alice_session),
+        Method::POST,
+        &format!("/poll/{mid}/vote"),
+        &format!("option_id={}", opts[1]),
+    )
+    .await;
+    assert!(db::polls::user_votes(&t.chat, mid, &t.alice)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
 #[tokio::test]
 async fn multi_choice_allows_multiple() {
     let t = app().await;

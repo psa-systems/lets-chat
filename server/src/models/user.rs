@@ -273,11 +273,14 @@ pub fn handle_char_allowed(c: char) -> bool {
 /// characters, fall back to `user`, truncate). This is the lenient provisioning
 /// path used at SSO signup, where there is no human to correct a bad value.
 pub fn sanitize_handle(s: &str) -> String {
-    let mut out: String = s.chars().filter(|c| handle_char_allowed(*c)).collect();
+    let mut out: String = s
+        .chars()
+        .filter(|c| handle_char_allowed(*c))
+        .take(MAX_USERNAME_CHARS)
+        .collect();
     if out.is_empty() {
         out.push_str("user");
     }
-    out.truncate(MAX_USERNAME_CHARS);
     out
 }
 
@@ -493,6 +496,45 @@ mod tests {
             sanitize_handle(&"z".repeat(80)).chars().count(),
             MAX_USERNAME_CHARS
         );
+    }
+
+    #[test]
+    fn sanitize_handle_truncates_multi_byte_input_by_chars_not_bytes() {
+        // LC-912: a naive `String::truncate(MAX_USERNAME_CHARS)` operates on
+        // byte offsets and panics when the cut falls inside a multi-byte
+        // character. 80 three-byte ideographs must still yield exactly 64
+        // characters without panicking.
+        let input = "\u{65e5}".repeat(80);
+        let out = sanitize_handle(&input);
+        assert_eq!(out.chars().count(), MAX_USERNAME_CHARS);
+    }
+
+    #[test]
+    fn sanitize_handle_does_not_panic_on_boundary_straddling_input() {
+        // 63 ASCII letters followed by 2 three-byte ideographs: the old
+        // byte-index truncation at 64 fell inside the first ideograph
+        // (bytes 63-65) and panicked. It must now return cleanly.
+        let input = format!("{}{}", "a".repeat(63), "\u{65e5}".repeat(2));
+        let out = sanitize_handle(&input);
+        assert!(!out.is_empty());
+        assert!(validate_handle(&out).is_ok());
+    }
+
+    #[test]
+    fn every_sanitize_handle_output_is_accepted_by_validate_handle() {
+        let inputs = [
+            "Ada_Lovelace-1.0",
+            &"\u{65e5}".repeat(80),
+            &"z".repeat(80),
+            "!!!***???",
+        ];
+        for input in inputs {
+            let out = sanitize_handle(input);
+            assert!(
+                validate_handle(&out).is_ok(),
+                "sanitize_handle({input:?}) = {out:?} was rejected by validate_handle"
+            );
+        }
     }
 
     #[test]

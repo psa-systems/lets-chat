@@ -24,7 +24,8 @@ const SNIPPET_MAX_CHARS: usize = 240;
 /// Collapse whitespace and truncate to `SNIPPET_MAX_CHARS`, breaking at the
 /// last space when possible. Mirrors `routes::pinned::snippet_for` intent.
 fn snippet_for(body: &str) -> String {
-    let collapsed: String = body.split_whitespace().collect::<Vec<_>>().join(" ");
+    let redacted = crate::views::markdown::redact_spoilers(body);
+    let collapsed: String = redacted.split_whitespace().collect::<Vec<_>>().join(" ");
     if collapsed.chars().count() <= SNIPPET_MAX_CHARS {
         return collapsed;
     }
@@ -126,4 +127,18 @@ pub async fn get_room_highlights(
         back_path: format!("/room/{room_id}"),
         rows,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // LC-918: the room highlights recap redacts spoilers rather than
+    // printing the hidden text.
+    #[test]
+    fn snippet_for_redacts_spoiler() {
+        let out = snippet_for("intro ||secret|| outro");
+        assert!(out.contains("[spoiler]"), "no placeholder: {out}");
+        assert!(!out.contains("secret"), "secret leaked: {out}");
+    }
 }
