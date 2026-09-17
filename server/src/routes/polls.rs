@@ -287,15 +287,31 @@ pub async fn post_vote(
             db::polls::add_vote(&state.chat, form.option_id, &user.id).await?;
         }
     } else {
-        // Single choice: clicking the current pick clears it; any other
-        // pick replaces the existing vote.
-        let mine = db::polls::user_votes(&state.chat, message_id, &user.id).await?;
-        if mine == [form.option_id] {
-            db::polls::remove_vote(&state.chat, form.option_id, &user.id).await?;
-        } else {
-            db::polls::clear_user_votes(&state.chat, message_id, &user.id).await?;
-            db::polls::add_vote(&state.chat, form.option_id, &user.id).await?;
+        // Single choice: clicking the current pick clears it; any other pick
+        // replaces the existing vote. LC-907: read-decide-write runs inside
+        // one BEGIN IMMEDIATE transaction (the writer lock), matching
+        // dispatch_one, so two concurrent requests from the same user cannot
+        // each observe a stale vote set and leave two rows behind.
+        let mut conn = state.chat.acquire().await?;
+        sqlx::query("BEGIN IMMEDIATE").execute(&mut *conn).await?;
+        let outcome = async {
+            let mine = db::polls::user_votes(&mut *conn, message_id, &user.id).await?;
+            if mine == [form.option_id] {
+                db::polls::remove_vote(&mut *conn, form.option_id, &user.id).await?;
+            } else {
+                db::polls::clear_user_votes(&mut *conn, message_id, &user.id).await?;
+                db::polls::add_vote(&mut *conn, form.option_id, &user.id).await?;
+            }
+            Ok::<(), sqlx::Error>(())
         }
+        .await;
+        match outcome {
+            Ok(()) => sqlx::query("COMMIT").execute(&mut *conn).await?,
+            Err(e) => {
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                return Err(e.into());
+            }
+        };
     }
 
     state.hub.broadcast_to_room(
