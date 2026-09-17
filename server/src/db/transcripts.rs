@@ -233,6 +233,13 @@ pub async fn list_segments(pool: &SqlitePool, transcript_id: i64) -> sqlx::Resul
 /// participant just said is that participant's voice bleeding through this
 /// client's speakers into its mic. `spoken_at` is lexically ordered text in
 /// [`NOW_MS`] format, so the cutoff compares as a string.
+///
+/// LC-928: ordered by `spoken_at` (not `id`) so this matches the
+/// `(transcript_id, spoken_at)` index left-to-right - the equality, the range,
+/// and the ordering all come from the same index, so SQLite seeks straight to
+/// the cutoff and walks at most `within_secs` worth of rows instead of the
+/// whole call. `spoken_at` and `id` are both insertion-order monotonic, so the
+/// result is the same "newest first" set either way.
 pub async fn recent_texts_by_others(
     pool: &SqlitePool,
     transcript_id: i64,
@@ -243,7 +250,7 @@ pub async fn recent_texts_by_others(
         "SELECT text FROM transcript_segments \
          WHERE transcript_id = ? AND user_id != ? \
            AND spoken_at >= strftime('%Y-%m-%d %H:%M:%f', 'now', ?) \
-         ORDER BY id DESC LIMIT 20",
+         ORDER BY spoken_at DESC LIMIT 20",
     )
     .bind(transcript_id)
     .bind(exclude_user)
@@ -376,4 +383,84 @@ pub async fn end_open_sessions_started_by(
         }
     }
     Ok(closed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn chat_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/chat")
+            .run(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    /// LC-928 AC: the echo-dedupe query's cost must not scale with total call
+    /// length, only with the configured time window. Before the
+    /// `(transcript_id, spoken_at)` index, the only index covering this table
+    /// was `(transcript_id, id)`, which cannot serve the `spoken_at` predicate
+    /// or the `ORDER BY`, so SQLite fell back to scanning the id index. This
+    /// asserts the query plan now does a SEARCH (an index seek), never a SCAN
+    /// (a walk), on `transcript_segments` - the mechanical guard against that
+    /// index (or this query's shape) regressing.
+    #[tokio::test]
+    async fn recent_texts_by_others_query_plan_seeks_not_scans() {
+        let pool = chat_pool().await;
+        let rows = sqlx::query(
+            "EXPLAIN QUERY PLAN \
+             SELECT text FROM transcript_segments \
+             WHERE transcript_id = ? AND user_id != ? \
+               AND spoken_at >= strftime('%Y-%m-%d %H:%M:%f', 'now', ?) \
+             ORDER BY spoken_at DESC LIMIT 20",
+        )
+        .bind(1_i64)
+        .bind("u1")
+        .bind("-8 seconds")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        let plan: Vec<String> = rows.iter().map(|r| r.get::<String, _>("detail")).collect();
+        let joined = plan.join(" | ");
+        assert!(
+            joined.contains(
+                "SEARCH transcript_segments USING INDEX idx_transcript_segments_tid_spoken_at"
+            ),
+            "expected an index seek on idx_transcript_segments_tid_spoken_at, got: {joined}"
+        );
+        assert!(
+            !joined.contains("SCAN transcript_segments"),
+            "query must not fall back to a full scan, got: {joined}"
+        );
+    }
+
+    #[tokio::test]
+    async fn recent_texts_by_others_bounded_by_window_not_call_length() {
+        let pool = chat_pool().await;
+        let (session, _) = start_session(&pool, 1, "starter").await.unwrap();
+        // A long call: many old segments from another user, backdated well
+        // outside the 8s window, so they must not appear in the result.
+        for i in 0..500 {
+            sqlx::query(
+                "INSERT INTO transcript_segments \
+                 (transcript_id, user_id, text, duration_ms, spoken_at) \
+                 VALUES (?, ?, ?, 0, strftime('%Y-%m-%d %H:%M:%f', 'now', '-1 hour'))",
+            )
+            .bind(session.id)
+            .bind("other")
+            .bind(format!("old line {i}"))
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        append_segment(&pool, session.id, "other", "recent line", None, 0)
+            .await
+            .unwrap();
+        let recent = recent_texts_by_others(&pool, session.id, "me", 8)
+            .await
+            .unwrap();
+        assert_eq!(recent, vec!["recent line".to_string()]);
+    }
 }

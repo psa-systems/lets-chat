@@ -491,6 +491,69 @@ pub async fn get_link_preview(
     }))
 }
 
+/// LC-925: the thumbnail bytes cached on a `link_previews` row, alongside
+/// when they were fetched. `image_fetched_at` is `None` until the first
+/// successful `fetch_image` for this hash, distinct from the row's own
+/// `fetched_at` (the page metadata and the image can be (re)fetched at
+/// different times).
+#[derive(Debug, Clone)]
+pub struct CachedImage {
+    pub content_type: String,
+    pub bytes: Vec<u8>,
+    pub fetched_at: String,
+}
+
+/// Read the cached thumbnail bytes for `url_hash`, if any have been stored.
+/// Returns `None` when the row doesn't exist or no image has been cached yet
+/// (a fresh row, or one whose `og:image` fetch has always failed).
+pub async fn get_cached_image(
+    pool: &SqlitePool,
+    url_hash: &str,
+) -> Result<Option<CachedImage>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT image_data, image_content_type, image_fetched_at \
+         FROM link_previews WHERE url_hash = ?",
+    )
+    .bind(url_hash)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|r| {
+        let bytes: Option<Vec<u8>> = r.get("image_data");
+        let content_type: Option<String> = r.get("image_content_type");
+        let fetched_at: Option<String> = r.get("image_fetched_at");
+        match (bytes, content_type, fetched_at) {
+            (Some(bytes), Some(content_type), Some(fetched_at)) => Some(CachedImage {
+                content_type,
+                bytes,
+                fetched_at,
+            }),
+            _ => None,
+        }
+    }))
+}
+
+/// Store the freshly fetched thumbnail bytes for `url_hash`, stamping
+/// `image_fetched_at` to now. A no-op if the row itself doesn't exist (it is
+/// written by `upsert_link_preview` before this is ever called).
+pub async fn set_cached_image(
+    pool: &SqlitePool,
+    url_hash: &str,
+    content_type: &str,
+    bytes: &[u8],
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE link_previews \
+         SET image_data = ?, image_content_type = ?, image_fetched_at = datetime('now') \
+         WHERE url_hash = ?",
+    )
+    .bind(bytes)
+    .bind(content_type)
+    .bind(url_hash)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn upsert_link_preview(
     pool: &SqlitePool,
     url_hash: &str,
