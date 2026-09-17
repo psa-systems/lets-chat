@@ -62,6 +62,21 @@ async fn fetch_call_room(state: &AppState, room_id: i64) -> Result<Room, AppErro
     Ok(room)
 }
 
+/// LC-915: which SFU surface admitted a non-DM caller, mirroring the OR
+/// precedence in `require_participant` - mesh checked first because it is
+/// in-memory, stage only consulted when mesh does not already admit. A room
+/// hosting both a Stage and a huddle at once therefore resolves to whichever
+/// gate actually admitted the starter, not to some fixed choice.
+fn admitted_surface(in_mesh: bool, is_stage_speaker: bool) -> Option<crate::livekit::Surface> {
+    if in_mesh {
+        Some(crate::livekit::Surface::Huddle)
+    } else if is_stage_speaker {
+        Some(crate::livekit::Surface::Stage)
+    } else {
+        None
+    }
+}
+
 /// Gate for mutating the live session (start / segment / end): the caller must
 /// be an active PARTICIPANT, not merely able to see the room. A DM member is a
 /// participant; for a voice channel OR a huddle the caller must currently be
@@ -77,22 +92,35 @@ async fn fetch_call_room(state: &AppState, room_id: i64) -> Result<Room, AppErro
 /// Stage speaker is absent from `voice_room_users` and was refused here. The
 /// mesh check runs first because it is in-memory and covers every other
 /// surface; only a caller it rejects pays for the stage lookup.
-async fn require_participant(state: &AppState, user: &User, room: &Room) -> Result<(), AppError> {
-    let ok = if room.room_type == "dm" {
-        db::chat::is_room_member(&state.chat, room.id, &user.id).await?
-    } else {
-        state
-            .hub
-            .voice_room_users(room.id)
-            .iter()
-            .any(|u| u == &user.id)
-            || is_stage_speaker(state, room, user).await?
-    };
-    if ok {
-        Ok(())
-    } else {
-        Err(AppError::Forbidden)
+///
+/// LC-915: returns WHICH surface admitted the caller (`None` for a DM, which
+/// has no SFU surface at all), so a caller that needs to know - the dispatch
+/// gate - can name the room the caller is actually IN instead of guessing.
+async fn require_participant(
+    state: &AppState,
+    user: &User,
+    room: &Room,
+) -> Result<Option<crate::livekit::Surface>, AppError> {
+    if room.room_type == "dm" {
+        return if db::chat::is_room_member(&state.chat, room.id, &user.id).await? {
+            Ok(None)
+        } else {
+            Err(AppError::Forbidden)
+        };
     }
+    let in_mesh = state
+        .hub
+        .voice_room_users(room.id)
+        .iter()
+        .any(|u| u == &user.id);
+    let is_speaker = if in_mesh {
+        false
+    } else {
+        is_stage_speaker(state, room, user).await?
+    };
+    admitted_surface(in_mesh, is_speaker)
+        .map(Some)
+        .ok_or(AppError::Forbidden)
 }
 
 /// LC-597: does `user` currently hold the floor on `room`'s stage?
@@ -431,28 +459,40 @@ fn bearer(headers: &HeaderMap) -> Option<&str> {
         .filter(|s| !s.is_empty())
 }
 
-/// LC-814: dispatch is attempted only for an SFU-huddle call - any non-DM room,
-/// which rides the LiveKit SFU when LiveKit is configured - and only when the
-/// agent is fully configured. A DM is always the 1:1 mesh, so there is no SFU to
-/// tap; it keeps its per-client capture.
-fn should_dispatch_agent(room_type: &str, dispatch_ready: bool) -> bool {
-    dispatch_ready && room_type != "dm"
+/// LC-915 (was LC-814): dispatch is attempted only when the session's starter
+/// was admitted through a real SFU surface - `require_participant` returns
+/// `None` for a DM (no SFU there, just the 1:1 mesh) and `Some` for a Stage or
+/// huddle admission - and only when the agent is fully configured. This used to
+/// read "any non-DM room", which silently equated "not a DM" with "a huddle"
+/// and so hardcoded the huddle room even for a Stage-admitted caller.
+fn should_dispatch_agent(surface: Option<crate::livekit::Surface>, dispatch_ready: bool) -> bool {
+    dispatch_ready && surface.is_some()
 }
 
-/// LC-814 (LC-810 stage 2): best-effort dispatch of the transcription agent for
-/// a newly-opened SFU-huddle session. Spawned so it never blocks or fails
-/// `start`; on any error the call simply degrades to the existing per-client
-/// capture (and the LC-765 notice). The agent reads the transcript id + callback
-/// base from the job metadata and posts per-track clips back to the LC-813
+/// LC-814 (LC-810 stage 2), surface-aware since LC-915: best-effort dispatch of
+/// the transcription agent for a newly-opened SFU session, into the SAME
+/// LiveKit room `surface` names - the room the session's starter was actually
+/// admitted into, never a guess. Spawned so it never blocks or fails `start`;
+/// on any error the call simply degrades to the existing per-client capture
+/// (and the LC-765 notice). The agent reads the transcript id + callback base
+/// from the job metadata and posts per-track clips back to the LC-813
 /// `agent-clip` route.
-fn maybe_dispatch_agent(state: &AppState, room: &Room, transcript_id: i64) {
-    if !should_dispatch_agent(&room.room_type, crate::livekit::transcribe_dispatch_ready()) {
+fn maybe_dispatch_agent(
+    state: &AppState,
+    room: &Room,
+    transcript_id: i64,
+    surface: Option<crate::livekit::Surface>,
+) {
+    if !should_dispatch_agent(surface, crate::livekit::transcribe_dispatch_ready()) {
         return;
     }
+    let Some(surface) = surface else {
+        return;
+    };
     let Some(cfg) = crate::livekit::LiveKitConfig::from_env() else {
         return;
     };
-    let room_name = crate::livekit::room_name(crate::livekit::Surface::Huddle, room.id);
+    let room_name = crate::livekit::room_name(surface, room.id);
     let metadata = json!({
         "transcript_id": transcript_id,
         "base_url": state.base_url,
@@ -495,7 +535,7 @@ pub async fn start(
     Path(room_id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
     let room = fetch_call_room(&state, room_id).await?;
-    require_participant(&state, &user, &room).await?;
+    let surface = require_participant(&state, &user, &room).await?;
     // LC-814 / LC-914: dispatch the agent only when THIS call opens a NEW
     // session, not when a later joiner re-hits start (which joins the
     // already-open one). `start_session` reports this from the same insert
@@ -513,7 +553,7 @@ pub async fn start(
     })
     .await;
     if is_new_session {
-        maybe_dispatch_agent(&state, &room, tid);
+        maybe_dispatch_agent(&state, &room, tid, surface);
     }
     Ok(Json(json!({ "transcript_id": tid })))
 }
@@ -1577,18 +1617,56 @@ mod agent_token_tests {
 
 #[cfg(test)]
 mod dispatch_tests {
-    use super::should_dispatch_agent;
+    use super::{admitted_surface, should_dispatch_agent};
+    use crate::livekit::{room_name, Surface};
 
     #[test]
-    fn dispatch_only_for_non_dm_and_when_ready() {
-        // LC-814: an SFU huddle (any non-DM) with the agent configured -> dispatch.
-        assert!(should_dispatch_agent("public", true));
-        assert!(should_dispatch_agent("enclave", true));
-        // A DM is always the 1:1 mesh: never dispatch.
-        assert!(!should_dispatch_agent("dm", true));
-        // Agent not configured: never dispatch, whatever the room.
-        assert!(!should_dispatch_agent("public", false));
-        assert!(!should_dispatch_agent("dm", false));
+    fn dispatch_only_with_a_real_surface_and_when_ready() {
+        // A resolved surface (Stage or Huddle) with the agent configured -> dispatch.
+        assert!(should_dispatch_agent(Some(Surface::Stage), true));
+        assert!(should_dispatch_agent(Some(Surface::Huddle), true));
+        // No surface (a DM: `require_participant` returns `None`) -> never dispatch.
+        assert!(!should_dispatch_agent(None, true));
+        // Agent not configured: never dispatch, whatever the surface.
+        assert!(!should_dispatch_agent(Some(Surface::Stage), false));
+        assert!(!should_dispatch_agent(None, false));
+    }
+
+    /// LC-915: a session opened by a stage speaker resolves the Stage's own
+    /// LiveKit room, not the huddle's - the defect this issue closes (the old
+    /// gate hardcoded `Surface::Huddle` for every non-DM caller).
+    #[test]
+    fn stage_speaker_admission_dispatches_into_the_stage_room() {
+        let surface = admitted_surface(/* in_mesh */ false, /* is_stage_speaker */ true);
+        assert_eq!(surface, Some(Surface::Stage));
+        assert_eq!(room_name(surface.unwrap(), 42), "stage-42");
+    }
+
+    /// A session opened by a live mesh participant resolves the huddle's room.
+    #[test]
+    fn mesh_participant_admission_dispatches_into_the_huddle_room() {
+        let surface = admitted_surface(/* in_mesh */ true, /* is_stage_speaker */ false);
+        assert_eq!(surface, Some(Surface::Huddle));
+        assert_eq!(room_name(surface.unwrap(), 42), "huddle-42");
+    }
+
+    /// A DM has no SFU surface at all: `require_participant`'s DM branch never
+    /// calls `admitted_surface` and always resolves `None`, so dispatch is
+    /// skipped outright instead of guessing a room.
+    #[test]
+    fn dm_has_no_surface_and_dispatches_nothing() {
+        assert!(!should_dispatch_agent(None, true));
+    }
+
+    /// LC-915: a room hosting both a Stage and a huddle at once - the surface
+    /// follows whichever gate actually admitted the starter, not the room's
+    /// shape. Mesh is checked first (it's in-memory), so a starter who is BOTH
+    /// a live mesh participant and a stage speaker lands in the huddle they
+    /// actually joined.
+    #[test]
+    fn with_both_rosters_populated_the_surface_follows_the_admitting_gate() {
+        assert_eq!(admitted_surface(true, true), Some(Surface::Huddle));
+        assert_eq!(admitted_surface(false, true), Some(Surface::Stage));
     }
 }
 
