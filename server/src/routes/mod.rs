@@ -145,6 +145,35 @@ pub(crate) fn wants_fragment(headers: &axum::http::HeaderMap) -> bool {
         && !headers.contains_key("hx-history-restore-request")
 }
 
+tokio::task_local! {
+    /// LC-924: whether the current request is a boosted navigation. Set by
+    /// `track_boosted_nav`; `load_chrome` reads it to skip building the
+    /// sidebar/switcher chrome that `hx-select="#main"` (`partials/nav_boost.html`)
+    /// throws away client-side. A real navigation over the live socket still gets
+    /// the sidebar rebuilt exactly once, via `PageChanged` -> `ws::render_sidebar`
+    /// (see `ws.rs`'s `apply_page_context` doc comment), so this avoids the second,
+    /// wasted, server-side render rather than leaving the sidebar stale.
+    static BOOSTED_NAV: bool;
+}
+
+/// Mirrors `crate::i18n::resolve_locale`'s task-local pattern: stash a
+/// per-request fact that a page handler several calls deep (`load_chrome`)
+/// needs, without threading `HeaderMap` through every one of its ~20 callers.
+pub(crate) async fn track_boosted_nav(
+    req: axum::extract::Request,
+    next: middleware::Next,
+) -> Response {
+    let boosted = req.headers().contains_key("hx-boosted");
+    BOOSTED_NAV.scope(boosted, next.run(req)).await
+}
+
+/// True when the in-flight request is a boosted navigation. `false` outside a
+/// request scoped by `track_boosted_nav` (e.g. a WebSocket task), which is the
+/// correct default: those callers must build the real chrome.
+pub(crate) fn is_boosted_nav() -> bool {
+    BOOSTED_NAV.try_with(|b| *b).unwrap_or(false)
+}
+
 /// LC-739: dual-mode answer for a settings form whose success changes page
 /// content an inline status fragment cannot patch (a rotated invite code, a
 /// removed ban row, a renamed enclave in the page header). htmx gets
@@ -1034,6 +1063,24 @@ pub(crate) async fn load_chrome(
     ),
     AppError,
 > {
+    // LC-924: `hx-select="#main"` (partials/nav_boost.html) means a boosted
+    // GET's caller discards everything this function returns, and a real
+    // navigation gets the sidebar rebuilt exactly once anyway, over the live
+    // socket, once the client's `page_context` frame lands (`apply_page_context`
+    // -> `ws::render_sidebar` in ws.rs). Skip the DB reads and template data
+    // build here so a boosted nav does not pay for chrome markup it throws away.
+    if is_boosted_nav() {
+        return Ok((
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            false,
+            current_enclave,
+        ));
+    }
     let (
         categories,
         starred_rooms,
@@ -1936,6 +1983,11 @@ pub fn build_router(state: AppState) -> Router {
         // LC-100: resolve the UI locale into a task-local for template `| t`
         // filters. Inner of `inject_user` so the user's saved locale is known.
         .layer(middleware::from_fn(crate::auth::resolve_locale))
+        // LC-924: stash whether this GET is a boosted navigation into a
+        // task-local, so `load_chrome` can skip the sidebar/switcher build
+        // `hx-select="#main"` discards anyway. Does not need `inject_user`
+        // (reads only the raw `HX-Boosted` header), so it can sit outside it.
+        .layer(middleware::from_fn(track_boosted_nav))
         .layer(middleware::from_fn_with_state(state.clone(), inject_user))
         // LC-72: the JSON API authenticates via bearer tokens (ApiAuth), not
         // the session cookie. Merge it AFTER the cookie / 2FA / maintenance /
