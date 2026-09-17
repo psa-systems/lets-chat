@@ -168,15 +168,6 @@ fn dm_event(room_id: i64, recipient: &str) -> ChatEvent {
     }
 }
 
-/// Spawned tasks observe the row deletes / sends asynchronously. Yield a
-/// few times so the runtime drains them before assertions.
-async fn drain_spawns() {
-    for _ in 0..10 {
-        tokio::task::yield_now().await;
-    }
-    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-}
-
 #[tokio::test]
 async fn dispatch_sends_to_recipient_subscriptions() {
     let mock = Arc::new(MockPushClient::default());
@@ -186,7 +177,10 @@ async fn dispatch_sends_to_recipient_subscriptions() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::eventually("push sent to recipient", || async {
+        f.mock.sent.lock().await.len() == 1
+    })
+    .await;
 
     let sent = f.mock.sent.lock().await;
     assert_eq!(sent.len(), 1);
@@ -208,7 +202,9 @@ async fn dispatch_skips_when_notify_push_disabled() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    // Negative assertion; dispatch also returns before spawning anything
+    // here since notify_push_enabled is checked up front. See common::settle.
+    common::settle().await;
 
     assert!(f.mock.sent.lock().await.is_empty());
     let _ = f.sender_id;
@@ -224,7 +220,7 @@ async fn dispatch_skips_when_vapid_unconfigured() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::settle().await;
 
     assert!(f.mock.sent.lock().await.is_empty());
     let _ = f.sender_id;
@@ -242,7 +238,7 @@ async fn dispatch_skips_when_room_muted_all() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::settle().await;
 
     assert!(f.mock.sent.lock().await.is_empty());
     let _ = f.sender_id;
@@ -265,7 +261,10 @@ async fn dispatch_fires_when_room_muted_except_mentions() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::eventually("push sent despite except-mentions mute", || async {
+        f.mock.sent.lock().await.len() == 1
+    })
+    .await;
 
     assert_eq!(f.mock.sent.lock().await.len(), 1);
     let _ = f.sender_id;
@@ -286,7 +285,7 @@ async fn dispatch_skips_dm_kind_when_room_muted() {
 
     let ev = dm_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::settle().await;
 
     assert!(f.mock.sent.lock().await.is_empty());
     let _ = f.sender_id;
@@ -311,7 +310,10 @@ async fn dispatch_fires_when_room_mute_none() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::eventually("push sent under unmuted room", || async {
+        f.mock.sent.lock().await.len() == 1
+    })
+    .await;
 
     assert_eq!(f.mock.sent.lock().await.len(), 1);
     let _ = f.sender_id;
@@ -326,7 +328,10 @@ async fn dispatch_fires_dm_kind_when_room_unmuted() {
 
     let ev = dm_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::eventually("push sent for unmuted dm", || async {
+        f.mock.sent.lock().await.len() == 1
+    })
+    .await;
 
     let sent = f.mock.sent.lock().await;
     assert_eq!(sent.len(), 1);
@@ -344,7 +349,7 @@ async fn dispatch_skips_when_no_subscriptions() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::settle().await;
 
     assert!(f.mock.sent.lock().await.is_empty());
     let _ = f.sender_id;
@@ -360,7 +365,10 @@ async fn dispatch_fan_out_one_per_subscription() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::eventually("both subscriptions sent", || async {
+        f.mock.sent.lock().await.len() == 2
+    })
+    .await;
 
     let sent = f.mock.sent.lock().await;
     assert_eq!(sent.len(), 2);
@@ -400,7 +408,13 @@ async fn dispatch_410_deletes_subscription() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::eventually("all subs deleted on 410", || async {
+        db::push_subscriptions::for_user(&f.state.auth, &f.recipient_id)
+            .await
+            .unwrap()
+            .is_empty()
+    })
+    .await;
 
     let remaining = db::push_subscriptions::for_user(&f.state.auth, &f.recipient_id)
         .await
@@ -464,7 +478,12 @@ async fn dispatch_fans_out_to_all_channels_in_parallel() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::eventually("all three channels sent", || async {
+        f.mock.sent.lock().await.len() == 1
+            && f.apns_mock.sent.lock().await.len() == 1
+            && f.fcm_mock.sent.lock().await.len() == 1
+    })
+    .await;
 
     // One delivery per channel, all carrying the same payload (AC: consistent
     // shape across channels).
@@ -490,7 +509,13 @@ async fn apns_dead_token_is_pruned() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::eventually("apns row pruned on dead token", || async {
+        db::apns_subscriptions::for_user(&f.state.auth, &f.recipient_id)
+            .await
+            .unwrap()
+            .is_empty()
+    })
+    .await;
 
     let remaining = db::apns_subscriptions::for_user(&f.state.auth, &f.recipient_id)
         .await
@@ -511,7 +536,13 @@ async fn fcm_dead_token_is_pruned() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::eventually("fcm row pruned on dead token", || async {
+        db::fcm_subscriptions::for_user(&f.state.auth, &f.recipient_id)
+            .await
+            .unwrap()
+            .is_empty()
+    })
+    .await;
 
     let remaining = db::fcm_subscriptions::for_user(&f.state.auth, &f.recipient_id)
         .await
@@ -532,7 +563,7 @@ async fn mobile_channels_skipped_when_notify_disabled() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::settle().await;
 
     assert!(f.apns_mock.sent.lock().await.is_empty());
     assert!(f.fcm_mock.sent.lock().await.is_empty());
@@ -551,7 +582,7 @@ async fn mobile_channels_skipped_when_room_muted_all() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::settle().await;
 
     assert!(f.apns_mock.sent.lock().await.is_empty());
     assert!(f.fcm_mock.sent.lock().await.is_empty());
@@ -571,7 +602,7 @@ async fn mobile_channels_skipped_during_dnd() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::settle().await;
 
     assert!(f.apns_mock.sent.lock().await.is_empty());
     assert!(f.fcm_mock.sent.lock().await.is_empty());
@@ -590,7 +621,7 @@ async fn unconfigured_mobile_channel_is_a_no_op_and_keeps_tokens() {
 
     let ev = mention_event(f.room_id, &f.recipient_id);
     push::dispatch(&f.state, &f.recipient_id, &ev).await;
-    drain_spawns().await;
+    common::settle().await;
 
     // Tokens survive (a missing sender must not look like a dead token).
     assert_eq!(
