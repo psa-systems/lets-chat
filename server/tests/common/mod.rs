@@ -59,6 +59,48 @@ pub async fn pool(name: &str) -> SqlitePool {
     }
 }
 
+/// LC-911: a `tracing::Subscriber` that records every event's fields as a
+/// formatted string instead of printing anywhere, so a test can assert on a
+/// `tracing::warn!` call (e.g. the embedding-dimension-mismatch log) without
+/// pulling in an external log-capture crate. Install it with
+/// `tracing::subscriber::set_default`, which stays active on the calling
+/// thread (across `.await` points, unlike `with_default`) until the returned
+/// guard is dropped - so the test must run on a single-threaded executor
+/// (`#[tokio::test(flavor = "current_thread")]`), otherwise the subscriber may
+/// not be active on the worker thread that logs the event.
+#[derive(Clone, Default)]
+pub struct CapturingSubscriber {
+    pub events: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+struct FieldsToString(String);
+impl tracing::field::Visit for FieldsToString {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if !self.0.is_empty() {
+            self.0.push(' ');
+        }
+        self.0.push_str(&format!("{}={:?}", field.name(), value));
+    }
+}
+
+impl tracing::Subscriber for CapturingSubscriber {
+    fn enabled(&self, _metadata: &tracing::Metadata<'_>) -> bool {
+        true
+    }
+    fn new_span(&self, _span: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+    fn record(&self, _span: &tracing::span::Id, _values: &tracing::span::Record<'_>) {}
+    fn record_follows_from(&self, _span: &tracing::span::Id, _follows: &tracing::span::Id) {}
+    fn event(&self, event: &tracing::Event<'_>) {
+        let mut visitor = FieldsToString(String::new());
+        event.record(&mut visitor);
+        self.events.lock().unwrap().push(visitor.0);
+    }
+    fn enter(&self, _span: &tracing::span::Id) {}
+    fn exit(&self, _span: &tracing::span::Id) {}
+}
+
 /// Poll `f` every 10ms until it returns `true`, or panic with `what` after a
 /// 5s deadline. Use this for any assertion on a side effect produced by a
 /// detached `tokio::spawn` task (e.g. push fan-out sends / DB writes): those

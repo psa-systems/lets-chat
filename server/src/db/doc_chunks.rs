@@ -24,7 +24,10 @@ pub struct DocChunk {
 
 /// Insert or replace one chunk keyed by `(source_url, chunk_index)`. `vec` is the
 /// little-endian byte encoding from [`crate::embeddings::vec_to_bytes`]; `dim` is
-/// its length.
+/// its length. `model` is the configured embeddings model name that produced
+/// `vec` (LC-911): the second cache key alongside `dim`, read back by
+/// [`source_content_hash`] so a model swap is detected even when the
+/// dimensionality happens to match.
 #[allow(clippy::too_many_arguments)]
 pub async fn upsert(
     pool: &SqlitePool,
@@ -35,17 +38,18 @@ pub async fn upsert(
     chunk_index: i64,
     body: &str,
     content_hash: &str,
+    model: &str,
     dim: i64,
     vec: &[u8],
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO doc_chunks \
-           (product, source_url, title, heading, chunk_index, body, content_hash, dim, vec) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) \
+           (product, source_url, title, heading, chunk_index, body, content_hash, model, dim, vec) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
          ON CONFLICT(source_url, chunk_index) DO UPDATE SET \
            product = excluded.product, title = excluded.title, heading = excluded.heading, \
-           body = excluded.body, content_hash = excluded.content_hash, dim = excluded.dim, \
-           vec = excluded.vec, updated_at = datetime('now')",
+           body = excluded.body, content_hash = excluded.content_hash, model = excluded.model, \
+           dim = excluded.dim, vec = excluded.vec, updated_at = datetime('now')",
     )
     .bind(product)
     .bind(source_url)
@@ -54,6 +58,7 @@ pub async fn upsert(
     .bind(chunk_index)
     .bind(body)
     .bind(content_hash)
+    .bind(model)
     .bind(dim)
     .bind(vec)
     .execute(pool)
@@ -62,15 +67,22 @@ pub async fn upsert(
 }
 
 /// The `content_hash` stored for a page (any chunk of it), if the page is
-/// already indexed. Used to skip re-embedding a page whose text is unchanged.
+/// already indexed AND was embedded with `model` (LC-911). Returns `None` when
+/// the page has no rows, or its stored rows carry a different model name, so a
+/// model swap makes the docs indexer's unchanged-skip stop firing and the page
+/// gets re-embedded even though its text did not change.
 pub async fn source_content_hash(
     pool: &SqlitePool,
     source_url: &str,
+    model: &str,
 ) -> Result<Option<String>, sqlx::Error> {
-    let row = sqlx::query("SELECT content_hash FROM doc_chunks WHERE source_url = ? LIMIT 1")
-        .bind(source_url)
-        .fetch_optional(pool)
-        .await?;
+    let row = sqlx::query(
+        "SELECT content_hash FROM doc_chunks WHERE source_url = ? AND model = ? LIMIT 1",
+    )
+    .bind(source_url)
+    .bind(model)
+    .fetch_optional(pool)
+    .await?;
     Ok(row.map(|r| r.get("content_hash")))
 }
 
