@@ -252,12 +252,17 @@ pub async fn options_with_counts(
         .collect())
 }
 
-/// Option ids the user has voted for in this poll.
-pub async fn user_votes(
-    pool: &SqlitePool,
+/// Option ids the user has voted for in this poll. Takes an executor (pool or
+/// transaction/connection) so the single-choice vote path can read inside the
+/// same `BEGIN IMMEDIATE` transaction that then writes (LC-907).
+pub async fn user_votes<'e, E>(
+    executor: E,
     message_id: i64,
     user_id: &str,
-) -> sqlx::Result<Vec<i64>> {
+) -> sqlx::Result<Vec<i64>>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let rows = sqlx::query(
         "SELECT v.option_id FROM poll_votes v \
          JOIN poll_options o ON o.id = v.option_id \
@@ -265,7 +270,7 @@ pub async fn user_votes(
     )
     .bind(message_id)
     .bind(user_id)
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await?;
     Ok(rows
         .into_iter()
@@ -317,37 +322,47 @@ pub async fn option_belongs(
     Ok(row.is_some())
 }
 
-pub async fn add_vote(pool: &SqlitePool, option_id: i64, user_id: &str) -> sqlx::Result<()> {
+pub async fn add_vote<'e, E>(executor: E, option_id: i64, user_id: &str) -> sqlx::Result<()>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query("INSERT OR IGNORE INTO poll_votes (option_id, user_id) VALUES (?, ?)")
         .bind(option_id)
         .bind(user_id)
-        .execute(pool)
+        .execute(executor)
         .await?;
     Ok(())
 }
 
-pub async fn remove_vote(pool: &SqlitePool, option_id: i64, user_id: &str) -> sqlx::Result<()> {
+pub async fn remove_vote<'e, E>(executor: E, option_id: i64, user_id: &str) -> sqlx::Result<()>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query("DELETE FROM poll_votes WHERE option_id = ? AND user_id = ?")
         .bind(option_id)
         .bind(user_id)
-        .execute(pool)
+        .execute(executor)
         .await?;
     Ok(())
 }
 
 /// Remove all of a user's votes in a poll (single-choice "move my vote").
-pub async fn clear_user_votes(
-    pool: &SqlitePool,
+/// Takes an executor so it can run inside the caller's transaction.
+pub async fn clear_user_votes<'e, E>(
+    executor: E,
     message_id: i64,
     user_id: &str,
-) -> sqlx::Result<()> {
+) -> sqlx::Result<()>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query(
         "DELETE FROM poll_votes WHERE user_id = ? AND option_id IN \
          (SELECT id FROM poll_options WHERE message_id = ?)",
     )
     .bind(user_id)
     .bind(message_id)
-    .execute(pool)
+    .execute(executor)
     .await?;
     Ok(())
 }

@@ -24,10 +24,19 @@ async fn start_then_end_by_room() {
         .unwrap();
     assert_eq!(open_rows(&pool, 7).await, 1);
 
-    audit::end_session_by_room(&pool, 7, "revoked")
+    let closed = audit::end_session_by_room(&pool, 7, "revoked")
         .await
-        .unwrap();
+        .unwrap()
+        .expect("a row was open to close");
+    assert_eq!(closed.controller_id, "controller");
+    assert_eq!(closed.sharer_id, "sharer");
     assert_eq!(open_rows(&pool, 7).await, 0);
+
+    // A second close finds nothing open and closes nothing.
+    assert!(audit::end_session_by_room(&pool, 7, "revoked")
+        .await
+        .unwrap()
+        .is_none());
 
     // The closed row carries the participants + reason.
     let row = sqlx::query(
@@ -82,10 +91,84 @@ async fn end_for_user_closes_both_roles() {
         .await
         .unwrap();
 
-    audit::end_sessions_for_user(&pool, "alice", "disconnect")
+    let mut closed = audit::end_sessions_for_user(&pool, "alice", "disconnect")
         .await
         .unwrap();
+    closed.sort_by_key(|c| c.room_id);
+    assert_eq!(closed.len(), 2);
+    assert_eq!(closed[0].room_id, 10);
+    assert_eq!(closed[0].controller_id, "alice");
+    assert_eq!(closed[0].sharer_id, "bob");
+    assert_eq!(closed[1].room_id, 11);
+    assert_eq!(closed[1].controller_id, "carol");
+    assert_eq!(closed[1].sharer_id, "alice");
     assert_eq!(open_rows(&pool, 10).await, 0);
     assert_eq!(open_rows(&pool, 11).await, 0);
     assert_eq!(open_rows(&pool, 12).await, 1);
+
+    // A second call finds nothing left open for alice.
+    assert!(audit::end_sessions_for_user(&pool, "alice", "disconnect")
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn end_for_participant_requires_membership_and_is_idempotent() {
+    let pool = common::chat_pool().await;
+    audit::start_session(&pool, 20, "carol", "dave")
+        .await
+        .unwrap();
+
+    // An outsider is not a party to the session: nothing closes.
+    assert!(
+        audit::end_session_for_participant(&pool, 20, "eve", "left_call")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(open_rows(&pool, 20).await, 1);
+
+    // The controller is a party: closes, returns the row.
+    let closed = audit::end_session_for_participant(&pool, 20, "carol", "left_call")
+        .await
+        .unwrap()
+        .expect("carol was a party");
+    assert_eq!(closed.controller_id, "carol");
+    assert_eq!(closed.sharer_id, "dave");
+    assert_eq!(open_rows(&pool, 20).await, 0);
+
+    // Whoever observes the drop second finds nothing left to close.
+    assert!(
+        audit::end_session_for_participant(&pool, 20, "dave", "disconnect")
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn end_by_sharer_ignores_the_controller() {
+    let pool = common::chat_pool().await;
+    audit::start_session(&pool, 30, "frank", "grace")
+        .await
+        .unwrap();
+
+    // Frank is the controller, not the sharer: must not close the session.
+    assert!(
+        audit::end_session_by_sharer(&pool, 30, "frank", "share_ended")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(open_rows(&pool, 30).await, 1);
+
+    // Grace is the sharer: closes.
+    let closed = audit::end_session_by_sharer(&pool, 30, "grace", "share_ended")
+        .await
+        .unwrap()
+        .expect("grace was the sharer");
+    assert_eq!(closed.controller_id, "frank");
+    assert_eq!(closed.sharer_id, "grace");
+    assert_eq!(open_rows(&pool, 30).await, 0);
 }

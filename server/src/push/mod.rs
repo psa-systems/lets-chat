@@ -361,11 +361,22 @@ async fn fan_out_webpush(state: &AppState, recipient_user_id: &str, payload: &By
                 .expect("push fan-out semaphore not closed");
             match client.send(&sub, payload).await {
                 Ok(()) => {
-                    let _ = db::push_subscriptions::bump_last_seen(&auth_pool, &sub.endpoint).await;
+                    // The push already went out; a failed last-seen bump is
+                    // stale bookkeeping only, so log and move on.
+                    if let Err(e) =
+                        db::push_subscriptions::bump_last_seen(&auth_pool, &sub.endpoint).await
+                    {
+                        tracing::warn!(error = %e, endpoint = %sub.endpoint, "push last_seen bump failed");
+                    }
                 }
                 Err(PushError::EndpointGone(_)) => {
-                    let _ =
-                        db::push_subscriptions::delete_by_endpoint(&auth_pool, &sub.endpoint).await;
+                    // The endpoint is already dead either way, so a failed
+                    // delete just leaves a stale row to retry later.
+                    if let Err(e) =
+                        db::push_subscriptions::delete_by_endpoint(&auth_pool, &sub.endpoint).await
+                    {
+                        tracing::warn!(error = %e, endpoint = %sub.endpoint, "push subscription delete failed");
+                    }
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, endpoint = %sub.endpoint, "push send failed");
@@ -399,12 +410,22 @@ async fn fan_out_apns(state: &AppState, recipient_user_id: &str, payload: &Bytes
                 .expect("push fan-out semaphore not closed");
             match client.send(&sub, payload).await {
                 Ok(()) => {
-                    let _ =
-                        db::apns_subscriptions::bump_last_seen(&auth_pool, &sub.device_token).await;
+                    // The push already went out; a failed last-seen bump is
+                    // stale bookkeeping only, so log and move on.
+                    if let Err(e) =
+                        db::apns_subscriptions::bump_last_seen(&auth_pool, &sub.device_token).await
+                    {
+                        tracing::warn!(error = %e, token = %sub.device_token, "apns last_seen bump failed");
+                    }
                 }
                 Err(PushError::EndpointGone(_)) => {
-                    let _ = db::apns_subscriptions::delete_by_token(&auth_pool, &sub.device_token)
-                        .await;
+                    // The token is already dead either way, so a failed
+                    // delete just leaves a stale row to retry later.
+                    if let Err(e) =
+                        db::apns_subscriptions::delete_by_token(&auth_pool, &sub.device_token).await
+                    {
+                        tracing::warn!(error = %e, token = %sub.device_token, "apns subscription delete failed");
+                    }
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, token = %sub.device_token, "apns send failed");
@@ -438,14 +459,24 @@ async fn fan_out_fcm(state: &AppState, recipient_user_id: &str, payload: &Bytes)
                 .expect("push fan-out semaphore not closed");
             match client.send(&sub, payload).await {
                 Ok(()) => {
-                    let _ =
+                    // The push already went out; a failed last-seen bump is
+                    // stale bookkeeping only, so log and move on.
+                    if let Err(e) =
                         db::fcm_subscriptions::bump_last_seen(&auth_pool, &sub.registration_token)
-                            .await;
+                            .await
+                    {
+                        tracing::warn!(error = %e, token = %sub.registration_token, "fcm last_seen bump failed");
+                    }
                 }
                 Err(PushError::EndpointGone(_)) => {
-                    let _ =
+                    // The token is already dead either way, so a failed
+                    // delete just leaves a stale row to retry later.
+                    if let Err(e) =
                         db::fcm_subscriptions::delete_by_token(&auth_pool, &sub.registration_token)
-                            .await;
+                            .await
+                    {
+                        tracing::warn!(error = %e, token = %sub.registration_token, "fcm subscription delete failed");
+                    }
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, token = %sub.registration_token, "fcm send failed");

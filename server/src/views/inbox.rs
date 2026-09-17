@@ -78,8 +78,7 @@ pub fn render_item(
     peer_id: Option<&str>,
     peer_label: Option<&str>,
 ) -> InboxItem {
-    let snippet: String = row
-        .body
+    let snippet: String = crate::views::markdown::redact_spoilers(&row.body)
         .chars()
         .take(140)
         .collect::<String>()
@@ -108,5 +107,44 @@ pub fn render_item(
         snippet,
         created_at: row.created_at.clone(),
         target_path,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::inbox::InboxRow;
+
+    // LC-918: /inbox previews redact spoilers rather than printing the
+    // hidden text verbatim.
+    #[test]
+    fn render_item_redacts_spoiler() {
+        let row = InboxRow {
+            message_id: 1,
+            room_id: 1,
+            room_name: "hiring".to_string(),
+            room_type: "channel".to_string(),
+            author_user_id: "u1".to_string(),
+            body: "intro ||secret|| outro".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        let author = InboxAuthor {
+            user_id: "u1".to_string(),
+            label: "Dave".to_string(),
+            avatar_ext: None,
+            status: "online".to_string(),
+            custom_status: None,
+        };
+        let item = render_item(&row, author, None, None);
+        assert!(
+            item.snippet.contains("[spoiler]"),
+            "no placeholder: {}",
+            item.snippet
+        );
+        assert!(
+            !item.snippet.contains("secret"),
+            "secret leaked: {}",
+            item.snippet
+        );
     }
 }

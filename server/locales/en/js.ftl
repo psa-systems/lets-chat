@@ -44,6 +44,7 @@ js-huddle-control-busy = Someone else already has control
 js-huddle-control-ended = Control ended
 js-huddle-control-requested = requested control of your screen
 js-huddle-control-active-suffix = is controlling your screen
+js-huddle-control-refused = Control could not be granted
 
 # Offline outbox (outbox.js)
 js-outbox-offline-queued = Offline - %n% message(s) queued

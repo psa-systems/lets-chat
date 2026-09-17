@@ -127,6 +127,10 @@ pub struct Hub {
 /// LC-853: one pending huddle control request (see `Hub::control_pending`).
 struct ControlPending {
     requester_id: String,
+    /// LC-905: the sharer this request was aimed at, so the slot can be
+    /// released precisely when THAT sharer stops sharing, not merely when the
+    /// room has no sharers left.
+    sharer_id: String,
     at: std::time::Instant,
 }
 
@@ -365,9 +369,10 @@ impl Hub {
         self.transcript_agents.contains_key(&room_id)
     }
 
-    /// Claim the room's pending-request slot for `requester_id`. Returns false
-    /// when an unexpired request already holds it (one at a time, no queue).
-    pub fn set_control_pending(&self, room_id: i64, requester_id: &str) -> bool {
+    /// Claim the room's pending-request slot for `requester_id`, aimed at
+    /// `sharer_id`. Returns false when an unexpired request already holds it
+    /// (one at a time, no queue).
+    pub fn set_control_pending(&self, room_id: i64, requester_id: &str, sharer_id: &str) -> bool {
         if self.control_pending_active(room_id) {
             return false;
         }
@@ -375,6 +380,7 @@ impl Hub {
             room_id,
             ControlPending {
                 requester_id: requester_id.to_string(),
+                sharer_id: sharer_id.to_string(),
                 at: std::time::Instant::now(),
             },
         );
@@ -412,6 +418,21 @@ impl Hub {
     pub fn clear_control_pending_for(&self, room_id: i64, user_id: &str) {
         self.control_pending
             .remove_if(&room_id, |_, p| p.requester_id == user_id);
+    }
+
+    /// Release the pending request aimed at `sharer_id`, if any, and return
+    /// the requester it belonged to. Unlike `clear_control_pending_for`, this
+    /// is keyed on the ANSWERING side: `sharer_id` stopping their share means
+    /// the request can no longer be answered, regardless of how many other
+    /// sharers remain in the room.
+    pub fn clear_control_pending_for_sharer(
+        &self,
+        room_id: i64,
+        sharer_id: &str,
+    ) -> Option<String> {
+        self.control_pending
+            .remove_if(&room_id, |_, p| p.sharer_id == sharer_id)
+            .map(|(_, p)| p.requester_id)
     }
 
     // ---- LC-494 stage control plane -----------------------------------
