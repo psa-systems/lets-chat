@@ -24,6 +24,12 @@ pre_commit_compile := "false"
 # full dep graph, and 8-way `ld` OOMs a swapless host (SIGTERM).
 test_args := "-p lets-chat-server --jobs 2"
 
+# `check` also reads templates, browser assets, migrations and the CI guard
+# scripts, none of which the scope guard's Rust-relevant set (*.rs, Cargo.*,
+# .sqlx/) would trigger on. Without these, a templates-only commit would skip
+# `just check` entirely.
+pre_commit_extra_paths := "server/templates/ server/assets/ server/migrations/ ci-build/ justfile"
+
 # The root Cargo.toml is a virtual workspace and the single version lives at
 # [workspace.package] version, so create-release edits it there.
 release_layout := "virtual-workspace"
