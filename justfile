@@ -324,15 +324,19 @@ run-down:
     docker compose --file compose.yml down
 
 # Start development server (web, standalone) locally on http://localhost:18080
+# LC-936: vendor-js beside build-css so the LiveKit SDK is present before the
+# server starts; otherwise huddles/stage audio 404 the moment LiveKit is
+# configured, invisible until then.
 [group('dev')]
-dev-web-local: build-css
+dev-web-local: build-css vendor-js
     {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local.yml up
 
 # Start the local dev server with a mock OIDC OP (no bunyip needed). DEV ONLY:
 # boots the server for unauthenticated debug routes (e.g. /dev/theme-gallery).
 # Authed pages still need the real bunyip dev-sso stack. See dev/mock-oidc.py.
+# LC-936: vendor-js beside build-css, same reason as dev-web-local.
 [group('dev')]
-dev-web-local-mock: build-css
+dev-web-local-mock: build-css vendor-js
     {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local.yml --file compose.dev-web-local-mock-sso.yml up
 
 # Stop the mock-OIDC local dev server (both overlay containers)
@@ -351,8 +355,9 @@ dev-web-local-clean:
     docker compose --file compose.dev-web-local.yml down --volumes
 
 # Start development server (web, saas) locally on http://localhost:18080
+# LC-936: vendor-js beside build-css, same reason as dev-web-local.
 [group('dev')]
-dev-web-local-saas: build-css
+dev-web-local-saas: build-css vendor-js
     {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local-saas.yml up
 
 # Stop the local saas dev server container
@@ -366,6 +371,9 @@ dev-web-local-saas-clean:
     docker compose --file compose.dev-web-local-saas.yml down --volumes
 
 # Start development server (desktop)
+# LC-936: deliberately no vendor-js dependency. The desktop shell runs against
+# a configured server URL and serves no assets of its own, so there is no
+# server here for a vendored SDK to be missing from.
 [group('dev')]
 dev-desktop:
     #!/usr/bin/env bash
@@ -433,7 +441,7 @@ stt-bench:
 # nothing recompiles in the container), fails fast if the container exits, and
 # checks for the sign-in link the login page always renders.
 [group('test')]
-verify: build-css
+verify: build-css vendor-js
     #!/usr/bin/env nu
     let container = "lets-chat-rewrite-server"
     print "Building release binary..."
