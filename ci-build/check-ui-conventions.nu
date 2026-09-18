@@ -152,6 +152,47 @@ const COMMENT_LINE = '^\s*(//|/\*|\*|<!--)'
 # extension and are matched by name.
 const TEXT_EXTENSIONS = ["rs" "html" "js" "css" "ftl" "md" "nu" "toml" "yml" "yaml" "json" "sql" "sh" "txt"]
 
+# LC-937: the env-var-template parity gate. `LETS_CHAT_*`, `IP2LOCATION_*` and
+# `LOGIN_APPROVAL_*` names are read across server/src, desktop/src and
+# services/*/src; the two files an operator actually copies to deploy,
+# `.env.standalone` and `.env.saas`, drifted out of sync with
+# docs/configuration.md three times running (LiveKit and embeddings families,
+# then transcription-agent tokens and STT quality knobs, then
+# `LETS_CHAT_ENVIRONMENT`) because nothing enforced the three surfaces staying
+# in lockstep. This rule extracts every name a read site names as a literal
+# and fails unless the name is documented in docs/configuration.md and
+# present in both templates, or carries a reason in the allowlist below.
+#
+# Each allowlist entry is a name this rule would otherwise flag, paired with
+# why it is deliberately exempt. The desktop-only names have no server .env
+# surface at all; the SaaS/dev-only gaps predate LC-937 and are tracked by
+# LC-952 rather than fixed here, since closing them touches auth/mail
+# behavior questions bigger than a template edit.
+const ENV_VAR_ALLOWLIST = {
+    LETS_CHAT_SERVER_URL: "desktop-only (docs/configuration.md Desktop app section); no server .env surface exists for it (LC-952)"
+    LETS_CHAT_UPDATE_REGISTRY_URL: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
+    LETS_CHAT_UPDATE_REPOSITORY: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
+    LETS_CHAT_UPDATE_TAG: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
+    LETS_CHAT_UPDATE_TOKEN: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
+    LETS_CHAT_UPDATE_URL_ALLOW_PRIVATE: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
+    LETS_CHAT_UPDATE_BASE_URL: "dead: no Rust source has read it since LC-733; the name survives only as the literal desktop/src/update.rs asserts is absent from the Dockerfiles (LC-594)"
+    LETS_CHAT_BASE_URL: ".env.saas omits it along with the rest of the mail/SSO block; pre-existing gap tracked by LC-952, not one of LC-937's eight families"
+    LETS_CHAT_SECRET_KEY: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_BUNYIP_SSO_ISSUER: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_BUNYIP_SSO_CLIENT_ID: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_BUNYIP_SSO_CLIENT_SECRET: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_BUNYIP_SSO_REDIRECT_URI: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_BUNYIP_SSO_INSECURE_TLS: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_SMTP_HOST: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_SMTP_PORT: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_SMTP_TLS: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_SMTP_FROM: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_SMTP_USERNAME: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_SMTP_PASSWORD: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_DEV_NO_SSO: "documented but present in neither template; pre-existing gap tracked by LC-952, not one of LC-937's eight families"
+    LETS_CHAT_PUSH_CONTACT: "documented but present in neither template; pre-existing gap tracked by LC-952, not one of LC-937's eight families"
+}
+
 # Email templates are excluded from every template rule: they render in a mail
 # client with no stylesheet, so a Tailwind class there is inert.
 def template-files [] {
@@ -587,6 +628,71 @@ def cbtn-label-missing-aria [] {
     } | flatten
 }
 
+# LC-937: every source file that may read a `LETS_CHAT_*` / `IP2LOCATION_*` /
+# `LOGIN_APPROVAL_*` name: the server, the desktop wrapper, and the LiveKit
+# transcription-agent sidecar (a separate TypeScript service under services/).
+def env-var-read-sites [] {
+    (glob server/src/**/*.rs)
+    | append (glob desktop/src/**/*.rs)
+    | append (glob services/*/src/**/*.ts)
+    | sort
+}
+
+# Every name literal a read site names, whether quoted (`env::var("X")`,
+# `required(env, 'X')`), bare (`env.X` in the TS agent), or captured in a
+# `const FLAG_ENV: &str = "X"` indirection (retention/sweep.rs) - one pattern
+# over the raw text covers all three shapes.
+def env-var-literals [] {
+    let pattern = '(?<name>\b(?:LETS_CHAT|IP2LOCATION|LOGIN_APPROVAL)(?:_[A-Z0-9]+)+\b)'
+    (env-var-read-sites) | each {|file|
+        open --raw $file | decode utf-8 | parse --regex $pattern | get name
+    } | flatten | uniq | sort
+}
+
+# docs/configuration.md spells a variable family once in full and abbreviates
+# the rest of the row to their differing suffix (`` `LETS_CHAT_LIVEKIT_URL` /
+# `_API_KEY` / `_API_SECRET` ``). A name counts as documented if it appears in
+# full, or if some split of it into `head` + `_` + `tail` has both `` `_tail` ``
+# and `head` somewhere in the doc (as the prefix of the row's full name).
+def env-var-documented [name: string, doc: string] {
+    if ($doc | str contains $"`($name)`") {
+        return true
+    }
+    let parts = ($name | split row "_")
+    let n = ($parts | length)
+    mut i = 1
+    while $i < $n {
+        let head = ($parts | first $i | str join "_")
+        let tail = ($parts | skip $i | str join "_")
+        if ($doc | str contains $"`_($tail)`") and ($doc | str contains $head) {
+            return true
+        }
+        $i = $i + 1
+    }
+    false
+}
+
+# Unlike the doc, both templates always spell every name in full.
+def env-var-in-template [name: string, template: string] {
+    $template | str contains $name
+}
+
+def undocumented-env-vars [] {
+    let doc = (open --raw "docs/configuration.md" | decode utf-8)
+    let standalone = (open --raw ".env.standalone" | decode utf-8)
+    let saas = (open --raw ".env.saas" | decode utf-8)
+    (env-var-literals)
+    | where {|name| $name not-in ($ENV_VAR_ALLOWLIST | columns) }
+    | each {|name|
+        mut missing = []
+        if not (env-var-documented $name $doc) { $missing = ($missing | append "docs/configuration.md") }
+        if not (env-var-in-template $name $standalone) { $missing = ($missing | append ".env.standalone") }
+        if not (env-var-in-template $name $saas) { $missing = ($missing | append ".env.saas") }
+        if ($missing | is-empty) { null } else { $"($name): missing from ($missing | str join ', ')" }
+    }
+    | where {|x| $x != null }
+}
+
 # LC-891: the `window.__lcI18n` table entries in base.html.
 def i18n-table-entries [] {
     let file = "server/templates/base.html"
@@ -779,6 +885,12 @@ def rules [] {
             pending: null
             fix: "a function that writes `.lc-cbtn-label` text must also write `aria-label` (and `data-lc-tip`) in the same function, or the tooltip and the accessible name go stale the moment the visible label flips; use the shared `setLabel` on `window.LetsChatRtc` (rtc_common.js) instead of a local copy (LC-875)"
             check: {|| cbtn-label-missing-aria }
+        }
+        {
+            id: "env-var-template-parity"
+            pending: null
+            fix: "add a commented entry mirroring docs/configuration.md's wording to whichever of .env.standalone / .env.saas is missing it, or add it to docs/configuration.md if the code changed first; a name deliberately absent from one of the three surfaces goes on the ENV_VAR_ALLOWLIST above with a one-line reason (LC-937)"
+            check: {|| undocumented-env-vars }
         }
     ]
 }
