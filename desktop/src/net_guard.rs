@@ -27,84 +27,19 @@
 //!    ureq actually connects on to public addresses only, closing the
 //!    resolve-then-connect TOCTOU on hostnames.
 //!
-//! `is_globally_routable` is ported VERBATIM from `server/src/ssrf.rs` (the
-//! source of truth). It is pure `std::net` with no external crates, so
-//! duplicating ~70 lines is correct here; a workspace-shared crate is a
-//! separate refactor, out of LC-210's scope.
+//! `is_globally_routable` comes from the shared `ip-policy` crate, which
+//! `server/src/ssrf.rs` also depends on, so this guard and the server's
+//! outbound-HTTP guard can never drift apart again.
 
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
 use std::time::Duration;
 use url::Url;
 
-/// Redirect cap, matching `server/src/http_client.rs::MAX_REDIRECTS`.
-pub const MAX_REDIRECTS: usize = 3;
+pub use ip_policy::is_globally_routable;
 
-/// IP allowlist: globally routable unicast only. Ported verbatim from
-/// `server/src/ssrf.rs::is_globally_routable` (source of truth). Stable Rust
-/// does not expose `IpAddr::is_global`, so every non-public range is rejected
-/// explicitly. Keep in sync with the server function if it changes.
-pub fn is_globally_routable(addr: IpAddr) -> bool {
-    match addr {
-        IpAddr::V4(v4) => {
-            if v4.is_loopback()
-                || v4.is_private()
-                || v4.is_link_local()
-                || v4.is_broadcast()
-                || v4.is_documentation()
-                || v4.is_unspecified()
-                || v4.is_multicast()
-            {
-                return false;
-            }
-            let oct = v4.octets();
-            // Carrier-grade NAT 100.64.0.0/10
-            if oct[0] == 100 && (oct[1] & 0xc0) == 64 {
-                return false;
-            }
-            // Reserved 240/4 (excl. 255.255.255.255 already broadcast)
-            if oct[0] >= 240 {
-                return false;
-            }
-            // Benchmark 198.18/15
-            if oct[0] == 198 && (oct[1] == 18 || oct[1] == 19) {
-                return false;
-            }
-            true
-        }
-        IpAddr::V6(v6) => {
-            if v6.is_loopback() || v6.is_unspecified() || v6.is_multicast() {
-                return false;
-            }
-            let segs = v6.segments();
-            // Unique local fc00::/7
-            if (segs[0] & 0xfe00) == 0xfc00 {
-                return false;
-            }
-            // Link-local fe80::/10
-            if (segs[0] & 0xffc0) == 0xfe80 {
-                return false;
-            }
-            // IPv4-mapped ::ffff:0:0/96
-            if segs[0] == 0
-                && segs[1] == 0
-                && segs[2] == 0
-                && segs[3] == 0
-                && segs[4] == 0
-                && segs[5] == 0xffff
-            {
-                let mapped = std::net::Ipv4Addr::new(
-                    (segs[6] >> 8) as u8,
-                    (segs[6] & 0xff) as u8,
-                    (segs[7] >> 8) as u8,
-                    (segs[7] & 0xff) as u8,
-                );
-                return is_globally_routable(IpAddr::V4(mapped));
-            }
-            true
-        }
-    }
-}
+/// Redirect cap, matching `server/src/routes/unfurl.rs::MAX_REDIRECTS`.
+pub const MAX_REDIRECTS: usize = 3;
 
 /// Which hop a guard rejection fired on. The killer tests match on this so a
 /// redirect rejection is provably the redirect hop, not the initial URL.
