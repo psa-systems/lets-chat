@@ -288,16 +288,29 @@ fn scan_code(code: &str) -> Option<(u16, bool)> {
 /// API surface to the remote page (`withGlobalTauri` stays off).
 pub const BRIDGE_JS: &str = r#"
 (function () {
-  // LC-640: advertise to the page that this client HAS a native injector, so
-  // when it is the one being controlled it can tell the controller their input
-  // will actually land. A plain browser leaves this undefined (falsy).
-  try { window.__lcNativeControl = true; } catch (e) {}
+  // LC-640/LC-933: advertise to the page that this client HAS a native
+  // injector, so when it is the one being controlled it can tell the
+  // controller their input will actually land. A plain browser leaves this
+  // undefined (falsy). The advertisement has to be earned, not assumed: the
+  // IPC bridge only reaches `rc_session` on an origin that currently holds
+  // the allow-rc-* capability (main.rs), which is not true for every page
+  // this script runs in (eg. a stale/unmatched origin after a URL change
+  // that this window has not navigated through yet). So probe with a no-op
+  // `rc_session(false)` call - already idempotent, safe to call speculatively
+  // - and only flip the flag on if that call actually resolves.
+  try { window.__lcNativeControl = false; } catch (e) {}
   function inv(cmd, args) {
     try {
       var t = window.__TAURI_INTERNALS__;
-      if (t && typeof t.invoke === 'function') { t.invoke(cmd, args); }
+      if (t && typeof t.invoke === 'function') { return t.invoke(cmd, args); }
     } catch (e) {}
+    return Promise.reject(new Error('Tauri IPC bridge not available'));
   }
+  inv('rc_session', { active: false }).then(function () {
+    try { window.__lcNativeControl = true; } catch (e) {}
+  }).catch(function () {
+    // No allow-rc-* grant on this origin: leave the flag falsy.
+  });
   document.addEventListener('lc:control-start', function () { inv('rc_session', { active: true }); });
   document.addEventListener('lc:control-end', function () { inv('rc_session', { active: false }); });
   document.addEventListener('lc:control-input', function (e) {
