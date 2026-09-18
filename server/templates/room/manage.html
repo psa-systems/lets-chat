@@ -224,7 +224,8 @@
       {% endif %}
 
       {% if !candidates.is_empty() %}
-      <form method="post" action="/room/{{ room.id }}/moderators" class="lc-set-form border-t border-border pt-4 mt-4">
+      <form method="post" action="/room/{{ room.id }}/moderators" class="lc-set-form border-t border-border pt-4 mt-4"
+            hx-post="/room/{{ room.id }}/moderators" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
         <span class="lc-set-label">{{ "room-mods-grant-heading"|t }}</span>
         <div class="lc-set-field lc-set-field--narrow">
           <label class="lc-set-help" for="lc-grant-user">{{ "room-mods-member"|t }}{% include "partials/required_mark.html" %}</label>
@@ -242,7 +243,8 @@
           </select>
         </div>
         <div class="lc-set-actions">
-          <button type="submit" class="btn btn-primary btn-sm">{{ "room-mods-grant-button"|t }}</button>
+          <button type="submit" class="btn btn-primary btn-sm"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "room-mods-grant-button"|t }}</span></button>
+          <span class="lc-set-status" role="status" aria-live="polite"></span>
         </div>
       </form>
       {% else %}
