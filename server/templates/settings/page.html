@@ -682,15 +682,18 @@
             <li class="flex items-center gap-2 border border-border rounded p-2">
               <img src="/api/emojis/{{ e.id }}" alt=":{{ e.shortcode }}:" class="h-8 w-8">
               <span class="font-mono text-sm flex-1 truncate">:{{ e.shortcode }}:</span>
-              <form method="post" action="/settings/emojis/{{ e.id }}/delete">
+              <form method="post" action="/settings/emojis/{{ e.id }}/delete" class="flex flex-wrap items-center gap-2"
+                    hx-post="/settings/emojis/{{ e.id }}/delete" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
                 <button type="submit" class="btn btn-sm btn-danger-outline"
-                        data-lc-confirm="{{ "settings-emoji-delete-confirm"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))">{{ "settings-emoji-delete"|t }}</button>
+                        data-lc-confirm="{{ "settings-emoji-delete-confirm"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "settings-emoji-delete"|t }}</span></button>
+                <span class="lc-set-status" role="status" aria-live="polite"></span>
               </form>
             </li>
             {% endfor %}
           </ul>
           {% endif %}
-          <form method="post" action="/settings/emojis" enctype="multipart/form-data" class="lc-set-form border-t border-border pt-3 mt-3">
+          <form method="post" action="/settings/emojis" enctype="multipart/form-data" class="lc-set-form border-t border-border pt-3 mt-3"
+                hx-post="/settings/emojis" hx-encoding="multipart/form-data" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
             <div class="lc-set-field lc-set-field--narrow">
               <label class="lc-set-label" for="lc-user-emoji-shortcode">{{ "settings-emoji-shortcode-label"|t }}{% include "partials/required_mark.html" %}</label>
               <input id="lc-user-emoji-shortcode" name="shortcode" pattern="[a-z0-9_]{2,32}" required aria-required="true" class="input font-mono text-sm">
@@ -711,7 +714,8 @@
               <p class="lc-set-help">{{ "settings-emoji-formats"|t }} {{ emoji_max_kib }} KiB.</p>
             </div>
             <div class="lc-set-actions">
-              <button type="submit" class="btn btn-primary">{{ "settings-emoji-add"|t }}</button>
+              <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "settings-emoji-add"|t }}</span></button>
+              <span class="lc-set-status" role="status" aria-live="polite"></span>
             </div>
           </form>
         </div>
@@ -737,15 +741,18 @@
                 {% if !c.description.is_empty() %}<div class="text-xs text-content-muted">{{ c.description }}</div>{% endif %}
                 <div class="mt-0.5 text-sm text-content-muted whitespace-pre-wrap break-words line-clamp-3">{{ c.target }}</div>
               </div>
-              <form method="post" action="/settings/canned/{{ c.id }}/delete" class="shrink-0">
+              <form method="post" action="/settings/canned/{{ c.id }}/delete" class="shrink-0"
+                    hx-post="/settings/canned/{{ c.id }}/delete" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
                 <button type="submit" class="btn btn-sm btn-danger-outline"
-                        data-lc-confirm="{{ "settings-canned-delete-confirm"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))">{{ "settings-canned-delete"|t }}</button>
+                        data-lc-confirm="{{ "settings-canned-delete-confirm"|t }}" onclick="return confirm(this.getAttribute('data-lc-confirm'))"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "settings-canned-delete"|t }}</span></button>
+                <span class="lc-set-status" role="status" aria-live="polite"></span>
               </form>
             </li>
             {% endfor %}
           </ul>
           {% endif %}
-          <form method="post" action="/settings/canned" class="lc-set-form border-t border-border pt-3 mt-3">
+          <form method="post" action="/settings/canned" class="lc-set-form border-t border-border pt-3 mt-3"
+                hx-post="/settings/canned" hx-target="find .lc-set-status" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
             <div class="lc-set-field lc-set-field--narrow">
               <label class="lc-set-label" for="lc-canned-name">{{ "settings-canned-name-label"|t }}{% include "partials/required_mark.html" %}</label>
               <input id="lc-canned-name" name="name" pattern="[A-Za-z0-9_-]{1,32}" required aria-required="true" class="input font-mono text-sm" placeholder="sig">
@@ -759,7 +766,8 @@
               <textarea id="lc-canned-body" name="body" rows="3" required aria-required="true" class="input text-sm"></textarea>
             </div>
             <div class="lc-set-actions">
-              <button type="submit" class="btn btn-primary">{{ "settings-canned-add"|t }}</button>
+              <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "settings-canned-add"|t }}</span></button>
+              <span class="lc-set-status" role="status" aria-live="polite"></span>
             </div>
           </form>
         </div>
