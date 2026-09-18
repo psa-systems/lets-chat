@@ -29,7 +29,7 @@ mod activity;
 #[cfg(feature = "standalone")]
 mod admin;
 pub(crate) mod ai_gate;
-mod api;
+pub mod api;
 mod api_tokens;
 mod assets;
 pub(crate) mod assistant;
