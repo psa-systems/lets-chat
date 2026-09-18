@@ -53,6 +53,11 @@ pub async fn run_digest_tick(state: &AppState) -> Result<DigestStats, AppError> 
 
     let due = db::chat::rooms_due_for_digest(&state.chat, DIGEST_INTERVAL_HOURS).await?;
     for room_id in due {
+        // LC-941: a room manager who opts a room out of AI must also stop the
+        // scheduled digest from summarizing that room's content.
+        if !crate::routes::ai_gate::room_ai_enabled(state, room_id).await? {
+            continue;
+        }
         stats.evaluated += 1;
         if let Err(e) = post_room_digest(state, &*llm, room_id, &mut stats).await {
             tracing::warn!(error = %e, room_id, "room digest failed; skipping");
