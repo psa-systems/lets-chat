@@ -47,9 +47,12 @@ docker_version_args := '--build-arg GIT_HASH="$(git rev-parse --short=12 HEAD 2>
 
 # Run all checks. LC-774: `test-js` runs the browser-asset node:test suites here
 # too, so `just pre-commit` (whose `pre_commit_prepare := "check"` runs this
-# recipe) covers them alongside the Rust checks.
+# recipe) covers them alongside the Rust checks. LC-944: `test-agent` (the
+# transcription agent's bun suite) and `test-saas` (the saas-feature server
+# suite) round this out to every suite CI runs, so a green `just pre-commit`
+# means a green CI.
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-ui-conventions check-update-injection check-count-badge check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js
+check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-ui-conventions check-update-injection check-count-badge check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js test-agent test-saas
 
 # Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
 # browser assets and templates, and untokenized backgrounds on the
@@ -432,6 +435,14 @@ test-saas:
 [group('test')]
 test-js:
     node --test 'server/assets/**/*.test.js'
+
+# Run the transcription agent's unit tests (LC-816, four files under
+# services/transcription-agent/test/). The suite imports only local modules, not
+# the LiveKit SDK, so no install is needed; runs through the repo's ./dev/bun
+# wrapper since the host carries no bun toolchain.
+[group('test')]
+test-agent:
+    cd services/transcription-agent && ../../dev/bun test
 
 # Run desktop crate tests (LC-210 established the pattern: #[cfg(test)] modules
 # in desktop/src/). Desktop is bin-only, so these are in-crate unit tests. Run
