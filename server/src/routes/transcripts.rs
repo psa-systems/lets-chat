@@ -491,12 +491,27 @@ fn maybe_dispatch_agent(
     transcript_id: i64,
     surface: Option<crate::livekit::Surface>,
 ) {
-    if !should_dispatch_agent(surface, crate::livekit::transcribe_dispatch_ready()) {
-        return;
-    }
     let Some(surface) = surface else {
+        // No SFU surface (a DM): dispatch never applies here, not a
+        // misconfiguration, so nothing to log.
         return;
     };
+    let livekit_ready = crate::livekit::available();
+    let token_ready = transcribe_agent_token().is_some();
+    let stt_ready = state.stt_available();
+    let dispatch_ready = crate::livekit::transcribe_dispatch_ready(stt_ready);
+    if !should_dispatch_agent(Some(surface), dispatch_ready) {
+        // LC-943 (F-N3 residual): the success and failure branches below both
+        // log; this was the one silent branch. Name which precondition the
+        // agent's own README states and the operator most likely forgot.
+        tracing::debug!(
+            livekit_ready,
+            token_ready,
+            stt_ready,
+            "skipping transcription agent dispatch: precondition not met"
+        );
+        return;
+    }
     let Some(cfg) = crate::livekit::LiveKitConfig::from_env() else {
         return;
     };
@@ -747,14 +762,11 @@ pub async fn agent_clip(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("audio/webm")
         .to_string();
-    // The agent may hint a per-track language via X-Language; otherwise fall back
-    // to the speaker's preferred locale, mirroring the browser path.
-    let x_language = headers
-        .get("x-language")
-        .and_then(|v| v.to_str().ok())
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-    let language = x_language.or(speaker.locale.as_deref());
+    // LC-943 (F-N1): the agent has no per-track language to send (it never sent
+    // X-Language, so this handler no longer reads it); the speaker's own
+    // preferred locale is the only source, mirroring the browser path's
+    // fallback.
+    let language = speaker.locale.as_deref();
     // LC-921: the agent measures each clip's real wall-clock duration sample by
     // sample and sends it as X-Duration-Secs. That is a fallback under the
     // engine's own segment timings (see `ingest_clip`), not a replacement,
