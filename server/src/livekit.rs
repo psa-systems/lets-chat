@@ -198,12 +198,18 @@ pub fn transcribe_agent_name() -> String {
         .unwrap_or_else(|| DEFAULT_AGENT_NAME.to_string())
 }
 
-/// True when server-side transcription can be dispatched: LiveKit is configured
-/// AND the agent callback token (LC-813) is set. The token is the trust boundary
-/// for the agent's clip callbacks, so without it the agent has nowhere to post
-/// and dispatch is pointless.
-pub fn transcribe_dispatch_ready() -> bool {
+/// True when server-side transcription can be dispatched: LiveKit is
+/// configured, the agent callback token (LC-813) is set, AND server-side STT
+/// is configured (`stt_configured`, threaded in from `AppState::stt_client` so
+/// this stays unit-testable without process env). The token is the trust
+/// boundary for the agent's clip callbacks, so without it the agent has
+/// nowhere to post and dispatch is pointless; LC-943 (F-N3 residual) adds the
+/// STT leg, matching the precondition the agent's own README already states -
+/// without STT the agent has nowhere for its audio to GO, so dispatching it
+/// anyway just joins LiveKit and encodes clips that are always rejected.
+pub fn transcribe_dispatch_ready(stt_configured: bool) -> bool {
     available()
+        && stt_configured
         && std::env::var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN")
             .ok()
             .map(|s| s.trim().to_string())
@@ -526,5 +532,52 @@ mod tests {
         // No env override in this process -> the documented default.
         std::env::remove_var("LETS_CHAT_TRANSCRIBE_AGENT_NAME");
         assert_eq!(transcribe_agent_name(), "transcriber");
+    }
+
+    /// LC-943 (F-N3 residual): `transcribe_dispatch_ready` guards the env
+    /// mutations with a lock, since `cargo test` runs this file's tests on
+    /// multiple threads sharing the same process env.
+    static DISPATCH_READY_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn dispatch_ready_requires_livekit_token_and_stt() {
+        let _guard = DISPATCH_READY_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        // SAFETY: single-threaded test (holds DISPATCH_READY_ENV_LOCK); vars
+        // are restored to unset at the end.
+        unsafe {
+            std::env::set_var("LETS_CHAT_LIVEKIT_URL", "wss://lk.example.com");
+            std::env::set_var("LETS_CHAT_LIVEKIT_API_KEY", "k");
+            std::env::set_var("LETS_CHAT_LIVEKIT_API_SECRET", "s");
+            std::env::set_var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN", "t");
+        }
+        assert!(
+            transcribe_dispatch_ready(true),
+            "all three preconditions met -> ready"
+        );
+
+        // LiveKit unset.
+        unsafe { std::env::remove_var("LETS_CHAT_LIVEKIT_URL") };
+        assert!(
+            !transcribe_dispatch_ready(true),
+            "LiveKit unset -> not ready"
+        );
+        unsafe { std::env::set_var("LETS_CHAT_LIVEKIT_URL", "wss://lk.example.com") };
+
+        // Token unset.
+        unsafe { std::env::remove_var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN") };
+        assert!(!transcribe_dispatch_ready(true), "token unset -> not ready");
+        unsafe { std::env::set_var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN", "t") };
+
+        // STT unset (LC-943: the precondition this issue adds).
+        assert!(!transcribe_dispatch_ready(false), "STT unset -> not ready");
+
+        unsafe {
+            std::env::remove_var("LETS_CHAT_LIVEKIT_URL");
+            std::env::remove_var("LETS_CHAT_LIVEKIT_API_KEY");
+            std::env::remove_var("LETS_CHAT_LIVEKIT_API_SECRET");
+            std::env::remove_var("LETS_CHAT_TRANSCRIBE_AGENT_TOKEN");
+        }
     }
 }

@@ -467,6 +467,32 @@ pub async fn transcribe_with_backoff(
     }
 }
 
+/// Extension matters to some engines that sniff by filename rather than the
+/// declared MIME type, so the filename attached to the multipart `file` part
+/// must match the clip's actual container.
+///
+/// LC-496: browser clips are video containers (video/webm|mp4|quicktime);
+/// voice messages are audio containers (audio/webm|ogg). LC-943 (F-N1): the
+/// server-capture transcription agent posts raw WAV (`audio/wav`, and the
+/// `x-wav`/`wave` spellings some tooling uses), which used to fall through to
+/// the `media.webm` default and fail to decode on a filename-sniffing engine.
+/// This is every content type the tree's producers emit; the `stt_filename_*`
+/// tests below assert one against every one of them so a new producer that
+/// arrives uncovered fails the test instead of silently falling through.
+fn stt_filename(content_type: &str) -> &'static str {
+    if content_type.contains("quicktime") || content_type.contains("mov") {
+        "clip.mov"
+    } else if content_type.contains("ogg") {
+        "audio.ogg"
+    } else if content_type.contains("mp4") || content_type.contains("mpeg") {
+        "media.mp4"
+    } else if content_type.contains("wav") {
+        "audio.wav"
+    } else {
+        "media.webm"
+    }
+}
+
 /// Production client: multipart POST to the operator's OpenAI-compatible
 /// endpoint via `http_client::outbound_trusted_post` (the single blessed
 /// un-SSRF-filtered path, so a self-hosted localhost engine is reachable; see
@@ -494,23 +520,7 @@ impl ReqwestSttClient {
         } = req;
         let content_type = content_type.as_str();
         let language = language.as_deref();
-        // Extension matters to some engines that sniff by filename; webm/opus is
-        // what MediaRecorder produces by default.
-        // LC-496: clips are video containers (video/webm|mp4|quicktime); voice
-        // messages are audio containers. Either way the filename extension must
-        // match the container so engines that sniff by name route it correctly.
-        let filename = if content_type.contains("quicktime") || content_type.contains("mov") {
-            "clip.mov"
-        } else if content_type.contains("ogg") {
-            "audio.ogg"
-        } else if content_type.contains("mp4") || content_type.contains("mpeg") {
-            "media.mp4"
-        } else if content_type.contains("wav") {
-            // LC-849: the boot warm-up clip. Nothing user-facing produces WAV.
-            "audio.wav"
-        } else {
-            "media.webm"
-        };
+        let filename = stt_filename(content_type);
         let part = reqwest::multipart::Part::bytes(audio)
             .file_name(filename)
             .mime_str(content_type)
@@ -1353,6 +1363,34 @@ mod tests {
             std::env::remove_var("LETS_CHAT_STT_URL");
             std::env::remove_var("LETS_CHAT_STT_TIMEOUT_SECS");
         }
+    }
+
+    #[test]
+    fn stt_filename_covers_every_producer_content_type() {
+        // LC-943 (F-N1): one arm per content type the tree's producers actually
+        // emit. A new producer that arrives without an arm here falls through
+        // to "media.webm" and fails this test rather than failing silently at
+        // the STT engine.
+        assert_eq!(stt_filename("audio/wav"), "audio.wav");
+        assert_eq!(
+            stt_filename("audio/webm"),
+            "media.webm",
+            "browser MediaRecorder default"
+        );
+        assert_eq!(stt_filename("video/webm"), "media.webm");
+        assert_eq!(stt_filename("video/mp4"), "media.mp4");
+        assert_eq!(stt_filename("video/quicktime"), "clip.mov");
+        assert_eq!(stt_filename("audio/ogg"), "audio.ogg");
+    }
+
+    #[test]
+    fn stt_filename_covers_wav_spelling_variants() {
+        // LC-943: the agent declares `audio/wav`; other tooling in the wild
+        // spells WAV as `audio/x-wav` or `audio/wave`. All three must resolve
+        // to a `.wav` filename, never the `media.webm` default.
+        assert_eq!(stt_filename("audio/wav"), "audio.wav");
+        assert_eq!(stt_filename("audio/x-wav"), "audio.wav");
+        assert_eq!(stt_filename("audio/wave"), "audio.wav");
     }
 
     #[test]

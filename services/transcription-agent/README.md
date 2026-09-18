@@ -5,10 +5,11 @@ lets-chat **server-side, per-participant** call transcription. It is the piece
 lets-chat dispatches (LC-814) when someone starts transcription on an SFU huddle.
 
 It is a **dumb media bridge**: it joins the LiveKit room, subscribes to each
-participant's audio track, slices each stream into ~5s clips, and POSTs them to
-lets-chat's trusted `agent-clip` route (LC-813). It runs **no STT of its own** -
-all speech-to-text policy (provider, model, glossary, rate limits, storage, live
-broadcast) stays in lets-chat, configured once.
+participant's audio track, slices each stream into ~5s WAV clips (`Content-Type:
+audio/wav`), and POSTs them to lets-chat's trusted `agent-clip` route (LC-813).
+It runs **no STT of its own** - all speech-to-text policy (provider, model,
+glossary, rate limits, storage, live broadcast) stays in lets-chat, configured
+once.
 
 ## How it fits
 
@@ -83,8 +84,8 @@ SFU + this agent on c-01 staging) lives in the docker repo:
 ## Enable it alongside lets-chat
 
 Prerequisites on the app: LiveKit configured (`LETS_CHAT_LIVEKIT_URL` / `_API_KEY` /
-`_API_SECRET`) and server-side STT configured (`LETS_CHAT_STT_URL`). Without both,
-lets-chat falls back to per-client capture and the agent does nothing.
+`_API_SECRET`) and server-side STT configured (`LETS_CHAT_STT_URL`). Without either,
+lets-chat does not dispatch the agent at all and falls back to per-client capture.
 
 1. Set `LETS_CHAT_TRANSCRIBE_AGENT_TOKEN` on the app (any strong random string). It
    authenticates the agent's callbacks (LC-813). Optionally set
