@@ -3097,6 +3097,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ip-policy"
+version = "0.3.0"
+
+[[package]]
 name = "ip2location"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3347,6 +3351,7 @@ version = "0.3.0"
 dependencies = [
  "dirs 5.0.1",
  "hex",
+ "ip-policy",
  "self-replace",
  "serde",
  "serde_json",
@@ -3388,6 +3393,7 @@ dependencies = [
  "http",
  "image",
  "infer 0.16.0",
+ "ip-policy",
  "ip2location",
  "jsonwebtoken",
  "kamadak-exif",
