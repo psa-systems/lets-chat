@@ -30,7 +30,7 @@
       s.src = SDK_URL;
       s.async = true;
       s.onload = function () { resolve(window.LivekitClient); };
-      s.onerror = function () { reject(new Error('livekit sdk failed to load')); };
+      s.onerror = function () { reject(new Error('livekit sdk failed to load: run `just vendor-js`')); };
       document.head.appendChild(s);
     });
     return sdkPromise;
