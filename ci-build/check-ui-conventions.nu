@@ -780,7 +780,31 @@ def rules [] {
             fix: "a function that writes `.lc-cbtn-label` text must also write `aria-label` (and `data-lc-tip`) in the same function, or the tooltip and the accessible name go stale the moment the visible label flips; use the shared `setLabel` on `window.LetsChatRtc` (rtc_common.js) instead of a local copy (LC-875)"
             check: {|| cbtn-label-missing-aria }
         }
+        {
+            id: "control-input-needs-arm-and-kill"
+            pending: null
+            fix: "a module that dispatches lc:control-input as the controlled side must also dispatch lc:control-start to arm the native injector and listen for lc:control-kill so the hotkey ends the session (LC-931); the four lc:control-* names are exported from rtc_common.js's LetsChatRtc.control.events"
+            check: {|| control-input-without-arm }
+        }
     ]
+}
+
+# LC-931: a module that dispatches lc:control-input as the controlled side
+# (hands a controller's frame to the native injector) must also dispatch
+# lc:control-start to arm it and listen for lc:control-kill so the desktop
+# hotkey can end the session; a third surface that ships input relay without
+# the other two leaves the injector unkillable or never armed.
+def control-input-without-arm [] {
+    browser-asset-files | each {|file|
+        let text = (open --raw $file | decode utf-8)
+        if not ($text =~ 'lc:control-input') {
+            []
+        } else if ($text =~ 'lc:control-start') and ($text =~ 'lc:control-kill') {
+            []
+        } else {
+            [$"($file): dispatches lc:control-input without both arming \(lc:control-start\) and a kill listener \(lc:control-kill\)"]
+        }
+    } | flatten
 }
 
 def main [] {
