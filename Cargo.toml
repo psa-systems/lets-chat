@@ -2,6 +2,7 @@
 members = [
     "server",
     "desktop",
+    "ip-policy",
 ]
 resolver = "2"
 
