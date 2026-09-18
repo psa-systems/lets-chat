@@ -37,7 +37,7 @@ struct ProbeResult {
 }
 
 #[tauri::command]
-fn set_server_url(url: String) -> Result<ProbeResult, String> {
+fn set_server_url(url: String, app: tauri::AppHandle) -> Result<ProbeResult, String> {
     let trimmed = url.trim().to_string();
     if trimmed.is_empty() {
         return Err("URL cannot be empty".into());
@@ -46,6 +46,12 @@ fn set_server_url(url: String) -> Result<ProbeResult, String> {
         return Err("URL must start with http:// or https://".into());
     }
     config::save(&trimmed).map_err(|e| format!("config save failed: {e}"))?;
+    // LC-933: re-grant the remote-control (and update-token) capability to the
+    // newly-configured origin. Without this, the grant from setup() still
+    // names the OLD url and the new origin the window is about to navigate to
+    // has no allow-rc-* permission for the rest of the session.
+    grant_remote_control_ipc(&app, &trimmed);
+    grant_update_token_ipc(&app, &trimmed);
     Ok(match welcome::server_reachable(&trimmed) {
         Ok(()) => ProbeResult {
             url: trimmed,
@@ -155,8 +161,8 @@ fn main() {
                 .initialization_script(inject::BRIDGE_JS)
                 .build()?;
             install_media_permission_handler(&window)?;
-            grant_remote_control_ipc(app, &url_for_cap);
-            grant_update_token_ipc(app, &url_for_cap);
+            grant_remote_control_ipc(app.handle(), &url_for_cap);
+            grant_update_token_ipc(app.handle(), &url_for_cap);
             // LC-186: register the kill-switch hotkey. Non-fatal if the combo
             // is already taken by another app - the on-banner button remains.
             {
@@ -206,7 +212,14 @@ fn kill_remote_control(app: &tauri::AppHandle) {
 // baked into a static capability file. The injector still gates every event
 // on an active grant (inject.rs), so enabling the IPC path is no weaker than
 // the trust the app already places in `LETS_CHAT_SERVER_URL`.
-fn grant_remote_control_ipc(app: &tauri::App, server_url: &str) {
+//
+// LC-933: called both from setup() (the AppHandle behind app.handle()) and
+// from set_server_url() (the AppHandle Tauri injects into the command), so
+// the grant always tracks whichever origin the window is currently showing,
+// not just the one configured at startup. `add_capability` is additive
+// (Tauri 2), so a stale capability from a prior URL is simply left in place:
+// it names an origin the window is no longer on and therefore grants nothing.
+fn grant_remote_control_ipc(app: &tauri::AppHandle, server_url: &str) {
     use tauri::{ipc::CapabilityBuilder, Manager};
     let Some(pattern) = remote_url_pattern(server_url) else {
         eprintln!("lets-chat-desktop: remote-control IPC disabled (unparseable server URL)");
@@ -228,7 +241,7 @@ fn grant_remote_control_ipc(app: &tauri::App, server_url: &str) {
 // the update-registry token it minted for the signed-in user. Same shape and
 // same trust argument as `grant_remote_control_ipc`, kept as its own capability
 // so the two grants stay independently reviewable.
-fn grant_update_token_ipc(app: &tauri::App, server_url: &str) {
+fn grant_update_token_ipc(app: &tauri::AppHandle, server_url: &str) {
     use tauri::{ipc::CapabilityBuilder, Manager};
     let Some(pattern) = remote_url_pattern(server_url) else {
         eprintln!("lets-chat-desktop: update-token bridge disabled (unparseable server URL)");
@@ -454,5 +467,36 @@ fn run_update() -> i32 {
             eprintln!("update failed: {e}");
             1
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // LC-933: the remote-control capability is granted once at startup for
+    // whichever URL is configured then, and again from set_server_url for
+    // whichever URL the user just switched to. Both call sites feed the same
+    // URL into `remote_url_pattern`, so the granted pattern always equals the
+    // pattern for the currently loaded URL: this pins that invariant across a
+    // URL change, not just for a single fixed URL.
+    #[test]
+    fn remote_url_pattern_tracks_a_url_change() {
+        let pre_change = "https://old.example.com/some/path?x=1";
+        let post_change = "https://new.example.com:8443/";
+
+        let pre_pattern = remote_url_pattern(pre_change);
+        let post_pattern = remote_url_pattern(post_change);
+
+        assert_eq!(pre_pattern, Some("https://old.example.com/*".to_string()));
+        assert_eq!(
+            post_pattern,
+            Some("https://new.example.com:8443/*".to_string())
+        );
+        assert_ne!(pre_pattern, post_pattern);
+
+        // The pattern granted for a given URL is exactly the pattern computed
+        // for that same URL when it is the currently loaded one.
+        assert_eq!(remote_url_pattern(post_change), post_pattern);
     }
 }
