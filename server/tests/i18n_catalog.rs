@@ -52,6 +52,21 @@ fn locale_keys(lang: &str) -> BTreeSet<String> {
     keys
 }
 
+/// Every locale the runtime loader ships, i.e. every subdirectory of
+/// `locales/` except `en` itself (the source/fallback catalog).
+fn other_locales() -> Vec<String> {
+    let dir = manifest("locales");
+    let mut locales: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("read dir {dir:?}: {e}"))
+        .map(|entry| entry.unwrap().path())
+        .filter(|p| p.is_dir())
+        .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .filter(|name| name != "en")
+        .collect();
+    locales.sort();
+    locales
+}
+
 /// All keys referenced via the `t` / `tn` filters across every template.
 fn referenced_keys() -> BTreeSet<String> {
     let dir = manifest("templates");
@@ -113,19 +128,31 @@ fn every_referenced_key_exists_in_english() {
 #[test]
 fn locales_have_full_coverage_against_english() {
     let en = locale_keys("en");
-    // Grows as locales are added (LC-188); a single entry today is fine.
-    #[allow(clippy::single_element_loop)]
-    for locale in ["es"] {
-        let other = locale_keys(locale);
+    // Derived from the `locales/` directory (LC-942), so a new locale is
+    // gated the moment it lands with no edit to this test.
+    for locale in other_locales() {
+        let other = locale_keys(&locale);
         let missing: Vec<&String> = en.difference(&other).collect();
         let stray: Vec<&String> = other.difference(&en).collect();
         assert!(
             missing.is_empty(),
-            "locale {locale} is missing keys vs English: {missing:?}"
+            "locales/{locale} is missing keys vs English: {missing:?}"
         );
         assert!(
             stray.is_empty(),
-            "locale {locale} has keys not in English: {stray:?}"
+            "locales/{locale} has keys not in English: {stray:?}"
+        );
+    }
+}
+
+#[test]
+fn every_shipped_locale_has_a_native_name() {
+    // LC-942: a locale that reaches the Settings picker with a blank
+    // native-name label is a shipping defect, not just a cosmetic gap.
+    for locale in other_locales() {
+        assert!(
+            !lets_chat::i18n::native_name(&locale).is_empty(),
+            "locales/{locale} has no native_name entry"
         );
     }
 }
