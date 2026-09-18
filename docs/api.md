@@ -35,11 +35,13 @@ A bot is a first-class non-human account. An admin creates one at **Admin -> Bot
 
 ## Scopes
 
-| Scope | Grants |
-|-------|--------|
-| `messages:read`  | Read messages in rooms the user can access. |
-| `messages:write` | Post messages in rooms the user can access. |
-| `rooms:read`     | List rooms the user can see. |
+| Scope | Grants | Bridge bots |
+|-------|--------|-------------|
+| `messages:read`    | Read messages in rooms the user can access. | Refused - `require_not_bridge` rejects any bridge-role token with 403, even if granted. |
+| `messages:write`   | Post messages in rooms the user can access. | Refused - same `require_not_bridge` gate. |
+| `rooms:read`       | List rooms the user can see. | Refused - same `require_not_bridge` gate. |
+| `bridge:post`      | Post a foreign-protocol message under a caller-chosen display name on a bridge the bot owns. | Bridge-only; see `docs/protocol-bridges.md`. |
+| `bridge:heartbeat` | Record a liveness ping for a bridge the bot owns. | Bridge-only; see `docs/protocol-bridges.md`. |
 
 ## Endpoints
 
@@ -47,10 +49,10 @@ A bot is a first-class non-human account. An admin creates one at **Admin -> Bot
 |--------|------|----------------|-------------|
 | GET  | `/api/v1/me` | (any valid token) | The token owner's identity (`id`, `username`, `role`). |
 | GET  | `/api/v1/rooms` | `rooms:read` | Non-DM rooms the user can see (`id`, `name`, `room_type`). |
-| GET  | `/api/v1/rooms/{room_id}/messages` | `messages:read` | Top-level messages in a room (`id`, `room_id`, `user_id`, `author`, `body`, `created_at`). |
+| GET  | `/api/v1/rooms/{room_id}/messages` | `messages:read` | Paginated top-level messages in a room, newest first. Returns an envelope `{"messages": [...], "next_cursor": ...}` where each message has `id`, `room_id`, `user_id`, `author`, `body`, `created_at`. Query parameters: `before_id` (optional cursor - return messages strictly older than this id; omit to start at the most recent) and `limit` (optional page size, default 50, clamped to `[1, 200]`). `next_cursor` is the smallest `id` returned, to feed back as `before_id` on the next request; it is `null` when the page returned fewer than `limit` rows (history exhausted) or the room is empty. |
 | POST | `/api/v1/rooms/{room_id}/messages` | `messages:write` | Post a message. JSON body `{"body": "..."}`. Returns the created message. Enforces the same send gates as the web composer (ban/mute, room access, rate limit, per-enclave burst override, enclave ban, posting policy, slowmode, new-member cooldown, DM block, link filter); broadcasts to connected clients. A policy/ban/block denial is **403 Forbidden**, a rate-limit/slowmode/cooldown denial is **429 Too Many Requests** with a `Retry-After` header, and a blocked-link body is **400 Bad Request**. |
 
-Routes that do not appear here are not reachable with an API token.
+`messages:read`, `messages:write`, and `rooms:read` are refused for bridge-role tokens (see the scope table above). Bridge bots instead reach `/api/v1/bridges/{id}/messages` and `/api/v1/bridges/{id}/heartbeat`, documented in `docs/protocol-bridges.md` along with the outgoing-webhook stream a bridge daemon subscribes to for reads. Routes that appear in neither this table nor `docs/protocol-bridges.md`'s API surface table are not reachable with an API token.
 
 ### Examples
 
@@ -66,6 +68,15 @@ curl -X POST https://chat.example/api/v1/rooms/1/messages \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"body":"hello from a bot"}'
+
+# Page through a room's history, newest first
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://chat.example/api/v1/rooms/1/messages?limit=50"
+# => {"messages": [...50 rows...], "next_cursor": 214}
+
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://chat.example/api/v1/rooms/1/messages?limit=50&before_id=214"
+# => {"messages": [...older rows...], "next_cursor": null}   # history exhausted
 ```
 
 ## Incoming webhooks (LC-74)
