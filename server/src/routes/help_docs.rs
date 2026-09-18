@@ -37,6 +37,19 @@ pub const HELP_DOCS_SOURCES_KEY: &str = "help_docs_sources";
 /// run (shown read-only on `/admin/settings`).
 pub const HELP_DOCS_STATUS_KEY: &str = "help_docs_last_status";
 
+// LC-724: marker substrings embedded in the bot replies this module formats,
+// so the support panel (`routes::support_panel`) can derive its stage machine
+// from the reply text without re-typing the sentences. Each constant is
+// referenced by both the `format!` call that produces the reply here and the
+// matcher that reads it back in `support_panel`, so a copy edit on one side
+// fails the build on the other instead of silently drifting.
+pub(crate) const HUMAN_AVAILABLE_MARKER: &str = "an admin has been notified";
+pub(crate) const HUMAN_UNAVAILABLE_MARKER: &str = "no admins are available";
+pub(crate) const NO_DOCS_CONFIGURED_MARKER: &str = "no documentation configured yet";
+pub(crate) const DOCS_NOT_SET_UP_MARKER: &str = "isn't set up yet";
+pub(crate) const NO_MATCH_MARKER: &str =
+    "couldn't find anything about that in the product documentation";
+
 /// Max characters accepted in a question (bounds the prompt + abuse).
 const MAX_QUESTION_CHARS: usize = 1000;
 /// Per-user support asks per minute.
@@ -758,13 +771,13 @@ pub async fn build_support_answer(
     if chunks.is_empty() {
         return if is_admin {
             format!(
-                "{header}\n\n_The help desk has no documentation configured yet, so I can't answer \
+                "{header}\n\n_The help desk has {NO_DOCS_CONFIGURED_MARKER}, so I can't answer \
                  product questions. Add one or more sources under [Admin settings](/admin#st-helpdocs), \
                  then reindex. In the meantime, type `/human` to reach an admin._"
             )
         } else {
             format!(
-                "{header}\n\n_The help desk isn't set up yet, so I can't answer product questions \
+                "{header}\n\n_The help desk {DOCS_NOT_SET_UP_MARKER}, so I can't answer product questions \
                  right now. Type `/human` to reach an admin._"
             )
         };
@@ -799,7 +812,7 @@ pub async fn build_support_answer(
     // than guessing. (Phase 2 will offer a human handoff on this branch.)
     if scored.is_empty() {
         return format!(
-            "{header}\n\n_I couldn't find anything about that in the product documentation. \
+            "{header}\n\n_I {NO_MATCH_MARKER}. \
              Try rephrasing, or type `/human` to bring in an admin._"
         );
     }
@@ -851,6 +864,28 @@ pub struct EscalationOutcome {
     pub available: bool,
 }
 
+/// LC-724: format the `/human` confirmation posted by [`handle_human`]. Pulled
+/// out as its own function (rather than inlined) so tests - both this
+/// module's and the support panel's - can assert the panel's matcher against
+/// the handler's real output instead of a hand-typed copy of it. The wording
+/// differs only in whether an admin is available now; the panel matches on
+/// HUMAN_AVAILABLE_MARKER / HUMAN_UNAVAILABLE_MARKER above.
+pub(crate) fn format_human_confirmation(
+    asker_label: &str,
+    available: bool,
+    ticket_id: i64,
+) -> String {
+    if available {
+        format!(
+            "_{asker_label}, {HUMAN_AVAILABLE_MARKER} and usually replies within about 5 minutes. I've opened support ticket #{ticket_id} so this doesn't get lost - you can keep waiting, or add details below._"
+        )
+    } else {
+        format!(
+            "_{asker_label}, {HUMAN_UNAVAILABLE_MARKER} right now, so I've filed support ticket #{ticket_id} for follow-up. You can add details below to help them help you._"
+        )
+    }
+}
+
 /// Handle `/human [message]` for `asker` in `room`. Notifies the admins (via a
 /// DM from the assistant bot that rides the existing DM push/email stack) that
 /// the user wants a person, then posts a confirmation in the room stating
@@ -896,21 +931,7 @@ pub(crate) async fn handle_human(
         db::support_tickets::create(&state.chat, &asker.id, Some(room.id), &room.name, &body)
             .await?;
     super::support::broadcast_support_changed(state);
-    // LC-724: both confirmations carry the ticket id so the panel can show a
-    // "waiting for a human" stage keyed on it (`ticket_ref`), with a live elapsed
-    // timer and an "add details" form that enriches this same ticket. The wording
-    // differs only in whether an admin is available now; the marker phrases ("an
-    // admin has been notified" / "no admins are available") are what the panel
-    // matches on, so keep them stable.
-    let confirmation = if outcome.available {
-        format!(
-            "_{asker_label}, an admin has been notified and usually replies within about 5 minutes. I've opened support ticket #{ticket_id} so this doesn't get lost - you can keep waiting, or add details below._"
-        )
-    } else {
-        format!(
-            "_{asker_label}, no admins are available right now, so I've filed support ticket #{ticket_id} for follow-up. You can add details below to help them help you._"
-        )
-    };
+    let confirmation = format_human_confirmation(asker_label, outcome.available, ticket_id);
     let bot = super::assistant::assistant_bot(state).await?;
     let msg_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &confirmation).await?;
     super::room::finalize_message_send(state, room, &bot, msg_id, &confirmation, None).await?;
@@ -946,9 +967,9 @@ pub(crate) fn ticket_ref(body: &str) -> Option<i64> {
 /// Matches the decline copy from [`build_support_answer`] (empty knowledge base
 /// and no-match) - all of which point the user at a human.
 pub(crate) fn is_low_confidence(body: &str) -> bool {
-    body.contains("couldn't find anything about that in the product documentation")
-        || body.contains("no documentation configured yet")
-        || body.contains("isn't set up yet")
+    body.contains(NO_MATCH_MARKER)
+        || body.contains(NO_DOCS_CONFIGURED_MARKER)
+        || body.contains(DOCS_NOT_SET_UP_MARKER)
 }
 
 /// Notify every active admin (except the requester, if they are one) that
@@ -1113,24 +1134,28 @@ mod tests {
     fn ticket_ref_extracts_the_filed_ticket_number() {
         // LC-724: both /human confirmations now carry the ticket id (so the panel
         // can key its waiting stage on it).
-        let unavailable = "_alice, no admins are available right now, so I've filed support ticket #42 for follow-up. You can add details below._";
-        assert_eq!(ticket_ref(unavailable), Some(42));
-        let available = "_alice, an admin has been notified and usually replies within about 5 minutes. I've opened support ticket #7 so this doesn't get lost - you can keep waiting, or add details below._";
-        assert_eq!(ticket_ref(available), Some(7));
+        assert_eq!(
+            ticket_ref(&format_human_confirmation("alice", false, 42)),
+            Some(42)
+        );
+        assert_eq!(
+            ticket_ref(&format_human_confirmation("alice", true, 7)),
+            Some(7)
+        );
         assert_eq!(ticket_ref("a normal answer from the docs"), None);
     }
 
     #[test]
     fn is_low_confidence_matches_the_decline_copy() {
-        assert!(is_low_confidence(
-            "> q\n\n_I couldn't find anything about that in the product documentation. Try rephrasing, or type `/human`._"
-        ));
-        assert!(is_low_confidence(
-            "_The help desk has no documentation configured yet, so I can't answer._"
-        ));
-        assert!(is_low_confidence(
-            "_The help desk isn't set up yet, so I can't answer product questions right now._"
-        ));
+        assert!(is_low_confidence(&format!(
+            "> q\n\n_I {NO_MATCH_MARKER}. Try rephrasing, or type `/human`._"
+        )));
+        assert!(is_low_confidence(&format!(
+            "_The help desk has {NO_DOCS_CONFIGURED_MARKER}, so I can't answer._"
+        )));
+        assert!(is_low_confidence(&format!(
+            "_The help desk {DOCS_NOT_SET_UP_MARKER}, so I can't answer product questions right now._"
+        )));
         assert!(!is_low_confidence(
             "> q\n\nTo reset your password, open Settings.\n\n**Sources:** ..."
         ));
