@@ -35,6 +35,19 @@ jobs:
           # Full history so the migration-immutability guard can compute the
           # merge-base with origin/main (LC-515).
           fetch-depth: 0
+          # The justfile imports common/common.just (LC-761); without this a
+          # submodule-less checkout errors on the very first `just` call below,
+          # and a plain checkout never surfaces that (LC-934).
+          submodules: true
+
+      - name: Justfile guard
+        # A checkout that cannot resolve the common/common.just import (an
+        # uninitialized submodule, or a root justfile that shadows one of its
+        # protected recipes) must fail here, loudly, instead of silently never
+        # being exercised by CI. See docs/quickstart.md and LC-934.
+        run: |
+          just --list
+          just check-justfile
 
       - name: Migration immutability guard
         # Committed migrations are immutable: sqlx verifies each migration's

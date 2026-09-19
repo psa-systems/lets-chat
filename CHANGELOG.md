@@ -2,11 +2,7 @@
 
 Operator-facing record of changes that affect how you **run, configure, secure, or upgrade** lets-chat. If you operate a deployment, read the Security and Changed entries before upgrading: they call out default-on behavior changes and "set this env var / upgrade promptly" actions.
 
-This file records **tagged releases**. The project's release flow (`just create-release`, see `docs/releasing.md`) bumps the version, tags, and publishes; this file is curated at that point from the operator-action markers in git history. Between releases, the operator-action delta is always reconstructable from git and never lives only here:
-
-```
-git log --grep='\[operator-action\]' <last-tag>..HEAD
-```
+This file records **tagged releases**. The project's release flow (`just create-release`, see `docs/releasing.md`) bumps the version, tags, and publishes; this file is curated at that point by the release-cutter, who reads the PR titles and descriptions merged since the last tag and picks out the operator-visible ones. Between releases, the operator-visible delta is always reconstructable from `git log --oneline --first-parent <last-tag>..HEAD` and never lives only here.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections: **Security** (must-act), **Changed** (behavior/default/config changes), **Added**, **Fixed**, **Deprecated**. Internal-only work (refactors, test hygiene, decoder hardening with no operator impact) is intentionally omitted; the git history is the complete record.
 
@@ -17,6 +13,34 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 - **The desktop self-updater now pulls its binary from an OCI registry, authenticated as the signed-in user (LC-733).** Let's Chat binaries are membership-gated, so the previous anonymous fetch of the Generic Packages URL could only ever answer 401. The updater now resolves `{registry}/v2/{repository}/manifests/latest-{platform}` and downloads the single artifact blob it names, using a registry credential the server hands the app after a Bunyip sign-in (`GET /desktop/registry-token`); there is no second sign-in and nothing to paste. The artifact's SHA-256 is still verified before the in-place replace, and the bearer is dropped on any cross-origin redirect. **Action:** the release still uploads binaries and `latest.json` to Forgejo Generic Packages for hand downloads, and since LC-831 it also pushes each binary to the container registry as an OCI artifact tagged `latest-{os}-x86_64` (plus a `{version}-{os}-x86_64` rollback tag), which is what the updater resolves; the registry must serve those artifacts over the OCI distribution API and accept a signed-in user's token. Operators mirroring releases replace `LETS_CHAT_UPDATE_URL` with `LETS_CHAT_UPDATE_REGISTRY_URL` (plus optional `LETS_CHAT_UPDATE_REPOSITORY` / `_TAG` / `_TOKEN`); the old variable is no longer read.
 
 - **Desktop update manifests are no longer Ed25519-signed (LC-709).** The updater's manifest signature, the detached signature artifact published beside `latest.json`, and the public key embedded in the desktop binary are all removed. Desktop distribution is membership-gated and authenticated rather than public, so the signature is not what makes a download trustworthy; each artifact's SHA-256 is still recorded in `latest.json` and still checked before the in-place replace, which covers a corrupt or truncated download and a manifest that has drifted from the binaries it names, but not an attacker who controls the source. **Action:** the update-signing secret and public-key variable that the v0.1.0 Security entry below told you to provision are no longer read by anything; delete them from the org if you set them. Cutting a desktop release now needs no key material beyond the packages PAT.
+
+## [v0.3.0] - 2026-08-14
+
+Third tagged release, cut from `main` after ~198 commits (about three weeks) of work on top of the v0.2.0 baseline. The entries below are curated from the PR titles and descriptions merged since v0.2.0 (`git log --first-parent v0.2.0..v0.3.0`); internal work (UI polish, refactors, test hygiene, CI changes with no operator impact) is intentionally omitted and lives in the git history.
+
+### Security
+
+- **`GET /messages/{id}` now checks room membership before returning the message (LC-636).** The single-message fetch looked the message up by id alone, so any authenticated user who knew or guessed a message id could read it regardless of room membership. It now runs the same room-access check as the room message list. **Upgrade promptly.**
+- **Public-room WebSocket fan-out and subscribe are now scoped to the enclave, not the whole server (LC-637).** Public-room chat events broadcast to every connected socket, and the `Subscribe` frame accepted any room id, so a signed-in user could subscribe to a public room outside their enclave and receive its message bodies. Both paths now check enclave membership. **Upgrade promptly** if you run more than one enclave.
+- **SSO account adoption can no longer hijack an already-claimed identity (LC-618, tightened by LC-698).** LC-618 let a Bunyip sign-in re-adopt a local account whose `bunyip_sub` had rotated (an OP reseed), but in doing so it broadened the match past the original "unlinked row only" guard. LC-698 restores that guard and adds an explicit identity-conflict path (a bot row, an unverified-email match, or a row already linked to a different subject) that surfaces an actionable "contact an administrator" error instead of adopting the row or 500ing. No action required; a rotated-sub sign-in after an OP reseed still resolves correctly.
+
+### Changed
+
+- **The whole AI/LLM surface is now gated behind a runtime, role-scoped flag (LC-679).** Setting `LETS_CHAT_LLM_URL` (or the embeddings/vision/STT endpoints) only makes the backing service available; the AI surface itself stays off until a site admin flips it on in Admin > Settings > "AI features" (default off, no restart to toggle). Once on, a "Who can use AI" audience setting (LC-702, default **Everyone**) controls whether it's exposed to every user or scoped down to site admins, enclave owners/admins, and room moderators. **Action:** if you already had an LLM endpoint configured, AI features are OFF by default after this upgrade until an admin enables the flag.
+- **Every boot backfills pre-existing users into the "General" default enclave (LC-621).** lets-chat now consolidates on General as the default enclave; the SSO signup path auto-joins new users, and an idempotent startup backfill (`INSERT OR IGNORE`) joins every account that existed before this upgrade. No action required.
+- **Liveness/readiness probes replace the old container healthcheck (LC-581).** `GET /healthz` (dependency-free liveness) and `GET /readyz` (pings the auth/chat/settings SQLite pools, reports SSO-client presence, `503` when a store is down) are new, unauthenticated, and exempt from maintenance mode. **Action:** the container `HEALTHCHECK` now targets `/healthz` instead of the old check; point any external liveness gate at `/healthz` and readiness/load-balancer draining at `/readyz`, never the other way around, or a transient dependency blip restarts an otherwise-healthy process.
+
+### Added
+
+- **Image alt-text auto-draft via an operator vision model (LC-667).** Set `LETS_CHAT_VISION_URL` (an OpenAI-vision-compatible endpoint, e.g. llava/llama3.2-vision) plus optional `LETS_CHAT_VISION_API_KEY` / `LETS_CHAT_VISION_MODEL` (default `llava`) to add an "Auto-draft" button to the image alt-text editor. Separate endpoint from the chat LLM; the image is sent only to this operator endpoint. Unset = the button stays hidden.
+- **Local AI moderation triage (LC-670).** With `LETS_CHAT_AI_MODERATION` set truthy and an LLM configured, posted messages are classified in the background and clear spam/harassment/inappropriate cases are flagged to the admin report queue for human review; nothing is auto-deleted or hidden. Content only reaches your own LLM.
+- **Personal weekly recap DM (LC-671).** With `LETS_CHAT_WEEKLY_RECAP` set truthy and an LLM configured, each active user is DMed a short AI-written weekly recap from the assistant bot once a week; quiet weeks are skipped.
+- **Background embeddings backfill for pre-existing messages (LC-673).** A new dispatcher embeds a small batch of un-embedded messages every 60s so semantic search and "Find related" cover history, not just messages posted after the embeddings endpoint was configured. No-op with no embeddings endpoint set; no action required.
+- A cluster of AI-assistant features layered on the existing `LETS_CHAT_LLM_URL` / `LETS_CHAT_STT_URL` endpoints: per-bot AI persona (LC-695), admin-picked assistant-bot identity (LC-693), a translation target-language picker (LC-688), an AI writing assistant (LC-655), auto thread titles (LC-668), a scheduled per-room AI digest (LC-665), an AI gist subject for the email digest (LC-672), and call-transcript recaps (LC-662, LC-663, LC-664, LC-629). No action required beyond the LC-679 flag above; each is additional load/cost on whichever LLM/STT endpoint you have configured.
+
+### Fixed
+
+- **Bunyip-verified users are now marked email-verified (LC-627).** SSO provisioning never stamped `email_verified_at`, which silently blocked call remote-control (gated on a verified email) for every SSO-only user. No action required.
 
 ## [v0.2.0] - 2026-07-22
 

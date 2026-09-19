@@ -108,11 +108,11 @@ Optional `{"error": "homeserver unreachable"}` body to surface a daemon-side fau
 
 ### Outgoing-webhook payload
 
-Subscribe an outgoing webhook at `/admin/outgoing-webhooks` to whichever events the daemon needs. The payload now carries an `actor` block on every message-* and reaction.added event:
+Subscribe an outgoing webhook at `/admin/outgoing-webhooks` to whichever events the daemon needs. The payload now carries an `actor` block on every message-* and reaction.added event. `version` is a JSON string, not an integer; compare it as such:
 
 ```json
 {
-  "version": 1,
+  "version": "1",
   "event": "message.posted",
   "room_id": 5,
   "data": {
