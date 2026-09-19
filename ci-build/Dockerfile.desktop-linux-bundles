@@ -32,9 +32,9 @@ ENV GIT_HASH=${GIT_HASH} \
     LETS_CHAT_UPDATE_REGISTRY_URL=${LETS_CHAT_UPDATE_REGISTRY_URL} \
     LETS_CHAT_UPDATE_REPOSITORY=${LETS_CHAT_UPDATE_REPOSITORY}
 
-# Cap concurrent rustc / build-script processes; see Dockerfile.desktop-linux
-# for the same trick. Overridable via `--build-arg CARGO_BUILD_JOBS=N`.
-ARG CARGO_BUILD_JOBS=2
+# Cargo parallelism comes from the CI runner via --build-arg CARGO_BUILD_JOBS;
+# `default` is cargo's own keyword for all CPUs, for ad-hoc local builds.
+ARG CARGO_BUILD_JOBS=default
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 
 # Tauri 2 CLI: produces the .deb + .AppImage bundles around the cargo
