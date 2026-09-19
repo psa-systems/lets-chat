@@ -130,6 +130,9 @@
   // LC-875: shared with voice.js, huddle_popout.js and huddle_control.js so
   // the visible label, the tooltip and the accessible name never drift apart.
   var setLabel = window.LetsChatRtc.setLabel;
+  // LC-931: the shared lc:control-* event names (rtc_common.js), so this file
+  // and huddle_control.js dispatch/listen for byte-identical strings.
+  var CONTROL_EVENTS = window.LetsChatRtc.control.events;
 
   // ---- focus trap (modal dialog discipline) -------------------------
   // Exactly one trap is active at a time. installDialogTrap migrates from
@@ -807,7 +810,7 @@
         // Controlled side: hand each input frame to the native injector (LC-185).
         // Web peers have no injector, so the event is simply unobserved.
         try {
-          document.dispatchEvent(new CustomEvent('lc:control-input', { detail: ev.data }));
+          document.dispatchEvent(new CustomEvent(CONTROL_EVENTS.INPUT, { detail: ev.data }));
         } catch (e) {}
         return;
       }
@@ -1037,7 +1040,7 @@
     sendCap();
     showControlBanner();
     // Arm any native injector (LC-185); web has none and ignores this.
-    try { document.dispatchEvent(new CustomEvent('lc:control-start')); } catch (e) {}
+    try { document.dispatchEvent(new CustomEvent(CONTROL_EVENTS.START)); } catch (e) {}
   }
   function denyControl() {
     hideControlPrompt();
@@ -1051,7 +1054,7 @@
     if (!controlGranted) return;
     controlGranted = false;
     hideControlBanner();
-    try { document.dispatchEvent(new CustomEvent('lc:control-end')); } catch (e) {}
+    try { document.dispatchEvent(new CustomEvent(CONTROL_EVENTS.END)); } catch (e) {}
   }
   // Kill-switch + auto-revoke for the sharer: tell the controller to stop
   // (so it stops capturing) AND tear down locally. Drives the banner button,
@@ -1273,7 +1276,7 @@
   // LC-186: the desktop global kill-switch hotkey fires this DOM event (the
   // native side has already disarmed its injector); the page side signals the
   // peer to stop and drops the banner. Harmless in a browser (never fires).
-  document.addEventListener('lc:control-kill', function () { revokeAsSharer(); });
+  document.addEventListener(CONTROL_EVENTS.KILL, function () { revokeAsSharer(); });
 
   // LC-144: re-route the live remote audio when the speaker is changed
   // mid-call from the device picker.
