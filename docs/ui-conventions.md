@@ -397,6 +397,12 @@ Every avatar `<img>` renders its URL through the `avatar_url` Askama filter, nev
 
 The call/voice surfaces build their avatar URLs in JS from a WebSocket-delivered id, not through the filter (`call.js` remote avatar, `voice.js` tile + lobby chips). LC-784 carries the version token into those frames so the JS builds the same immutable URL: the token rides alongside the id as a `data-*` attribute (`data-avatar-version` on `VoiceJoined`, `data-from-avatar-version` on `CallSignal`, `data-self-version` / `data-lc-avatar-version` on the server-rendered config and preview chips) or as the third element of each `VoiceRoster` peer tuple. `render_voice_event` / `render_call_signal` source it from `crate::avatar_version::version_of`, and the JS keeps an `avatarVersions` map that `avatarUrl(id)` reads to append `?v=`; an id with no known token (an SFU tile identified only by LiveKit metadata) falls back to the bare URL, which still resolves `no-cache`. The guard also scans `server/assets/**/*.js` and fails on a `/avatars/` string literal with no `?v=` on the same line.
 
+## Count badges (LC-889)
+
+There is exactly **one** count-badge component: `partials/unread_badge.html`'s `badge` macro (`{% macro badge(count, noun, variant) %}`). It renders `.lc-count-pill` (plain), `.lc-count-pill--alert` (danger-red, `variant="alert"`) or `.lc-rail-badge` (`variant="rail"`), always with `aria-label="{count} {noun}"` so a screen reader never announces a bare numeral. The partial's own row markup (the `unread-{kind}-{id}` span and its `hx-swap-oob` counterpart) mirrors the same classes for the same reason, since it needs the extra `id`/zero-placeholder machinery the OOB unread swaps depend on that the macro does not.
+
+`ci-build/check-count-badge.nu` (wired into `just check` and the Check workflow) rejects a literal `lc-count-pill`, `lc-count-pill--alert`, or `lc-rail-badge` class anywhere under `server/templates/` outside `partials/unread_badge.html` and its OOB counterpart `ws/unread_badge.html`, so a new badge cannot silently bypass the macro and reintroduce the unlabeled-numeral gap.
+
 ## Tooltips (LC-370)
 
 Styled tooltips come from one shared helper: `server/assets/tooltip.js` (loaded in `base.html`) plus the `#lc-tooltip` rule in `main.css`. Drive a tooltip declaratively with attributes on the trigger - never hand-roll a positioned tooltip element, and prefer this over the native `title=` attribute (which is unstyled, theme-blind, and clipped by `overflow:auto` ancestors like the enclave rail).
