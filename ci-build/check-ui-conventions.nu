@@ -138,6 +138,13 @@ const I18N_TABLE_ENTRY = '^\s*(?<key>[a-zA-Z_][a-zA-Z0-9_]*):\s*"\{\{\s*"[a-z0-9
 const I18N_KEY_CALL = '\b(__lcS|S|s|str)\(\s*[\x27"](?<key>[a-zA-Z0-9_]+)[\x27"]'
 const I18N_TOAST_KEY_CALL = '\blcToast\(\s*[\x27"][^\x27"]*[\x27"]\s*,\s*[\x27"](?<key>[a-zA-Z0-9_]+)[\x27"]'
 
+# LC-945: `window.__lcS` is the reader function `base.html` defines
+# (`function (k, fb) { ... }`), never the catalog map itself; subscripting it
+# (`window.__lcS[key]`) always reads a property of a function, which is
+# `undefined`, so the fallback is taken unconditionally regardless of catalog
+# content. huddle_ring.js shipped exactly that shape once already.
+const LCS_SUBSCRIPT = 'window\.__lcS\['
+
 # LC-748: the service worker's offline fallback. It is a standalone document
 # outside the template layer, so nothing else here covers it: it must stay
 # mode-aware (no light-only `color-scheme`) and must call the product by its
@@ -725,6 +732,12 @@ def used-i18n-keys [] {
 # LC-891: the key-pairing rule from both directions - a table entry nothing
 # calls, and a call site whose key has no table entry (a broken lookup, not
 # just a dead one).
+# LC-945: the wrong-accessor shape - reading `window.__lcS` as if it were the
+# catalog map instead of calling it as the reader function base.html defines.
+def lcs-subscripts [] {
+    scan-lines (browser-asset-files) $LCS_SUBSCRIPT
+}
+
 def i18n-key-pairing [] {
     let table = (i18n-table-entries)
     let used = (used-i18n-keys)
@@ -861,6 +874,12 @@ def rules [] {
             pending: null
             fix: "write three periods, not U+2026 or `&#8230;`; the catalogs spell it that way and `check-locale-ellipsis.nu` guards them, this rule is the same spelling over the templates and browser scripts. `sw.js` is exempt: its one U+2026 is a truncation marker, not prose (LC-891)"
             check: {|| ellipsis-outside-locales }
+        }
+        {
+            id: "no-lcS-subscript"
+            pending: null
+            fix: "call `window.__lcS(key, fallback)` as a function, matching every other reader in the tree; `window.__lcS[key]` subscripts the reader function itself and is always undefined, so the fallback wins unconditionally regardless of catalog content (LC-945)"
+            check: {|| lcs-subscripts }
         }
         {
             id: "i18n-keys-are-paired"
