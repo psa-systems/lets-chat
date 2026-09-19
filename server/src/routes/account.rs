@@ -345,6 +345,18 @@ async fn purge_user_chat(chat: &SqlitePool, user_id: &str) -> Result<(), AppErro
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
+    // LC-947: dm_pairs.user_lo/user_hi exist only to enforce the
+    // find-or-create uniqueness constraint (LC-909); once the deleted user
+    // can no longer be a DM participant, the row has no functional purpose
+    // and would otherwise retain their id indefinitely. room_members above
+    // already dropped this user's membership, so the room is orphaned on
+    // their side regardless; this just stops dm_pairs from being the one
+    // place their id survives.
+    sqlx::query("DELETE FROM dm_pairs WHERE user_lo = ? OR user_hi = ?")
+        .bind(user_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
     tx.commit().await?;
     Ok(())
 }

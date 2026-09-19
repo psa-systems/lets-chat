@@ -43,15 +43,28 @@ pub fn router() -> Router<AppState> {
 const PANEL_PAGE_LIMIT: i64 = 50;
 
 /// LC-724: substring that marks the "you added details" confirmation, so the
-/// panel derives the ticket-filed stage from it (kept next to the message it
-/// matches, in [`post_ticket_details`]).
+/// panel derives the ticket-filed stage from it. Referenced by both
+/// [`format_details_filed_confirmation`] (the producer, below) and
+/// [`derive_stage`] (the matcher), so the two can't drift apart.
 const DETAILS_FILED_MARKER: &str = "added your details";
+
+/// LC-724: format the "you added details" confirmation posted by
+/// [`post_ticket_details`]. Pulled out as its own function so tests can
+/// assert the matcher against the real producer output.
+fn format_details_filed_confirmation(ticket_id: i64) -> String {
+    format!(
+        "_Thanks - I've {DETAILS_FILED_MARKER} to support ticket #{ticket_id}. An admin will follow up._"
+    )
+}
 
 /// LC-724: true when a bot message is a `/human` waiting confirmation (an admin
 /// was notified, or none were available). Matches the stable marker phrases in
-/// [`help_docs::handle_human`]; both variants also carry the ticket id.
+/// [`help_docs::handle_human`] via the shared [`help_docs::HUMAN_AVAILABLE_MARKER`]
+/// / [`help_docs::HUMAN_UNAVAILABLE_MARKER`] constants; both variants also carry
+/// the ticket id.
 fn is_waiting_confirmation(body: &str) -> bool {
-    body.contains("an admin has been notified") || body.contains("no admins are available")
+    body.contains(help_docs::HUMAN_AVAILABLE_MARKER)
+        || body.contains(help_docs::HUMAN_UNAVAILABLE_MARKER)
 }
 
 /// LC-724: turn a SQLite `datetime('now')` UTC timestamp ("YYYY-MM-DD HH:MM:SS")
@@ -543,10 +556,7 @@ async fn post_ticket_details(
     crate::routes::support::broadcast_support_changed(&state);
 
     let bot = crate::routes::assistant::assistant_bot(&state).await?;
-    let confirmation = format!(
-        "_Thanks - I've added your details to support ticket #{}. An admin will follow up._",
-        form.ticket_id
-    );
+    let confirmation = format_details_filed_confirmation(form.ticket_id);
     let msg_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &confirmation).await?;
     crate::routes::room::finalize_message_send(&state, &room, &bot, msg_id, &confirmation, None)
         .await?;
@@ -630,26 +640,24 @@ mod tests {
     #[test]
     fn derive_stage_maps_each_confirmation_to_its_affordance() {
         // The two /human confirmations -> the waiting stage, keyed on the ticket.
-        let waiting_available = "_bob, an admin has been notified and usually replies within about 5 minutes. I've opened support ticket #12 so this doesn't get lost - you can keep waiting, or add details below._";
+        // Built through the handler's real formatter, not a frozen copy of its
+        // output, so a copy edit that breaks the pairing fails here.
+        let waiting_available = help_docs::format_human_confirmation("bob", true, 12);
         assert!(matches!(
-            derive_stage(waiting_available, "2026-08-16 00:46:02"),
+            derive_stage(&waiting_available, "2026-08-16 00:46:02"),
             Stage::Waiting(12, ref s) if s == "2026-08-16T00:46:02Z"
         ));
-        let waiting_unavailable = "_bob, no admins are available right now, so I've filed support ticket #13 for follow-up. You can add details below._";
+        let waiting_unavailable = help_docs::format_human_confirmation("bob", false, 13);
         assert!(matches!(
-            derive_stage(waiting_unavailable, "2026-08-16 00:46:02"),
+            derive_stage(&waiting_unavailable, "2026-08-16 00:46:02"),
             Stage::Waiting(13, _)
         ));
         // The "added details" confirmation -> the filed stage.
-        let filed =
-            "_Thanks - I've added your details to support ticket #12. An admin will follow up._";
-        assert!(matches!(derive_stage(filed, ""), Stage::TicketFiled(12)));
+        let filed = format_details_filed_confirmation(12);
+        assert!(matches!(derive_stage(&filed, ""), Stage::TicketFiled(12)));
         // A low-confidence decline -> stuck; a normal answer -> normal.
         assert!(matches!(
-            derive_stage(
-                "_I couldn't find anything about that in the product documentation._",
-                ""
-            ),
+            derive_stage(&format!("_I {}._", help_docs::NO_MATCH_MARKER), ""),
             Stage::Stuck
         ));
         assert!(matches!(
@@ -667,8 +675,8 @@ mod tests {
         // the reference (previously the id was only in the scrolling bubble above
         // and the hidden form field, so a submitter could not tell from the
         // interface that a request had been created).
-        let no_admin = "_bob, no admins are available right now, so I've filed support ticket #77 for follow-up. You can add details below._";
-        let stage = derive_stage(no_admin, "2026-08-16 00:46:02");
+        let no_admin = help_docs::format_human_confirmation("bob", false, 77);
+        let stage = derive_stage(&no_admin, "2026-08-16 00:46:02");
         assert!(matches!(stage, Stage::Waiting(77, _)));
         let view = PanelThreadView {
             messages: Vec::new(),
