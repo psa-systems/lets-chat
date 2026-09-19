@@ -1,8 +1,8 @@
 # Architecture
 
 A single Rust binary serving HTTP, WebSocket, and static assets, with an
-optional desktop wrapper around the same pages. The workspace has two members,
-`server/` and `desktop/`.
+optional desktop wrapper around the same pages. The workspace has three
+members, `server/`, `desktop/`, and `ip-policy/`.
 
 ## Stack
 
@@ -29,6 +29,7 @@ and `just check` compiles and lints both.
 |---|---|
 | `server/` | the server binary: routes, templates, assets, Fluent locales, migrations |
 | `desktop/` | the Tauri 2 desktop wrapper and its self-updater |
+| `ip-policy/` | the shared `is_globally_routable` SSRF/net-guard IP policy, used by both `server/` and `desktop/` |
 | `services/transcription-agent/` | the LiveKit transcription agent sidecar (TypeScript), published as its own image |
 | `dev/` | containerized `cargo` / `bun` wrappers and the mock OIDC provider |
 | `ci-build/` | Dockerfiles and the Nushell convention guards `just check` runs |

@@ -24,6 +24,12 @@ pre_commit_compile := "false"
 # full dep graph, and 8-way `ld` OOMs a swapless host (SIGTERM).
 test_args := "-p lets-chat-server --jobs 2"
 
+# `check` also reads templates, browser assets, migrations and the CI guard
+# scripts, none of which the scope guard's Rust-relevant set (*.rs, Cargo.*,
+# .sqlx/) would trigger on. Without these, a templates-only commit would skip
+# `just check` entirely.
+pre_commit_extra_paths := "server/templates/ server/assets/ server/migrations/ ci-build/ justfile"
+
 # The root Cargo.toml is a virtual workspace and the single version lives at
 # [workspace.package] version, so create-release edits it there.
 release_layout := "virtual-workspace"
@@ -35,9 +41,10 @@ set allow-duplicate-recipes := true
 
 import 'common/common.just'
 
-# List available recipes. Keep FIRST: just picks the default recipe by source
-# order and never selects an imported one.
+# List available recipes.
 default:
+    # Note: keep FIRST in the file; just picks the default recipe by source
+    # order and never selects an imported one.
     @just --list
 
 # Build args for Docker image builds: inject git metadata so the binary can
@@ -45,40 +52,34 @@ default:
 # args must be computed on the host and forwarded.
 docker_version_args := '--build-arg GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" --build-arg GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"'
 
-# Run all checks. LC-774: `test-js` runs the browser-asset node:test suites here
-# too, so `just pre-commit` (whose `pre_commit_prepare := "check"` runs this
-# recipe) covers them alongside the Rust checks.
+# Run every check: asset/template conventions, Rust compile, clippy, fmt, and JS tests.
 [group('check')]
 check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-ui-conventions check-update-injection check-count-badge check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js
+    # Note: LC-774: `test-js` runs the browser-asset node:test suites here too, so
+    # `just pre-commit` (whose `pre_commit_prepare := "check"` runs this recipe)
+    # covers them alongside the Rust checks.
 
-# Reject raw numbered palette utilities (text-slate-700, bg-blue-500, ...) in the
-# browser assets and templates, and untokenized backgrounds on the
-# [aria-selected="true"] selection highlight; both must recolor from the design
-# tokens (LC-735, LC-736, LC-741).
+# Reject raw numbered palette utilities and untokenized selection-highlight backgrounds in the browser assets and templates; both must recolor from the design tokens (LC-735, LC-736, LC-741).
 [group('check')]
 check-asset-color-tokens:
     nu ci-build/check-asset-color-tokens.nu
 
-# Reject raw <input type="file"> in templates; every picker goes through
-# partials/file_picker.html (LC-740).
+# Reject raw <input type="file"> in templates; every picker goes through partials/file_picker.html (LC-740).
 [group('check')]
 check-file-pickers:
     nu ci-build/check-file-pickers.nu
 
-# Reject bare /avatars/{id} URLs in templates; render them versioned via the
-# avatar_url filter so the route can answer immutable (LC-781 F11).
+# Reject bare /avatars/{id} URLs in templates; render them versioned via the avatar_url filter so the route can answer immutable (LC-781 F11).
 [group('check')]
 check-avatar-cache:
     nu ci-build/check-avatar-cache.nu
 
-# Reject tables with no horizontal scroll wrapper; a clipping wrapper makes the
-# trailing columns unreachable on a narrow viewport (LC-737).
+# Reject tables with no horizontal scroll wrapper; a clipping wrapper makes the trailing columns unreachable on a narrow viewport (LC-737).
 [group('check')]
 check-table-scroll:
     nu ci-build/check-table-scroll.nu
 
-# Every table is the shared .lc-table inside a .card, and its cells take their
-# padding from the component rather than per-cell utilities (LC-745).
+# Every table is the shared .lc-table inside a .card, and its cells take their padding from the component rather than per-cell utilities (LC-745).
 [group('check')]
 check-table-shape:
     nu ci-build/check-table-shape.nu
@@ -88,63 +89,49 @@ check-table-shape:
 check-locale-ellipsis:
     nu ci-build/check-locale-ellipsis.nu
 
-# A boolean setting announces as a switch, and only partials/settings_toggle.html
-# hand-rolls the switch markup (LC-747).
+# A boolean setting announces as a switch, and only partials/settings_toggle.html hand-rolls the switch markup (LC-747).
 [group('check')]
 check-boolean-settings:
     nu ci-build/check-boolean-settings.nu
 
-# Only assets/tabs.js drives the [data-lc-tab] contract; the three consumers go
-# through window.lcInitTabs (LC-747).
+# Only assets/tabs.js drives the [data-lc-tab] contract; the three consumers go through window.lcInitTabs (LC-747).
 [group('check')]
 check-single-tab-controller:
     nu ci-build/check-single-tab-controller.nu
 
-# Every revoke control asks first; a revoke is irreversible and breaks every
-# integration using the credential (LC-738).
+# Every revoke control asks first; a revoke is irreversible and breaks every integration using the credential (LC-738).
 [group('check')]
 check-revoke-confirm:
     nu ci-build/check-revoke-confirm.nu
 
-# No apostrophe in a catalog string interpolated into an inline confirm('...');
-# askama escapes it, the HTML parser hands a bare quote to the JS compiler, and
-# the confirmation silently never runs (LC-753).
+# No apostrophe in a catalog string interpolated into an inline confirm('...'); askama escapes it, the HTML parser hands a bare quote to the JS compiler, and the confirmation silently never runs (LC-753).
 [group('check')]
 check-confirm-apostrophe:
     nu ci-build/check-confirm-apostrophe.nu
 
-# Every inline <script> in a template that can render more than once declares
-# how it survives the re-run (LC-835): data-lc-guard="none|flag|teardown". Carries
-# its own self-test, so a rule engine that stops asserting fails before the scan.
+# Every inline <script> in a template that can render more than once declares how it survives the re-run (LC-835): data-lc-guard="none|flag|teardown".
 [group('check')]
 check-swap-safe-scripts:
+    # Note: carries its own self-test, so a rule engine that stops asserting fails
+    # before the scan.
     nu ci-build/check-swap-safe-scripts.nu
 
-# LC-837: every anchor in the persistent nav panel is either boosted through the
-# partials/nav_boost.html include (swap #main, keep the socket) or carries
-# hx-boost="false" on purpose, and hx-boost="true" appears nowhere else, since a
-# container-level boost is inherited by the sidebar's own htmx controls.
+# LC-837: every anchor in the persistent nav panel is either boosted through the partials/nav_boost.html include (swap #main, keep the socket) or carries hx-boost="false" on purpose, and hx-boost="true" appears nowhere else since a container-level boost is inherited by the sidebar's own htmx controls.
 [group('check')]
 check-nav-boost:
     nu ci-build/check-nav-boost.nu
 
-# The convention classes the 2026-08-11 UI audit closed, held closed: palette
-# literals in templates, fake link buttons, open-coded .btn-danger-outline,
-# untokenized borders, clipping table wrappers, raw h1 sizes, the offline
-# page's mode bootstrap and brand name, and the em-dash ban (LC-749).
+# The convention classes the 2026-08-11 UI audit closed, held closed: palette literals in templates, fake link buttons, open-coded .btn-danger-outline, untokenized borders, clipping table wrappers, raw h1 sizes, the offline page's mode bootstrap and brand name, and the em-dash ban (LC-749).
 [group('check')]
 check-ui-conventions:
     nu ci-build/check-ui-conventions.nu
 
-# The self-updater polls where the release publishes: every option_env! update
-# name is injected by the release build, no build arg names a variable nothing
-# reads, and every platform tag the client resolves is pushed (LC-831).
+# The self-updater polls where the release publishes: every option_env! update name is injected by the release build, no build arg names a variable nothing reads, and every platform tag the client resolves is pushed (LC-831).
 [group('check')]
 check-update-injection:
     nu ci-build/check-update-injection.nu
 
-# Every numeric count badge renders through partials/unread_badge.html's
-# `badge` macro, so it always carries an aria-label (LC-889).
+# Every numeric count badge renders through partials/unread_badge.html's `badge` macro, so it always carries an aria-label (LC-889).
 [group('check')]
 check-count-badge:
     nu ci-build/check-count-badge.nu
@@ -165,11 +152,11 @@ check-desktop:
     ./dev/cargo-desktop check -p lets-chat-desktop
 
 # Run clippy lints (standalone server + desktop).
-# `-D warnings` matches the CI runner so any new lint that the Rust 1.94
-# clippy promotes to a warning fails the local check too, instead of slipping
-# past `just check` and only blowing up after a push.
 [group('check')]
 check-clippy:
+    # Note: `-D warnings` matches the CI runner so any new lint that the Rust 1.94
+    # clippy promotes to a warning fails the local check too, instead of slipping
+    # past `just check` and only blowing up after a push.
     ./dev/cargo clippy -p lets-chat-server --all-targets -- -D warnings
     ./dev/cargo-desktop clippy -p lets-chat-desktop -- -D warnings
 
@@ -199,17 +186,17 @@ build-css:
     cd server && ../dev/bun install --frozen-lockfile
     cd server && ../dev/bun run tailwindcss --input assets/tailwind.css --output assets/tailwind-built.css --minify
 
-# LC-512: vendor the LiveKit browser SDK same-origin (no CDN at runtime, no CSP
-# change). The output is gitignored + produced at build time like
-# tailwind-built.css. LC-850: sourced from the bun-installed npm package (pinned
-# in package.json + bun.lock, checksummed) instead of a build-time curl whose
-# swallowed failure shipped images with no SDK and dead huddles/stage audio.
-# The npm package's dist/livekit-client.umd.js is already minified (the old
-# jsdelivr .umd.min.js URL was that same file); it is copied to the .min.js
-# name huddle_sfu.js/stage_media.js request. The cp fails loudly if the
-# package layout ever changes.
+# LC-512: vendor the LiveKit browser SDK same-origin (no CDN at runtime, no CSP change).
 [group('build')]
 vendor-js:
+    # Note: the output is gitignored + produced at build time like
+    # tailwind-built.css. LC-850: sourced from the bun-installed npm package
+    # (pinned in package.json + bun.lock, checksummed) instead of a build-time
+    # curl whose swallowed failure shipped images with no SDK and dead
+    # huddles/stage audio. The npm package's dist/livekit-client.umd.js is
+    # already minified (the old jsdelivr .umd.min.js URL was that same file);
+    # it is copied to the .min.js name huddle_sfu.js/stage_media.js request.
+    # The cp fails loudly if the package layout ever changes.
     cd server && ../dev/bun install --frozen-lockfile
     mkdir -p server/assets/vendor
     cp server/node_modules/livekit-client/dist/livekit-client.umd.js server/assets/vendor/livekit-client.umd.min.js
@@ -309,13 +296,13 @@ compose_env := 'GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo un
 # developer on the host.
 compose_uid := 'HOST_UID="$(id -u)" HOST_GID="$(id -g)"'
 
-# Build and run the production-shape image via Docker Compose (compose.yml) on
-# http://127.0.0.1:8080. Supply the required Bunyip SSO vars (and any optional
-# features) with an env file: copy .env.standalone, fill it in, then run
-# `just run` after adding `env_file: [.env.standalone]` to compose.yml or pass
-# `--env-file .env.standalone` on the command line.
+# Build and run the production-shape image via Docker Compose (compose.yml) on http://127.0.0.1:8080.
 [group('run')]
 run:
+    # Note: supply the required Bunyip SSO vars (and any optional features) with
+    # an env file: copy .env.standalone, fill it in, then run `just run` after
+    # adding `env_file: [.env.standalone]` to compose.yml or pass
+    # `--env-file .env.standalone` on the command line.
     {{ compose_env }} docker compose --file compose.yml up --build
 
 # Stop the compose.yml container
@@ -324,20 +311,21 @@ run-down:
     docker compose --file compose.yml down
 
 # Start development server (web, standalone) locally on http://localhost:18080.
-# LC-936: vendor-js beside build-css so the LiveKit SDK is present before the
-# server starts; otherwise huddles/stage audio 404 the moment LiveKit is
-# configured, invisible until then.
-# Precondition: export the four LETS_CHAT_BUNYIP_SSO_* variables, or use dev-web-local-mock.
 [group('dev')]
 dev-web-local: build-css vendor-js
+    # Note: LC-936: vendor-js beside build-css so the LiveKit SDK is present
+    # before the server starts; otherwise huddles/stage audio 404 the moment
+    # LiveKit is configured, invisible until then. Precondition: export the four
+    # LETS_CHAT_BUNYIP_SSO_* variables, or use dev-web-local-mock.
     {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local.yml up
 
-# Start the local dev server with a mock OIDC OP (no bunyip needed). DEV ONLY:
-# boots the server for unauthenticated debug routes (e.g. /dev/theme-gallery).
-# Authed pages still need the real bunyip dev-sso stack. See dev/mock-oidc.py.
-# LC-936: vendor-js beside build-css, same reason as dev-web-local.
+# Start the local dev server with a mock OIDC OP (no bunyip needed).
 [group('dev')]
 dev-web-local-mock: build-css vendor-js
+    # Note: DEV ONLY: boots the server for unauthenticated debug routes (e.g.
+    # /dev/theme-gallery). Authed pages still need the real bunyip dev-sso stack.
+    # See dev/mock-oidc.py. LC-936: vendor-js beside build-css, same reason as
+    # dev-web-local.
     {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local.yml --file compose.dev-web-local-mock-sso.yml up
 
 # Stop the mock-OIDC local dev server (both overlay containers)
@@ -356,10 +344,11 @@ dev-web-local-clean:
     docker compose --file compose.dev-web-local.yml down --volumes
 
 # Start development server (web, saas) locally on http://localhost:18080.
-# LC-936: vendor-js beside build-css, same reason as dev-web-local.
-# Precondition: export the four LETS_CHAT_BUNYIP_SSO_* variables, or use dev-web-local-saas-mock.
 [group('dev')]
 dev-web-local-saas: build-css vendor-js
+    # Note: LC-936: vendor-js beside build-css, same reason as dev-web-local.
+    # Precondition: export the four LETS_CHAT_BUNYIP_SSO_* variables, or use
+    # dev-web-local-saas-mock.
     {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local-saas.yml up
 
 # Stop the local saas dev server container
@@ -372,12 +361,13 @@ dev-web-local-saas-down:
 dev-web-local-saas-clean:
     docker compose --file compose.dev-web-local-saas.yml down --volumes
 
-# Start the local saas dev server with a mock OIDC OP (no bunyip needed). DEV
-# ONLY: boots the saas server for unauthenticated debug routes and, with
-# LC-577's real auth-code flow, authenticated pages too. See dev/mock-oidc.py.
-# LC-936: vendor-js beside build-css, same reason as dev-web-local.
+# Start the local saas dev server with a mock OIDC OP (no bunyip needed).
 [group('dev')]
 dev-web-local-saas-mock: build-css vendor-js
+    # Note: DEV ONLY: boots the saas server for unauthenticated debug routes and,
+    # with LC-577's real auth-code flow, authenticated pages too. See
+    # dev/mock-oidc.py. LC-936: vendor-js beside build-css, same reason as
+    # dev-web-local.
     {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local-saas.yml --file compose.dev-web-local-mock-sso.yml up
 
 # Stop the saas mock-OIDC local dev server (both overlay containers)
@@ -385,13 +375,13 @@ dev-web-local-saas-mock: build-css vendor-js
 dev-web-local-saas-mock-down:
     docker compose --file compose.dev-web-local-saas.yml --file compose.dev-web-local-mock-sso.yml down
 
-# Start development server (desktop)
-# LC-936: deliberately no vendor-js dependency. The desktop shell runs against
-# a configured server URL and serves no assets of its own, so there is no
-# server here for a vendored SDK to be missing from.
+# Start development server (desktop).
 [group('dev')]
 dev-desktop:
     #!/usr/bin/env bash
+    # Note: LC-936: deliberately no vendor-js dependency. The desktop shell runs
+    # against a configured server URL and serves no assets of its own, so there
+    # is no server here for a vendored SDK to be missing from.
     set -euo pipefail
     # Default XAUTHORITY to the canonical location so compose has a real
     # host path to bind-mount the X11 cookie file from. Touching is a no-op
@@ -427,37 +417,38 @@ test:
 test-saas:
     ./dev/cargo test -p lets-chat-server --no-default-features --features saas
 
-# Run the browser-asset unit tests (LC-628: media-constraints shape). Node's
-# built-in runner, no extra dependency. Globs server/assets/*.test.js.
+# Run the browser-asset unit tests (LC-628: media-constraints shape).
 [group('test')]
 test-js:
+    # Note: uses Node's built-in test runner, no extra dependency. Globs
+    # server/assets/*.test.js.
     node --test 'server/assets/**/*.test.js'
 
-# Run desktop crate tests (LC-210 established the pattern: #[cfg(test)] modules
-# in desktop/src/). Desktop is bin-only, so these are in-crate unit tests. Run
-# this for any PR touching desktop/ - `just check` only compiles it.
+# Run desktop crate tests; run this for any PR touching desktop/ since `just check` only compiles it.
 [group('test')]
 test-desktop:
+    # Note: LC-210 established the pattern: #[cfg(test)] modules in desktop/src/.
+    # Desktop is bin-only, so these are in-crate unit tests.
     ./dev/cargo-desktop test -p lets-chat-desktop
 
-# LC-861: same-audio transcription comparison harness. Replays the fixtures in
-# server/tests/fixtures/stt through each service listed in LETS_CHAT_STT_BENCH
-# ('label=provider,url,model[,api_key];...') and prints a WER + latency table.
-# The deterministic harness tests run in the normal suite; this is the opt-in
-# live run against real endpoints (see server/tests/stt_comparison.rs).
+# Replay the fixtures in server/tests/fixtures/stt through each service listed in LETS_CHAT_STT_BENCH and print a WER + latency table (LC-861).
 [group('test')]
 stt-bench:
+    # Note: LETS_CHAT_STT_BENCH format is 'label=provider,url,model[,api_key];...'.
+    # The deterministic harness tests run in the normal suite; this is the
+    # opt-in live run against real endpoints (see server/tests/stt_comparison.rs).
     ./dev/cargo test -p lets-chat-server --test stt_comparison -- --ignored --nocapture
 
 # Verify the standalone server binary starts and serves the login page.
-# LC-826: boots with LETS_CHAT_DEV_NO_SSO=1 (the development-only opt-out of
-# the mandatory Bunyip RP, since the smoke has no Bunyip to talk to), runs the
-# release binary just built (dev/server-up shares dev/cargo's target volume, so
-# nothing recompiles in the container), fails fast if the container exits, and
-# checks for the sign-in link the login page always renders.
 [group('test')]
 verify: build-css vendor-js
     #!/usr/bin/env nu
+    # Note: LC-826: boots with LETS_CHAT_DEV_NO_SSO=1 (the development-only
+    # opt-out of the mandatory Bunyip RP, since the smoke has no Bunyip to talk
+    # to), runs the release binary just built (dev/server-up shares dev/cargo's
+    # target volume, so nothing recompiles in the container), fails fast if the
+    # container exits, and checks for the sign-in link the login page always
+    # renders.
     let container = "lets-chat-rewrite-server"
     print "Building release binary..."
     ./dev/cargo build --release -p lets-chat-server

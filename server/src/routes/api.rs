@@ -44,22 +44,24 @@ pub const ALL_SCOPES: &[&str] = &[
     SCOPE_BRIDGE_HEARTBEAT,
 ];
 
+/// Every path template mounted by this router, for the doc-coverage test
+/// (`docs_cover_every_api_route`) that asserts each one is documented in
+/// `docs/api.md` or `docs/protocol-bridges.md`.
+pub const ROUTE_PATHS: &[&str] = &[
+    "/api/v1/me",
+    "/api/v1/rooms",
+    "/api/v1/rooms/{room_id}/messages",
+    "/api/v1/bridges/{bridge_id}/messages",
+    "/api/v1/bridges/{bridge_id}/heartbeat",
+];
+
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/me", get(get_me))
-        .route("/api/v1/rooms", get(get_rooms))
-        .route(
-            "/api/v1/rooms/{room_id}/messages",
-            get(get_messages).post(post_message),
-        )
-        .route(
-            "/api/v1/bridges/{bridge_id}/messages",
-            axum::routing::post(post_bridge_message),
-        )
-        .route(
-            "/api/v1/bridges/{bridge_id}/heartbeat",
-            axum::routing::post(post_bridge_heartbeat),
-        )
+        .route(ROUTE_PATHS[0], get(get_me))
+        .route(ROUTE_PATHS[1], get(get_rooms))
+        .route(ROUTE_PATHS[2], get(get_messages).post(post_message))
+        .route(ROUTE_PATHS[3], axum::routing::post(post_bridge_message))
+        .route(ROUTE_PATHS[4], axum::routing::post(post_bridge_heartbeat))
 }
 
 #[derive(Serialize)]
@@ -166,11 +168,14 @@ struct ApiMessagePage {
 /// `messages:read`.
 ///
 /// LC-78: paginated. Returns up to `limit` rows in `id DESC` order with a
-/// `next_cursor` to walk older history. The bounded shape was added so the
-/// LC-78 Matrix-bridge daemon's initial-sync has a deterministic paging
-/// contract; this endpoint is the only API-side reader, so the change is
-/// breaking only for API callers (the web/HTMX room render still uses the
-/// unbounded `list_messages` directly, untouched).
+/// `next_cursor` to walk older history. The bounded shape gives user and bot
+/// tokens a deterministic paging contract for initial-sync-style callers;
+/// `require_not_bridge` above refuses bridge-role tokens outright, so a
+/// bridge daemon never reaches this endpoint (it reads via the outgoing-webhook
+/// stream documented in `docs/protocol-bridges.md` instead). This endpoint is
+/// the only API-side reader, so the change is breaking only for API callers
+/// (the web/HTMX room render still uses the unbounded `list_messages`
+/// directly, untouched).
 async fn get_messages(
     State(state): State<AppState>,
     auth: ApiAuth,
