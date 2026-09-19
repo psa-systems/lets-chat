@@ -70,6 +70,10 @@ search-saved-heading = Saved searches
 search-saved-remove = Remove saved search
 # LC-699: room-header search polish.
 search-scope-room = This room
+# LC-938: the same results fragment is also used for enclave- and workspace-
+# wide searches, which need their own scope label instead of "This room".
+search-scope-enclave = This space
+search-scope-all = All conversations
 search-clear = Clear search
 search-searching = Searching...
 

@@ -8,9 +8,9 @@
   {% for query in queries %}
   <div class="flex items-center gap-1 px-2 py-1 hover:bg-surface-sunken border-b border-border last:border-b-0">
     <button type="button" data-lc-saved-query="{{ query }}" class="flex-1 text-left text-sm truncate">{{ query }}</button>
-    <input type="hidden" id="lc-del-q-{{ loop.index0 }}" name="query" value="{{ query }}">
-    <button type="button" hx-post="/searches/delete" hx-include="#lc-del-q-{{ loop.index0 }}"
-      hx-target="#sidebar-search-results" hx-swap="innerHTML"
+    <input type="hidden" id="lc-del-q-{{ container_id }}-{{ loop.index0 }}" name="query" value="{{ query }}">
+    <button type="button" hx-post="/searches/delete" hx-include="#lc-del-q-{{ container_id }}-{{ loop.index0 }}"
+      hx-target="#{{ container_id }}" hx-swap="innerHTML"
       class="text-content-subtle hover:text-danger px-1" aria-label="{{ "search-saved-remove"|t }}">&times;</button>
   </div>
   {% endfor %}
