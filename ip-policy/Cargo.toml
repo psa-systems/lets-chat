@@ -1,0 +1,8 @@
+[package]
+name = "ip-policy"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "ip_policy"
+path = "src/lib.rs"

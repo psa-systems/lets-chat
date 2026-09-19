@@ -685,6 +685,11 @@ async fn delete_wipes_lc908_gap_tables() {
         .await
         .unwrap();
 
+    // dm_pairs (LC-947): the user has a DM room with the peer.
+    db::chat::create_dm_room(&t.chat, "dm", &t.user_id, &t.peer_id)
+        .await
+        .unwrap();
+
     let (status, body, _) =
         post_delete(&t.app, &t.session, &form(PASSWORD, "delete my account")).await;
     assert!(
@@ -782,6 +787,14 @@ async fn delete_wipes_lc908_gap_tables() {
             "enclave_last_room",
             "SELECT COUNT(*) FROM enclave_last_room WHERE user_id = ?",
         ),
+        (
+            "dm_pairs (user_lo)",
+            "SELECT COUNT(*) FROM dm_pairs WHERE user_lo = ?",
+        ),
+        (
+            "dm_pairs (user_hi)",
+            "SELECT COUNT(*) FROM dm_pairs WHERE user_hi = ?",
+        ),
     ] {
         assert_eq!(
             count(&t.chat, sql, &t.user_id).await,
@@ -867,6 +880,8 @@ async fn chat_user_columns_are_purged_or_allowlisted() {
         ("user_storage_quotas", "user_id"),
         ("message_tag_overrides", "actor_user"),
         ("enclave_last_room", "user_id"),
+        ("dm_pairs", "user_lo"),
+        ("dm_pairs", "user_hi"),
     ];
 
     // (table, column) pairs intentionally left holding a user id after
@@ -919,6 +934,8 @@ async fn chat_user_columns_are_purged_or_allowlisted() {
             || col == "receiver_id"
             || col == "reporter_id"
             || col == "assignee_id"
+            || col == "user_lo"
+            || col == "user_hi"
     };
 
     let mut uncovered = Vec::new();

@@ -201,8 +201,9 @@ pub async fn post_grant(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(room_id): Path<i64>,
+    headers: HeaderMap,
     Form(form): Form<GrantForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     require_can_manage(&state, &user, room_id).await?;
     let role = form.role.trim().to_ascii_lowercase();
     if role != "moderator" && role != "admin" {
@@ -233,7 +234,10 @@ pub async fn post_grant(
         Some(&metadata),
     )
     .await?;
-    Ok(Redirect::to(&format!("/room/{room_id}/manage")))
+    Ok(super::redirect_or_hx(
+        &headers,
+        &format!("/room/{room_id}/manage"),
+    ))
 }
 
 #[derive(Deserialize)]

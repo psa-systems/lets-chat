@@ -11,6 +11,7 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+ip-policy = { path = "../ip-policy" }
 # Tauri 2 replaced the previous Tao+Wry pair. Same system webview (WebKit2GTK
 # / WebView2 / WKWebView) under the hood, but with an IPC bridge, a
 # permission/capability allow-list, native plugins, and a bundler producing
