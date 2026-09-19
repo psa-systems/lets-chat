@@ -887,12 +887,36 @@ def rules [] {
             check: {|| cbtn-label-missing-aria }
         }
         {
+            id: "control-input-needs-arm-and-kill"
+            pending: null
+            fix: "a module that dispatches lc:control-input as the controlled side must also dispatch lc:control-start to arm the native injector and listen for lc:control-kill so the hotkey ends the session (LC-931); the four lc:control-* names are exported from rtc_common.js's LetsChatRtc.control.events"
+            check: {|| control-input-without-arm }
+        }
+        {
             id: "env-var-template-parity"
             pending: null
             fix: "add a commented entry mirroring docs/configuration.md's wording to whichever of .env.standalone / .env.saas is missing it, or add it to docs/configuration.md if the code changed first; a name deliberately absent from one of the three surfaces goes on the ENV_VAR_ALLOWLIST above with a one-line reason (LC-937)"
             check: {|| undocumented-env-vars }
         }
     ]
+}
+
+# LC-931: a module that dispatches lc:control-input as the controlled side
+# (hands a controller's frame to the native injector) must also dispatch
+# lc:control-start to arm it and listen for lc:control-kill so the desktop
+# hotkey can end the session; a third surface that ships input relay without
+# the other two leaves the injector unkillable or never armed.
+def control-input-without-arm [] {
+    browser-asset-files | each {|file|
+        let text = (open --raw $file | decode utf-8)
+        if not ($text =~ 'lc:control-input') {
+            []
+        } else if ($text =~ 'lc:control-start') and ($text =~ 'lc:control-kill') {
+            []
+        } else {
+            [$"($file): dispatches lc:control-input without both arming \(lc:control-start\) and a kill listener \(lc:control-kill\)"]
+        }
+    } | flatten
 }
 
 def main [] {
