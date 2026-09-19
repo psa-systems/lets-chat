@@ -2,11 +2,7 @@
 
 Operator-facing record of changes that affect how you **run, configure, secure, or upgrade** lets-chat. If you operate a deployment, read the Security and Changed entries before upgrading: they call out default-on behavior changes and "set this env var / upgrade promptly" actions.
 
-This file records **tagged releases**. The project's release flow (`just create-release`, see `docs/releasing.md`) bumps the version, tags, and publishes; this file is curated at that point from the operator-action markers in git history. Between releases, the operator-action delta is always reconstructable from git and never lives only here:
-
-```
-git log --grep='\[operator-action\]' <last-tag>..HEAD
-```
+This file records **tagged releases**. The project's release flow (`just create-release`, see `docs/releasing.md`) bumps the version, tags, and publishes; this file is curated at that point by the release-cutter, who reads the PR titles and descriptions merged since the last tag and picks out the operator-visible ones. Between releases, the operator-visible delta is always reconstructable from `git log --oneline --first-parent <last-tag>..HEAD` and never lives only here.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections: **Security** (must-act), **Changed** (behavior/default/config changes), **Added**, **Fixed**, **Deprecated**. Internal-only work (refactors, test hygiene, decoder hardening with no operator impact) is intentionally omitted; the git history is the complete record.
 
