@@ -37,9 +37,8 @@ on:
 jobs:
   build-and-push:
     name: Build and push lets-chat
-    # Base image: the server compile happens inside `docker buildx`; the runner
-    # only drives docker and the registry (LC-647).
-    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
+    # HEAVY: runs `docker buildx build`, which compiles the server in the image.
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_HEAVY }}
     permissions:
       contents: read
       packages: write
@@ -65,14 +64,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Start job metrics sampler
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/job-metrics-start@main
+
+      - name: Build parallelism from the runner
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/build-parallelism@main
+
       - name: Verify Docker availability
         run: |
           docker version
           docker buildx version
 
       - name: Set up buildx builder
-        run: |
-          docker buildx create --name container-builder --driver docker-container --use
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/setup-buildx@main
+        with:
+          name: build-oci-image
 
       - name: Export Actions runtime env for buildx gha cache
         # A raw `docker buildx build` (unlike docker/build-push-action)
@@ -146,9 +152,8 @@ jobs:
           # manual run never mutates the registry or the gha cache); a real run
           # pushes and writes the gha buildcache.
           let push_args = if $dry_run { [--load] } else { [--push --cache-to $cache_to] }
-          # nproc/2 cap on cargo workers. See the matching block in
-          # build-desktop-linux.yml for rationale.
-          let jobs = ((sys cpu | length) / 2 | into int)
+          # The runner owns cargo parallelism (build-parallelism step above).
+          let jobs = $env.CARGO_BUILD_JOBS
           # LC-214: inject build provenance. The Dockerfile ARG defaults are
           # `unknown`; without these --build-args the compiled binary would
           # bake "unknown" into version::banner and the admin nav badge.
@@ -187,3 +192,7 @@ jobs:
           let image = "lets-chat"
           let registry = $env.IMAGE_REGISTRY
           print $"($prefix) ($registry)/($image):($tag)"
+
+      - name: Report job metrics
+        if: always()
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/job-metrics-report@main

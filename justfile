@@ -20,9 +20,10 @@ dev_image := "ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie"
 pre_commit_prepare := "check"
 pre_commit_clippy := "false"
 pre_commit_compile := "false"
-# --jobs 2 caps parallel linking: the ~50 test binaries each statically link the
-# full dep graph, and 8-way `ld` OOMs a swapless host (SIGTERM).
-test_args := "-p lets-chat-server --jobs 2"
+# A memory-constrained host sets CARGO_BUILD_JOBS to cap parallel linking (~50
+# statically linked test binaries); --jobs is passed only when it is set.
+cargo_jobs_arg := if env("CARGO_BUILD_JOBS", "") == "" { "" } else { "--jobs " + env("CARGO_BUILD_JOBS") }
+test_args := "-p lets-chat-server " + cargo_jobs_arg
 
 # `check` also reads templates, browser assets, migrations and the CI guard
 # scripts, none of which the scope guard's Rust-relevant set (*.rs, Cargo.*,
@@ -49,8 +50,9 @@ default:
 
 # Build args for Docker image builds: inject git metadata so the binary can
 # report its exact version. .git is excluded from the Docker context, so the
-# args must be computed on the host and forwarded.
-docker_version_args := '--build-arg GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" --build-arg GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"'
+# args must be computed on the host and forwarded. CARGO_BUILD_JOBS comes from
+# the environment, else cargo's `default`.
+docker_version_args := '--build-arg CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-default}" --build-arg GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" --build-arg GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"'
 
 # Run every check: asset/template conventions, Rust compile, clippy, fmt, and JS tests.
 [group('check')]
@@ -407,10 +409,8 @@ dev-desktop-down:
 # Run tests (server, standalone)
 [group('test')]
 test:
-    # --jobs 2 caps parallel linking: each of the ~50 test binaries statically
-    # links the full dep graph, and 8-way parallel `ld` exhausts memory on a
-    # swapless host, getting the linker OOM-killed (SIGTERM).
-    ./dev/cargo test -p lets-chat-server --jobs 2
+    # A memory-constrained host sets CARGO_BUILD_JOBS to cap parallel linking.
+    ./dev/cargo test -p lets-chat-server {{ cargo_jobs_arg }}
 
 # Run tests (server, saas)
 [group('test')]
