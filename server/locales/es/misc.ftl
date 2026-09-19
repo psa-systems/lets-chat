@@ -70,6 +70,8 @@ search-saved-heading = Búsquedas guardadas
 search-saved-remove = Quitar búsqueda guardada
 # LC-699: room-header search polish.
 search-scope-room = En esta sala
+search-scope-enclave = En este espacio
+search-scope-all = Todas las conversaciones
 search-clear = Limpiar búsqueda
 search-searching = Buscando...
 
