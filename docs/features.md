@@ -22,16 +22,18 @@ surfaces is in [configuration.md](configuration.md).
 ## Voice and video
 
 - 1:1 audio and video calls over WebRTC, with mic/camera/speaker selection
-- Multi-party enclave voice channels
+- Huddles: multi-party enclave voice channels, with a ring notification to room members who are not already viewing the room
 - Per-room stage mode: speaker roles and request-to-speak, with audio carried by a self-hosted LiveKit SFU when `LETS_CHAT_LIVEKIT_*` is configured (the mesh path caps at a handful of peers)
 - Call transcription, either in the speaker's browser (Web Speech) or server-side against a transcription endpoint you run
-- Consent-gated remote control: during a 1:1 call, request keyboard/mouse control of a peer's screen (desktop app; verified-email gated, revocable at any time)
+- Consent-gated remote control: during a 1:1 call, request keyboard/mouse control of a peer's screen (desktop app; verified-email gated, revocable at any time); admins can review the consent history on a dedicated audit page
 
 ## Spaces and organization
 
 - Enclaves: grouped rooms/workspaces, each with a default room and settings gear
+- Room wiki: a per-room markdown page, editable inline by moderators and up
 - Room and DM mute, sidebar categories, starred rooms, and user groups
 - Custom user status
+- Handle picker: pick and change your own `@handle`, subject to the same validation the SSO provisioning flow uses to derive one
 
 ## Personalization
 
@@ -63,6 +65,7 @@ Every one of these is off until an operator points it at an endpoint they run, a
 - Auto-drafted image alt text
 - Moderation triage: clear spam / harassment cases are flagged to the admin report queue for human review, never auto-deleted
 - A weekly personal recap DM
+- AI help desk: `/support <question>` answers from the indexed docs, with an escalation path to a human in the admin support queue
 
 ## Administration
 
@@ -76,3 +79,5 @@ Every one of these is off until an operator points it at an endpoint they run, a
 - New-country sign-in alerts, and an optional notify-and-approve gate for suspicious logins
 - Installable PWA with an offline message outbox
 - Role-based access: Admin > Moderator > User
+- Voice diagnostics log: a live, admin-only feed of voice-call events for observability
+- Deployment-environment badge: when `LETS_CHAT_ENVIRONMENT` names a non-production deployment, it is shown in the app shell and on the sign-in, first-entry, and invitation surfaces
