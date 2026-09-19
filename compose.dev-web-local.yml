@@ -47,6 +47,16 @@ services:
       GIT_HASH: ${GIT_HASH:-unknown}
       GIT_VERSION: ${GIT_VERSION:-unknown}
       BUILD_DATE: ${BUILD_DATE:-unknown}
+      # LC-940: pass-through only, no default. A developer with a real dev-SSO
+      # stack running can export these four in the calling shell and the
+      # plain recipe boots against it; left unset, the server still exits 1
+      # with the same bunyip-SSO startup error, now the developer's own doing.
+      # Use compose.dev-web-local-mock-sso.yml (`just dev-web-local-mock`)
+      # instead of exporting these for a mock OP that needs no real stack.
+      LETS_CHAT_BUNYIP_SSO_ISSUER: ${LETS_CHAT_BUNYIP_SSO_ISSUER:-}
+      LETS_CHAT_BUNYIP_SSO_CLIENT_ID: ${LETS_CHAT_BUNYIP_SSO_CLIENT_ID:-}
+      LETS_CHAT_BUNYIP_SSO_CLIENT_SECRET: ${LETS_CHAT_BUNYIP_SSO_CLIENT_SECRET:-}
+      LETS_CHAT_BUNYIP_SSO_REDIRECT_URI: ${LETS_CHAT_BUNYIP_SSO_REDIRECT_URI:-}
     volumes:
       - .:/work
       - cargo-registry:/usr/local/cargo/registry

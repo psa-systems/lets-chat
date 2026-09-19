@@ -1,9 +1,13 @@
 ---
-# LOCAL-DEV-ONLY overlay: layer ON TOP of compose.dev-web-local.yml to boot
-# lets-chat-server without the full bunyip dev-sso stack.
+# LOCAL-DEV-ONLY overlay: layer ON TOP of compose.dev-web-local.yml OR
+# compose.dev-web-local-saas.yml to boot lets-chat-server without the full
+# bunyip dev-sso stack.
 #
 #   docker compose -f compose.dev-web-local.yml -f compose.dev-web-local-mock-sso.yml up
 #   (or: `just dev-web-local-mock`)
+#
+#   docker compose -f compose.dev-web-local-saas.yml -f compose.dev-web-local-mock-sso.yml up
+#   (or: `just dev-web-local-saas-mock`)
 #
 # Since the LC-22 cutover the server refuses to start unless a Bunyip SSO OP
 # answers discovery + JWKS at boot. This overlay adds a tiny mock OP
