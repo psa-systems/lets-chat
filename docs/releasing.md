@@ -100,4 +100,4 @@ For a **security** change present in shipped versions, also say so in the traile
 
 ## Future option (not in scope for LC-209)
 
-`create-release.yml` could be enhanced to grep the `[operator-action]` / `Operator-Action:` markers itself and prepend an "Operator actions" section to the release body automatically, reducing the manual step in (3). It is deliberately not done here: it modifies dormant CI that has never run and cannot be exercised until a first real release. Revisit when the first tag is cut.
+`create-release.yml` could be enhanced to grep the `[operator-action]` / `Operator-Action:` markers itself and prepend an "Operator actions" section to the release body automatically, reducing the manual step in (3). It is deliberately not done here: `create-release.yml` is no longer the dormant, unexercised path it was when this was written (check `git tag` for its run history), but this specific enhancement has never been tried against a real release. Revisit once there is enough release history to exercise it safely.
