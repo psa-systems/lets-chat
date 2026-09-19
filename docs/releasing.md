@@ -7,7 +7,7 @@ How lets-chat cuts releases, and the convention for recording changes that affec
 The project ships two ways:
 
 - **Server**: the `latest` OCI image, built off `main` (`build-oci-image.yml`). Operators run it directly. There is **no per-commit version**; `main` is the release.
-- **Desktop**: a self-updating Tao+Wry app. `publish-release.yml` fires on a `v*` tag push, cross-builds the Linux/Windows binaries, uploads them plus a `latest.json` manifest to Forgejo Generic Packages (the hand-download path), and pushes each binary to the container registry as an OCI artifact (the path the app's self-updater pulls). The only credential the release needs is the packages PAT, used for both.
+- **Desktop**: a self-updating Tauri 2 app. `publish-release.yml` fires on a `v*` tag push, cross-builds the Linux/Windows binaries, uploads them plus a `latest.json` manifest to Forgejo Generic Packages (the hand-download path), and pushes each binary to the container registry as an OCI artifact (the path the app's self-updater pulls). The only credential the release needs is the packages PAT, used for both.
 
 ### Desktop distribution is membership-gated (LC-733)
 
