@@ -29,7 +29,7 @@
     return ids.length === 1 && ids[0] !== state.selfId;
   }
 
-  window.LetsChatHuddleControl = { canRequest: canRequest };
+  window.LetsChatHuddleControl = { canRequest: canRequest, bindRoot: bindRoot };
 
   // Same requester patience as the 1:1 flow (call.js); the sharer prompt
   // auto-dismisses to Deny well before the server's 45s pending slot expires.
@@ -55,17 +55,34 @@
   // it a mystery.
   var sharerNative = null;
 
-  // The bar can be re-rendered by an htmx page swap (LC-837 nav boost), so
-  // never cache elements - resolve through the CURRENT root on every use.
-  function root() { return document.querySelector('[data-lc-huddle-control]'); }
-  function q(sel) { var r = root(); return r ? r.querySelector(sel) : null; }
-  function roomId() {
-    var r = root();
-    return r ? parseInt(r.getAttribute('data-lc-room'), 10) : NaN;
+  // LC-931: the bar can be re-rendered by an htmx page swap (LC-837 nav boost)
+  // AND, once joined, popped out into a PiP window or floated (LC-822/LC-832) -
+  // moved into a different document than the one a query against the global
+  // `document` would search. So `root` is a captured reference to the live
+  // [data-lc-huddle-control] node, following voice.js's own captured-root
+  // pattern for the same dock, rather than re-resolved from `document` on
+  // every use: a live reference survives the move (the node is reparented,
+  // not recreated), while re-querying `document` after a PiP pop-out finds
+  // nothing (wrong document) or, worse, a same-room swap's newly rendered -
+  // but not live - bar. voice.js calls bindRoot() whenever it binds a
+  // genuinely new dock (a fresh render, not a pop-out/float move); see its
+  // own bindRoot().
+  var root = null;
+  function bindRoot(dockEl) {
+    root = dockEl ? dockEl.querySelector('[data-lc-huddle-control]') : null;
   }
+  function q(sel) { return root ? root.querySelector(sel) : null; }
+  function roomId() {
+    return root ? parseInt(root.getAttribute('data-lc-room'), 10) : NaN;
+  }
+  // The enclosing huddle dock ([data-lc-voice-root], voice.js's own root):
+  // an ancestor of the captured control root, so it is resolved through the
+  // actual DOM position of the live node rather than a `document` lookup that
+  // would miss it once popped into another document.
+  function dockRoot() { return root ? root.closest('[data-lc-voice-root]') : null; }
   function selfId() {
-    var cr = document.querySelector('[data-lc-call-root]');
-    return cr ? cr.getAttribute('data-self-id') : null;
+    var dock = dockRoot();
+    return dock ? dock.getAttribute('data-self-id') : null;
   }
   function joined() {
     return !!(window.LetsChatVoice && window.LetsChatVoice.isJoined());
@@ -75,8 +92,8 @@
   // channel; the affordance stays hidden there rather than granting a session
   // whose input would go nowhere.
   function sfuHuddle() {
-    var vr = document.querySelector('[data-lc-voice-root]');
-    return !!vr && vr.getAttribute('data-lc-huddle-sfu') === '1';
+    var dock = dockRoot();
+    return !!dock && dock.getAttribute('data-lc-huddle-sfu') === '1';
   }
   function str(key, fallback) {
     return window.__lcS ? window.__lcS(key, fallback) : fallback;
@@ -112,9 +129,9 @@
   // The sharer's tile <video> the controller drives (the shared surface). The
   // roster keys tiles by user id, exactly as voice.js builds them.
   function tileEl(uid) {
-    if (!uid) return null;
+    if (!uid || !root) return null;
     var esc = (window.CSS && CSS.escape) ? CSS.escape(uid) : uid.replace(/"/g, '\\"');
-    return document.querySelector('[data-lc-voice-tile="' + esc + '"]');
+    return root.ownerDocument.querySelector('[data-lc-voice-tile="' + esc + '"]');
   }
   function tileVideo(uid) {
     var t = tileEl(uid);
@@ -190,12 +207,17 @@
   function armInjection() {
     var s = sfu();
     if (!s || !s.onControlData) return;
+    // LC-931: arm the native injector (desktop/src/inject.rs) for the life of
+    // this grant, matching call.js's grantControl(). Dispatched before the
+    // data callback is registered so the injector is armed before any frame
+    // can possibly arrive.
+    try { document.dispatchEvent(new CustomEvent(CONTROL_EVENTS.START)); } catch (e) {}
     s.onControlData(function (fromId, text) {
       if (!grantedTo || fromId !== grantedTo) return;
       var cap = parseCap(text);
       if (cap) return; // capability frames are controller-bound, ignore here
       try {
-        document.dispatchEvent(new CustomEvent('lc:control-input', { detail: text }));
+        document.dispatchEvent(new CustomEvent(CONTROL_EVENTS.INPUT, { detail: text }));
       } catch (e) {}
     });
     // Announce our injector capability so the controller learns whether their
@@ -212,7 +234,7 @@
     var s = sfu();
     if (s && s.onControlData) s.onControlData(null);
     // Release any keys/buttons the injector is holding.
-    try { document.dispatchEvent(new CustomEvent('lc:control-end')); } catch (e) {}
+    try { document.dispatchEvent(new CustomEvent(CONTROL_EVENTS.END)); } catch (e) {}
   }
   function parseCap(text) {
     if (typeof text !== 'string') return null;
@@ -399,11 +421,23 @@
   }
 
   // Install unconditionally (the buses live in layout.html on every page):
-  // an htmx page swap can bring the huddle bar in AFTER load, so presence of
-  // the bar is checked live in every handler via root(), never at init.
+  // an htmx page swap can bring the huddle bar in AFTER load, so every handler
+  // reads the module-level `root` voice.js's bindRoot() sets live, never a
+  // value captured once at init.
   if (!window.LetsChatRtc) return;
+  // LC-931: the shared lc:control-* event names (rtc_common.js), so this file
+  // and call.js dispatch/listen for byte-identical strings. Read here, after
+  // the guard above, since window.LetsChatRtc is what the guard confirms.
+  var CONTROL_EVENTS = window.LetsChatRtc.control.events;
   window.LetsChatRtc.watchBus('lc-control-bus', 'data-lc-control-event', onControlEvent);
   window.LetsChatRtc.watchBus('lc-voice-bus', 'data-lc-voice-event', onVoiceEvent);
+  // LC-931: the desktop app's global kill hotkey (Ctrl/Cmd+Alt+F9, LC-186) ends
+  // a huddle grant exactly like the Stop button, so the sharer is never stuck
+  // with an armed injector the hotkey cannot reach.
+  document.addEventListener(CONTROL_EVENTS.KILL, function () {
+    send('revoke');
+    endGrant(str('huddleControlEnded', 'Control ended'));
+  });
   window.LetsChatRtc.bindControls({
     '[data-lc-huddle-control-request]': onRequestClick,
     '[data-lc-huddle-control-grant]': grantPending,

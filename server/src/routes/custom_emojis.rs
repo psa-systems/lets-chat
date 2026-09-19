@@ -1,7 +1,7 @@
 use axum::body::Body;
 use axum::extract::{Multipart, Path, State};
 use axum::http::{header, HeaderMap, StatusCode};
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::response::{IntoResponse, Response};
 use futures::StreamExt;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -257,6 +257,7 @@ pub async fn post_upload(
 pub async fn post_user_upload(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
     multipart: Multipart,
 ) -> Result<Response, AppError> {
     let ingested = match ingest_emoji_multipart(multipart).await? {
@@ -285,7 +286,10 @@ pub async fn post_user_upload(
         Err(e) => return Err(e.into()),
     }
 
-    Ok(Redirect::to("/settings?ok=emoji-added#emoji").into_response())
+    Ok(super::redirect_or_hx(
+        &headers,
+        "/settings?ok=emoji-added#emoji",
+    ))
 }
 
 /// POST /settings/emojis/{emoji_id}/delete - LC-482 remove one of the
@@ -294,12 +298,16 @@ pub async fn post_user_delete(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(emoji_id): Path<i64>,
+    headers: HeaderMap,
 ) -> Result<Response, AppError> {
     let removed = db::custom_emojis::delete_for_user(&state.chat, &user.id, emoji_id).await?;
     if removed == 0 {
         return Err(AppError::NotFound);
     }
-    Ok(Redirect::to("/settings?ok=emoji-deleted#emoji").into_response())
+    Ok(super::redirect_or_hx(
+        &headers,
+        "/settings?ok=emoji-deleted#emoji",
+    ))
 }
 
 /// DELETE /enclave/{id}/emojis/{eid} - remove the row. The file on disk is

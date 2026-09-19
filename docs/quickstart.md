@@ -48,6 +48,8 @@ That builds `ci-build/Dockerfile.web` via `compose.yml` and serves on `http://12
 
 Run `just --list` to see all available recipes.
 
+> **Huddles or stage audio do not start locally?** `dev-web-local`, `dev-web-local-mock`, `dev-web-local-saas` and `dev-web-local-saas-mock` all depend on `vendor-js`, which vendors the LiveKit browser SDK to `server/assets/vendor/livekit-client.umd.min.js` before the server starts. If you bypassed the recipes (e.g. running the binary directly against a bind-mounted `server/`), run `just vendor-js` yourself first.
+
 ## Local smoke test
 
 `just verify` builds the release binary, boots it in a container on port 18080 and checks that the login page renders. Sign-in is Bunyip SSO only and the server refuses to start without it, so the smoke sets `LETS_CHAT_DEV_NO_SSO=1`: a development-only opt-out that boots with no identity provider at all (nobody can sign in; the SSO routes answer with a "not configured" login error). Never set it on a real deployment. `./dev/server-up [--release]` runs the binary you last built with `./dev/cargo build` (same image, same target volume, so nothing recompiles) and passes that variable and the `LETS_CHAT_BUNYIP_SSO_*` variables through from your shell if set.
