@@ -1,7 +1,7 @@
 //! LC-100: i18n catalog integrity (the CI gate).
 //!
-//! 1. Every translation key referenced in a template (`"key"|t` / `"key"|tn(`)
-//!    must be defined in the English source catalog.
+//! 1. Every translation key referenced in a template (`"key"|t` / `"key"|tn(` /
+//!    `"key"|ta(`) must be defined in the English source catalog.
 //! 2. Every non-English locale must define exactly the same message ids as
 //!    English (full coverage - no missing or stray keys).
 
@@ -71,8 +71,9 @@ fn referenced_keys() -> BTreeSet<String> {
     keys
 }
 
-/// Pull `"<key>"|t` and `"<key>"|tn(` references out of template text. The
-/// no-space pipe is the project convention (Askama parses `"x" | t` as bitor).
+/// Pull `"<key>"|t`, `"<key>"|tn(`, and `"<key>"|ta(` references out of
+/// template text. The no-space pipe is the project convention (Askama parses
+/// `"x" | t` as bitor).
 fn collect_keys(text: &str, out: &mut BTreeSet<String>) {
     let bytes = text.as_bytes();
     let mut i = 0;
@@ -81,11 +82,13 @@ fn collect_keys(text: &str, out: &mut BTreeSet<String>) {
                              // Walk back to the opening quote.
         if let Some(openrel) = text[..close].rfind('"') {
             let key = &text[openrel + 1..close];
-            // After `"|t` must come `}`, ` `, `n`, or `(` - i.e. the `t`/`tn`
-            // filter, not some other `...|t...` substring.
+            // After `"|t` must come `}`, ` `, `n`, `a`, or `(` - i.e. the
+            // `t`/`tn`/`ta` filter, not some other `...|t...` substring.
             let after = bytes.get(close + 3).copied();
-            let is_filter = matches!(after, Some(b'n') | Some(b' ') | Some(b'}') | Some(b'('))
-                || after.is_none();
+            let is_filter = matches!(
+                after,
+                Some(b'n') | Some(b'a') | Some(b' ') | Some(b'}') | Some(b'(')
+            ) || after.is_none();
             if is_filter
                 && !key.is_empty()
                 && key
