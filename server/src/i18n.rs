@@ -67,6 +67,21 @@ pub fn translate_current(key: &str) -> String {
         .unwrap_or_else(|_| translate(&fallback(), key))
 }
 
+/// Look up a message in the current locale, passing a single named string as a
+/// Fluent argument (e.g. `{ $host }`) so a sentence can embed a runtime value
+/// without breaking word order in every locale.
+pub fn translate_arg(key: &str, arg_name: &str, arg_value: &str) -> String {
+    let mut args = std::collections::HashMap::new();
+    args.insert(
+        std::borrow::Cow::Owned(arg_name.to_string()),
+        fluent_templates::fluent_bundle::FluentValue::from(arg_value),
+    );
+    let do_lookup = |l: &LanguageIdentifier| LOCALES.lookup_with_args(l, key, &args);
+    CURRENT_LOCALE
+        .try_with(|l| do_lookup(l))
+        .unwrap_or_else(|_| do_lookup(&fallback()))
+}
+
 /// Look up a plural-aware message in the current locale, passing `count` as the
 /// Fluent `$count` argument so the catalog can select the right plural form.
 pub fn translate_count(key: &str, count: i64) -> String {
@@ -147,6 +162,13 @@ pub mod filters {
     /// to the catalog as the Fluent `$count` selector argument.
     pub fn tn(key: &str, count: i64) -> askama::Result<String> {
         Ok(super::translate_count(key, count))
+    }
+
+    /// `{{ "key" | ta(arg_name, arg_value) }}` -> a message with a single
+    /// named runtime value spliced in via Fluent's `{ $arg_name }` placeable,
+    /// so the catalog can control word order around the value per locale.
+    pub fn ta(key: &str, arg_name: &str, arg_value: &str) -> askama::Result<String> {
+        Ok(super::translate_arg(key, arg_name, arg_value))
     }
 
     /// `{{ ""|lang }}` -> the current request locale's BCP-47 code, for the

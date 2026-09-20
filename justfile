@@ -8,7 +8,7 @@ app := "lets-chat"
 # This repo has no compose.dev.yml, so the containerized pre-commit checks run in
 # the org rust-builder image (the same one ./dev/cargo uses) via `docker run`.
 pre_commit_mode := "docker"
-dev_image := "ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie"
+dev_image := "ghcr.io/niceguyit/rust-builder-glibc:v1.2.0-rust1.98.1-trixie"
 
 # The shared hook runs one clippy/compile/test pass in a container. This repo's
 # full matrix (standalone + SaaS server, desktop, both clippy passes, fmt, and
@@ -20,9 +20,10 @@ dev_image := "ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie"
 pre_commit_prepare := "check"
 pre_commit_clippy := "false"
 pre_commit_compile := "false"
-# --jobs 2 caps parallel linking: the ~50 test binaries each statically link the
-# full dep graph, and 8-way `ld` OOMs a swapless host (SIGTERM).
-test_args := "-p lets-chat-server --jobs 2"
+# A memory-constrained host sets CARGO_BUILD_JOBS to cap parallel linking (~50
+# statically linked test binaries); --jobs is passed only when it is set.
+cargo_jobs_arg := if env("CARGO_BUILD_JOBS", "") == "" { "" } else { "--jobs " + env("CARGO_BUILD_JOBS") }
+test_args := "-p lets-chat-server " + cargo_jobs_arg
 
 # `check` also reads templates, browser assets, migrations and the CI guard
 # scripts, none of which the scope guard's Rust-relevant set (*.rs, Cargo.*,
@@ -49,15 +50,19 @@ default:
 
 # Build args for Docker image builds: inject git metadata so the binary can
 # report its exact version. .git is excluded from the Docker context, so the
-# args must be computed on the host and forwarded.
-docker_version_args := '--build-arg GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" --build-arg GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"'
+# args must be computed on the host and forwarded. CARGO_BUILD_JOBS comes from
+# the environment, else cargo's `default`.
+docker_version_args := '--build-arg CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-default}" --build-arg GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" --build-arg GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"'
 
-# Run every check: asset/template conventions, Rust compile, clippy, fmt, and JS tests.
+# Run every check: asset/template conventions, Rust compile, clippy, fmt, and JS, agent and saas tests.
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-ui-conventions check-update-injection check-count-badge check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js
+check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-ui-conventions check-update-injection check-count-badge check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js test-agent test-saas
     # Note: LC-774: `test-js` runs the browser-asset node:test suites here too, so
     # `just pre-commit` (whose `pre_commit_prepare := "check"` runs this recipe)
     # covers them alongside the Rust checks.
+    # Note: LC-944: `test-agent` (the transcription agent's bun suite) and
+    # `test-saas` (the saas-feature server suite) round this out to every suite CI
+    # runs, so a green `just pre-commit` means a green CI.
 
 # Reject raw numbered palette utilities and untokenized selection-highlight backgrounds in the browser assets and templates; both must recolor from the design tokens (LC-735, LC-736, LC-741).
 [group('check')]
@@ -154,7 +159,7 @@ check-desktop:
 # Run clippy lints (standalone server + desktop).
 [group('check')]
 check-clippy:
-    # Note: `-D warnings` matches the CI runner so any new lint that the Rust 1.94
+    # Note: `-D warnings` matches the CI runner so any new lint that the Rust 1.98.1
     # clippy promotes to a warning fails the local check too, instead of slipping
     # past `just check` and only blowing up after a push.
     ./dev/cargo clippy -p lets-chat-server --all-targets -- -D warnings
@@ -407,10 +412,8 @@ dev-desktop-down:
 # Run tests (server, standalone)
 [group('test')]
 test:
-    # --jobs 2 caps parallel linking: each of the ~50 test binaries statically
-    # links the full dep graph, and 8-way parallel `ld` exhausts memory on a
-    # swapless host, getting the linker OOM-killed (SIGTERM).
-    ./dev/cargo test -p lets-chat-server --jobs 2
+    # A memory-constrained host sets CARGO_BUILD_JOBS to cap parallel linking.
+    ./dev/cargo test -p lets-chat-server {{ cargo_jobs_arg }}
 
 # Run tests (server, saas)
 [group('test')]
@@ -423,6 +426,14 @@ test-js:
     # Note: uses Node's built-in test runner, no extra dependency. Globs
     # server/assets/*.test.js.
     node --test 'server/assets/**/*.test.js'
+
+# Run the transcription agent's unit tests (LC-816).
+[group('test')]
+test-agent:
+    # Note: four files under services/transcription-agent/test/. The suite imports
+    # only local modules, not the LiveKit SDK, so no install is needed; runs through
+    # the repo's ./dev/bun wrapper since the host carries no bun toolchain.
+    cd services/transcription-agent && ../../dev/bun test
 
 # Run desktop crate tests; run this for any PR touching desktop/ since `just check` only compiles it.
 [group('test')]
