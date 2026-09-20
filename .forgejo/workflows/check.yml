@@ -238,3 +238,15 @@ jobs:
       - name: Report job metrics
         if: always()
         uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/job-metrics-report@main
+
+  secrets:
+    # LC-977: kingfisher, trufflehog and noseyparker from the shared workflow, so
+    # the contexts read `Check / ...` and match branch protection.
+    uses: psa-systems/common/.forgejo/workflows/check-secrets.yml@main
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_MEDIUM }}
+    with:
+      # Brand favicons wrap a base64-encoded PNG; a substring of that blob trips
+      # KINGFISHER.CRATESIO.1 as a false positive (LC-471).
+      kingfisher_excludes: server/assets/favicon.svg server/assets/favicon-dot.svg
+      noseyparker_ignore_file: .noseyparker-ignore.txt
+    secrets: inherit
