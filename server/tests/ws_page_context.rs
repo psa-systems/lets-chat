@@ -2,11 +2,11 @@
 //! page-scoped state honest once one socket serves more than one page.
 //!
 //! Three pieces of `ws.rs` state describe the PAGE rather than the connection -
-//! `current_enclave`, `subscribed` and `dm_seen_msg` - and all three are correct
-//! today only because every navigation is a full page load and therefore a fresh
-//! socket. The frame's contract is fresh-socket equivalence: after it is
-//! applied, the connection holds exactly what a socket opened from scratch on
-//! the destination page would hold.
+//! `current_enclave`, `subscribed` and `dm_seen_msg` - and navigation no longer
+//! opens a fresh socket now that LC-837 boosts it, so this frame is what keeps
+//! them correct across a swap. The frame's contract is fresh-socket
+//! equivalence: after it is applied, the connection holds exactly what a
+//! socket opened from scratch on the destination page would hold.
 //!
 //! The sharpest of the three is `current_enclave`, because the frame is the only
 //! thing that can ever CLEAR it. It is learned from an `enclave:{id}` topic

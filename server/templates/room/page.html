@@ -75,11 +75,10 @@
    persistent document.body, never fires for a different page's controls. The
    composer is excluded because it already surfaces its own failures through
    the .composer-error banner.
-   Registered once (LC-835, data-lc-guard="flag"): navigation is a full page
-   load today, so this block runs once per load and the flag never fires. It
-   is here for LC-837, which swaps #main on room-to-room navigation and re-runs
-   this script; without the flag that would stack a second listener and toast
-   N times for one failure. The tree had no hx-boost when this was written. #}
+   Registered once (LC-835, data-lc-guard="flag"): LC-837 boosts navigation,
+   swapping #main on room-to-room navigation and re-running this script;
+   without the flag that would stack a second listener and toast N times for
+   one failure. #}
 <script data-lc-guard="flag">
 (function () {
   if (window.__lcRoomErrToastWired) return;
