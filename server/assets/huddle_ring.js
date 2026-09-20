@@ -18,8 +18,7 @@
   function root() { return document.querySelector('[data-lc-huddle-ring-root]'); }
 
   function s(key, fallback) {
-    var t = window.__lcS && window.__lcS[key];
-    return t || fallback;
+    return window.__lcS ? window.__lcS(key, fallback) : fallback;
   }
 
   function render(ring) {

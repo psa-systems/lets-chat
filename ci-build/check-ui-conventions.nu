@@ -138,6 +138,13 @@ const I18N_TABLE_ENTRY = '^\s*(?<key>[a-zA-Z_][a-zA-Z0-9_]*):\s*"\{\{\s*"[a-z0-9
 const I18N_KEY_CALL = '\b(__lcS|S|s|str)\(\s*[\x27"](?<key>[a-zA-Z0-9_]+)[\x27"]'
 const I18N_TOAST_KEY_CALL = '\blcToast\(\s*[\x27"][^\x27"]*[\x27"]\s*,\s*[\x27"](?<key>[a-zA-Z0-9_]+)[\x27"]'
 
+# LC-945: `window.__lcS` is the reader function `base.html` defines
+# (`function (k, fb) { ... }`), never the catalog map itself; subscripting it
+# (`window.__lcS[key]`) always reads a property of a function, which is
+# `undefined`, so the fallback is taken unconditionally regardless of catalog
+# content. huddle_ring.js shipped exactly that shape once already.
+const LCS_SUBSCRIPT = 'window\.__lcS\['
+
 # LC-748: the service worker's offline fallback. It is a standalone document
 # outside the template layer, so nothing else here covers it: it must stay
 # mode-aware (no light-only `color-scheme`) and must call the product by its
@@ -151,6 +158,47 @@ const COMMENT_LINE = '^\s*(//|/\*|\*|<!--)'
 # allowlist rather than a glob; `justfile` and the Dockerfiles carry no
 # extension and are matched by name.
 const TEXT_EXTENSIONS = ["rs" "html" "js" "css" "ftl" "md" "nu" "toml" "yml" "yaml" "json" "sql" "sh" "txt"]
+
+# LC-937: the env-var-template parity gate. `LETS_CHAT_*`, `IP2LOCATION_*` and
+# `LOGIN_APPROVAL_*` names are read across server/src, desktop/src and
+# services/*/src; the two files an operator actually copies to deploy,
+# `.env.standalone` and `.env.saas`, drifted out of sync with
+# docs/configuration.md three times running (LiveKit and embeddings families,
+# then transcription-agent tokens and STT quality knobs, then
+# `LETS_CHAT_ENVIRONMENT`) because nothing enforced the three surfaces staying
+# in lockstep. This rule extracts every name a read site names as a literal
+# and fails unless the name is documented in docs/configuration.md and
+# present in both templates, or carries a reason in the allowlist below.
+#
+# Each allowlist entry is a name this rule would otherwise flag, paired with
+# why it is deliberately exempt. The desktop-only names have no server .env
+# surface at all; the SaaS/dev-only gaps predate LC-937 and are tracked by
+# LC-952 rather than fixed here, since closing them touches auth/mail
+# behavior questions bigger than a template edit.
+const ENV_VAR_ALLOWLIST = {
+    LETS_CHAT_SERVER_URL: "desktop-only (docs/configuration.md Desktop app section); no server .env surface exists for it (LC-952)"
+    LETS_CHAT_UPDATE_REGISTRY_URL: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
+    LETS_CHAT_UPDATE_REPOSITORY: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
+    LETS_CHAT_UPDATE_TAG: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
+    LETS_CHAT_UPDATE_TOKEN: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
+    LETS_CHAT_UPDATE_URL_ALLOW_PRIVATE: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
+    LETS_CHAT_UPDATE_BASE_URL: "dead: no Rust source has read it since LC-733; the name survives only as the literal desktop/src/update.rs asserts is absent from the Dockerfiles (LC-594)"
+    LETS_CHAT_BASE_URL: ".env.saas omits it along with the rest of the mail/SSO block; pre-existing gap tracked by LC-952, not one of LC-937's eight families"
+    LETS_CHAT_SECRET_KEY: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_BUNYIP_SSO_ISSUER: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_BUNYIP_SSO_CLIENT_ID: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_BUNYIP_SSO_CLIENT_SECRET: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_BUNYIP_SSO_REDIRECT_URI: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_BUNYIP_SSO_INSECURE_TLS: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_SMTP_HOST: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_SMTP_PORT: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_SMTP_TLS: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_SMTP_FROM: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_SMTP_USERNAME: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_SMTP_PASSWORD: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
+    LETS_CHAT_DEV_NO_SSO: "documented but present in neither template; pre-existing gap tracked by LC-952, not one of LC-937's eight families"
+    LETS_CHAT_PUSH_CONTACT: "documented but present in neither template; pre-existing gap tracked by LC-952, not one of LC-937's eight families"
+}
 
 # Email templates are excluded from every template rule: they render in a mail
 # client with no stylesheet, so a Tailwind class there is inert.
@@ -587,6 +635,71 @@ def cbtn-label-missing-aria [] {
     } | flatten
 }
 
+# LC-937: every source file that may read a `LETS_CHAT_*` / `IP2LOCATION_*` /
+# `LOGIN_APPROVAL_*` name: the server, the desktop wrapper, and the LiveKit
+# transcription-agent sidecar (a separate TypeScript service under services/).
+def env-var-read-sites [] {
+    (glob server/src/**/*.rs)
+    | append (glob desktop/src/**/*.rs)
+    | append (glob services/*/src/**/*.ts)
+    | sort
+}
+
+# Every name literal a read site names, whether quoted (`env::var("X")`,
+# `required(env, 'X')`), bare (`env.X` in the TS agent), or captured in a
+# `const FLAG_ENV: &str = "X"` indirection (retention/sweep.rs) - one pattern
+# over the raw text covers all three shapes.
+def env-var-literals [] {
+    let pattern = '(?<name>\b(?:LETS_CHAT|IP2LOCATION|LOGIN_APPROVAL)(?:_[A-Z0-9]+)+\b)'
+    (env-var-read-sites) | each {|file|
+        open --raw $file | decode utf-8 | parse --regex $pattern | get name
+    } | flatten | uniq | sort
+}
+
+# docs/configuration.md spells a variable family once in full and abbreviates
+# the rest of the row to their differing suffix (`` `LETS_CHAT_LIVEKIT_URL` /
+# `_API_KEY` / `_API_SECRET` ``). A name counts as documented if it appears in
+# full, or if some split of it into `head` + `_` + `tail` has both `` `_tail` ``
+# and `head` somewhere in the doc (as the prefix of the row's full name).
+def env-var-documented [name: string, doc: string] {
+    if ($doc | str contains $"`($name)`") {
+        return true
+    }
+    let parts = ($name | split row "_")
+    let n = ($parts | length)
+    mut i = 1
+    while $i < $n {
+        let head = ($parts | first $i | str join "_")
+        let tail = ($parts | skip $i | str join "_")
+        if ($doc | str contains $"`_($tail)`") and ($doc | str contains $head) {
+            return true
+        }
+        $i = $i + 1
+    }
+    false
+}
+
+# Unlike the doc, both templates always spell every name in full.
+def env-var-in-template [name: string, template: string] {
+    $template | str contains $name
+}
+
+def undocumented-env-vars [] {
+    let doc = (open --raw "docs/configuration.md" | decode utf-8)
+    let standalone = (open --raw ".env.standalone" | decode utf-8)
+    let saas = (open --raw ".env.saas" | decode utf-8)
+    (env-var-literals)
+    | where {|name| $name not-in ($ENV_VAR_ALLOWLIST | columns) }
+    | each {|name|
+        mut missing = []
+        if not (env-var-documented $name $doc) { $missing = ($missing | append "docs/configuration.md") }
+        if not (env-var-in-template $name $standalone) { $missing = ($missing | append ".env.standalone") }
+        if not (env-var-in-template $name $saas) { $missing = ($missing | append ".env.saas") }
+        if ($missing | is-empty) { null } else { $"($name): missing from ($missing | str join ', ')" }
+    }
+    | where {|x| $x != null }
+}
+
 # LC-891: the `window.__lcI18n` table entries in base.html.
 def i18n-table-entries [] {
     let file = "server/templates/base.html"
@@ -619,6 +732,12 @@ def used-i18n-keys [] {
 # LC-891: the key-pairing rule from both directions - a table entry nothing
 # calls, and a call site whose key has no table entry (a broken lookup, not
 # just a dead one).
+# LC-945: the wrong-accessor shape - reading `window.__lcS` as if it were the
+# catalog map instead of calling it as the reader function base.html defines.
+def lcs-subscripts [] {
+    scan-lines (browser-asset-files) $LCS_SUBSCRIPT
+}
+
 def i18n-key-pairing [] {
     let table = (i18n-table-entries)
     let used = (used-i18n-keys)
@@ -757,6 +876,12 @@ def rules [] {
             check: {|| ellipsis-outside-locales }
         }
         {
+            id: "no-lcS-subscript"
+            pending: null
+            fix: "call `window.__lcS(key, fallback)` as a function, matching every other reader in the tree; `window.__lcS[key]` subscripts the reader function itself and is always undefined, so the fallback wins unconditionally regardless of catalog content (LC-945)"
+            check: {|| lcs-subscripts }
+        }
+        {
             id: "i18n-keys-are-paired"
             pending: null
             fix: "every `window.__lcI18n` entry in base.html needs a caller in the templates or server/assets, and every `__lcS`-family call site needs a matching base.html entry; delete whichever side of the pair is now the leftover (LC-891)"
@@ -780,7 +905,37 @@ def rules [] {
             fix: "a function that writes `.lc-cbtn-label` text must also write `aria-label` (and `data-lc-tip`) in the same function, or the tooltip and the accessible name go stale the moment the visible label flips; use the shared `setLabel` on `window.LetsChatRtc` (rtc_common.js) instead of a local copy (LC-875)"
             check: {|| cbtn-label-missing-aria }
         }
+        {
+            id: "control-input-needs-arm-and-kill"
+            pending: null
+            fix: "a module that dispatches lc:control-input as the controlled side must also dispatch lc:control-start to arm the native injector and listen for lc:control-kill so the hotkey ends the session (LC-931); the four lc:control-* names are exported from rtc_common.js's LetsChatRtc.control.events"
+            check: {|| control-input-without-arm }
+        }
+        {
+            id: "env-var-template-parity"
+            pending: null
+            fix: "add a commented entry mirroring docs/configuration.md's wording to whichever of .env.standalone / .env.saas is missing it, or add it to docs/configuration.md if the code changed first; a name deliberately absent from one of the three surfaces goes on the ENV_VAR_ALLOWLIST above with a one-line reason (LC-937)"
+            check: {|| undocumented-env-vars }
+        }
     ]
+}
+
+# LC-931: a module that dispatches lc:control-input as the controlled side
+# (hands a controller's frame to the native injector) must also dispatch
+# lc:control-start to arm it and listen for lc:control-kill so the desktop
+# hotkey can end the session; a third surface that ships input relay without
+# the other two leaves the injector unkillable or never armed.
+def control-input-without-arm [] {
+    browser-asset-files | each {|file|
+        let text = (open --raw $file | decode utf-8)
+        if not ($text =~ 'lc:control-input') {
+            []
+        } else if ($text =~ 'lc:control-start') and ($text =~ 'lc:control-kill') {
+            []
+        } else {
+            [$"($file): dispatches lc:control-input without both arming \(lc:control-start\) and a kill listener \(lc:control-kill\)"]
+        }
+    } | flatten
 }
 
 def main [] {
