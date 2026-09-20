@@ -89,6 +89,11 @@ pub async fn run_triage(
     if !super::ai_gate::flag_on(state).await {
         return Ok(None);
     }
+    // LC-941: honor the room's own AI toggle - a room opted out of AI should
+    // not have its messages sent to the LLM for moderation triage either.
+    if !super::ai_gate::room_ai_enabled(state, room_id).await? {
+        return Ok(None);
+    }
     let verdict = match llm.complete_guarded(CLASSIFY_SYSTEM, text).await {
         Ok(s) => s,
         Err(e) => {

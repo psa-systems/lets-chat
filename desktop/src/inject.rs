@@ -13,6 +13,15 @@
 // who floods the data channel without a live grant injects nothing because
 // `active` is false. This does NOT defend against a compromised server page -
 // that is the same trust the app already places in `LETS_CHAT_SERVER_URL`.
+//
+// LC-931: this contract's JS side is the four `lc:control-*` DOM events
+// (defined once in rtc_common.js's `LetsChatRtc.control.events`, dispatched by
+// call.js and huddle_control.js): `lc:control-start` arms this module
+// (ControlState.active = true), `lc:control-input` carries one frame to
+// `rc_input`, `lc:control-end` disarms it on a clean revoke, and
+// `lc:control-kill` (dispatched INTO the page by main.rs's global hotkey
+// handler, not listened for here) is the JS side's own signal to end the
+// session locally regardless of which surface granted it.
 
 use std::collections::HashSet;
 use std::sync::Mutex;
