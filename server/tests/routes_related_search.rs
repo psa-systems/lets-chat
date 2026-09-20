@@ -95,9 +95,15 @@ async fn make_room(t: &TestApp) -> i64 {
         .fetch_one(&t.chat)
         .await
         .unwrap();
-    db::chat::create_room(&t.chat, "general", None, "public", None, Some(eid))
+    let room_id = db::chat::create_room(&t.chat, "general", None, "public", None, Some(eid))
         .await
-        .unwrap()
+        .unwrap();
+    // LC-941: these tests exercise related/semantic-search/backfill themselves,
+    // not the room AI toggle, so opt the room in (the toggle defaults off).
+    db::chat::set_room_assistant_enabled(&t.chat, room_id, true)
+        .await
+        .unwrap();
+    room_id
 }
 
 /// Insert a message and store its deterministic mock embedding (mirrors what the
