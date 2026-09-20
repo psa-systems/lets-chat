@@ -101,6 +101,15 @@ class El {
     return out;
   }
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+  closest(sel) {
+    for (let n = this; n; n = n.parentNode) if (matches(n, sel)) return n;
+    return null;
+  }
+  get ownerDocument() {
+    let n = this;
+    while (n.parentNode) n = n.parentNode;
+    return n;
+  }
   getBoundingClientRect() { return { left: 0, top: 0, width: 480, height: 320 }; }
   play() { this.playCalls++; this.paused = false; return Promise.resolve(); }
   addEventListener() {}

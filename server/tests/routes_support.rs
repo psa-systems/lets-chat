@@ -77,6 +77,11 @@ async fn human_with_no_admin_files_a_ticket() {
     db::enclave::backfill_general_membership(&auth, &chat)
         .await
         .unwrap();
+    // LC-941: this test exercises the /human escalation flow, not the room AI
+    // toggle, so opt General (room 1) in (the toggle defaults off).
+    db::chat::set_room_assistant_enabled(&chat, 1, true)
+        .await
+        .unwrap();
     sqlx::query("UPDATE users SET last_active_at = datetime('now','-1 day'), last_ws_seen_at = NULL WHERE id=?")
         .bind(&admin)
         .execute(&auth)

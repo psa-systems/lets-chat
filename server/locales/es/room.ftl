@@ -320,12 +320,12 @@ room-broadcast-mods = Solo moderadores
 room-broadcast-admins = Solo administradores
 # LC-492: interruptor del asistente de IA en el canal (pagina de gestion).
 room-assistant-heading = Asistente de IA
-room-assistant-intro = Permite que los miembros hagan preguntas al asistente de IA de la sala con
+room-assistant-intro = Controla todas las funciones de IA de esta sala: /ask, traducir, respuestas sugeridas, asistencia de redaccion, mensajes relacionados, resumenes y busqueda semantica. Incluye
 room-assistant-unconfigured = Aun no hay un LLM configurado en este servidor, asi que el asistente no respondera hasta que un operador defina LETS_CHAT_LLM_URL.
 room-assistant-on-label = Activado.
-room-assistant-on-text = Los miembros pueden usar /ask en esta sala.
+room-assistant-on-text = Los miembros pueden usar /ask, traducir, respuestas sugeridas, asistencia de redaccion, mensajes relacionados, resumenes y busqueda semantica en esta sala.
 room-assistant-off-label = Desactivado.
-room-assistant-off-text = /ask esta desactivado en esta sala.
+room-assistant-off-text = Todas las funciones de IA estan desactivadas en esta sala: /ask, traducir, respuestas sugeridas, asistencia de redaccion, mensajes relacionados, resumenes y busqueda semantica. Los mensajes de esta sala no se envian al asistente de IA ni a los endpoints de embeddings.
 # LC-665: interruptor del resumen diario con IA (pagina de gestion).
 room-digest-heading = Resumen diario
 room-digest-intro = Publica una vez al dia un breve resumen con IA de la actividad reciente de esta sala, como el bot asistente.

@@ -40,7 +40,7 @@ docker cp "$id:/out/lets-chat-desktop-setup-x86_64.exe" artifacts/
 docker rm "$id"
 ```
 
-## Done (LC-131)
+## [LC-131](https://yt.a8n.run/issue/LC-131)
 
 - **NSIS-from-Linux toolchain** proven: `makensis v3.11` on Debian trixie
   compiles `lets-chat.nsi` (MUI2 pages, install/uninstall, ARP registry,
@@ -70,7 +70,7 @@ is the first-install option for users the NSIS installer does not suit
 boxes); the self-updater consumes the raw exe, so updates are unaffected. Built
 trivially from Linux in the same `zip` step - no Windows host.
 
-## Remaining (ops-gated, not code)
+## [LC-180](https://yt.a8n.run/issue/LC-180) (ops-gated, not code)
 
 - **Code signing**: explicitly deferred (decision 2026-05-26, LC-180) - no cert
   for the foreseeable future, so the installer and the portable zip both ship
