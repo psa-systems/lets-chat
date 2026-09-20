@@ -183,6 +183,11 @@ async fn setup_with_clients(
 
     // A non-DM room alice belongs to (General = room 1 from backfill is public).
     let public_room = 1;
+    // LC-941: these tests exercise the transcript/summary/translate surfaces
+    // themselves, not the room AI toggle, so opt General in (defaults off).
+    db::chat::set_room_assistant_enabled(&chat, public_room, true)
+        .await
+        .unwrap();
 
     // A public voice channel (Phase 2). is_voice gates it as call-capable;
     // participation is tracked by the hub, not room_members.

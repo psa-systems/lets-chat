@@ -13,7 +13,7 @@
 # /build/target/x86_64-pc-windows-gnu/release/lets-chat-desktop.exe, which
 # the CI workflow extracts via `docker create` + `docker cp`.
 
-FROM ghcr.io/niceguyit/rust-builder-glibc-windows:v1.0.0-rust1.94-trixie AS builder
+FROM ghcr.io/niceguyit/rust-builder-glibc-windows:v1.2.0-rust1.98.1-trixie AS builder
 ARG GIT_HASH=unknown
 ARG GIT_VERSION=unknown
 ARG BUILD_DATE=unknown
