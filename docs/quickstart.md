@@ -44,7 +44,7 @@ To build and run the production-shape image instead:
 just run
 ```
 
-That builds `ci-build/Dockerfile.web` via `compose.yml` and serves on `http://127.0.0.1:8080`. Supply the mandatory Bunyip SSO vars (and any optional features) with an env file: copy `.env.standalone`, fill it in, and either add `env_file: [.env.standalone]` to `compose.yml` or pass `--env-file .env.standalone`.
+That builds `ci-build/Dockerfile.web` via `compose.yml` and serves on `http://127.0.0.1:8080`. Supply the mandatory Bunyip SSO vars (and any optional features) with an env file: copy `.env.standalone`, fill it in, and add `env_file: [.env.standalone]` to `compose.yml`'s `app` service.
 
 Run `just --list` to see all available recipes.
 

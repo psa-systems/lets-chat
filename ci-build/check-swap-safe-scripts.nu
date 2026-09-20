@@ -2,10 +2,10 @@
 
 # Guard re-entrant inline page scripts (LC-835).
 #
-# Today every in-app navigation is a full page load, so each inline <script>
-# runs exactly once and none of them has to be re-entrant. LC-837 swaps
-# <main id="main"> instead, and from then on every inline script inside the
-# swapped region re-runs on every navigation. A script that registers on a host
+# Every in-app navigation is boosted (LC-837): htmx swaps <main id="main">
+# instead of loading a new document, so every inline script inside the swapped
+# region re-runs on every navigation instead of running exactly once. A script
+# that registers on a host
 # the swap does not replace - document, document.body, window, a repeating
 # timer, an observer - stacks a second registration each time. Nothing throws:
 # the handler just fires twice, the interval just ticks twice as often. An

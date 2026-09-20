@@ -118,7 +118,7 @@ Exceptions / gotchas:
 
 ## Inline scripts must survive a swap (LC-835)
 
-Every in-app navigation is still a full page load, so an inline `<script>` runs exactly once and nothing here changes what the browser does today. LC-837 swaps `<main id="main">` (`layout.html:24`) instead of loading a new document, and from that point every inline script inside the swapped region re-runs on every navigation. A script that registers on a host the swap does not replace stacks a second registration each time, and the failure is silent: the handler fires twice, the interval ticks twice as fast, nothing throws. An unaudited script is indistinguishable from a safe one, which is why the declaration below is mandatory rather than inferred from what the code looks like.
+Every in-app navigation is boosted (LC-837): htmx swaps `<main id="main">` (`layout.html:24`) instead of loading a new document, so an inline `<script>` inside the swapped region re-runs on every navigation instead of running exactly once. A script that registers on a host the swap does not replace stacks a second registration each time, and the failure is silent: the handler fires twice, the interval ticks twice as fast, nothing throws. An unaudited script is indistinguishable from a safe one, which is why the declaration below is mandatory rather than inferred from what the code looks like.
 
 A **surviving host** is anything the swap leaves in place: `document`, `document.body`, `document.documentElement`, `window`, a repeating `setInterval`, any observer (`MutationObserver`, `IntersectionObserver`, `ResizeObserver`, `PerformanceObserver`), `customElements.define`, `htmx.onLoad`. A one-shot `setTimeout` is not one: it fires once and cannot stack. Binding a node *inside* the swapped region is not one either, and must stay unguarded: the swap replaces that node, so re-running is how the new node gets its handler.
 
@@ -210,10 +210,10 @@ When adding a new destructive action, copy the closest existing example of the m
 
 Two contexts, one visual + accessibility contract.
 
-- **Server-rendered pages** (auth flows, full-page forms): the view struct carries `error: Option<String>` (or `Option<&str>`) and the template includes `auth/form_errors.html`. That partial is the single source of the error element's markup (`<p role="alert" class="text-red-600 text-sm">`). Do not hand-roll the `{% if let Some(error) = error %}` block inline; include the partial so every page announces errors identically.
-- **In-place forms** (modals, the composer) that stay open after a failed submit and cannot re-render the whole page: use a pre-rendered, initially-`hidden` slot (`role="alert"`, `text-red-600`) that JS un-hides and fills from the response. Existing slots: `.composer-error`, `.thread-error`, `#lc-upload-error`.
+- **Server-rendered pages** (auth flows, full-page forms): the view struct carries `error: Option<String>` (or `Option<&str>`). There is no shared partial; each template hand-rolls `{% if let Some(err) = error %}<div class="alert alert-danger" role="alert">{{ err }}</div>{% endif %}` inline (the bound name varies by template, e.g. `err` or `msg`). The `.alert.alert-danger` class (defined in `server/assets/tailwind.css`) is what keeps the markup and color identical across pages; see `auth/login.html`, `settings/api_tokens.html`, or `admin/branding.html` for the pattern.
+- **In-place forms** (modals, the composer) that stay open after a failed submit and cannot re-render the whole page: use a pre-rendered, initially-`hidden` slot (`role="alert"`, `text-danger`) that JS un-hides and fills from the response. Existing slots: `.composer-error`, `.thread-error`, `#lc-upload-error`.
 
-Both contexts must share the same visual treatment (`text-red-600`) and carry `role="alert"` so assistive tech announces the error regardless of which rendering path produced it.
+Both contexts must share the same visual treatment (`text-danger`) and carry `role="alert"` so assistive tech announces the error regardless of which rendering path produced it.
 
 A field the server rejected also gets `input-error` (defined in `server/assets/tailwind.css`) on the control itself, alongside the message. The class is a red border and nothing else, so it is never the only signal: the reason always stays readable as text. See `auth/login_approve.html` and `settings/blocked.html`.
 

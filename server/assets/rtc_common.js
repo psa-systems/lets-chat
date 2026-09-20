@@ -108,6 +108,19 @@
     return (e.ctrlKey ? 1 : 0) | (e.shiftKey ? 2 : 0) | (e.altKey ? 4 : 0) | (e.metaKey ? 8 : 0);
   }
 
+  // LC-931: the four DOM events that bridge a controlled surface to the
+  // desktop native injector (LC-185/186/854). Named once here so call.js and
+  // huddle_control.js dispatch/listen for the identical strings desktop/src/
+  // inject.rs's module comment names as the contract's other side; a third
+  // surface that half-implements the set is caught by
+  // ci-build/check-ui-conventions.nu's control-input-needs-arm-and-kill rule.
+  var CONTROL_EVENTS = {
+    START: 'lc:control-start',
+    INPUT: 'lc:control-input',
+    END: 'lc:control-end',
+    KILL: 'lc:control-kill',
+  };
+
   // Key policy (LC-854). Every key is preventDefault'd locally while a session
   // is active (so a browser shortcut like Ctrl+W never fires on the
   // controller's own machine); this decides which are additionally FORWARDED to
@@ -234,6 +247,7 @@
       modMask: modMask,
       isForwardableKey: isForwardableKey,
       bindCapture: bindCapture,
+      events: CONTROL_EVENTS,
     },
   };
 })();
