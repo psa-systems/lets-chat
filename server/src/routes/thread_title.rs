@@ -52,6 +52,11 @@ pub async fn run_thread_title(
     if !super::ai_gate::flag_on(state).await {
         return Ok(None);
     }
+    // LC-941: honor the room's own AI toggle - a thread's title should not be
+    // generated from a room's content when its manager has opted it out.
+    if !super::ai_gate::room_ai_enabled(state, room_id).await? {
+        return Ok(None);
+    }
     // Only ever title once.
     if db::chat::get_thread_title(&state.chat, parent_id)
         .await?
