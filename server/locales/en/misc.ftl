@@ -172,11 +172,14 @@ voice-transcript-empty-sub = Spoken audio will appear here once transcription is
 # LC-590: shown in the drawer when a clip fails server-side transcription.
 voice-transcript-clip-failed = Some audio could not be transcribed. Captions may be incomplete.
 # LC-765: transcription is per-client local capture (each browser transcribes
-# only its own mic, on that device). Turning it on now auto-activates it for
-# everyone in the call, including late joiners (each client starts its own
-# capture), so one person's Transcribe covers the whole call. Say the privacy
-# fact and the auto-activation plainly.
-voice-transcript-local-only = Only your own microphone is transcribed, on your device. Turning on Transcribe activates it for everyone in the call automatically, including people who join later.
+# only its own mic). Turning it on now auto-activates it for everyone in the
+# call, including late joiners (each client starts its own capture), so one
+# person's Transcribe covers the whole call.
+# LC-962: the Fast engine transcribes on-device, but the Accurate engine
+# (see voice-engine-accurate) sends the mic clips to this server, so this
+# string can no longer claim universal on-device-only transcription. State
+# the per-engine boundary instead, matching the engine picker's own copy.
+voice-transcript-local-only = Only your own microphone is transcribed: on your device with the Fast engine, or sent to this server with Accurate. Turning on Transcribe activates it for everyone in the call automatically, including people who join later.
 # LC-860: live captions are a distinct presentation with no accuracy guarantee;
 # the saved transcript of record is assembled separately (server-side, on a
 # delay) and never contains this live text. State the boundary in the drawer so
