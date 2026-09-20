@@ -19,15 +19,11 @@ ARG BUILD_DATE=unknown
 
 FROM ghcr.io/niceguyit/rust-builder-glibc:v1.2.0-rust1.98.1-trixie AS chef
 
-# Cap concurrent rustc / build-script processes. The desktop and OCI
-# builds run in parallel on the same CI runner; without a cap each
-# container reads the host's nproc and queues that many cargo
-# workers, oversubscribing the runner. nproc/2 lets the two builds
-# share the host without stepping on each other. Overridable via
-# `--build-arg CARGO_BUILD_JOBS=N` for ad-hoc local builds.
-ARG CARGO_BUILD_JOBS=2
+# Cargo parallelism comes from the CI runner via --build-arg CARGO_BUILD_JOBS;
+# `default` is cargo's own keyword for all CPUs, for ad-hoc local builds.
+ARG CARGO_BUILD_JOBS=default
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
-RUN echo "build parallelism: CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} (host nproc=$(nproc))"
+RUN echo "build parallelism: CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}"
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends pkg-config libssl-dev \
