@@ -8,14 +8,13 @@ issue, which is the only place its state lives.
 
 [LC-833](https://yt.a8n.run/issue/LC-833)
 
-Every in-app navigation is currently a full browser page load. `hx-boost`
-appears nowhere in `server/templates/`, and `server/src/routes/ws.rs` records
-the model directly. Three costs follow: a voice call cannot survive a page
-move, because the unload destroys the JS context and every
-`RTCPeerConnection`; the WebSocket is torn down and rebuilt on every
-navigation, which is what LC-318's reconnect-banner grace period exists to
-hide; and the whole shell re-renders on every move, in an app where moving
-between rooms is the dominant interaction.
+Before this work, every in-app navigation was a full browser page load, and
+`server/src/routes/ws.rs` recorded the model directly. Three costs followed: a
+voice call could not survive a page move, because the unload destroyed the JS
+context and every `RTCPeerConnection`; the WebSocket was torn down and rebuilt
+on every navigation, which is what LC-318's reconnect-banner grace period
+exists to hide; and the whole shell re-rendered on every move, in an app where
+moving between rooms is the dominant interaction.
 
 The layout is already shaped for the change. `layout.html` puts the
 `ws-connect` element and the sidebar outside `<main id="main">`, so a swap
@@ -36,17 +35,18 @@ already in production rather than alongside them.
 3. [LC-836](https://yt.a8n.run/issue/LC-836) - the sidebar stays correct
    without a page load. It sits outside the swap target, so the active-room
    highlight and unread counts would otherwise go stale.
-4. [LC-837](https://yt.a8n.run/issue/LC-837) - the flip. Boost navigation with
-   an explicit `#main` target, never hx-boost's default of `body`, which would
-   swap the `ws-connect` element and cycle the socket on every move.
+4. [LC-837](https://yt.a8n.run/issue/LC-837) - the flip. **Shipped**: boosted
+   links target `#main` explicitly, never hx-boost's default of `body`, which
+   would swap the `ws-connect` element and cycle the socket on every move. See
+   [ui-conventions.md](ui-conventions.md#boosted-navigation-lc-837) for the
+   current model.
 5. [LC-832](https://yt.a8n.run/issue/LC-832) - a joined voice channel or huddle
    survives navigation. The dock-lifting machinery already exists from
    LC-821/822/823; phase 4 is what makes it reachable.
 
-A note worth keeping, because it already cost a wrong issue: several comments
-in the tree described an `hx-boost` model this application has never used. The
-attribute has never appeared in a template on any branch; the only commit
-carrying the literal `hx-boost="true"` is the one that added this file. Phase 2
-corrected the two misleading template comments, in `room/page.html` and
-`layout.html`. The remaining mention, in `ws.rs`, describes the current model
-accurately and is phase 4's to update when the model changes.
+A note worth keeping, because it already cost a wrong issue: before phase 4
+shipped, several comments in the tree described an `hx-boost` model this
+application had not yet built. Phase 2 corrected the two misleading template
+comments, in `room/page.html` and `layout.html`. See
+[ui-conventions.md](ui-conventions.md#boosted-navigation-lc-837) for the model
+`hx-boost` actually implements now that phase 4 has landed.
