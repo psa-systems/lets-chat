@@ -859,10 +859,12 @@ pub async fn post_help_docs_sources(
     headers: HeaderMap,
     axum::Form(form): axum::Form<HelpDocsForm>,
 ) -> Result<Response, AppError> {
+    let sources = form.sources.trim();
+    let (_, rejected) = super::help_docs::parse_sources_detailed(sources);
     db::settings::set_setting(
         &state.settings,
         super::help_docs::HELP_DOCS_SOURCES_KEY,
-        form.sources.trim(),
+        sources,
     )
     .await?;
     db::moderation::log_mod_action(
@@ -876,7 +878,17 @@ pub async fn post_help_docs_sources(
     )
     .await?;
     if is_hx(&headers) {
-        return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
+        let msg = if rejected.is_empty() {
+            translate_current("admin-saved")
+        } else {
+            let mut msg = format!("Saved. {} line(s) will be ignored:", rejected.len());
+            for r in &rejected {
+                msg.push_str(&format!(" line {} ({}) {},", r.line, r.text, r.reason));
+            }
+            msg.pop(); // trailing comma
+            msg
+        };
+        return Ok(html(&SettingsFeedback::ok(msg))?.into_response());
     }
     Ok(Redirect::to("/admin/settings").into_response())
 }

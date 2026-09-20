@@ -940,16 +940,25 @@ pub async fn set_room_slowmode(
 /// LC-476: the room's `@here`/`@channel` broadcast policy. Read on demand
 /// (not carried on the `Room` struct) - mirrors `get_room_retention_days`.
 /// A missing row yields `'all'` (the permissive default).
-/// LC-492: whether the in-channel AI assistant (`/ask`) is enabled for a room.
+/// LC-492/LC-941: whether this room's AI surfaces (`/ask` and every other
+/// per-room AI feature) are enabled. A DM has no manage page and no explicit
+/// toggle value, so it always reads as enabled regardless of the stored
+/// column - only a room whose manager has explicitly flipped the toggle off
+/// changes behavior.
 pub async fn get_room_assistant_enabled(
     pool: &sqlx::SqlitePool,
     room_id: i64,
 ) -> Result<bool, sqlx::Error> {
-    let v: Option<i64> = sqlx::query_scalar("SELECT assistant_enabled FROM rooms WHERE id = ?")
-        .bind(room_id)
-        .fetch_optional(pool)
-        .await?;
-    Ok(v.unwrap_or(0) != 0)
+    let row: Option<(String, i64)> =
+        sqlx::query_as("SELECT room_type, assistant_enabled FROM rooms WHERE id = ?")
+            .bind(room_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(match row {
+        Some((room_type, _)) if room_type == "dm" => true,
+        Some((_, enabled)) => enabled != 0,
+        None => false,
+    })
 }
 
 /// LC-492: toggle the assistant for a room. Returns rows affected (0 = no such

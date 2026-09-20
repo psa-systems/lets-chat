@@ -16,7 +16,7 @@ services:
     # optional features (SMTP mail, server-side call transcription via
     # LETS_CHAT_STT_URL, AI transcript summaries via LETS_CHAT_LLM_URL, ...) are
     # supplied via an env file - copy .env.standalone (or .env.saas), fill it in,
-    # and add `env_file: [.env.standalone]` here (or run with `--env-file`).
+    # and add `env_file: [.env.standalone]` here.
     environment:
       RUST_LOG: lets_chat=info
       LETS_CHAT_DATA_DIR: /data

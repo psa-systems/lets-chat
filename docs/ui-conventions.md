@@ -210,10 +210,10 @@ When adding a new destructive action, copy the closest existing example of the m
 
 Two contexts, one visual + accessibility contract.
 
-- **Server-rendered pages** (auth flows, full-page forms): the view struct carries `error: Option<String>` (or `Option<&str>`) and the template includes `auth/form_errors.html`. That partial is the single source of the error element's markup (`<p role="alert" class="text-red-600 text-sm">`). Do not hand-roll the `{% if let Some(error) = error %}` block inline; include the partial so every page announces errors identically.
-- **In-place forms** (modals, the composer) that stay open after a failed submit and cannot re-render the whole page: use a pre-rendered, initially-`hidden` slot (`role="alert"`, `text-red-600`) that JS un-hides and fills from the response. Existing slots: `.composer-error`, `.thread-error`, `#lc-upload-error`.
+- **Server-rendered pages** (auth flows, full-page forms): the view struct carries `error: Option<String>` (or `Option<&str>`). There is no shared partial; each template hand-rolls `{% if let Some(err) = error %}<div class="alert alert-danger" role="alert">{{ err }}</div>{% endif %}` inline (the bound name varies by template, e.g. `err` or `msg`). The `.alert.alert-danger` class (defined in `server/assets/tailwind.css`) is what keeps the markup and color identical across pages; see `auth/login.html`, `settings/api_tokens.html`, or `admin/branding.html` for the pattern.
+- **In-place forms** (modals, the composer) that stay open after a failed submit and cannot re-render the whole page: use a pre-rendered, initially-`hidden` slot (`role="alert"`, `text-danger`) that JS un-hides and fills from the response. Existing slots: `.composer-error`, `.thread-error`, `#lc-upload-error`.
 
-Both contexts must share the same visual treatment (`text-red-600`) and carry `role="alert"` so assistive tech announces the error regardless of which rendering path produced it.
+Both contexts must share the same visual treatment (`text-danger`) and carry `role="alert"` so assistive tech announces the error regardless of which rendering path produced it.
 
 A field the server rejected also gets `input-error` (defined in `server/assets/tailwind.css`) on the control itself, alongside the message. The class is a red border and nothing else, so it is never the only signal: the reason always stays readable as text. See `auth/login_approve.html` and `settings/blocked.html`.
 
