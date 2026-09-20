@@ -52,6 +52,11 @@ async fn setup(llm: Option<Arc<dyn lets_chat::llm::LlmClient>>) -> Setup {
     db::chat::add_room_member(&chat, room_id, &alice)
         .await
         .unwrap();
+    // LC-941: this test exercises the moderation-triage gate, not the room AI
+    // toggle, so opt the room in (the toggle defaults off).
+    db::chat::set_room_assistant_enabled(&chat, room_id, true)
+        .await
+        .unwrap();
 
     let bg = lets_chat::bg::spawn(auth.clone());
     let state = AppState {
