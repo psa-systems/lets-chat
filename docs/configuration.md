@@ -99,7 +99,7 @@ head -c 32 /dev/urandom | base64
 
 (or `openssl rand -base64 32` if OpenSSL is handy.)
 
-**Without it.** Web Push and encrypted email ingress are silently disabled. Settings shows the relevant checkboxes as disabled with help text pointing back here. The rest of the app works normally.
+**Without it.** Web Push and encrypted email ingress are silently disabled. Settings shows the relevant checkboxes as disabled with help text pointing back here. The HTTP API is also unavailable: see [api.md](api.md) for the 401 behavior this causes for all token auth.
 
 **If you lose it.** Encrypted rows become undecryptable, but the rest of the app continues to run.
 

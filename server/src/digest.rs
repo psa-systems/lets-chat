@@ -1,12 +1,11 @@
-//! Email-digest content primitives (phase 22 tasks 3 + 4).
+//! Email-digest content primitives and scheduler tick (phase 22 tasks 3 + 4).
 //!
-//! `build_snippet` is the only public entry point in this file today. It
-//! takes a raw message body and returns a `(plaintext, html)` pair suitable
-//! for inclusion in the digest's two-part `multipart/alternative` body.
-//!
-//! Future tasks (4, scheduler tick) layer the eligibility query and dispatch
-//! loop on top of this module; they reuse `build_snippet` to render each
-//! digest item.
+//! `build_snippet` renders a raw message body into a `(plaintext, html)`
+//! pair suitable for inclusion in the digest's two-part `multipart/alternative`
+//! body. `run_tick` is the scheduler entry point: it loads eligible
+//! candidates from `db::auth::find_digest_candidates`, fetches each one's
+//! missed activity, and dispatches one email per candidate through the
+//! shared `Mailer`, reusing `build_snippet` to render each digest item.
 //!
 //! Design notes:
 //! - The digest renders messages MUCH more conservatively than the in-app

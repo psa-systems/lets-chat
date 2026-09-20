@@ -38,6 +38,11 @@ async fn setup() -> Setup {
     db::enclave::backfill_general_membership(&auth, &chat)
         .await
         .unwrap();
+    // LC-941: this test exercises the runtime-flag/audience gate, not the room
+    // AI toggle, so opt General (room 1) in (the toggle defaults off).
+    db::chat::set_room_assistant_enabled(&chat, 1, true)
+        .await
+        .unwrap();
 
     let admin_session = db::auth::create_session(&auth, &admin).await.unwrap();
     let member_session = db::auth::create_session(&auth, &member).await.unwrap();
