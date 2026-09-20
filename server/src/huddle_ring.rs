@@ -15,8 +15,8 @@
 //! A huddle has no such contest: two people starting one in the same room
 //! simultaneously both land in the same `voice_rooms` entry and are already in
 //! a call together. Reusing the slot would have meant inventing a loser for a
-//! race with no stakes, and would have put the 1:1 call path (which currently
-//! has no test coverage) at risk for nothing.
+//! race with no stakes, and would have put the 1:1 call path (covered by
+//! `server/tests/call_ring.rs`) at risk for nothing.
 
 use crate::db;
 use crate::models::User;
