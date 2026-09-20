@@ -23,7 +23,13 @@ async fn saved_or_empty(state: &AppState, user_id: &str) -> Result<Html, AppErro
     if queries.is_empty() {
         return Ok(empty_popover());
     }
-    html(&SavedSearchesFragment { queries })
+    // LC-938: the saved list is only ever rendered into the sidebar's unscoped
+    // search popover (the room-header box always passes room_id and short-
+    // circuits to `empty_popover` below), so the container id is fixed here.
+    html(&SavedSearchesFragment {
+        queries,
+        container_id: "sidebar-search-results",
+    })
 }
 
 #[derive(Deserialize)]
@@ -160,6 +166,22 @@ pub async fn get_search(
     let query = q.unwrap_or_default();
     let trimmed = query.trim();
 
+    // LC-938: the room-header and sidebar popovers coexist in the DOM, so the
+    // fragment needs to know which container it is being swapped into (to
+    // scope its ids) and which scope it actually searched (to label itself).
+    let container_id = if room_id.is_some() {
+        "lc-room-search-results"
+    } else {
+        "sidebar-search-results"
+    };
+    let scope_key = if room_id.is_some() {
+        "search-scope-room"
+    } else if enclave_id.is_some() {
+        "search-scope-enclave"
+    } else {
+        "search-scope-all"
+    };
+
     if trimmed.is_empty() {
         // LC-312: an empty query (the box was focused or cleared) shows the
         // caller's saved searches, scoped to the sidebar message-search box.
@@ -203,7 +225,16 @@ pub async fn get_search(
                         .into_iter()
                         .filter(|r| !blocked.contains(&r.user_id))
                         .collect();
-                    return render_results(&state, &user, trimmed, query_text, rows).await;
+                    return render_results(
+                        &state,
+                        &user,
+                        trimmed,
+                        query_text,
+                        rows,
+                        container_id,
+                        scope_key,
+                    )
+                    .await;
                 }
             }
         }
@@ -273,7 +304,16 @@ pub async fn get_search(
     .filter(|r| !blocked_authors.contains(&r.user_id))
     .collect();
 
-    render_results(&state, &user, trimmed, &parsed.text, rows).await
+    render_results(
+        &state,
+        &user,
+        trimmed,
+        &parsed.text,
+        rows,
+        container_id,
+        scope_key,
+    )
+    .await
 }
 
 /// Turn ranked `models::SearchResult` rows (from FTS or LC-549 semantic ranking)
@@ -286,6 +326,8 @@ async fn render_results(
     trimmed: &str,
     highlight: &str,
     rows: Vec<crate::models::SearchResult>,
+    container_id: &'static str,
+    scope_key: &'static str,
 ) -> Result<Html, AppError> {
     // Build a room_id -> peer_id map so DM hits link to /dm/{peer_id}. Admin
     // search excludes DMs entirely, so this map is only consulted for non-
@@ -337,6 +379,8 @@ async fn render_results(
     let fragment = ResultsFragment {
         query: trimmed,
         results: &results,
+        container_id,
+        scope_key,
     };
     html(&fragment)
 }

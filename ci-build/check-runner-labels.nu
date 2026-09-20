@@ -1,9 +1,10 @@
 #!/usr/bin/env nu
 
-# Guard the Forgejo runner-label split (LC-642 / LC-647).
-# Jobs that compile natively on the runner need the dev image's C toolchain
-# (RUNS_ON_OPENSUSE_DEV_LATEST); everything else stays on base. Installing a
-# toolchain at job time is the workaround this guard rejects.
+# Guard the Forgejo runner-label split (LC-642 / LC-647, DEV-769).
+# Jobs that run cargo natively or `docker build` need RUNS_ON_OPENSUSE_BASE_HEAVY
+# (the dev image, with a C toolchain); everything else runs on
+# RUNS_ON_OPENSUSE_BASE_MEDIUM. Installing a toolchain at job time is the
+# workaround this guard rejects.
 
 def main [] {
     let files = (glob .forgejo/workflows/*.yml | sort)
@@ -18,17 +19,17 @@ def main [] {
         let lines = (open --raw $file | lines | where {|l| not (($l | str trim) | str starts-with "#") })
         let labels = ($lines | where {|l| $l =~ 'runs-on:' })
 
-        let unknown = ($labels | where {|l| not ($l =~ 'vars\.RUNS_ON_OPENSUSE_(BASE|DEV)_LATEST') })
+        let unknown = ($labels | where {|l| not ($l =~ 'vars\.RUNS_ON_OPENSUSE_BASE_(HEAVY|MEDIUM)\b') })
         if ($unknown | is-not-empty) {
-            $problems = ($problems | append $"($file): runs-on must use vars.RUNS_ON_OPENSUSE_BASE_LATEST or vars.RUNS_ON_OPENSUSE_DEV_LATEST")
+            $problems = ($problems | append $"($file): runs-on must use vars.RUNS_ON_OPENSUSE_BASE_HEAVY or vars.RUNS_ON_OPENSUSE_BASE_MEDIUM")
         }
 
-        # A bare `cargo ...` command compiles on the runner; a cargo build inside
-        # `docker buildx` lives in the image and never matches this shape.
-        let native_cargo = ($lines | where {|l| $l =~ '^\s*(- )?(run:\s*)?\^?cargo\s' })
-        let on_base = ($labels | any {|l| $l =~ 'RUNS_ON_OPENSUSE_BASE_LATEST' })
-        if (($native_cargo | is-not-empty) and $on_base) {
-            $problems = ($problems | append $"($file): compiles natively \(cargo\) but requests the base runner; use vars.RUNS_ON_OPENSUSE_DEV_LATEST")
+        # A bare `cargo ...` compiles on the runner; `docker build` compiles in
+        # the image. Both are HEAVY work.
+        let heavy_work = ($lines | where {|l| ($l =~ '^\s*(- )?(run:\s*)?\^?cargo\s') or ($l =~ '\bdocker\s+(buildx\s+)?build\s') })
+        let on_medium = ($labels | any {|l| $l =~ 'RUNS_ON_OPENSUSE_BASE_MEDIUM' })
+        if (($heavy_work | is-not-empty) and $on_medium) {
+            $problems = ($problems | append $"($file): compiles \(cargo or docker build\) but requests MEDIUM; use vars.RUNS_ON_OPENSUSE_BASE_HEAVY")
         }
 
         let installs = ($lines | where {|l| $l =~ '(zypper|apt-get|dnf install|apk add)' })
