@@ -4,12 +4,15 @@
 name: Build desktop (Windows)
 
 on:
-  # Releases are cut by create-release.yml, which tags the merge commit via the
-  # Forgejo API. An API-created tag does NOT raise `push: tags: v*` (YOTUN-29),
-  # so the versioned release bundle is built from the `release` event instead:
-  # it fires for the API-created release with github.ref = refs/tags/<tag>. The
-  # `release` event ignores the `paths` filter (paths only gates `push`), so a
-  # release always builds.
+  # Releases are cut by create-release.yml, which creates the release (and its
+  # `vX.Y.Z` tag) via the Forgejo API. That tag push DOES raise the ordinary
+  # `push: tags: v*` event below: get-tags.nu relies on the same fact, and
+  # LC-708 (run #4894) shows this workflow's sibling publish-release.yml
+  # actually firing from `refs/tags/v0.3.0`. `release: types: [published]` is
+  # kept as a second, redundant trigger for the same release, so a future
+  # change to how the tag lands still fires a build. The `release` event
+  # ignores the `paths` filter (paths only gates `push`), so a release always
+  # builds either way.
   release:
     types:
       - published

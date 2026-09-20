@@ -150,12 +150,13 @@ jobs:
         run: nu ci-build/check-confirm-apostrophe.nu
 
       - name: Swap-safe inline script guard
-        # LC-837 will swap <main id="main"> instead of loading a new page, and
-        # from then on every inline <script> inside it re-runs on every
-        # navigation. A handler registered on document, a repeating timer or an
-        # observer stacks a second copy each time, and nothing throws: it just
-        # fires twice. Every inline script in a template that can render more
-        # than once therefore declares data-lc-guard="none|flag|teardown", and
+        # LC-837 boosts navigation, swapping <main id="main"> instead of
+        # loading a new page, so every inline <script> inside it re-runs on
+        # every navigation. A handler registered on document, a repeating
+        # timer or an observer stacks a second copy each time, and nothing
+        # throws: it just fires twice. Every inline script in a template that
+        # can render more than once therefore declares
+        # data-lc-guard="none|flag|teardown", and
         # "none" must contain no surviving-host registration. The script carries
         # its own self-test so a hollow rule engine fails before the scan. See
         # ci-build/check-swap-safe-scripts.nu and LC-835.
