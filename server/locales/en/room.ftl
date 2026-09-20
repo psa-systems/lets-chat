@@ -321,12 +321,12 @@ room-broadcast-mods = Moderators only
 room-broadcast-admins = Admins only
 # LC-492: in-channel AI assistant toggle (room manage page).
 room-assistant-heading = AI assistant
-room-assistant-intro = Let members ask the room's AI assistant questions with
+room-assistant-intro = Controls every AI surface for this room: /ask, translate, suggested replies, compose assist, find related, summaries, and semantic search ranking. Includes
 room-assistant-unconfigured = No LLM is configured on this server yet, so the assistant will not answer until an operator sets LETS_CHAT_LLM_URL.
 room-assistant-on-label = On.
-room-assistant-on-text = Members can use /ask in this room.
+room-assistant-on-text = Members can use /ask, translate, suggested replies, compose assist, find related, summaries, and semantic search in this room.
 room-assistant-off-label = Off.
-room-assistant-off-text = /ask is disabled in this room.
+room-assistant-off-text = All AI features are disabled in this room: /ask, translate, suggested replies, compose assist, find related, summaries, and semantic search. Messages in this room are not sent to the AI assistant or embeddings endpoints.
 # LC-665: scheduled AI digest toggle (room manage page).
 room-digest-heading = Daily digest
 room-digest-intro = Post a short AI recap of this room's recent activity once a day, as the assistant bot.

@@ -775,3 +775,31 @@ async fn login_page_without_an_rp_renders_and_explains_the_error() {
         "the unconfigured error must be explained: {body}"
     );
 }
+
+// LC-949: the sign-in button and the redirect notice below it must localize
+// like the rest of the page, not stay hardcoded English.
+#[tokio::test]
+async fn login_page_localizes_the_bunyip_button_and_redirect_notice() {
+    let t = app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/login")
+        .header(header::ACCEPT_LANGUAGE, "es")
+        .body(Body::empty())
+        .unwrap();
+    let res = t.app.clone().oneshot(req).await.unwrap();
+    let (status, body) = body_string(res).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("Iniciar sesión con Bunyip"),
+        "sign-in button must render in the request locale: {body}"
+    );
+    assert!(
+        !body.contains("Sign in with Bunyip"),
+        "sign-in button must not fall back to English: {body}"
+    );
+    assert!(
+        body.contains("para iniciar sesión"),
+        "redirect notice must render in the request locale: {body}"
+    );
+}
