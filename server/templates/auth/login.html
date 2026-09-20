@@ -20,7 +20,7 @@
     {% if let Some(err) = sso_error %}
     {# LC-564: shared alert component (was a raw red text utility), so the login
        error themes with the rest of the app and matches the welcome flash. #}
-    <div class="alert alert-danger text-left" role="alert">{{ err }}</div>
+    <div class="alert alert-danger text-left" role="alert">{{ err|t }}</div>
     {% endif %}
     <a href="/auth/bunyip/start" class="btn btn-primary w-full">{{ "login-bunyip-submit"|t }}</a>
     <p class="text-xs text-content-subtle">{{ "login-bunyip-redirect-notice"|ta("host", bunyip_issuer_host) }}</p>

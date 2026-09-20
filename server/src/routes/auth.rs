@@ -38,27 +38,27 @@ pub async fn get_login(
     html(&page)
 }
 
+/// Map an `sso_error` code to its message-catalog key. The template applies
+/// `|t`, so the banner follows the request locale.
 fn map_sso_error(code: &str) -> &'static str {
     match code {
-        "dance" => "Sign-in could not be completed. Please try again.",
-        "op" => "Bunyip rejected the sign-in attempt.",
-        "banned" => "Your account is suspended.",
-        "identity_conflict" => {
-            "This account's email is already linked to a different sign-in identity. Contact an administrator."
-        }
-        "internal" => "An internal error occurred. Please try again.",
+        "dance" => "login-sso-error-dance",
+        "op" => "login-sso-error-op",
+        "banned" => "login-sso-error-banned",
+        "identity_conflict" => "login-sso-error-identity-conflict",
+        "internal" => "login-sso-error-internal",
         // LC-826: the development-only LETS_CHAT_DEV_NO_SSO opt-out booted with
         // no RP at all.
-        "unconfigured" => "Single sign-on is not configured on this server.",
+        "unconfigured" => "login-sso-error-unconfigured",
         // LC-939: the emailed approval code (LC-587) expired, was already used,
         // or hit the attempt cap. Distinct from a generic SSO failure because the
         // recovery is just signing in again.
-        "approval" => {
-            "Your sign-in approval code expired or was already used. Sign in again to get a new one."
-        }
-        _ => "Sign-in failed.",
+        "approval" => "login-sso-error-approval",
+        _ => GENERIC_SSO_ERROR,
     }
 }
+
+const GENERIC_SSO_ERROR: &str = "login-sso-error-generic";
 
 /// Resolve global branding and bake it into a `LoginPage`. Now mostly cosmetic
 /// chrome around the SSO button.
@@ -116,7 +116,7 @@ pub(crate) fn build_session_cookie(secure: bool, token: String) -> Cookie<'stati
 
 #[cfg(test)]
 mod tests {
-    use super::map_sso_error;
+    use super::{map_sso_error, GENERIC_SSO_ERROR};
     use regex::Regex;
     use std::collections::HashSet;
 
@@ -138,7 +138,7 @@ mod tests {
         for code in codes {
             assert_ne!(
                 map_sso_error(code),
-                "Sign-in failed.",
+                GENERIC_SSO_ERROR,
                 "sso_error={code} falls through to the generic catch-all"
             );
         }
