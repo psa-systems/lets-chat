@@ -33,9 +33,8 @@ on:
 jobs:
   build-and-push:
     name: Build and push lets-chat-transcription-agent
-    # Base image: the build happens inside `docker buildx`; the runner only
-    # drives docker and the registry (LC-647).
-    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_LATEST }}
+    # HEAVY: runs `docker buildx build` for the agent image.
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_HEAVY }}
     permissions:
       contents: read
       packages: write
@@ -55,14 +54,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Start job metrics sampler
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/job-metrics-start@main
+
+      - name: Build parallelism from the runner
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/build-parallelism@main
+
       - name: Verify Docker availability
         run: |
           docker version
           docker buildx version
 
       - name: Set up buildx builder
-        run: |
-          docker buildx create --name container-builder --driver docker-container --use
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/setup-buildx@main
+        with:
+          name: build-agent-image
 
       - name: Export Actions runtime env for buildx gha cache
         # See build-oci-image.yml: a raw `docker buildx build` does not inject
@@ -143,3 +149,7 @@ jobs:
           let image = "lets-chat-transcription-agent"
           let registry = $env.IMAGE_REGISTRY
           print $"($prefix) ($registry)/($image):($tag)"
+
+      - name: Report job metrics
+        if: always()
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/job-metrics-report@main

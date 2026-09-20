@@ -55,6 +55,12 @@ pub(crate) async fn embed_message(
     if !super::ai_gate::flag_on(state).await {
         return Ok(());
     }
+    // LC-941: a room manager who opts a room out of AI must also keep its
+    // messages out of the embeddings index, so this feeds both the live-send
+    // path and the backfill dispatcher (both call `embed_message`).
+    if !db::chat::get_room_assistant_enabled(&state.chat, room_id).await? {
+        return Ok(());
+    }
     let vec = match client.embed(text).await {
         Ok(v) => v,
         Err(e) => {

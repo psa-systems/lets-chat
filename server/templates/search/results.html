@@ -4,15 +4,17 @@
 </div>
 {% else %}
 <div class="lc-search-panel">
-  {# LC-699: results header - makes the scope explicit and gives the popover a
-     clear top edge. The header box is always single-room; the sidebar owns
-     global search. #}
+  {# LC-699/LC-938: results header - makes the scope explicit and gives the
+     popover a clear top edge. This fragment is shared by the room-header
+     popover and the sidebar's workspace-wide popover, so the label comes from
+     `scope_key` (set by the route from whether room_id/enclave_id was given)
+     rather than being hardcoded to one caller's scope. #}
   <div class="lc-search-head">
-    <span class="lc-search-scope">{{ "search-scope-room"|t }}</span>
+    <span class="lc-search-scope">{{ scope_key|t }}</span>
   </div>
   <div role="listbox" class="lc-search-list max-h-80 overflow-y-auto">
     {% for r in results %}
-    <a href="/{{ r.context_kind }}/{{ r.context_id }}#msg-{{ r.message_id }}" role="option" id="lc-opt-msg-{{ r.message_id }}" aria-selected="false" class="lc-search-row">
+    <a href="/{{ r.context_kind }}/{{ r.context_id }}#msg-{{ r.message_id }}" role="option" id="lc-opt-msg-{{ container_id }}-{{ r.message_id }}" aria-selected="false" class="lc-search-row">
       <img src="{{ r.author_id|avatar_url }}" alt="" loading="lazy" class="lc-search-avatar">
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-1.5 text-xs text-content-muted">
@@ -33,9 +35,9 @@
      (not a nested <form>, which is invalid inside the search form) - the button
      swaps this footer to a "Saved" confirmation, so it works in any results
      popover. #}
-  <div id="lc-save-wrap" class="lc-search-foot">
-    <input type="hidden" id="lc-save-q" name="query" value="{{ query }}">
-    <button type="button" hx-post="/searches" hx-include="#lc-save-q" hx-target="#lc-save-wrap" hx-swap="innerHTML"
+  <div id="lc-save-wrap-{{ container_id }}" class="lc-search-foot">
+    <input type="hidden" id="lc-save-q-{{ container_id }}" name="query" value="{{ query }}">
+    <button type="button" hx-post="/searches" hx-include="#lc-save-q-{{ container_id }}" hx-target="#lc-save-wrap-{{ container_id }}" hx-swap="innerHTML"
       class="lc-search-save">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-3.5 w-3.5">
         <path fill-rule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z" clip-rule="evenodd"/>

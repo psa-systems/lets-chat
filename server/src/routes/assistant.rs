@@ -89,8 +89,9 @@ fn effective_system_prompt(persona: Option<&str>) -> String {
 const THINKING_BODY: &str = "_The assistant is thinking\u{2026}_";
 
 /// Resolve (or lazily create) the shared `assistant` bot user and return it as
-/// a `User` suitable for `finalize_message_send`. LC-662: also used by the
-/// automatic post-call recap (`routes::transcripts`), which posts as the same bot.
+/// a `User` suitable for `finalize_message_send`. LC-662: also used by
+/// `routes::transcripts`'s post-call "transcript saved" notice, which posts as
+/// the same bot.
 pub(crate) async fn assistant_bot(state: &AppState) -> Result<User, AppError> {
     // LC-693: an admin can choose which bot the AI assistant posts as (settings
     // `assistant_bot_username`, set from the admin Bots page). Honor it only when
