@@ -8,7 +8,7 @@ app := "lets-chat"
 # This repo has no compose.dev.yml, so the containerized pre-commit checks run in
 # the org rust-builder image (the same one ./dev/cargo uses) via `docker run`.
 pre_commit_mode := "docker"
-dev_image := "ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie"
+dev_image := "ghcr.io/niceguyit/rust-builder-glibc:v1.2.0-rust1.98.1-trixie"
 
 # The shared hook runs one clippy/compile/test pass in a container. This repo's
 # full matrix (standalone + SaaS server, desktop, both clippy passes, fmt, and
@@ -157,7 +157,7 @@ check-desktop:
 # Run clippy lints (standalone server + desktop).
 [group('check')]
 check-clippy:
-    # Note: `-D warnings` matches the CI runner so any new lint that the Rust 1.94
+    # Note: `-D warnings` matches the CI runner so any new lint that the Rust 1.98.1
     # clippy promotes to a warning fails the local check too, instead of slipping
     # past `just check` and only blowing up after a push.
     ./dev/cargo clippy -p lets-chat-server --all-targets -- -D warnings
