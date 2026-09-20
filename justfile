@@ -52,12 +52,15 @@ default:
 # args must be computed on the host and forwarded.
 docker_version_args := '--build-arg GIT_HASH="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" --build-arg GIT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo unknown)" --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"'
 
-# Run every check: asset/template conventions, Rust compile, clippy, fmt, and JS tests.
+# Run every check: asset/template conventions, Rust compile, clippy, fmt, and JS, agent and saas tests.
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-ui-conventions check-update-injection check-count-badge check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js
+check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-ui-conventions check-update-injection check-count-badge check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js test-agent test-saas
     # Note: LC-774: `test-js` runs the browser-asset node:test suites here too, so
     # `just pre-commit` (whose `pre_commit_prepare := "check"` runs this recipe)
     # covers them alongside the Rust checks.
+    # Note: LC-944: `test-agent` (the transcription agent's bun suite) and
+    # `test-saas` (the saas-feature server suite) round this out to every suite CI
+    # runs, so a green `just pre-commit` means a green CI.
 
 # Reject raw numbered palette utilities and untokenized selection-highlight backgrounds in the browser assets and templates; both must recolor from the design tokens (LC-735, LC-736, LC-741).
 [group('check')]
@@ -423,6 +426,14 @@ test-js:
     # Note: uses Node's built-in test runner, no extra dependency. Globs
     # server/assets/*.test.js.
     node --test 'server/assets/**/*.test.js'
+
+# Run the transcription agent's unit tests (LC-816).
+[group('test')]
+test-agent:
+    # Note: four files under services/transcription-agent/test/. The suite imports
+    # only local modules, not the LiveKit SDK, so no install is needed; runs through
+    # the repo's ./dev/bun wrapper since the host carries no bun toolchain.
+    cd services/transcription-agent && ../../dev/bun test
 
 # Run desktop crate tests; run this for any PR touching desktop/ since `just check` only compiles it.
 [group('test')]
