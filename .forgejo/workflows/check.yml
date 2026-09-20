@@ -3,9 +3,9 @@
 # Validate code on every push and pull request: fmt, clippy, build, tests.
 # Mirrors the local `just check` + `just test` recipes for the SERVER (which use
 # ./dev/cargo). The server + saas targets compile natively on the runner, so this
-# job runs on the opensuse-dev runner (RUNS_ON_OPENSUSE_DEV_LATEST), the image
-# that carries a C toolchain; the opensuse-base image has no `cc` and every
-# cargo build there dies with `linker cc not found` (LC-642).
+# job runs on the HEAVY label (RUNS_ON_OPENSUSE_BASE_HEAVY, the opensuse-dev
+# image), which carries a C toolchain; the opensuse-base image has no `cc` and
+# every cargo build there dies with `linker cc not found` (LC-642).
 #
 # The desktop crate is intentionally NOT checked here. The ./dev/cargo-desktop
 # wrapper cannot run on this runner: the runner executes inside a container while
@@ -26,7 +26,8 @@ on:
 jobs:
   check:
     name: clippy + fmt + tests
-    runs-on: ${{ vars.RUNS_ON_OPENSUSE_DEV_LATEST }}
+    # HEAVY: compiles and tests the server natively (needs the dev image's cc).
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_HEAVY }}
 
     steps:
       - name: Clone the repository
@@ -39,6 +40,9 @@ jobs:
           # submodule-less checkout errors on the very first `just` call below,
           # and a plain checkout never surfaces that (LC-934).
           submodules: true
+
+      - name: Start job metrics sampler
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/job-metrics-start@main
 
       - name: Justfile guard
         # A checkout that cannot resolve the common/common.just import (an
@@ -146,12 +150,13 @@ jobs:
         run: nu ci-build/check-confirm-apostrophe.nu
 
       - name: Swap-safe inline script guard
-        # LC-837 will swap <main id="main"> instead of loading a new page, and
-        # from then on every inline <script> inside it re-runs on every
-        # navigation. A handler registered on document, a repeating timer or an
-        # observer stacks a second copy each time, and nothing throws: it just
-        # fires twice. Every inline script in a template that can render more
-        # than once therefore declares data-lc-guard="none|flag|teardown", and
+        # LC-837 boosts navigation, swapping <main id="main"> instead of
+        # loading a new page, so every inline <script> inside it re-runs on
+        # every navigation. A handler registered on document, a repeating
+        # timer or an observer stacks a second copy each time, and nothing
+        # throws: it just fires twice. Every inline script in a template that
+        # can render more than once therefore declares
+        # data-lc-guard="none|flag|teardown", and
         # "none" must contain no surviving-host registration. The script carries
         # its own self-test so a hollow rule engine fails before the scan. See
         # ci-build/check-swap-safe-scripts.nu and LC-835.
@@ -190,9 +195,9 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Cap build parallelism
-        # nproc/2 cap: never claim more than half the host (see CI.md "Concurrency cap").
-        run: echo "CARGO_BUILD_JOBS=$(($(nproc) / 2))" >> "$GITHUB_ENV"
+      - name: Build parallelism from the runner
+        # Exports CARGO_BUILD_JOBS; warns and falls back low when the runner did not set it.
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/build-parallelism@main
 
       - name: Check formatting
         run: cargo fmt --check
@@ -229,3 +234,7 @@ jobs:
       # /admin routes. Run the saas suite here so it cannot silently break again.
       - name: Tests (server, saas)
         run: cargo test -p lets-chat-server --no-default-features --features saas
+
+      - name: Report job metrics
+        if: always()
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/job-metrics-report@main

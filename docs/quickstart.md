@@ -44,11 +44,11 @@ To build and run the production-shape image instead:
 just run
 ```
 
-That builds `ci-build/Dockerfile.web` via `compose.yml` and serves on `http://127.0.0.1:8080`. Supply the mandatory Bunyip SSO vars (and any optional features) with an env file: copy `.env.standalone`, fill it in, and either add `env_file: [.env.standalone]` to `compose.yml` or pass `--env-file .env.standalone`.
+That builds `ci-build/Dockerfile.web` via `compose.yml` and serves on `http://127.0.0.1:8080`. Supply the mandatory Bunyip SSO vars (and any optional features) with an env file: copy `.env.standalone`, fill it in, and add `env_file: [.env.standalone]` to `compose.yml`'s `app` service.
 
 Run `just --list` to see all available recipes.
 
-> **Huddles or stage audio do not start locally?** `dev-web-local`, `dev-web-local-mock` and `dev-web-local-saas` all depend on `vendor-js`, which vendors the LiveKit browser SDK to `server/assets/vendor/livekit-client.umd.min.js` before the server starts. If you bypassed the recipes (e.g. running the binary directly against a bind-mounted `server/`), run `just vendor-js` yourself first.
+> **Huddles or stage audio do not start locally?** `dev-web-local`, `dev-web-local-mock`, `dev-web-local-saas` and `dev-web-local-saas-mock` all depend on `vendor-js`, which vendors the LiveKit browser SDK to `server/assets/vendor/livekit-client.umd.min.js` before the server starts. If you bypassed the recipes (e.g. running the binary directly against a bind-mounted `server/`), run `just vendor-js` yourself first.
 
 ## Local smoke test
 

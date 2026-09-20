@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Wrapper: runs cargo inside the shared org rust-builder image since the host
 # has no Rust toolchain. The image (`ghcr.io/niceguyit/rust-builder-glibc`)
-# bakes in Rust 1.94 + rustfmt + clippy + every native system library every
+# bakes in Rust 1.98.1 + rustfmt + clippy + every native system library every
 # repo under ~/projects/a8n-run/ has needed (gtk, webkit, soup, sqlite, ssl,
 # fontconfig, libgit2, X/Wayland, etc), so the local check matches the CI
 # build environment one-for-one. Image tag must stay aligned with
@@ -59,7 +59,7 @@ docker run --rm --init \
     -e "GIT_VERSION=$GIT_VERSION" \
     -e "BUILD_DATE=$BUILD_DATE" \
     -e "FIXTURE_WRITE=${FIXTURE_WRITE:-}" \
-    ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie \
+    ghcr.io/niceguyit/rust-builder-glibc:v1.2.0-rust1.98.1-trixie \
     bash -c '
         set -euo pipefail
         for d in /usr/local/cargo/registry /usr/local/cargo/git /cargo-target; do

@@ -9,6 +9,8 @@ login-page-title = Sign in
 login-forgot-link = Forgot password?
 login-no-account = No account?
 login-logo-alt = Logo
+login-bunyip-submit = Sign in with Bunyip
+login-bunyip-redirect-notice = You will be redirected to { $host } to sign in.
 
 ## Sign-in approval (bunyip/approve)
 login-approve-title = Approve sign-in
