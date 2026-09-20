@@ -1,7 +1,7 @@
 //! LC-100: i18n catalog integrity (the CI gate).
 //!
-//! 1. Every translation key referenced in a template (`"key"|t` / `"key"|tn(`)
-//!    must be defined in the English source catalog.
+//! 1. Every translation key referenced in a template (`"key"|t` / `"key"|tn(` /
+//!    `"key"|ta(`) must be defined in the English source catalog.
 //! 2. Every non-English locale must define exactly the same message ids as
 //!    English (full coverage - no missing or stray keys).
 
@@ -52,6 +52,21 @@ fn locale_keys(lang: &str) -> BTreeSet<String> {
     keys
 }
 
+/// Every locale the runtime loader ships, i.e. every subdirectory of
+/// `locales/` except `en` itself (the source/fallback catalog).
+fn other_locales() -> Vec<String> {
+    let dir = manifest("locales");
+    let mut locales: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("read dir {dir:?}: {e}"))
+        .map(|entry| entry.unwrap().path())
+        .filter(|p| p.is_dir())
+        .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .filter(|name| name != "en")
+        .collect();
+    locales.sort();
+    locales
+}
+
 /// All keys referenced via the `t` / `tn` filters across every template.
 fn referenced_keys() -> BTreeSet<String> {
     let dir = manifest("templates");
@@ -71,8 +86,9 @@ fn referenced_keys() -> BTreeSet<String> {
     keys
 }
 
-/// Pull `"<key>"|t` and `"<key>"|tn(` references out of template text. The
-/// no-space pipe is the project convention (Askama parses `"x" | t` as bitor).
+/// Pull `"<key>"|t`, `"<key>"|tn(`, and `"<key>"|ta(` references out of
+/// template text. The no-space pipe is the project convention (Askama parses
+/// `"x" | t` as bitor).
 fn collect_keys(text: &str, out: &mut BTreeSet<String>) {
     let bytes = text.as_bytes();
     let mut i = 0;
@@ -81,11 +97,13 @@ fn collect_keys(text: &str, out: &mut BTreeSet<String>) {
                              // Walk back to the opening quote.
         if let Some(openrel) = text[..close].rfind('"') {
             let key = &text[openrel + 1..close];
-            // After `"|t` must come `}`, ` `, `n`, or `(` - i.e. the `t`/`tn`
-            // filter, not some other `...|t...` substring.
+            // After `"|t` must come `}`, ` `, `n`, `a`, or `(` - i.e. the
+            // `t`/`tn`/`ta` filter, not some other `...|t...` substring.
             let after = bytes.get(close + 3).copied();
-            let is_filter = matches!(after, Some(b'n') | Some(b' ') | Some(b'}') | Some(b'('))
-                || after.is_none();
+            let is_filter = matches!(
+                after,
+                Some(b'n') | Some(b'a') | Some(b' ') | Some(b'}') | Some(b'(')
+            ) || after.is_none();
             if is_filter
                 && !key.is_empty()
                 && key
@@ -113,19 +131,31 @@ fn every_referenced_key_exists_in_english() {
 #[test]
 fn locales_have_full_coverage_against_english() {
     let en = locale_keys("en");
-    // Grows as locales are added (LC-188); a single entry today is fine.
-    #[allow(clippy::single_element_loop)]
-    for locale in ["es"] {
-        let other = locale_keys(locale);
+    // Derived from the `locales/` directory (LC-942), so a new locale is
+    // gated the moment it lands with no edit to this test.
+    for locale in other_locales() {
+        let other = locale_keys(&locale);
         let missing: Vec<&String> = en.difference(&other).collect();
         let stray: Vec<&String> = other.difference(&en).collect();
         assert!(
             missing.is_empty(),
-            "locale {locale} is missing keys vs English: {missing:?}"
+            "locales/{locale} is missing keys vs English: {missing:?}"
         );
         assert!(
             stray.is_empty(),
-            "locale {locale} has keys not in English: {stray:?}"
+            "locales/{locale} has keys not in English: {stray:?}"
+        );
+    }
+}
+
+#[test]
+fn every_shipped_locale_has_a_native_name() {
+    // LC-942: a locale that reaches the Settings picker with a blank
+    // native-name label is a shipping defect, not just a cosmetic gap.
+    for locale in other_locales() {
+        assert!(
+            !lets_chat::i18n::native_name(&locale).is_empty(),
+            "locales/{locale} has no native_name entry"
         );
     }
 }

@@ -134,15 +134,31 @@ pub async fn require_llm_workspace(state: &AppState, user: &User) -> Result<(), 
     }
 }
 
-/// LC-702: is `user` allowed to use AI in `room_id`'s context, honoring the
-/// audience setting? `"everyone"` (default) admits any member; `"staff"` narrows
-/// to [`privileged_in_room`]. This is the predicate the render paths and route
-/// guards ask; the flag-on check stays separate (callers gate on both).
+/// LC-941: is the room's own AI toggle (`rooms.assistant_enabled`) on? This is
+/// the room manager's control, independent of the global flag and audience:
+/// with it off, no AI surface may touch the room's content, no matter how
+/// privileged the viewer is. A missing room reads as off (the restrictive
+/// default), matching [`crate::db::chat::get_room_assistant_enabled`].
+pub async fn room_ai_enabled(state: &AppState, room_id: i64) -> Result<bool, AppError> {
+    Ok(db::chat::get_room_assistant_enabled(&state.chat, room_id).await?)
+}
+
+/// LC-702/LC-941: is `user` allowed to use AI in `room_id`'s context, honoring
+/// both the room's own toggle and the audience setting? The room toggle is
+/// checked first and is absolute - off means off for everyone, including a
+/// site admin, since a room manager who opts a room out needs that to hold
+/// regardless of who is asking. Once the room is opted in, `"everyone"`
+/// (default) admits any member; `"staff"` narrows to [`privileged_in_room`].
+/// This is the predicate the render paths and route guards ask; the flag-on
+/// check stays separate (callers gate on both).
 pub async fn allowed_in_room(
     state: &AppState,
     room_id: i64,
     user: &User,
 ) -> Result<bool, AppError> {
+    if !room_ai_enabled(state, room_id).await? {
+        return Ok(false);
+    }
     if audience_is_everyone(state).await {
         return Ok(true);
     }

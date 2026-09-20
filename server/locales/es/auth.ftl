@@ -7,6 +7,8 @@ login-page-title = Iniciar sesión
 login-forgot-link = ¿Olvidaste tu contraseña?
 login-no-account = ¿No tienes cuenta?
 login-logo-alt = Logotipo
+login-bunyip-submit = Iniciar sesión con Bunyip
+login-bunyip-redirect-notice = Serás redirigido a { $host } para iniciar sesión.
 
 ## Aprobación de inicio de sesión (bunyip/approve)
 login-approve-title = Aprobar inicio de sesión

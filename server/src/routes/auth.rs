@@ -50,6 +50,12 @@ fn map_sso_error(code: &str) -> &'static str {
         // LC-826: the development-only LETS_CHAT_DEV_NO_SSO opt-out booted with
         // no RP at all.
         "unconfigured" => "Single sign-on is not configured on this server.",
+        // LC-939: the emailed approval code (LC-587) expired, was already used,
+        // or hit the attempt cap. Distinct from a generic SSO failure because the
+        // recovery is just signing in again.
+        "approval" => {
+            "Your sign-in approval code expired or was already used. Sign in again to get a new one."
+        }
         _ => "Sign-in failed.",
     }
 }
@@ -106,4 +112,35 @@ pub(crate) fn build_session_cookie(secure: bool, token: String) -> Cookie<'stati
     c.set_path("/");
     c.set_max_age(Duration::days(30));
     c
+}
+
+#[cfg(test)]
+mod tests {
+    use super::map_sso_error;
+    use regex::Regex;
+    use std::collections::HashSet;
+
+    // LC-939: `bunyip_sso.rs` redirects to `/login?sso_error=<code>` from
+    // several call sites via a string literal, not through `sso_error_code`,
+    // so a new one can silently take `map_sso_error`'s catch-all (as happened
+    // with "approval"). Enumerate every literal in that file and require a
+    // non-default arm here for each, so the next one fails this test instead.
+    #[test]
+    fn every_literal_sso_error_code_has_a_mapped_message() {
+        let source = include_str!("bunyip_sso.rs");
+        let re = Regex::new(r#"sso_error=([A-Za-z_]+)"#).unwrap();
+        let codes: HashSet<&str> = re
+            .captures_iter(source)
+            .map(|c| c.get(1).unwrap().as_str())
+            .collect();
+        assert!(!codes.is_empty(), "expected to find sso_error literals");
+
+        for code in codes {
+            assert_ne!(
+                map_sso_error(code),
+                "Sign-in failed.",
+                "sso_error={code} falls through to the generic catch-all"
+            );
+        }
+    }
 }
