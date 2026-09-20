@@ -97,14 +97,36 @@ pub async fn get_dm(
     // Find or create the underlying DM room. The DM room is named after the
     // peer relative to the creator; the rendered title uses peer.username
     // directly so the displayed name matches whoever the viewer is talking to.
-    let room = match db::chat::find_dm_room(&state.chat, &user.id, &peer.id).await? {
-        Some(r) => r,
-        None => {
-            // A private profile cannot be DM'd by someone who has no prior
-            // conversation with them. Render Home with an inline error bubble
-            // so the user gets app chrome and a clear explanation rather than
-            // a bare 404.
-            if !peer.is_profile_public {
+    // A private profile cannot be DM'd by someone who has no prior conversation
+    // with them, so that branch only ever finds - it never creates.
+    let room = if peer.is_profile_public {
+        let dm_name = format!("@{}", peer.username);
+        // LC-909: race-safe find-or-create, so a concurrent request for the
+        // same pair can never produce two rooms; `created` is only true when
+        // this call is the one that found nothing and went on to attempt the
+        // create, so the "new DM" sidebar nudge fires on that side only, per
+        // find_or_create_dm_room's own doc comment.
+        let (r, created) =
+            db::chat::find_or_create_dm_room(&state.chat, &dm_name, &user.id, &peer.id).await?;
+        if created {
+            // Notify both parties so their sidebars pick up the new DM live.
+            // Each user receives RoomMemberAdded for their own user_id; the WS
+            // handler then re-renders that user's sidebar OOB.
+            for member_id in [&user.id, &peer.id] {
+                let event = ChatEvent::RoomMemberAdded {
+                    room_id: r.id,
+                    user_id: member_id.clone(),
+                };
+                state.hub.broadcast_to_user(member_id, &event);
+            }
+        }
+        r
+    } else {
+        match db::chat::find_dm_room(&state.chat, &user.id, &peer.id).await? {
+            Some(r) => r,
+            None => {
+                // Render Home with an inline error bubble so the user gets app
+                // chrome and a clear explanation rather than a bare 404.
                 let (
                     sidebar_categories,
                     sidebar_starred_rooms,
@@ -149,19 +171,6 @@ pub async fn get_dm(
                 };
                 return Ok(html(&page)?.into_response());
             }
-            let dm_name = format!("@{}", peer.username);
-            let r = db::chat::create_dm_room(&state.chat, &dm_name, &user.id, &peer.id).await?;
-            // Notify both parties so their sidebars pick up the new DM live.
-            // Each user receives RoomMemberAdded for their own user_id; the WS
-            // handler then re-renders that user's sidebar OOB.
-            for member_id in [&user.id, &peer.id] {
-                let event = ChatEvent::RoomMemberAdded {
-                    room_id: r.id,
-                    user_id: member_id.clone(),
-                };
-                state.hub.broadcast_to_user(member_id, &event);
-            }
-            r
         }
     };
     let room_id = room.id;

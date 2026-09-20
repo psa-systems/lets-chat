@@ -3,8 +3,8 @@
 //! (`/name [args]`) and expanded by `routes::slash::try_dispatch`.
 
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
 use crate::auth::AuthUser;
@@ -36,6 +36,7 @@ fn valid_name(name: &str) -> bool {
 pub async fn post_create(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<CannedForm>,
 ) -> Result<Response, AppError> {
     let name = form
@@ -82,7 +83,10 @@ pub async fn post_create(
         }
         Err(e) => return Err(e.into()),
     }
-    Ok(Redirect::to("/settings?ok=canned-added#canned").into_response())
+    Ok(super::redirect_or_hx(
+        &headers,
+        "/settings?ok=canned-added#canned",
+    ))
 }
 
 /// POST /settings/canned/{id}/delete - remove one of the caller's canned
@@ -91,10 +95,14 @@ pub async fn post_delete(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path(id): Path<i64>,
+    headers: HeaderMap,
 ) -> Result<Response, AppError> {
     let removed = db::slash::delete_canned(&state.chat, &user.id, id).await?;
     if removed == 0 {
         return Err(AppError::NotFound);
     }
-    Ok(Redirect::to("/settings?ok=canned-deleted#canned").into_response())
+    Ok(super::redirect_or_hx(
+        &headers,
+        "/settings?ok=canned-deleted#canned",
+    ))
 }
