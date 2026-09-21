@@ -37,7 +37,7 @@ tracing = { workspace = true }
 axum = { version = "0.8", features = ["ws", "macros", "multipart"] }
 axum-extra = { version = "0.10", features = ["cookie"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip"] }
+tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip", "compression-br"] }
 http = "1"
 askama = "0.12"
 # LC-100: i18n. fluent-templates embeds server/locales/**/*.ftl at compile time
