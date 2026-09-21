@@ -1001,3 +1001,35 @@ async fn expired_reservation_does_not_block_change_username() {
         .expect("an expired reservation refuses no one");
     assert_eq!(change.new, "skyler");
 }
+
+#[tokio::test]
+async fn bot_handles_are_reserved_and_human_row_is_not_the_bot() {
+    let pool = setup_pool().await;
+    let id = create_user(&pool, "erin", "").await.unwrap();
+    for name in ["assistant", "AUTOMATION", "Assistant"] {
+        let err = change_username(&pool, &id, name, true, false)
+            .await
+            .expect_err("bot handle refused");
+        assert!(matches!(err, ChangeHandleError::Reserved));
+        assert!(!lets_chat::db::auth::handle_available_for(&pool, name, "")
+            .await
+            .unwrap());
+    }
+
+    // A pre-existing human `assistant` row is not resolved as the bot.
+    create_user(&pool, "assistant", "").await.unwrap();
+    assert!(
+        lets_chat::db::auth::find_bot_by_username(&pool, "assistant")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let bot = lets_chat::db::auth::create_bot(&pool, "automation")
+        .await
+        .unwrap();
+    let rec = lets_chat::db::auth::find_bot_by_username(&pool, "automation")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(rec.id, bot);
+}
