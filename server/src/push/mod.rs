@@ -415,7 +415,7 @@ async fn fan_out_apns(state: &AppState, recipient_user_id: &str, payload: &Bytes
                     if let Err(e) =
                         db::apns_subscriptions::bump_last_seen(&auth_pool, &sub.device_token).await
                     {
-                        tracing::warn!(error = %e, token = %sub.device_token, "apns last_seen bump failed");
+                        tracing::warn!(error = %e, subscription = %sub.id, "apns last_seen bump failed");
                     }
                 }
                 Err(PushError::EndpointGone(_)) => {
@@ -424,11 +424,11 @@ async fn fan_out_apns(state: &AppState, recipient_user_id: &str, payload: &Bytes
                     if let Err(e) =
                         db::apns_subscriptions::delete_by_token(&auth_pool, &sub.device_token).await
                     {
-                        tracing::warn!(error = %e, token = %sub.device_token, "apns subscription delete failed");
+                        tracing::warn!(error = %e, subscription = %sub.id, "apns subscription delete failed");
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, token = %sub.device_token, "apns send failed");
+                    tracing::warn!(error = %e, subscription = %sub.id, "apns send failed");
                 }
             }
         });
@@ -465,7 +465,7 @@ async fn fan_out_fcm(state: &AppState, recipient_user_id: &str, payload: &Bytes)
                         db::fcm_subscriptions::bump_last_seen(&auth_pool, &sub.registration_token)
                             .await
                     {
-                        tracing::warn!(error = %e, token = %sub.registration_token, "fcm last_seen bump failed");
+                        tracing::warn!(error = %e, subscription = %sub.id, "fcm last_seen bump failed");
                     }
                 }
                 Err(PushError::EndpointGone(_)) => {
@@ -475,11 +475,11 @@ async fn fan_out_fcm(state: &AppState, recipient_user_id: &str, payload: &Bytes)
                         db::fcm_subscriptions::delete_by_token(&auth_pool, &sub.registration_token)
                             .await
                     {
-                        tracing::warn!(error = %e, token = %sub.registration_token, "fcm subscription delete failed");
+                        tracing::warn!(error = %e, subscription = %sub.id, "fcm subscription delete failed");
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, token = %sub.registration_token, "fcm send failed");
+                    tracing::warn!(error = %e, subscription = %sub.id, "fcm send failed");
                 }
             }
         });
