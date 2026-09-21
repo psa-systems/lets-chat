@@ -39,6 +39,11 @@ jobs:
     name: Build and push lets-chat
     # HEAVY: runs `docker buildx build`, which compiles the server in the image.
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_HEAVY }}
+    # Forgejo ignores `permissions:` (capabilities come from Authorized
+    # Integrations); kept commented for a possible move to GitHub Actions.
+    # permissions:
+    #   contents: read
+    #   packages: write
     env:
       IMAGE_REGISTRY: ""
       REGISTRY_PROVIDER: dev.a8n.run
