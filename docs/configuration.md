@@ -78,6 +78,8 @@ may be `localhost` or internal; never point one at an untrusted host.
 
 ## Desktop app
 
+These variables are read by the desktop binary on the user's machine, never by the server, so they are deliberately absent from `.env.standalone` and `.env.saas` (those are server deployment templates) and no `.env.desktop` exists. Set them in the desktop process environment.
+
 | Variable | Default | Description |
 |---|---|---|
 | `LETS_CHAT_SERVER_URL` | `http://localhost:8080` | URL the desktop wrapper opens. Server-only deployments can ignore it. |
