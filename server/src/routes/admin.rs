@@ -1024,6 +1024,7 @@ pub async fn post_ban(
 ) -> Result<Html, AppError> {
     guard_not_last_admin(&state, &user_id).await?;
     db::auth::ban_user(&state.auth, &user_id, None).await?;
+    state.hub.unsubscribe_user_from_topic(&user_id, "admin");
     db::moderation::log_mod_action(&state.chat, "ban", &user_id, &actor.id, None, None, None)
         .await?;
     state.hub.broadcast_global(&ChatEvent::UserBanned {
@@ -1151,6 +1152,9 @@ pub async fn post_role(
         guard_not_last_admin(&state, &user_id).await?;
     }
     db::auth::set_user_role(&state.auth, &user_id, role).await?;
+    if role != "admin" {
+        state.hub.unsubscribe_user_from_topic(&user_id, "admin");
+    }
     db::moderation::log_mod_action(
         &state.chat,
         "role_change",
@@ -1176,6 +1180,7 @@ pub async fn post_delete_user(
     guard_not_last_admin(&state, &user_id).await?;
     db::auth::delete_user_sessions(&state.auth, &user_id).await?;
     db::auth::delete_user(&state.auth, &user_id).await?;
+    state.hub.unsubscribe_user_from_topic(&user_id, "admin");
     db::moderation::log_mod_action(
         &state.chat,
         "delete_user",
