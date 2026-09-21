@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1.6
+
+# LC-997: pre-merge gate for the desktop crate (fmt, clippy, tests).
+#
+# Run via `docker buildx build`, which ships the build context to the daemon
+# instead of bind-mounting the workdir (the ./dev/cargo-desktop wrapper cannot
+# run on the CI runner). Any failing step fails the build. The image tag must
+# stay aligned with Dockerfile.desktop-linux.
+FROM ghcr.io/niceguyit/rust-builder-glibc:v1.2.0-rust1.98.1-trixie
+
+ARG CARGO_BUILD_JOBS=default
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
+
+WORKDIR /build
+COPY . .
+
+RUN cargo fmt -p lets-chat-desktop --check
+RUN cargo clippy -p lets-chat-desktop --all-targets -- -D warnings
+RUN cargo test -p lets-chat-desktop

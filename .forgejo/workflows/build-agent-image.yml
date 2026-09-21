@@ -85,13 +85,19 @@ jobs:
       - name: Resolve publish mode, train and tag
         id: resolve
         shell: nu {0}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          SIMULATE_TAG: ${{ inputs.simulate_tag }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           # Trigger-derived mode, never git describe (see build-oci-image.yml
           # and ci-build/get-tags.nu for the twin-publish race this avoids).
-          let event = "${{ github.event_name }}"
-          let ref_type = "${{ github.ref_type }}"
-          let ref_name = "${{ github.ref_name }}"
-          let simulate_tag = "${{ inputs.simulate_tag }}"
+          let event = $env.EVENT_NAME
+          let ref_type = $env.REF_TYPE
+          let ref_name = $env.REF_NAME
+          let simulate_tag = $env.SIMULATE_TAG
           let mode = if $event == "workflow_dispatch" {
             "dry-run"
           } else if $ref_type == "tag" {
@@ -99,7 +105,7 @@ jobs:
           } else {
             "latest"
           }
-          let dry_run = ($event == "workflow_dispatch" and "${{ inputs.dry_run }}" != "false")
+          let dry_run = ($event == "workflow_dispatch" and $env.INPUT_DRY_RUN != "false")
           let r = (^nu ci-build/get-tags.nu --mode $mode --ref-name $ref_name --simulate-tag $simulate_tag --json | from json)
           $"mode=($r.mode)\n" | save --append $env.GITHUB_OUTPUT
           $"train=($r.train)\n" | save --append $env.GITHUB_OUTPUT
@@ -111,13 +117,16 @@ jobs:
       - name: Log in to container registry
         shell: nu {0}
         run: |
-          ^docker login --username $env.REGISTRY_USER --password $env.REGISTRY_PASSWORD $env.REGISTRY_PROVIDER
+          $env.REGISTRY_PASSWORD | ^docker login --username $env.REGISTRY_USER --password-stdin $env.REGISTRY_PROVIDER
 
       - name: Build and push image
         shell: nu {0}
+        env:
+          RESOLVED_TAG: ${{ steps.resolve.outputs.tag }}
+          RESOLVED_DRY_RUN: ${{ steps.resolve.outputs.dry_run }}
         run: |
-          let tag = "${{ steps.resolve.outputs.tag }}"
-          let dry_run = ("${{ steps.resolve.outputs.dry_run }}" == "true")
+          let tag = $env.RESOLVED_TAG
+          let dry_run = ($env.RESOLVED_DRY_RUN == "true")
           let image = "lets-chat-transcription-agent"
           let registry = $env.IMAGE_REGISTRY
           let tag_args = [-t $"($registry)/($image):($tag)"]
@@ -142,9 +151,12 @@ jobs:
 
       - name: Print image URLs
         shell: nu {0}
+        env:
+          RESOLVED_TAG: ${{ steps.resolve.outputs.tag }}
+          RESOLVED_DRY_RUN: ${{ steps.resolve.outputs.dry_run }}
         run: |
-          let tag = "${{ steps.resolve.outputs.tag }}"
-          let dry_run = ("${{ steps.resolve.outputs.dry_run }}" == "true")
+          let tag = $env.RESOLVED_TAG
+          let dry_run = ($env.RESOLVED_DRY_RUN == "true")
           let prefix = if $dry_run { "[dry-run] WOULD push image to" } else { "Image pushed to" }
           let image = "lets-chat-transcription-agent"
           let registry = $env.IMAGE_REGISTRY

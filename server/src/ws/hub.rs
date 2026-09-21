@@ -324,6 +324,30 @@ impl Hub {
             .unwrap_or_default()
     }
 
+    /// The voice (huddle) and stage room ids `user_id` currently occupies, read
+    /// without mutating so a ban can name the LiveKit rooms to evict them from.
+    pub fn media_rooms_of_user(&self, user_id: &str) -> (Vec<i64>, Vec<i64>) {
+        let voice = self
+            .voice_rooms
+            .iter()
+            .filter(|e| {
+                e.value().iter().any(|c| {
+                    self.connections
+                        .get(c)
+                        .is_some_and(|conn| conn.user_id == user_id)
+                })
+            })
+            .map(|e| *e.key())
+            .collect();
+        let stage = self
+            .stages
+            .iter()
+            .filter(|s| s.participants.contains(user_id))
+            .map(|s| *s.key())
+            .collect();
+        (voice, stage)
+    }
+
     /// True when `conn_id` is currently joined to voice channel `room_id`.
     pub fn is_in_voice_room(&self, conn_id: ConnId, room_id: i64) -> bool {
         self.voice_conn
@@ -429,15 +453,16 @@ impl Hub {
         true
     }
 
-    /// Consume the room's pending request, returning the requester it belonged
-    /// to. `None` when nothing (unexpired) is pending - a grant/deny with no
-    /// live request has nobody to answer and must be dropped.
-    pub fn take_control_pending(&self, room_id: i64) -> Option<String> {
+    /// Consume the room's pending request only if it was aimed at
+    /// `sharer_id`, returning the requester it belonged to. `None` when nothing
+    /// (unexpired) is pending or it is addressed to a different sharer, which
+    /// leaves that request intact.
+    pub fn take_control_pending_for_sharer(&self, room_id: i64, sharer_id: &str) -> Option<String> {
         if !self.control_pending_active(room_id) {
             return None;
         }
         self.control_pending
-            .remove(&room_id)
+            .remove_if(&room_id, |_, p| p.sharer_id == sharer_id)
             .map(|(_, p)| p.requester_id)
     }
 
@@ -893,6 +918,24 @@ impl Hub {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // LC-982: a grant/deny only resolves a request addressed to the caller.
+    #[test]
+    fn take_control_pending_is_bound_to_the_recorded_sharer() {
+        let hub = Hub::new();
+        assert!(hub.set_control_pending(1, "req", "sharer_a"));
+
+        assert_eq!(hub.take_control_pending_for_sharer(1, "sharer_b"), None);
+        assert!(
+            hub.control_pending_active(1),
+            "a mismatched sharer must leave the request intact"
+        );
+        assert_eq!(
+            hub.take_control_pending_for_sharer(1, "sharer_a"),
+            Some("req".to_string())
+        );
+        assert!(!hub.control_pending_active(1));
+    }
 
     // LC-176: a user dropped from a topic stops receiving its events on every
     // one of their connections, while other users on the topic are unaffected.

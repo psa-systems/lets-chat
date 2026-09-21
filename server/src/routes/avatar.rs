@@ -9,8 +9,8 @@ use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
 
-/// LC-781 (F11): a `?v=<token>` marks a versioned avatar URL. Its presence (not
-/// its value) flips the response to `immutable`; the token only has to differ
+/// LC-781 (F11): a `?v=<token>` marks a versioned avatar URL. A well-formed token (see
+/// `avatar_version::is_token`) flips the response to `immutable`; the token only has to differ
 /// across uploads, which `crate::avatar_version` guarantees.
 #[derive(Deserialize)]
 pub struct AvatarQuery {
@@ -36,7 +36,10 @@ pub async fn get_avatar(
     Query(query): Query<AvatarQuery>,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
-    let versioned = query.v.is_some();
+    let versioned = query
+        .v
+        .as_deref()
+        .is_some_and(crate::avatar_version::is_token);
     // LC-701: an unknown id (a message author who is a bot or a since-deleted
     // user, e.g. surfaced in search results) must still resolve to an image, not
     // 404. `/avatars/{id}` is referenced unconditionally by chat rows, the voice

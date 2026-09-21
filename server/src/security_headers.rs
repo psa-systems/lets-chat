@@ -99,5 +99,71 @@ pub async fn set_security_headers(req: Request, next: Next) -> Response {
     headers
         .entry(PERMISSIONS_POLICY_NAME)
         .or_insert(PERMISSIONS_POLICY);
+    privatize_cookie_responses(headers);
     resp
+}
+
+/// A response carrying `Set-Cookie` (the locale and preference middleware can
+/// add one to any route) must never be stored by a shared cache, so a `public`
+/// Cache-Control is rewritten to `private`.
+fn privatize_cookie_responses(headers: &mut axum::http::HeaderMap) {
+    if !headers.contains_key(header::SET_COOKIE) {
+        return;
+    }
+    let Some(cc) = headers
+        .get(header::CACHE_CONTROL)
+        .and_then(|v| v.to_str().ok())
+    else {
+        return;
+    };
+    if cc
+        .split(',')
+        .any(|d| d.trim().eq_ignore_ascii_case("public"))
+    {
+        let fixed = cc
+            .split(',')
+            .map(|d| {
+                if d.trim().eq_ignore_ascii_case("public") {
+                    "private"
+                } else {
+                    d.trim()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        if let Ok(v) = HeaderValue::from_str(&fixed) {
+            headers.insert(header::CACHE_CONTROL, v);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn public_becomes_private_with_set_cookie() {
+        let mut h = axum::http::HeaderMap::new();
+        h.insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
+        );
+        h.insert(header::SET_COOKIE, HeaderValue::from_static("a=b"));
+        privatize_cookie_responses(&mut h);
+        assert_eq!(
+            h[header::CACHE_CONTROL],
+            "private, max-age=31536000, immutable"
+        );
+    }
+
+    #[test]
+    fn public_kept_without_set_cookie() {
+        let mut h = axum::http::HeaderMap::new();
+        h.insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=1"),
+        );
+        privatize_cookie_responses(&mut h);
+        assert_eq!(h[header::CACHE_CONTROL], "public, max-age=1");
+    }
 }
