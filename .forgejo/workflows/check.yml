@@ -7,7 +7,7 @@
 # image), which carries a C toolchain; the opensuse-base image has no `cc` and
 # every cargo build there dies with `linker cc not found` (LC-642).
 #
-# The desktop crate is intentionally NOT checked here. The ./dev/cargo-desktop
+# The desktop crate is intentionally NOT checked here (desktop-check.yml gates it, LC-997). The ./dev/cargo-desktop
 # wrapper cannot run on this runner: the runner executes inside a container while
 # the docker daemon runs on the host, so the wrapper's `-v $PWD:/work` bind mount
 # resolves against the host filesystem and lands on an empty directory. The
