@@ -2111,6 +2111,21 @@ pub async fn username_exists(pool: &SqlitePool, username: &str) -> Result<bool, 
     Ok(n > 0)
 }
 
+/// LC-978: handles of the built-in bots. No human account may hold them, so the
+/// lazily-created bot rows can never be pre-empted by a claimed handle.
+pub const RESERVED_BOT_HANDLES: [&str; 2] = ["assistant", "automation"];
+
+/// LC-978: look up an active bot by username. A human or banned row holding the
+/// name is never returned, so callers never treat it as the bot.
+pub async fn find_bot_by_username(
+    pool: &SqlitePool,
+    username: &str,
+) -> Result<Option<UserRecord>, sqlx::Error> {
+    Ok(find_user_by_username(pool, username)
+        .await?
+        .filter(|r| r.is_bot && !r.is_banned))
+}
+
 /// LC-913: the one availability predicate for a handle, shared by every path
 /// that assigns one: provisioning (`pick_username`), the welcome prompt's
 /// accept-unchanged branch, and `change_username`. A handle is unavailable to
@@ -2128,6 +2143,12 @@ pub async fn handle_available_for<'e, E>(
 where
     E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
 {
+    if RESERVED_BOT_HANDLES
+        .iter()
+        .any(|r| r.eq_ignore_ascii_case(handle))
+    {
+        return Ok(false);
+    }
     let available: bool = sqlx::query_scalar(
         "SELECT NOT EXISTS (SELECT 1 FROM users WHERE username = ? COLLATE NOCASE AND id != ?) \
            AND NOT EXISTS (SELECT 1 FROM reserved_usernames \
@@ -2283,6 +2304,12 @@ pub async fn change_username(
     // within its window? Run through the shared predicate, inside this
     // transaction, so the check stays race-free with the write below.
     if !handle_available_for(&mut *tx, new_username, user_id).await? {
+        if RESERVED_BOT_HANDLES
+            .iter()
+            .any(|r| r.eq_ignore_ascii_case(new_username))
+        {
+            return Err(ChangeHandleError::Reserved);
+        }
         let taken: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM users WHERE username = ? COLLATE NOCASE AND id != ?",
         )
