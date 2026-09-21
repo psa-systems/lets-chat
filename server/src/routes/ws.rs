@@ -2397,8 +2397,15 @@ pub(crate) async fn remote_control_email_verified(
 
 /// LC-183: the security gate for any remote-control consent signal between
 /// `a` and `b`. Both must be email-verified (per the build's definition) and
-/// neither may have blocked the other. Fails closed: any lookup error denies.
+/// neither may have blocked the other nor be banned. Fails closed: any lookup
+/// error or missing user denies.
 pub(crate) async fn remote_control_allowed(auth: &sqlx::SqlitePool, a: &str, b: &str) -> bool {
+    for id in [a, b] {
+        match db::auth::find_user_by_id(auth, id).await {
+            Ok(Some(u)) if !u.is_banned => {}
+            _ => return false,
+        }
+    }
     if db::auth::is_blocked_either_way(auth, a, b)
         .await
         .unwrap_or(true)
@@ -4106,5 +4113,28 @@ mod tests {
         db::auth::block_user(&auth, &a, &b).await.unwrap();
         assert!(!remote_control_allowed(&auth, &a, &b).await);
         assert!(!remote_control_allowed(&auth, &b, &a).await);
+    }
+
+    // LC-981: a banned party on either side denies, so request and grant
+    // (which both go through the gate) refuse a banned requester or sharer.
+    #[tokio::test]
+    async fn gate_denies_when_either_party_is_banned() {
+        let auth = auth_pool().await;
+        let a = db::auth::create_user(&auth, "alice", "h").await.unwrap();
+        let b = db::auth::create_user(&auth, "bob", "h").await.unwrap();
+        verify(&auth, &a).await;
+        verify(&auth, &b).await;
+        db::auth::ban_user(&auth, &a, None).await.unwrap();
+        assert!(!remote_control_allowed(&auth, &a, &b).await);
+        assert!(!remote_control_allowed(&auth, &b, &a).await);
+    }
+
+    // LC-981: a failed lookup (here, an unknown user) fails closed.
+    #[tokio::test]
+    async fn gate_denies_when_user_lookup_fails() {
+        let auth = auth_pool().await;
+        let a = db::auth::create_user(&auth, "alice", "h").await.unwrap();
+        verify(&auth, &a).await;
+        assert!(!remote_control_allowed(&auth, &a, "missing").await);
     }
 }
