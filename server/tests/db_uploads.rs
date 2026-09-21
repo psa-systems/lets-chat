@@ -258,7 +258,7 @@ async fn link_preview_image_cache_round_trips() {
     assert!(none.is_none());
 
     let bytes = vec![1u8, 2, 3, 4];
-    lets_chat::db::uploads::set_cached_image(&pool, "deadbeef", "image/png", &bytes)
+    lets_chat::db::uploads::set_cached_image(&pool, "deadbeef", "image/png", &bytes, i64::MAX)
         .await
         .unwrap();
 
@@ -272,7 +272,7 @@ async fn link_preview_image_cache_round_trips() {
 
     // Re-fetching updates the bytes and content type in place.
     let bytes2 = vec![9u8, 9, 9];
-    lets_chat::db::uploads::set_cached_image(&pool, "deadbeef", "image/webp", &bytes2)
+    lets_chat::db::uploads::set_cached_image(&pool, "deadbeef", "image/webp", &bytes2, i64::MAX)
         .await
         .unwrap();
     let cached2 = lets_chat::db::uploads::get_cached_image(&pool, "deadbeef")
@@ -281,4 +281,46 @@ async fn link_preview_image_cache_round_trips() {
         .expect("should still exist after re-fetch");
     assert_eq!(cached2.content_type, "image/webp");
     assert_eq!(cached2.bytes, bytes2);
+}
+
+/// LC-985: the global quota refuses writes past the cap, and the sweep clears
+/// bytes older than the TTL.
+#[tokio::test]
+async fn link_preview_image_cache_quota_and_expiry() {
+    let pool = setup_chat_pool().await;
+    for h in ["aa", "bb"] {
+        lets_chat::db::uploads::upsert_link_preview(&pool, h, "https://e.com", None, None, None)
+            .await
+            .unwrap();
+    }
+    let db = lets_chat::db::uploads::set_cached_image;
+    assert!(db(&pool, "aa", "image/png", &[0u8; 10], 15).await.unwrap());
+    assert!(!db(&pool, "bb", "image/png", &[0u8; 10], 15).await.unwrap());
+    assert!(lets_chat::db::uploads::get_cached_image(&pool, "bb")
+        .await
+        .unwrap()
+        .is_none());
+    // Rewriting the same row does not count its own old bytes.
+    assert!(db(&pool, "aa", "image/png", &[0u8; 15], 15).await.unwrap());
+
+    assert_eq!(
+        lets_chat::db::uploads::clear_expired_cached_images(&pool, 86400)
+            .await
+            .unwrap(),
+        0
+    );
+    sqlx::query("UPDATE link_previews SET image_fetched_at = datetime('now', '-2 days')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        lets_chat::db::uploads::clear_expired_cached_images(&pool, 86400)
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(lets_chat::db::uploads::get_cached_image(&pool, "aa")
+        .await
+        .unwrap()
+        .is_none());
 }

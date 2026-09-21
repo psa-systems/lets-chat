@@ -534,24 +534,49 @@ pub async fn get_cached_image(
 
 /// Store the freshly fetched thumbnail bytes for `url_hash`, stamping
 /// `image_fetched_at` to now. A no-op if the row itself doesn't exist (it is
-/// written by `upsert_link_preview` before this is ever called).
+/// written by `upsert_link_preview` before this is ever called). LC-985:
+/// refuses (returns `false`) when the write would push the total cached image
+/// bytes over `max_total_bytes`, not counting this row's current bytes.
 pub async fn set_cached_image(
     pool: &SqlitePool,
     url_hash: &str,
     content_type: &str,
     bytes: &[u8],
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
+    max_total_bytes: i64,
+) -> Result<bool, sqlx::Error> {
+    let res = sqlx::query(
         "UPDATE link_previews \
          SET image_data = ?, image_content_type = ?, image_fetched_at = datetime('now') \
-         WHERE url_hash = ?",
+         WHERE url_hash = ? \
+           AND (SELECT COALESCE(SUM(LENGTH(image_data)), 0) FROM link_previews \
+                WHERE url_hash != ?) + ? <= ?",
     )
     .bind(bytes)
     .bind(content_type)
     .bind(url_hash)
+    .bind(url_hash)
+    .bind(bytes.len() as i64)
+    .bind(max_total_bytes)
     .execute(pool)
     .await?;
-    Ok(())
+    Ok(res.rows_affected() > 0)
+}
+
+/// LC-985: clear cached image bytes on rows whose image is older than
+/// `ttl_secs`. Returns the number of rows cleared.
+pub async fn clear_expired_cached_images(
+    pool: &SqlitePool,
+    ttl_secs: i64,
+) -> Result<u64, sqlx::Error> {
+    let res = sqlx::query(
+        "UPDATE link_previews \
+         SET image_data = NULL, image_content_type = NULL, image_fetched_at = NULL \
+         WHERE image_data IS NOT NULL AND image_fetched_at < datetime('now', ?)",
+    )
+    .bind(format!("-{ttl_secs} seconds"))
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
 }
 
 pub async fn upsert_link_preview(
