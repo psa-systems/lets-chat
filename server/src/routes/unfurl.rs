@@ -21,6 +21,32 @@ const MAX_PREVIEW_BYTES: usize = 1024 * 1024;
 /// LC-857: a preview thumbnail is small; 5 MiB is generous headroom while
 /// bounding what one proxied fetch can pull into memory.
 const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
+/// LC-985: only thumbnails up to this size are written to `image_data`; larger
+/// images are served uncached.
+const MAX_CACHED_IMAGE_BYTES: usize = 512 * 1024;
+/// LC-985: global cap on total cached image bytes across all rows.
+const MAX_CACHE_TOTAL_BYTES: i64 = 256 * 1024 * 1024;
+/// LC-985: per-user, per-minute cap on each unfurl route.
+const UNFURL_RATE_PER_MIN: u32 = 60;
+const UNFURL_IMAGE_RATE_PER_MIN: u32 = 120;
+
+fn check_rate(
+    state: &AppState,
+    kind: crate::rate_limit::RateLimitKind,
+    user_id: &str,
+    limit: u32,
+) -> Result<(), AppError> {
+    if let crate::rate_limit::Outcome::Deny { retry_after } =
+        state.rate_limits.check(kind, user_id, limit)
+    {
+        return Err(AppError::TooManyRequests(
+            "unfurl rate limit exceeded".into(),
+            retry_after,
+        ));
+    }
+    Ok(())
+}
+
 const FETCH_TIMEOUT_SECS: u64 = 5;
 const USER_AGENT: &str = "lets-chat-unfurler/1.0";
 const MAX_REDIRECTS: usize = 3;
@@ -51,9 +77,15 @@ struct LinkPreviewFragment<'a> {
 /// text/html parsed. Cached 24h in `link_previews` keyed by URL hash.
 pub async fn get_unfurl(
     State(state): State<AppState>,
-    AuthUser(_user): AuthUser,
+    AuthUser(user): AuthUser,
     Query(params): Query<UnfurlParams>,
 ) -> Result<Response, AppError> {
+    check_rate(
+        &state,
+        crate::rate_limit::RateLimitKind::Unfurl,
+        &user.id.to_string(),
+        UNFURL_RATE_PER_MIN,
+    )?;
     let parsed = Url::parse(&params.url).map_err(|_| AppError::BadRequest("invalid URL".into()))?;
     if !matches!(parsed.scheme(), "http" | "https") {
         return Ok(empty_preview());
@@ -221,10 +253,16 @@ pub async fn get_unfurl(
 /// to a 304 before either the cache or the remote fetch is touched.
 pub async fn get_unfurl_image(
     State(state): State<AppState>,
-    AuthUser(_user): AuthUser,
+    AuthUser(user): AuthUser,
     Path(url_hash): Path<String>,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
+    check_rate(
+        &state,
+        crate::rate_limit::RateLimitKind::UnfurlImage,
+        &user.id.to_string(),
+        UNFURL_IMAGE_RATE_PER_MIN,
+    )?;
     if !is_valid_hash(&url_hash) {
         return Err(AppError::NotFound);
     }
@@ -253,7 +291,16 @@ pub async fn get_unfurl_image(
             let Some((content_type, bytes)) = fetch_image(&image_url).await else {
                 return Err(AppError::NotFound);
             };
-            db::uploads::set_cached_image(&state.chat, &url_hash, content_type, &bytes).await?;
+            if bytes.len() <= MAX_CACHED_IMAGE_BYTES {
+                db::uploads::set_cached_image(
+                    &state.chat,
+                    &url_hash,
+                    content_type,
+                    &bytes,
+                    MAX_CACHE_TOTAL_BYTES,
+                )
+                .await?;
+            }
             (content_type.to_string(), bytes)
         }
     };

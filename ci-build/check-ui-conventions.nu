@@ -180,6 +180,7 @@ const ENV_VAR_ALLOWLIST = {
     LETS_CHAT_UPDATE_REPOSITORY: "desktop-only, see LETS_CHAT_SERVER_URL above"
     LETS_CHAT_UPDATE_TAG: "desktop-only, see LETS_CHAT_SERVER_URL above"
     LETS_CHAT_UPDATE_TOKEN: "desktop-only, see LETS_CHAT_SERVER_URL above"
+    LETS_CHAT_UPDATE_ALLOW_INSECURE: "desktop-only, see LETS_CHAT_SERVER_URL above; read only under #[cfg(debug_assertions)], so release builds never honour it"
     LETS_CHAT_UPDATE_URL_ALLOW_PRIVATE: "desktop-only, see LETS_CHAT_SERVER_URL above"
     LETS_CHAT_UPDATE_BASE_URL: "dead: no Rust source has read it since LC-733; the name survives only as the literal desktop/src/update.rs asserts is absent from the Dockerfiles (LC-594)"
 }

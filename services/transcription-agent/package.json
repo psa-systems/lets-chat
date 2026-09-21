@@ -12,8 +12,8 @@
     "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
-    "@livekit/agents": "^0.7.0",
-    "@livekit/rtc-node": "^0.13.0"
+    "@livekit/agents": "0.7.9",
+    "@livekit/rtc-node": "0.13.35"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",

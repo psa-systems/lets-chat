@@ -158,7 +158,7 @@ mod tests {
             decide(true, Some(" Dev.User@example.test : hunter2 ")),
             Seed::Admin {
                 email: "Dev.User@example.test".to_string(),
-                username: "Dev.User".to_string(),
+                username: "devuser".to_string(),
             }
         );
     }
