@@ -6,8 +6,10 @@
 # clips an overflowing table instead of scrolling it: nothing upstream provides
 # horizontal scroll, so at 375px the trailing columns (including the nowrap
 # actions cell) were unreachable, with no scrollbar and no drag. The wrapper is
-# now `.lc-table-wrap` (`overflow-x: auto`, main.css), which is what the two
-# one-off admin tables already did with `overflow-x-auto`.
+# now `.lc-table-wrap` (`overflow-x: auto`, main.css). LC-756 moved the last two
+# admin tables onto the shared component and deleted the exemption list, so every
+# table under `server/templates/` outside the email templates uses it, with no
+# exemptions.
 #
 # Email templates are excluded: they are layout tables in a mail client, with
 # inline styles and no stylesheet.
