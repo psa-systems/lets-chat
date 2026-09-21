@@ -2507,20 +2507,30 @@ pub async fn relay_control_signal(
     // room. Best-effort - an audit write failure must not block the relay.
     match kind {
         "grant" => {
-            let _ =
+            audit_warn(
                 db::remote_control_audit::start_session(&state.chat, room_id, &peer_id, &user.id)
-                    .await;
+                    .await,
+                room_id,
+                "start_session",
+            );
         }
         "revoke" => {
-            let _ = db::remote_control_audit::end_session_by_room(&state.chat, room_id, "revoked")
-                .await;
+            audit_warn(
+                db::remote_control_audit::end_session_by_room(&state.chat, room_id, "revoked")
+                    .await,
+                room_id,
+                "end_session",
+            );
         }
         _ => {}
     }
     // LC-855: log every consent event (request/grant/deny/revoke), not only the
     // session lifecycle, so the 1:1 flow shares the huddle's full audit trail.
-    let _ =
-        db::remote_control_audit::log_event(&state.chat, room_id, &user.id, &peer_id, kind).await;
+    audit_warn(
+        db::remote_control_audit::log_event(&state.chat, room_id, &user.id, &peer_id, kind).await,
+        room_id,
+        kind,
+    );
     // LC-627: trace the successful relay so a "no prompt on the peer" report can
     // be told apart from a silent drop - if this line is present the signal left
     // the server for the peer, so the next suspect is delivery/render, not relay.
@@ -2658,8 +2668,11 @@ async fn relay_huddle_control_signal(
         let target = target.to_string();
         let kind = kind.to_string();
         async move {
-            let _ =
-                db::remote_control_audit::log_event(&chat, room_id, &actor, &target, &kind).await;
+            audit_warn(
+                db::remote_control_audit::log_event(&chat, room_id, &actor, &target, &kind).await,
+                room_id,
+                &kind,
+            );
         }
     };
     match kind {
@@ -2700,10 +2713,13 @@ async fn relay_huddle_control_signal(
                 echo("unavailable", "not_allowed");
                 return;
             }
-            let busy_session = matches!(
+            let busy_session = audit_warn(
                 db::remote_control_audit::open_session(&state.chat, room_id).await,
-                Ok(Some(_))
-            );
+                room_id,
+                "open_session",
+            )
+            .flatten()
+            .is_some();
             if busy_session || !state.hub.set_control_pending(room_id, &user.id, sharer) {
                 echo("busy", "controller_active_or_pending");
                 return;
@@ -2758,16 +2774,23 @@ async fn relay_huddle_control_signal(
                 echo("unavailable", "not_allowed");
                 return;
             }
-            if matches!(
+            if audit_warn(
                 db::remote_control_audit::open_session(&state.chat, room_id).await,
-                Ok(Some(_))
-            ) {
+                room_id,
+                "open_session",
+            )
+            .flatten()
+            .is_some()
+            {
                 echo("unavailable", "controller_active");
                 return;
             }
-            let _ =
+            audit_warn(
                 db::remote_control_audit::start_session(&state.chat, room_id, &requester, &user.id)
-                    .await;
+                    .await,
+                room_id,
+                "start_session",
+            );
             audit(&requester, "grant").await;
             relay_to(&requester, "grant");
             // LC-855: label the sharer's tile for every viewer. The controller
@@ -2776,14 +2799,18 @@ async fn relay_huddle_control_signal(
             fanout_control_label(state, room_id, &user.id, controller_name, true);
         }
         "revoke" => {
-            let Ok(Some(closed)) = db::remote_control_audit::end_session_for_participant(
-                &state.chat,
+            let Some(closed) = audit_warn(
+                db::remote_control_audit::end_session_for_participant(
+                    &state.chat,
+                    room_id,
+                    &user.id,
+                    "revoked",
+                )
+                .await,
                 room_id,
-                &user.id,
-                "revoked",
+                "revoke",
             )
-            .await
-            else {
+            .flatten() else {
                 echo("unavailable", "no_active_session");
                 return;
             };
@@ -2854,8 +2881,11 @@ async fn notify_control_session_ended(
     } else {
         sharer_id
     };
-    let _ =
-        db::remote_control_audit::log_event(&state.chat, room_id, actor_id, other, "revoke").await;
+    audit_warn(
+        db::remote_control_audit::log_event(&state.chat, room_id, actor_id, other, "revoke").await,
+        room_id,
+        "revoke",
+    );
     let event = ChatEvent::RemoteControlSignal {
         room_id,
         to_user_id: other.to_string(),
@@ -2867,16 +2897,33 @@ async fn notify_control_session_ended(
     fanout_control_label(state, room_id, sharer_id, String::new(), false);
 }
 
+/// Log a failed remote-control audit write or lookup with the room and event
+/// kind. Audit is best-effort, so the error is never propagated.
+fn audit_warn<T>(res: sqlx::Result<T>, room_id: i64, kind: &str) -> Option<T> {
+    res.inspect_err(|e| {
+        tracing::warn!(room_id, kind, error = %e, "remote-control audit failed");
+    })
+    .ok()
+}
+
 /// LC-186/LC-905: the socket-disconnect backstop. Closes every control
 /// session `user_id` was party to (across every room, since a hard drop can
 /// happen mid-session in more than one huddle) and notifies each counterpart,
 /// mirroring `end_control_on_participant_gone`'s per-row notify so the two
 /// backstops behave identically regardless of which one wins a race.
 pub async fn end_control_sessions_for_disconnect(state: &AppState, user_id: &str) {
-    let Ok(closed) =
-        db::remote_control_audit::end_sessions_for_user(&state.chat, user_id, "disconnect").await
-    else {
-        return;
+    let closed = match db::remote_control_audit::end_sessions_for_user(
+        &state.chat,
+        user_id,
+        "disconnect",
+    )
+    .await
+    {
+        Ok(closed) => closed,
+        Err(e) => {
+            tracing::warn!(user_id, error = %e, "remote-control audit write failed: disconnect");
+            return;
+        }
     };
     for sess in closed {
         notify_control_session_ended(
@@ -2910,14 +2957,18 @@ pub async fn end_control_on_share_stop(state: &AppState, room_id: i64, sharer_id
         };
         state.hub.broadcast_to_user(&requester, &event);
     }
-    let Ok(Some(closed)) = db::remote_control_audit::end_session_by_sharer(
-        &state.chat,
+    let Some(closed) = audit_warn(
+        db::remote_control_audit::end_session_by_sharer(
+            &state.chat,
+            room_id,
+            sharer_id,
+            "share_ended",
+        )
+        .await,
         room_id,
-        sharer_id,
         "share_ended",
     )
-    .await
-    else {
+    .flatten() else {
         return;
     };
     notify_control_session_ended(
@@ -2938,14 +2989,18 @@ pub async fn end_control_on_share_stop(state: &AppState, room_id: i64, sharer_id
 /// so this and the disconnect backstop racing the same row can never both
 /// notify - whichever commits first gets `Some` back, the other `None`.
 pub async fn end_control_on_participant_gone(state: &AppState, room_id: i64, user_id: &str) {
-    let Ok(Some(closed)) = db::remote_control_audit::end_session_for_participant(
-        &state.chat,
+    let Some(closed) = audit_warn(
+        db::remote_control_audit::end_session_for_participant(
+            &state.chat,
+            room_id,
+            user_id,
+            "left_call",
+        )
+        .await,
         room_id,
-        user_id,
         "left_call",
     )
-    .await
-    else {
+    .flatten() else {
         return;
     };
     notify_control_session_ended(
