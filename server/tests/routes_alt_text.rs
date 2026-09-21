@@ -57,6 +57,7 @@ struct Setup {
     author_session: String,
     other_session: String,
     file_id: i64,
+    settings: sqlx::SqlitePool,
 }
 
 async fn setup() -> Setup {
@@ -103,7 +104,7 @@ async fn setup() -> Setup {
         login_approval_enabled: false,
         auth,
         chat,
-        settings,
+        settings: settings.clone(),
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
         last_seen_ledger: lets_chat::auth::new_last_seen_ledger(),
@@ -128,6 +129,7 @@ async fn setup() -> Setup {
         author_session,
         other_session,
         file_id,
+        settings,
     }
 }
 
@@ -182,6 +184,9 @@ async fn post_alt_draft(app: &Router, sess: Option<&str>, file_id: i64) -> Statu
 #[tokio::test]
 async fn alt_draft_is_uploader_only_and_needs_a_vision_endpoint() {
     let s = setup().await;
+    db::settings::set_setting(&s.settings, "llm_enabled", "true")
+        .await
+        .unwrap();
     // Non-uploader is refused before anything else.
     assert_eq!(
         post_alt_draft(&s.app, Some(&s.other_session), s.file_id).await,
@@ -197,6 +202,43 @@ async fn alt_draft_is_uploader_only_and_needs_a_vision_endpoint() {
     assert_eq!(
         post_alt_draft(&s.app, None, s.file_id).await,
         StatusCode::SEE_OTHER
+    );
+}
+
+// LC-992: the route honors the AI flag and audience, and is rate-limited.
+#[tokio::test]
+async fn alt_draft_honors_ai_flag_audience_and_rate_limit() {
+    let s = setup().await;
+    // Flag off (default): even the uploader is refused.
+    assert_eq!(
+        post_alt_draft(&s.app, Some(&s.author_session), s.file_id).await,
+        StatusCode::FORBIDDEN
+    );
+    db::settings::set_setting(&s.settings, "llm_enabled", "true")
+        .await
+        .unwrap();
+    // Staff-only audience: a non-admin is refused before the uploader check.
+    db::settings::set_setting(&s.settings, "llm_audience", "staff")
+        .await
+        .unwrap();
+    assert_eq!(
+        post_alt_draft(&s.app, Some(&s.other_session), s.file_id).await,
+        StatusCode::FORBIDDEN
+    );
+    db::settings::set_setting(&s.settings, "llm_audience", "everyone")
+        .await
+        .unwrap();
+    // Burst past the cap: the first 10 reach the handler (400, no vision
+    // endpoint), the next is limited.
+    for _ in 0..10 {
+        assert_eq!(
+            post_alt_draft(&s.app, Some(&s.author_session), s.file_id).await,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    assert_eq!(
+        post_alt_draft(&s.app, Some(&s.author_session), s.file_id).await,
+        StatusCode::TOO_MANY_REQUESTS
     );
 }
 
