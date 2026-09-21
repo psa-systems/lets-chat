@@ -688,6 +688,7 @@ pub(crate) async fn handle_support(
     room: &Room,
     asker: &User,
     question: &str,
+    echo_asker: bool,
 ) -> Result<(), AppError> {
     let Some(llm) = state.llm_client.clone() else {
         return Err(AppError::BadRequest(
@@ -721,6 +722,12 @@ pub(crate) async fn handle_support(
         return Err(AppError::BadRequest(
             "You're asking the support assistant too quickly. Try again in a minute.".into(),
         ));
+    }
+
+    // LC-991: the support panel echoes the question as the asker's own message.
+    // Done only after every gate above so a rejected request writes no row.
+    if echo_asker {
+        db::chat::insert_message(&state.chat, room.id, &asker.id, question).await?;
     }
 
     let asker_label = match asker.display_name.as_deref() {
