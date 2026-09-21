@@ -262,6 +262,20 @@ fn mute_active(muted_until: Option<&str>, now: chrono::DateTime<chrono::Utc>) ->
 /// in the SSO provisioning path.
 pub const MAX_USERNAME_CHARS: usize = 64;
 
+/// LC-993: maximum display-name length, shared by the profile form and the SSO
+/// paths so an IdP `name` claim can never exceed what a user could type.
+pub const MAX_DISPLAY_NAME_CHARS: usize = 64;
+
+/// LC-993: trim and truncate (by chars, not bytes) an SSO name claim to
+/// `MAX_DISPLAY_NAME_CHARS`. Returns `None` for a blank claim.
+pub fn cap_display_name(raw: &str) -> Option<String> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return None;
+    }
+    Some(t.chars().take(MAX_DISPLAY_NAME_CHARS).collect())
+}
+
 /// LC-766: characters allowed in a chat handle. Kept in one place so the SSO
 /// provisioning sanitizer and the user-facing handle editor agree on exactly
 /// what a valid handle is: letters, digits, and `_ - .`.
@@ -466,6 +480,15 @@ mod tests {
 
     // LC-766 handle validation.
     use super::{sanitize_handle, validate_handle, MAX_USERNAME_CHARS};
+
+    #[test]
+    fn cap_display_name_truncates_by_chars_and_skips_blank() {
+        use super::{cap_display_name, MAX_DISPLAY_NAME_CHARS};
+        let out = cap_display_name(&format!("  {}  ", "\u{65e5}".repeat(100))).unwrap();
+        assert_eq!(out.chars().count(), MAX_DISPLAY_NAME_CHARS);
+        assert_eq!(cap_display_name(" Ada ").unwrap(), "Ada");
+        assert!(cap_display_name("   ").is_none());
+    }
 
     #[test]
     fn valid_handle_is_returned_trimmed() {

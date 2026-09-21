@@ -207,10 +207,9 @@ pub async fn get_callback(
     if let Some(name) = userinfo
         .name
         .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
+        .and_then(crate::models::user::cap_display_name)
     {
-        if let Err(e) = db::auth::sync_bunyip_display_name(&state.auth, &user_id, name).await {
+        if let Err(e) = db::auth::sync_bunyip_display_name(&state.auth, &user_id, &name).await {
             tracing::warn!(target: "bunyip_sso", error = %e, user_id = %user_id, "display_name sync failed");
         }
     }
@@ -422,7 +421,11 @@ async fn resolve_or_provision_user(
     // UNIQUE(users.email). Surface that as an actionable identity conflict
     // rather than an opaque sso_error=internal (LC-618).
     let username = pick_username(state, userinfo).await?;
-    let display_name = userinfo.name.as_deref().filter(|s| !s.trim().is_empty());
+    let display_name = userinfo
+        .name
+        .as_deref()
+        .and_then(crate::models::user::cap_display_name);
+    let display_name = display_name.as_deref();
     let email = userinfo.email.as_deref().filter(|s| !s.trim().is_empty());
     let id =
         match db::auth::create_user_from_bunyip(&state.auth, &username, sub, display_name, email)
