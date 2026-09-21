@@ -147,8 +147,15 @@ mod tests {
     }
 
     #[test]
-    fn accepts_a_generated_key() {
-        // Shape of `openssl rand -base64 32`: 44 chars, mixed case, digits, +/=.
-        assert!(validate_secret_key("uR3k9XqPz1LmB7vN0sYtQ2wE5hJ8cF4aG6dK1oI3xZ0=").is_ok());
+    fn accepts_a_key_that_clears_every_rule() {
+        // Built rather than written out: a literal with the shape of
+        // `openssl rand -base64 32` is exactly what a secret scanner is built
+        // to catch, and committing one to test a secret guard would trip the
+        // repository's own gate (LC-977). The rules care about length and
+        // variety, not encoding, so a synthetic run of characters exercises
+        // the accept path just as well.
+        let generated: String = ('a'..='z').chain('A'..='Z').chain('0'..='9').collect();
+        assert!(generated.chars().count() >= SECRET_KEY_MIN_LEN);
+        assert!(validate_secret_key(&generated).is_ok());
     }
 }
