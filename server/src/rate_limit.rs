@@ -113,6 +113,10 @@ pub enum RateLimitKind {
     /// 'failed' repeatedly, so the cap bounds a noisy client and over-limit
     /// reports are dropped silently.
     VoiceDiag,
+    /// LC-984: per-user cap on `voice_mute` WS frames. Keyed by the sender's
+    /// user_id. Each accepted frame broadcasts to the room and writes a voice
+    /// log row, so over-limit frames are dropped silently before either.
+    VoiceMute,
 }
 
 impl RateLimitKind {
@@ -136,6 +140,7 @@ impl RateLimitKind {
             RateLimitKind::SttRoom => "sttr",
             RateLimitKind::CallReaction => "rxn",
             RateLimitKind::VoiceDiag => "vdiag",
+            RateLimitKind::VoiceMute => "vmute",
         }
     }
 }
