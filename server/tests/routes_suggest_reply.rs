@@ -85,9 +85,15 @@ async fn make_room(t: &TestApp) -> i64 {
         .fetch_one(&t.chat)
         .await
         .unwrap();
-    db::chat::create_room(&t.chat, "general", None, "public", None, Some(eid))
+    let room_id = db::chat::create_room(&t.chat, "general", None, "public", None, Some(eid))
         .await
-        .unwrap()
+        .unwrap();
+    // LC-941: these tests exercise suggest-reply itself, not the room AI
+    // toggle, so opt the room in (the toggle defaults off).
+    db::chat::set_room_assistant_enabled(&t.chat, room_id, true)
+        .await
+        .unwrap();
+    room_id
 }
 
 async fn suggest(t: &TestApp, message_id: i64) -> (StatusCode, String) {

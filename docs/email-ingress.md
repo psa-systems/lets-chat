@@ -26,7 +26,7 @@ The secret in the inbox address is the entire authorization boundary. Concretely
 
 - **No raw HTML in body.** HTML-only messages fall through `mail-parser`'s text fallback (or drop with `ParseFail` if no text is recoverable). The chat markdown pipeline already strips raw HTML in user input; the email path never feeds it raw HTML in the first place. Test: `email_ingress_threat_model::raw_html_never_appears_in_stored_body`.
 
-- **Revoked inboxes drop silently.** No bounce email; the operator's only diagnostic is the structured `email_ingress::drop` log line. Revealing whether an inbox address exists via a bounce would let an attacker enumerate live inboxes.
+- **Revoked inboxes drop silently.** No bounce email; the operator's diagnostics are the structured `email_ingress::drop` log line and the drops panel on `/admin/settings` (see "Verifying it works"). Revealing whether an inbox address exists via a bounce would let an attacker enumerate live inboxes.
 
 - **Per-inbox rate limit.** 60 messages per minute per inbox. Over-limit messages drop with `reason=rate_limited`.
 
@@ -69,10 +69,13 @@ If a polled message has the token in NONE of those headers, the resolver returns
 
 If the test message does not post within ~5-10 minutes:
 
-1. **Check the server logs.** Filter to `target=email_ingress` for the spawn-time messages and `target=email_ingress::drop` for per-message drops. If you see `email ingress disabled: ...`, the spawn gate refused to start; the message names the missing piece.
-2. **If the spawn is running but no `email_ingress` lines fire on the tick interval**: the poll connected and found 0 unseen messages. The mail did not reach the mailbox. Check at the IMAP provider.
-3. **If a `target=email_ingress::drop reason=address_no_match` line fires**: the mail reached the mailbox but the resolver could not find the token. The log's `detail` field includes the tried addresses; this tells you exactly which headers the operator's MTA preserved (or didn't). Fix the forwarder, OR mail directly to the polled mailbox without an intermediate forward.
-4. **Other drops** (`parse_fail`, `revoked_inbox`, `loop_detected`, `rate_limited`): the log carries `reason` + `detail` and the inbox-id + sender. The taxonomy below names what each reason means.
+1. **Check the "Email ingress health" panel on `/admin/settings`.** This is the first stop and needs no container-log access: it shows the last poll time, the last successful poll time, the consecutive-failure count, the last tick's fetched / posted / dropped counts, and the last poll error (if any). Below that, a "drops in the last 24h" summary grouped by reason, and a table of the most recent 20 drops (time, reason, IMAP UID, detail).
+2. **No poll has run yet** (`imap_poll_status` panel shows the not-run state): the spawn gate refused to start. Check the server logs for `target=email_ingress` at startup - a line starting `email ingress disabled: ...` names the missing piece (unset `LETS_CHAT_SECRET_KEY`, no `imap_inbox_config` row, poll disabled, or missing ingress domain).
+3. **Consecutive failures > 0 or a last-error present**: the poll ran but could not complete (auth failure, network error, etc). The `last_error` field carries the underlying error string.
+4. **The poll is healthy (last-ok is recent) but the message never posted**: check the drops panel / table for a matching row.
+   - `address_no_match`: the mail reached the mailbox but the resolver could not find the token. The `detail` column lists the tried addresses; this tells you exactly which headers the operator's MTA preserved (or didn't). Fix the forwarder, OR mail directly to the polled mailbox without an intermediate forward.
+   - Any other reason (`parse_fail`, `revoked_inbox`, `loop_detected`, `rate_limited`, etc): the taxonomy below names what each reason means.
+5. **No admin UI access, or you need more detail than the panel's truncated `detail` field shows**: the underlying log lines are still there. Filter server logs to `target=email_ingress` for spawn-time and per-tick messages and `target=email_ingress::drop` for per-message drops.
 
 ## Failure-log taxonomy
 
@@ -202,14 +205,14 @@ Errs on the side of leaving extra text in chat (a missed strip is recoverable; a
 - **Auto-responder ingestion.** Out-of-office replies and vacation messages drop with `loop_detected detail="Auto-Submitted: ..."`. Same posture as `List-Id`.
 - **HTML email rich rendering.** HTML-only messages either drop with `parse_fail` (no text fallback recoverable) or post the stripped-to-text version. A dedicated HTML-to-Markdown converter is a follow-up.
 - **Signature / quoted-history stripping for the per-room inbox actor.** Stripping is wired ONLY on the reply-by-email path (where humans actually quote). The synthetic-actor path posts the body verbatim to preserve external-sender output as-is.
-- **Bouncing failed messages.** No bounce email is ever generated. The operator's only diagnostic is the structured log. This is a deliberate security posture (no enumeration via bounces, no reciprocal loops).
+- **Bouncing failed messages.** No bounce email is ever generated. The operator's diagnostics are the structured log and the `/admin/settings` drops panel. This is a deliberate security posture (no enumeration via bounces, no reciprocal loops).
 - **Voice-format attachments.** Email attachments cannot be voice messages in v1; voice has a `MediaRecorder` origin emails don't produce.
 
 ## Dead-letter folder
 
 Optional: if you set an IMAP folder name in the admin IMAP settings as the dead-letter folder, every dropped message is `UID COPY`d into that folder before being marked `\Seen` on the source UID. You then have a per-drop record of the raw message (headers, body, attachments) in the folder, recoverable via any IMAP client.
 
-When the field is empty (the default), the v1 always-`\Seen` posture stands: dropped messages stay in the source folder marked Seen and the structured WARN log under `target=email_ingress::drop` is the only diagnostic.
+When the field is empty (the default), the v1 always-`\Seen` posture stands: dropped messages stay in the source folder marked Seen, and the structured WARN log under `target=email_ingress::drop` plus the `/admin/settings` drops panel are the only diagnostics; the raw dropped message itself is not recoverable.
 
 ### What gets dead-lettered
 

@@ -1395,6 +1395,9 @@
     if (cfg.selfId && cfg.selfVersion) avatarVersions[cfg.selfId] = cfg.selfVersion; // LC-784
     seedParticipantsFromDom();
     applyHuddleVisibility(); // LC-493: reveal the bar if a huddle is already live
+    // LC-931: a genuinely new dock (not a pop-out/float reparent, which keeps
+    // the same node) - point huddle_control.js's captured root at it too.
+    if (window.LetsChatHuddleControl) window.LetsChatHuddleControl.bindRoot(el);
   }
 
   function scan() {
@@ -1438,6 +1441,7 @@
       if (joined) leave();
       root = null;
       cfg = null;
+      if (window.LetsChatHuddleControl) window.LetsChatHuddleControl.bindRoot(null);
     }
   }
 

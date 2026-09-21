@@ -70,6 +70,8 @@ search-saved-heading = Búsquedas guardadas
 search-saved-remove = Quitar búsqueda guardada
 # LC-699: room-header search polish.
 search-scope-room = En esta sala
+search-scope-enclave = En este espacio
+search-scope-all = Todas las conversaciones
 search-clear = Limpiar búsqueda
 search-searching = Buscando...
 
@@ -168,10 +170,13 @@ voice-transcript-empty-sub = El audio hablado aparecerá aquí cuando la transcr
 # LC-590: shown in the drawer when a clip fails server-side transcription.
 voice-transcript-clip-failed = No se pudo transcribir parte del audio. Los subtítulos pueden estar incompletos.
 # LC-765: la transcripción es captura local por cliente (cada navegador
-# transcribe solo su propio micrófono, en ese dispositivo). Activarla ahora la
-# activa automáticamente para todos en la llamada, incluidos los que se unen más
+# transcribe solo su propio micrófono). Activarla ahora la activa
+# automáticamente para todos en la llamada, incluidos los que se unen más
 # tarde, así que la Transcripción de una persona cubre toda la llamada.
-voice-transcript-local-only = Solo se transcribe tu propio micrófono, en tu dispositivo. Activar Transcribir lo activa automáticamente para todos en la llamada, incluidas las personas que se unan más tarde.
+# LC-962: el motor Fast transcribe en el dispositivo, pero el motor Accurate
+# envía los clips del micrófono a este servidor, así que esta cadena ya no
+# puede afirmar una transcripción universal solo en el dispositivo.
+voice-transcript-local-only = Solo se transcribe tu propio micrófono: en tu dispositivo con el motor Fast, o enviado a este servidor con Accurate. Activar Transcribir lo activa automáticamente para todos en la llamada, incluidas las personas que se unan más tarde.
 # LC-860: los subtítulos en vivo son una presentación distinta, sin garantía de
 # precisión; la transcripción guardada se genera por separado y nunca contiene
 # este texto en vivo.
