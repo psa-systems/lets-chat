@@ -55,8 +55,9 @@ mail is in [email-ingress.md](email-ingress.md).
 
 Configuring any of these only makes the capability **available**. LC-679 keeps
 the whole AI surface off until an admin flips "AI features" in Admin > Settings,
-and even then it is exposed only to site admins, enclave owners/admins and room
-moderators. Every endpoint is operator-trusted and **not** SSRF-filtered, so it
+and when on, the default audience is everyone (any logged-in user). An admin can
+narrow it to staff (site admins, enclave owners/admins and room moderators) via
+the LLM audience setting. Every endpoint is operator-trusted and **not** SSRF-filtered, so it
 may be `localhost` or internal; never point one at an untrusted host.
 
 | Variable | Default | Description |
