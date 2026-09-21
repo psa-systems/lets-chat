@@ -4,9 +4,8 @@
 # Production dependencies only.
 FROM oven/bun:1 AS deps
 WORKDIR /app
-COPY package.json ./
-# No lockfile is committed for this leaf service; resolve at build time.
-RUN bun install --production
+COPY package.json bun.lock ./
+RUN bun install --production --frozen-lockfile
 
 # LC-816: unit tests, run in CI via `docker buildx build --target test` (the CI
 # runner has no bun; work happens inside docker, like the desktop build). The
@@ -27,8 +26,8 @@ RUN bun test
 # `docker buildx build --target typecheck`. Not on the runtime path.
 FROM oven/bun:1 AS typecheck
 WORKDIR /app
-COPY package.json tsconfig.json ./
-RUN bun install
+COPY package.json bun.lock tsconfig.json ./
+RUN bun install --frozen-lockfile
 COPY src ./src
 COPY test ./test
 RUN bun x tsc --noEmit
