@@ -1072,7 +1072,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                         ClientFrame::VoiceMute { room_id, muted } => {
                             // Only a participant of the channel may announce mute
                             // state, and only to that channel's subscribers.
-                            if state.hub.is_in_voice_room(conn_id, room_id) {
+                            // LC-984: over-limit frames are dropped silently, before
+                            // the broadcast and the log write.
+                            if state.hub.is_in_voice_room(conn_id, room_id)
+                                && matches!(
+                                    state.rate_limits.check(
+                                        crate::rate_limit::RateLimitKind::VoiceMute,
+                                        &user.id,
+                                        VOICE_MUTE_PER_MINUTE,
+                                    ),
+                                    crate::rate_limit::Outcome::Allow
+                                )
+                            {
                                 state.hub.broadcast_to_room(
                                     room_id,
                                     &ChatEvent::VoiceMuteChanged {
@@ -3289,6 +3300,10 @@ pub(crate) async fn record_voice_event(
 /// can flap through 'failed' many times a minute, so the cap is generous but
 /// bounded; over-limit reports are dropped silently (no error frame).
 const VOICE_DIAG_PER_MINUTE: u32 = 30;
+
+/// LC-984: cap on `voice_mute` frames per user. A normal mute/unmute sequence
+/// is a handful of frames, so this bounds a stuck or hostile client only.
+const VOICE_MUTE_PER_MINUTE: u32 = 30;
 /// LC-869: max bytes of the client-supplied `detail` we persist. A report is a
 /// short label ("ice failed: peer ab12cd", "getUserMedia: NotAllowedError"),
 /// never a stack trace; anything longer is truncated so the wire and the log
