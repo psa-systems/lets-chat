@@ -408,17 +408,21 @@
     // server render. A participant showing up here is, by definition,
     // connected right now, so the dot defaults to online; ws/user_status_update.html
     // corrects it in place the moment a real status broadcast arrives.
+    // LC-893: the huddle lobby (data-lc-preview-compact) renders small inline
+    // avatars with no name caption; the voice lobby renders larger chips.
+    var compact = preview.hasAttribute('data-lc-preview-compact');
     names.replaceChildren();
     ids.forEach(function (uid) {
       var label = participants[uid] || uid;
       var chip = document.createElement('span');
-      chip.className = 'lc-voice-lobby-chip';
+      if (!compact) chip.className = 'lc-voice-lobby-chip';
+      else chip.title = label;
       chip.setAttribute('data-lc-voice-preview-name', uid);
       chip.setAttribute('data-lc-label', label);
       var avatarWrap = document.createElement('span');
       avatarWrap.className = 'relative inline-block shrink-0';
       var img = document.createElement('img');
-      img.className = 'lc-voice-lobby-avatar';
+      img.className = compact ? 'h-6 w-6 rounded-full object-cover' : 'lc-voice-lobby-avatar';
       img.loading = 'lazy';
       img.src = avatarUrl(uid);
       img.alt = '';
@@ -432,7 +436,7 @@
       nm.className = 'lc-voice-lobby-name';
       nm.textContent = label;
       chip.appendChild(avatarWrap);
-      chip.appendChild(nm);
+      if (!compact) chip.appendChild(nm);
       names.appendChild(chip);
     });
     applyHuddleVisibility(); // LC-493
