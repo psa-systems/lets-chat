@@ -252,5 +252,8 @@ jobs:
       # Brand favicons wrap a base64-encoded PNG; a substring of that blob trips
       # KINGFISHER.CRATESIO.1 as a false positive (LC-471).
       kingfisher_excludes: server/assets/favicon.svg server/assets/favicon-dot.svg
+      # `docker run --user $(id -u):$(id -g)` in a historical .claude/settings.local.json
+      # reads as curl basic auth once Claude Code writes it as __CMDSUB_OUTPUT__ (LC-977).
+      kingfisher_skip_regex: __CMDSUB_OUTPUT__
       noseyparker_ignore_file: .noseyparker-ignore.txt
     secrets: inherit
