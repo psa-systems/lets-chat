@@ -328,9 +328,9 @@ dev-web-local: build-css vendor-js
 [group('dev')]
 dev-web-local-mock: build-css vendor-js
     # Note: DEV ONLY: boots the server for unauthenticated debug routes (e.g.
-    # /dev/theme-gallery). Authed pages still need the real bunyip dev-sso stack.
-    # See dev/mock-oidc.py. LC-936: vendor-js beside build-css, same reason as
-    # dev-web-local.
+    # /dev/theme-gallery) and, with LC-577's real auth-code flow, authenticated
+    # pages too. See dev/mock-oidc.py. LC-936: vendor-js beside build-css, same
+    # reason as dev-web-local.
     {{ compose_uid }} {{ compose_env }} docker compose --file compose.dev-web-local.yml --file compose.dev-web-local-mock-sso.yml up
 
 # Stop the mock-OIDC local dev server (both overlay containers)
