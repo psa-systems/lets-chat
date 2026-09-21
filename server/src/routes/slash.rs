@@ -344,7 +344,7 @@ async fn dispatch_known(
             "support" => {
                 // LC-712: AI help desk. Answers from the docs knowledge base and
                 // posts as the assistant bot; errors surface to the composer.
-                super::help_docs::handle_support(state, room, user, rest).await?;
+                super::help_docs::handle_support(state, room, user, rest, false).await?;
             }
             "human" => {
                 // LC-713: AI help desk escalation. Notifies the admins that the

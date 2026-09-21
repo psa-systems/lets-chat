@@ -480,12 +480,11 @@ async fn post_send(
         if body.is_empty() {
             return render_thread(&state, &user).await;
         }
-        // Echo the user's question into the thread as their own message (the
-        // support handler only posts the bot's reply), so the panel reads as a
-        // normal chat. Insert directly - no finalize fan-out is needed for the
-        // user's own bot DM.
-        db::chat::insert_message(&state.chat, room.id, &user.id, &body).await?;
-        help_docs::handle_support(&state, &room, &user, &body).await?;
+        super::room::check_message_length(&body)?;
+        // The handler echoes the user's question into the thread as their own
+        // message (it only posts the bot's reply otherwise), after its length and
+        // rate-limit gates, so a rejected send writes no row.
+        help_docs::handle_support(&state, &room, &user, &body, true).await?;
     }
     render_thread(&state, &user).await
 }
