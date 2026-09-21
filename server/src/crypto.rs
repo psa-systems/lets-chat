@@ -38,7 +38,9 @@ pub fn open(key: &[u8; 32], nonce: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, 
 /// the next edit to echo a real one (LC-1003).
 #[derive(Debug, thiserror::Error)]
 pub enum SecretKeyError {
-    #[error("LETS_CHAT_SECRET_KEY is a known placeholder; generate one with: openssl rand -base64 32")]
+    #[error(
+        "LETS_CHAT_SECRET_KEY is a known placeholder; generate one with: openssl rand -base64 32"
+    )]
     Placeholder,
     #[error("LETS_CHAT_SECRET_KEY is {len} characters, at least {min} are required; generate one with: openssl rand -base64 32")]
     TooShort { len: usize, min: usize },
@@ -73,7 +75,10 @@ fn validate_secret_key(s: &str) -> Result<(), SecretKeyError> {
     }
     let len = trimmed.chars().count();
     if len < SECRET_KEY_MIN_LEN {
-        return Err(SecretKeyError::TooShort { len, min: SECRET_KEY_MIN_LEN });
+        return Err(SecretKeyError::TooShort {
+            len,
+            min: SECRET_KEY_MIN_LEN,
+        });
     }
     let mut chars = trimmed.chars();
     if let Some(first) = chars.next() {
@@ -126,14 +131,20 @@ mod tests {
             "CHANGE-ME-IN-PRODUCTION",
             "  change-me-in-production  ",
         ] {
-            assert!(matches!(validate_secret_key(v), Err(SecretKeyError::Placeholder)), "{v:?}");
+            assert!(
+                matches!(validate_secret_key(v), Err(SecretKeyError::Placeholder)),
+                "{v:?}"
+            );
         }
     }
 
     #[test]
     fn rejects_the_other_stand_ins() {
         for v in ["changeme", "change-me", "secret", "password", "test"] {
-            assert!(matches!(validate_secret_key(v), Err(SecretKeyError::Placeholder)), "{v:?}");
+            assert!(
+                matches!(validate_secret_key(v), Err(SecretKeyError::Placeholder)),
+                "{v:?}"
+            );
         }
     }
 
@@ -141,13 +152,19 @@ mod tests {
     fn rejects_a_value_under_the_length_floor() {
         assert!(matches!(
             validate_secret_key("abc123"),
-            Err(SecretKeyError::TooShort { len: 6, min: SECRET_KEY_MIN_LEN })
+            Err(SecretKeyError::TooShort {
+                len: 6,
+                min: SECRET_KEY_MIN_LEN
+            })
         ));
     }
 
     #[test]
     fn rejects_a_single_repeated_character_that_clears_the_floor() {
-        assert!(matches!(validate_secret_key(&"a".repeat(40)), Err(SecretKeyError::NoEntropy)));
+        assert!(matches!(
+            validate_secret_key(&"a".repeat(40)),
+            Err(SecretKeyError::NoEntropy)
+        ));
     }
 
     #[test]
