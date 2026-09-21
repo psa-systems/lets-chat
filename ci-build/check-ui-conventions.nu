@@ -172,32 +172,16 @@ const TEXT_EXTENSIONS = ["rs" "html" "js" "css" "ftl" "md" "nu" "toml" "yml" "ya
 #
 # Each allowlist entry is a name this rule would otherwise flag, paired with
 # why it is deliberately exempt. The desktop-only names have no server .env
-# surface at all; the SaaS/dev-only gaps predate LC-937 and are tracked by
-# LC-952 rather than fixed here, since closing them touches auth/mail
-# behavior questions bigger than a template edit.
+# surface at all; the former SaaS/dev-only gaps (SMTP, SSO, DEV_NO_SSO, PUSH_CONTACT) were
+# closed by LC-952 with commented template entries, so they need no allowlist.
 const ENV_VAR_ALLOWLIST = {
-    LETS_CHAT_SERVER_URL: "desktop-only (docs/configuration.md Desktop app section); no server .env surface exists for it (LC-952)"
-    LETS_CHAT_UPDATE_REGISTRY_URL: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
-    LETS_CHAT_UPDATE_REPOSITORY: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
-    LETS_CHAT_UPDATE_TAG: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
-    LETS_CHAT_UPDATE_TOKEN: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
-    LETS_CHAT_UPDATE_URL_ALLOW_PRIVATE: "desktop-only, see LETS_CHAT_SERVER_URL above (LC-952)"
+    LETS_CHAT_SERVER_URL: "desktop-only (docs/configuration.md Desktop app section); deliberately absent from the server templates, see docs/configuration.md Desktop app section"
+    LETS_CHAT_UPDATE_REGISTRY_URL: "desktop-only, see LETS_CHAT_SERVER_URL above"
+    LETS_CHAT_UPDATE_REPOSITORY: "desktop-only, see LETS_CHAT_SERVER_URL above"
+    LETS_CHAT_UPDATE_TAG: "desktop-only, see LETS_CHAT_SERVER_URL above"
+    LETS_CHAT_UPDATE_TOKEN: "desktop-only, see LETS_CHAT_SERVER_URL above"
+    LETS_CHAT_UPDATE_URL_ALLOW_PRIVATE: "desktop-only, see LETS_CHAT_SERVER_URL above"
     LETS_CHAT_UPDATE_BASE_URL: "dead: no Rust source has read it since LC-733; the name survives only as the literal desktop/src/update.rs asserts is absent from the Dockerfiles (LC-594)"
-    LETS_CHAT_BASE_URL: ".env.saas omits it along with the rest of the mail/SSO block; pre-existing gap tracked by LC-952, not one of LC-937's eight families"
-    LETS_CHAT_SECRET_KEY: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
-    LETS_CHAT_BUNYIP_SSO_ISSUER: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
-    LETS_CHAT_BUNYIP_SSO_CLIENT_ID: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
-    LETS_CHAT_BUNYIP_SSO_CLIENT_SECRET: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
-    LETS_CHAT_BUNYIP_SSO_REDIRECT_URI: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
-    LETS_CHAT_BUNYIP_SSO_INSECURE_TLS: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
-    LETS_CHAT_SMTP_HOST: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
-    LETS_CHAT_SMTP_PORT: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
-    LETS_CHAT_SMTP_TLS: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
-    LETS_CHAT_SMTP_FROM: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
-    LETS_CHAT_SMTP_USERNAME: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
-    LETS_CHAT_SMTP_PASSWORD: "same .env.saas gap as LETS_CHAT_BASE_URL above (LC-952)"
-    LETS_CHAT_DEV_NO_SSO: "documented but present in neither template; pre-existing gap tracked by LC-952, not one of LC-937's eight families"
-    LETS_CHAT_PUSH_CONTACT: "documented but present in neither template; pre-existing gap tracked by LC-952, not one of LC-937's eight families"
 }
 
 # Email templates are excluded from every template rule: they render in a mail
