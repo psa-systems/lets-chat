@@ -324,6 +324,30 @@ impl Hub {
             .unwrap_or_default()
     }
 
+    /// The voice (huddle) and stage room ids `user_id` currently occupies, read
+    /// without mutating so a ban can name the LiveKit rooms to evict them from.
+    pub fn media_rooms_of_user(&self, user_id: &str) -> (Vec<i64>, Vec<i64>) {
+        let voice = self
+            .voice_rooms
+            .iter()
+            .filter(|e| {
+                e.value().iter().any(|c| {
+                    self.connections
+                        .get(c)
+                        .is_some_and(|conn| conn.user_id == user_id)
+                })
+            })
+            .map(|e| *e.key())
+            .collect();
+        let stage = self
+            .stages
+            .iter()
+            .filter(|s| s.participants.contains(user_id))
+            .map(|s| *s.key())
+            .collect();
+        (voice, stage)
+    }
+
     /// True when `conn_id` is currently joined to voice channel `room_id`.
     pub fn is_in_voice_room(&self, conn_id: ConnId, room_id: i64) -> bool {
         self.voice_conn
