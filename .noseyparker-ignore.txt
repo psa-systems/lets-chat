@@ -2,3 +2,51 @@
 # Docker-inherited patterns (.sops.yaml, *-secrets.yml, archived/) were removed
 # because none of those files exist here. Add a path only with a documented
 # false-positive reason.
+#
+# LC-977 turned this scan into a real gate. Before it, the job ran `noseyparker
+# scan` + `report` with no exit check, and both commands exit 0 even when
+# findings exist, so the scan passed unconditionally and the findings below were
+# never surfaced. Each entry was read at the matching line before being ignored;
+# none is a live credential.
+#
+# Note for whoever edits this file: do NOT quote the matching literals in these
+# comments. The scan reads this file too, so reproducing a match here creates a
+# new finding in the very file that documents it. Describe the shape instead.
+
+# Not this repository's content at all: the scan runs from the checkout root, so
+# it walks .git/ as ordinary files. actions/checkout strips its fetch credential
+# in a POST step that runs AFTER this scan, so .git/config still carries the
+# fetch credential header at scan time and trips the HTTP Basic Authentication
+# rule. Fixing it per-repo duplicates a runner-level fact into every consumer;
+# the durable fix is in the shared workflow and is tracked in PC-59. Remove this
+# entry once PC-59 lands.
+.git/
+
+# Test fixtures: a short placeholder string assigned to the IMAP password field
+# in a #[sqlx::test], and the same fixture shape in the inboxes route test.
+# Neither reaches a real mailbox.
+server/tests/db_imap_config_dead_letter.rs
+server/tests/routes_email_inboxes.rs
+
+# Identifier and doc-comment text, not a value: the LiveKit API secret struct
+# field and the env-var names the module documents. The value itself is read
+# from the environment at runtime and never appears in the source.
+server/src/livekit.rs
+
+# Documentation placeholders: an Authorization header example whose token is a
+# fixed run of filler characters, shown to document the header format, plus the
+# same shape in the bridges guide.
+docs/api.md
+docs/protocol-bridges.md
+
+# Third-party vendored dependencies, never this repo's content. `node_modules/`
+# is gitignored and holds no tracked file, so CI (which only checks out and
+# scans) never sees it; a developer running the scan by hand after a `bun
+# install` does, and tailwindcss ships a match. Listed so a local run agrees
+# with CI instead of reporting a finding CI cannot reproduce.
+node_modules/
+
+# Parameter name and doc comments describing the OCI bearer flow, not a token.
+# LC-733's rule that the credential is attached only while the redirect chain
+# stays on the initial host is documented here in prose.
+desktop/src/net_guard.rs
