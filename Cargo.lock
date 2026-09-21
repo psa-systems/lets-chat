@@ -3426,6 +3426,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unic-langid",
+ "unicode-normalization",
  "url",
  "uuid",
  "web-push-native",
