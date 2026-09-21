@@ -41,9 +41,11 @@ jobs:
     name: Build desktop (Linux x86_64)
     # HEAVY: runs `docker buildx build`, which compiles the desktop app in the image.
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_HEAVY }}
-    permissions:
-      contents: read
-      packages: write
+    # Forgejo ignores `permissions:` (capabilities come from Authorized
+    # Integrations); kept commented for a possible move to GitHub Actions.
+    # permissions:
+    #   contents: read
+    #   packages: write
     env:
       # Publish to the shared psa-systems private org Generic Packages
       # registry, matching every other repo in ~/projects/a8n-run/.
