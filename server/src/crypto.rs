@@ -121,7 +121,11 @@ mod tests {
 
     #[test]
     fn rejects_the_shipped_placeholder_in_any_case_or_padding() {
-        for v in ["change-me-in-production", "CHANGE-ME-IN-PRODUCTION", "  change-me-in-production  "] {
+        for v in [
+            "change-me-in-production",
+            "CHANGE-ME-IN-PRODUCTION",
+            "  change-me-in-production  ",
+        ] {
             assert!(matches!(validate_secret_key(v), Err(SecretKeyError::Placeholder)), "{v:?}");
         }
     }
