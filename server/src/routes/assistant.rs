@@ -108,7 +108,7 @@ pub(crate) async fn assistant_bot(state: &AppState) -> Result<User, AppError> {
             }
         }
     }
-    if let Some(rec) = db::auth::find_user_by_username(&state.auth, ASSISTANT_USERNAME).await? {
+    if let Some(rec) = db::auth::find_bot_by_username(&state.auth, ASSISTANT_USERNAME).await? {
         return Ok(rec.into());
     }
     // Race: a concurrent first-ask may create it between the lookup and here;
@@ -119,7 +119,7 @@ pub(crate) async fn assistant_bot(state: &AppState) -> Result<User, AppError> {
             .map(Into::into)
             .ok_or_else(|| AppError::Internal("assistant bot vanished after create".into())),
         Err(sqlx::Error::Database(d)) if d.is_unique_violation() => {
-            db::auth::find_user_by_username(&state.auth, ASSISTANT_USERNAME)
+            db::auth::find_bot_by_username(&state.auth, ASSISTANT_USERNAME)
                 .await?
                 .map(Into::into)
                 .ok_or_else(|| AppError::Internal("assistant bot vanished after race".into()))
