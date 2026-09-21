@@ -99,6 +99,8 @@ pub enum UpdateError {
     Registry(OciError),
     Verify(update_verify::VerifyError),
     Io(String),
+    /// The registry URL is not `https` (LC-980).
+    InsecureRegistry(String),
 }
 
 impl std::fmt::Display for UpdateError {
@@ -110,6 +112,9 @@ impl std::fmt::Display for UpdateError {
             UpdateError::Registry(e) => write!(f, "{e}"),
             UpdateError::Verify(e) => write!(f, "verify downloaded artifact: {e}"),
             UpdateError::Io(e) => write!(f, "{e}"),
+            UpdateError::InsecureRegistry(u) => {
+                write!(f, "refusing non-https update registry: {u}")
+            }
         }
     }
 }
@@ -165,14 +170,39 @@ fn platform_tag() -> Option<&'static str> {
         .map(|(_, _, tag)| *tag)
 }
 
+/// LC-980: the updater only talks to an `https` registry. The single exception
+/// is a loopback host with the dev flag, and `allow_insecure` is always false in
+/// release builds (the flag is read only under `debug_assertions`).
+fn require_https(registry: &str, allow_insecure: bool) -> Result<(), UpdateError> {
+    let url = url::Url::parse(registry)
+        .map_err(|_| UpdateError::InsecureRegistry(registry.to_string()))?;
+    let loopback = match url.host() {
+        Some(url::Host::Domain(d)) => d.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+        None => false,
+    };
+    if url.scheme() == "https" || (allow_insecure && url.scheme() == "http" && loopback) {
+        Ok(())
+    } else {
+        Err(UpdateError::InsecureRegistry(registry.to_string()))
+    }
+}
+
 /// Registry coordinate for this platform's artifact, after env overrides.
 pub fn registry_ref() -> Result<RegistryRef, UpdateError> {
     let reference = env_non_empty("LETS_CHAT_UPDATE_TAG")
         .or_else(|| platform_tag().map(str::to_string))
         .ok_or(UpdateError::UnsupportedPlatform)?;
+    let registry =
+        env_non_empty(REGISTRY_URL_VAR).unwrap_or_else(|| DEFAULT_REGISTRY_URL.to_string());
+    #[cfg(debug_assertions)]
+    let allow_insecure = env_non_empty("LETS_CHAT_UPDATE_ALLOW_INSECURE").as_deref() == Some("1");
+    #[cfg(not(debug_assertions))]
+    let allow_insecure = false;
+    require_https(&registry, allow_insecure)?;
     Ok(RegistryRef {
-        registry: env_non_empty(REGISTRY_URL_VAR)
-            .unwrap_or_else(|| DEFAULT_REGISTRY_URL.to_string()),
+        registry,
         repository: env_non_empty(REPOSITORY_VAR).unwrap_or_else(|| DEFAULT_REPOSITORY.to_string()),
         reference,
     })
@@ -434,6 +464,23 @@ mod tests {
             !DEFAULT_REPOSITORY.is_empty() && !DEFAULT_REPOSITORY.contains("a8n-tools"),
             "default repository is unusable: {DEFAULT_REPOSITORY}"
         );
+    }
+
+    #[test]
+    fn require_https_rejects_plaintext_and_other_schemes() {
+        assert!(require_https("https://registry.example", false).is_ok());
+        assert!(matches!(
+            require_https("http://registry.example", false),
+            Err(UpdateError::InsecureRegistry(_))
+        ));
+        assert!(matches!(
+            require_https("ftp://registry.example", false),
+            Err(UpdateError::InsecureRegistry(_))
+        ));
+        assert!(require_https("http://registry.example", true).is_err());
+        assert!(require_https("http://127.0.0.1:5000", true).is_ok());
+        assert!(require_https("http://127.0.0.1:5000", false).is_err());
+        assert!(require_https("ftp://127.0.0.1", true).is_err());
     }
 
     const PUBLISH_WORKFLOW: &str = ".forgejo/workflows/publish-release.yml";
