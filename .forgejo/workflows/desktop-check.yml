@@ -16,6 +16,7 @@ on:
     paths:
       - "desktop/**"
       - "ci-build/Dockerfile.desktop-check"
+      - ".dockerignore"
       - ".forgejo/workflows/desktop-check.yml"
   pull_request:
     branches:
@@ -23,6 +24,7 @@ on:
     paths:
       - "desktop/**"
       - "ci-build/Dockerfile.desktop-check"
+      - ".dockerignore"
       - ".forgejo/workflows/desktop-check.yml"
 
 jobs:
