@@ -795,7 +795,17 @@ pub async fn post_llm_flag(
     };
     db::settings::set_setting(&state.settings, super::ai_gate::LLM_AUDIENCE_KEY, audience).await?;
     let action = if on { "llm_flag_on" } else { "llm_flag_off" };
-    db::moderation::log_mod_action(&state.chat, action, "", &actor.id, None, None, None).await?;
+    let detail = format!("enabled={value} audience={audience}");
+    db::moderation::log_mod_action(
+        &state.chat,
+        action,
+        "",
+        &actor.id,
+        Some(&detail),
+        None,
+        None,
+    )
+    .await?;
     if is_hx(&headers) {
         return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
     }
@@ -872,7 +882,7 @@ pub async fn post_help_docs_sources(
         "help_docs_sources",
         "",
         &actor.id,
-        None,
+        Some(sources),
         None,
         None,
     )
