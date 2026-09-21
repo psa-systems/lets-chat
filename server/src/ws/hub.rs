@@ -929,6 +929,25 @@ mod tests {
         assert!(rx3.try_recv().is_ok(), "u2 stays subscribed");
     }
 
+    // LC-983: a demoted/banned/deleted admin is dropped from `admin` and gets
+    // no further frames, while remaining admins keep receiving them.
+    #[test]
+    fn unsubscribe_from_admin_topic_stops_frames_for_revoked_user() {
+        let hub = Hub::new();
+        let (c1, mut rx1, _) = hub.connect("demoted", "demoted");
+        let (c2, mut rx2, _) = hub.connect("admin2", "admin2");
+        hub.subscribe_topic(c1, "admin");
+        hub.subscribe_topic(c2, "admin");
+        let evt = ChatEvent::AdminUserChanged {
+            user_id: "x".into(),
+            removed: true,
+        };
+        hub.unsubscribe_user_from_topic("demoted", "admin");
+        hub.broadcast_to_topic("admin", &evt);
+        assert!(rx1.try_recv().is_err());
+        assert!(rx2.try_recv().is_ok());
+    }
+
     #[test]
     fn unsubscribe_user_from_topic_is_noop_for_unknown_user() {
         let hub = Hub::new();
