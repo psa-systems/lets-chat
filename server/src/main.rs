@@ -275,6 +275,7 @@ async fn main() {
     spawn_mute_expiry_scanner(state.clone());
     spawn_digest_sender(state.clone());
     spawn_orphan_sweeper(state.clone());
+    spawn_unfurl_image_sweeper(state.clone());
     spawn_scheduled_dispatcher(state.clone());
     spawn_reminders_dispatcher(state.clone());
     spawn_polls_closer(state.clone());
@@ -682,6 +683,24 @@ fn spawn_polls_closer(state: AppState) {
                     }
                 }
                 Err(e) => tracing::warn!(error = %e, "poll closer tick failed"),
+            }
+        }
+    });
+}
+
+/// LC-985: hourly tick that clears link-preview image bytes past the TTL.
+fn spawn_unfurl_image_sweeper(state: AppState) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            match lets_chat::db::uploads::clear_expired_cached_images(&state.chat, 24 * 60 * 60)
+                .await
+            {
+                Ok(n) if n > 0 => tracing::info!(rows = n, "unfurl image sweep complete"),
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "unfurl image sweep failed"),
             }
         }
     });

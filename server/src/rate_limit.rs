@@ -113,6 +113,11 @@ pub enum RateLimitKind {
     /// 'failed' repeatedly, so the cap bounds a noisy client and over-limit
     /// reports are dropped silently.
     VoiceDiag,
+    /// LC-985: per-user cap on `GET /api/unfurl` and `GET /api/unfurl/image/{hash}`.
+    /// Keyed by user_id; each route gets its own bucket. Bounds outbound fetches
+    /// and image-cache growth per user.
+    Unfurl,
+    UnfurlImage,
 }
 
 impl RateLimitKind {
@@ -136,6 +141,8 @@ impl RateLimitKind {
             RateLimitKind::SttRoom => "sttr",
             RateLimitKind::CallReaction => "rxn",
             RateLimitKind::VoiceDiag => "vdiag",
+            RateLimitKind::Unfurl => "unf",
+            RateLimitKind::UnfurlImage => "unfi",
         }
     }
 }
