@@ -68,6 +68,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 scraper = "0.20"
 url = "2"
 regex = "1"
+unicode-normalization = "0.1"
 totp-rs = { version = "5", features = ["qr", "otpauth", "gen_secret"] }
 aes-gcm = "0.10"
 web-push-native = "0.4"
