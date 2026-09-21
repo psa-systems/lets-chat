@@ -227,9 +227,13 @@ fn parse_index_links(html: &str, index_url: &str) -> Vec<String> {
         } else {
             continue;
         };
-        let Some((_, path)) = split_origin_path(&abs) else {
+        let Some((link_origin, path)) = split_origin_path(&abs) else {
             continue;
         };
+        // Stay on the configured origin (no off-origin crawl).
+        if link_origin != origin {
+            continue;
+        }
         // Directly under the index path, and not the index itself.
         if !path.starts_with(&prefix) || path == index_path {
             continue;
@@ -1301,6 +1305,7 @@ mod tests {
             <a href="/apps/other/docs/thing">Other product</a>
             <a href="/account">Nav</a>
             <a href="https://a8n.systems/apps/mokosh-server/docs/quick-start">Abs</a>
+            <a href="https://evil.example/apps/mokosh-server/docs/pwn">Off-origin</a>
         "#;
         let mut links = parse_index_links(html, "https://a8n.systems/apps/mokosh-server/docs");
         links.sort();
