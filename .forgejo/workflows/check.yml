@@ -171,6 +171,10 @@ jobs:
         # page and drops a live call. See ci-build/check-nav-boost.nu.
         run: nu ci-build/check-nav-boost.nu
 
+      - name: Workflow secrets stay out of argv (LC-987)
+        shell: nu {0}
+        run: nu ci-build/check-workflow-secrets.nu
+
       - name: UI convention guard
         # The classes the 2026-08-11 UI audit closed, held closed by one grep
         # each: palette literals in templates, buttons styled as text links,
