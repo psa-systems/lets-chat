@@ -1014,11 +1014,32 @@ pub async fn post_ban(
 ) -> Result<Html, AppError> {
     guard_not_last_admin(&state, &user_id).await?;
     db::auth::ban_user(&state.auth, &user_id, None).await?;
+    db::auth::delete_user_sessions(&state.auth, &user_id).await?;
     db::moderation::log_mod_action(&state.chat, "ban", &user_id, &actor.id, None, None, None)
         .await?;
+    // Read the LiveKit rooms before the broadcast: closing the socket clears
+    // the user's hub voice and stage membership.
+    let (voice_rooms, stage_rooms) = state.hub.media_rooms_of_user(&user_id);
+    // LC-979: the ws send task closes every socket of this user on this event.
     state.hub.broadcast_global(&ChatEvent::UserBanned {
         user_id: user_id.clone(),
     });
+    if let Some(cfg) = crate::livekit::LiveKitConfig::from_env() {
+        let now = chrono::Utc::now().timestamp().max(0) as u64;
+        let rooms = voice_rooms
+            .iter()
+            .map(|id| crate::livekit::room_name(crate::livekit::Surface::Huddle, *id))
+            .chain(
+                stage_rooms
+                    .iter()
+                    .map(|id| crate::livekit::room_name(crate::livekit::Surface::Stage, *id)),
+            );
+        for room in rooms {
+            if let Err(e) = crate::livekit::remove_participant(&cfg, &room, &user_id, now).await {
+                tracing::warn!(error = %e, %room, %user_id, "livekit remove on ban failed");
+            }
+        }
+    }
     render_user_row(&state, &user_id).await
 }
 
