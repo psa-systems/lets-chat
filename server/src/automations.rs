@@ -75,8 +75,7 @@ fn label_of(user: &User) -> &str {
 /// assistant-bot pattern in `routes::assistant`, including the create race.
 async fn automation_bot(state: &AppState) -> Result<User, crate::error::AppError> {
     use crate::error::AppError;
-    if let Some(rec) = db::auth::find_user_by_username(&state.auth, AUTOMATION_BOT_USERNAME).await?
-    {
+    if let Some(rec) = db::auth::find_bot_by_username(&state.auth, AUTOMATION_BOT_USERNAME).await? {
         return Ok(rec.into());
     }
     match db::auth::create_bot(&state.auth, AUTOMATION_BOT_USERNAME).await {
@@ -85,7 +84,7 @@ async fn automation_bot(state: &AppState) -> Result<User, crate::error::AppError
             .map(Into::into)
             .ok_or_else(|| AppError::Internal("automation bot vanished after create".into())),
         Err(sqlx::Error::Database(d)) if d.is_unique_violation() => {
-            db::auth::find_user_by_username(&state.auth, AUTOMATION_BOT_USERNAME)
+            db::auth::find_bot_by_username(&state.auth, AUTOMATION_BOT_USERNAME)
                 .await?
                 .map(Into::into)
                 .ok_or_else(|| AppError::Internal("automation bot vanished after race".into()))
