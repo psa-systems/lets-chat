@@ -53,3 +53,13 @@ verify-email-page-title = Verificación de correo
 verify-email-title = Verificación de correo
 verify-email-open-link = Abrir Let's Chat
 verify-email-signin-link = Iniciar sesión
+
+## Login SSO errors (LC-951)
+login-sso-error-dance = No se pudo completar el inicio de sesión. Inténtalo de nuevo.
+login-sso-error-op = Bunyip rechazó el intento de inicio de sesión.
+login-sso-error-banned = Tu cuenta está suspendida.
+login-sso-error-identity-conflict = El correo de esta cuenta ya está vinculado a otra identidad de inicio de sesión. Contacta con un administrador.
+login-sso-error-internal = Ocurrió un error interno. Inténtalo de nuevo.
+login-sso-error-unconfigured = El inicio de sesión único no está configurado en este servidor.
+login-sso-error-approval = Tu código de aprobación de inicio de sesión caducó o ya se usó. Inicia sesión de nuevo para obtener uno nuevo.
+login-sso-error-generic = Error al iniciar sesión.

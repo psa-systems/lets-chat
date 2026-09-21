@@ -688,6 +688,9 @@ pub async fn post_file_alt(
     })
 }
 
+/// LC-992: alt-draft requests allowed per user per minute (matches the assistant).
+const ALT_DRAFT_RATE_PER_MIN: u32 = 10;
+
 /// `POST /api/files/{id}/alt-draft` - LC-667: draft alt text for an image with
 /// the operator's vision model, returned as plain text for the LC-660 alt editor
 /// to fill in (the uploader still accepts/edits it). Uploader-only, images only,
@@ -701,6 +704,21 @@ pub async fn post_file_alt_draft(
     Path(file_id): Path<i64>,
 ) -> Result<Response, AppError> {
     use base64::Engine as _;
+
+    // LC-992: like every other LLM entry point, honor the AI flag and audience,
+    // and share the assistant's per-user bucket so a burst can't hammer the
+    // operator's vision endpoint.
+    crate::routes::ai_gate::require_llm_workspace(&state, &user).await?;
+    if let crate::rate_limit::Outcome::Deny { .. } = state.rate_limits.check(
+        crate::rate_limit::RateLimitKind::AssistantAsk,
+        &user.id,
+        ALT_DRAFT_RATE_PER_MIN,
+    ) {
+        return Err(AppError::TooManyRequests(
+            "Too many alt text drafts. Try again in a minute.".into(),
+            60,
+        ));
+    }
 
     let (upload, _room_id) = db::uploads::get_upload(&state.chat, file_id)
         .await?

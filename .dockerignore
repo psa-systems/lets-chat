@@ -13,7 +13,11 @@ target/
 .idea/
 .claude/
 .superpowers/
-.forgejo/
+.forgejo/*
+# desktop tests (update.rs) read this file at test time; see ci-build/Dockerfile.desktop-check
+!.forgejo/workflows/
+.forgejo/workflows/*
+!.forgejo/workflows/publish-release.yml
 
 # Local data and secrets
 data/

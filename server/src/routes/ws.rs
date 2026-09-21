@@ -2751,7 +2751,8 @@ async fn relay_huddle_control_signal(
                 echo("unavailable", "not_sharing");
                 return;
             }
-            let Some(requester) = state.hub.take_control_pending(room_id) else {
+            let Some(requester) = state.hub.take_control_pending_for_sharer(room_id, &user.id)
+            else {
                 echo("unavailable", "no_pending_request");
                 return;
             };
@@ -2768,7 +2769,8 @@ async fn relay_huddle_control_signal(
                 echo("unavailable", "not_sharing");
                 return;
             }
-            let Some(requester) = state.hub.take_control_pending(room_id) else {
+            let Some(requester) = state.hub.take_control_pending_for_sharer(room_id, &user.id)
+            else {
                 // Expired or never existed: nobody is waiting on this answer.
                 echo("unavailable", "no_pending_request");
                 return;

@@ -809,3 +809,52 @@ async fn concurrent_panel_renders_create_only_one_bot_dm() {
         "exactly one assistant-bot DM room must exist for the user, got: {dm_rooms:?}"
     );
 }
+
+/// LC-991: a send rejected by the length or rate gate writes no user row.
+#[tokio::test]
+async fn rejected_send_inserts_no_row() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+    let (_uid, session) = member_session(&auth).await;
+    db::settings::set_setting(&settings, "llm_enabled", "true")
+        .await
+        .unwrap();
+    let app: Router = routes::build_router(state(auth.clone(), chat.clone(), settings, true));
+
+    let send = |body: String| {
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/support/panel/send")
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(header::COOKIE, format!("session={session}"))
+            .body(Body::from(format!("body={body}")))
+            .unwrap();
+        app.clone().oneshot(req)
+    };
+    let count = || async {
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages")
+            .fetch_one(&chat)
+            .await
+            .unwrap()
+    };
+
+    // Over MAX_MESSAGE_CHARS: rejected, nothing stored.
+    let res = send("a".repeat(16_001)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(count().await, 0);
+
+    // Over the support question cap: rejected, nothing stored.
+    let res = send("a".repeat(1_001)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(count().await, 0);
+
+    // Exhaust the limiter, then a further send stores no user row.
+    for _ in 0..10 {
+        assert_eq!(send("hi".into()).await.unwrap().status(), StatusCode::OK);
+    }
+    let before = count().await;
+    let res = send("hi".into()).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(count().await, before);
+}
