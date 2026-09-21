@@ -56,7 +56,7 @@ docker_version_args := '--build-arg CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-defaul
 
 # Run every check: asset/template conventions, Rust compile, clippy, fmt, and JS, agent and saas tests.
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-ui-conventions check-update-injection check-count-badge check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js test-agent test-saas
+check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-workflow-secrets check-ui-conventions check-update-injection check-count-badge check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js test-agent test-saas
     # Note: LC-774: `test-js` runs the browser-asset node:test suites here too, so
     # `just pre-commit` (whose `pre_commit_prepare := "check"` runs this recipe)
     # covers them alongside the Rust checks.
@@ -125,6 +125,11 @@ check-swap-safe-scripts:
 [group('check')]
 check-nav-boost:
     nu ci-build/check-nav-boost.nu
+
+# LC-987: no `--password <value>` argument and no `${{ }}` inside a `run:` body in the publish workflows.
+[group('check')]
+check-workflow-secrets:
+    nu ci-build/check-workflow-secrets.nu
 
 # The convention classes the 2026-08-11 UI audit closed, held closed: palette literals in templates, fake link buttons, open-coded .btn-danger-outline, untokenized borders, clipping table wrappers, raw h1 sizes, the offline page's mode bootstrap and brand name, and the em-dash ban (LC-749).
 [group('check')]

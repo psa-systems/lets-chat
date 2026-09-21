@@ -212,8 +212,10 @@ jobs:
 
       - name: Generate update manifest
         shell: nu {0}
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          let version = "${{ steps.version.outputs.version }}"
+          let version = $env.RELEASE_VERSION
           let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
           # Each artifact carries its lowercase-hex SHA-256 (nushell
           # `hash sha256`). The desktop updater checks the downloaded binary
@@ -238,8 +240,9 @@ jobs:
         shell: nu {0}
         env:
           FORGEJO_TOKEN: ${{ secrets.PSA_SYSTEMS_PRIVATE_PACKAGE_PAT }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          let version = "${{ steps.version.outputs.version }}"
+          let version = $env.RELEASE_VERSION
           let auth = [Authorization $"token ($env.FORGEJO_TOKEN)"]
           let server = ($env.GITHUB_SERVER_URL | url parse)
           # Tauri stamps the bundles with the crate version
@@ -303,8 +306,9 @@ jobs:
         shell: nu {0}
         env:
           FORGEJO_TOKEN: ${{ secrets.PSA_SYSTEMS_PRIVATE_PACKAGE_PAT }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          let version = "${{ steps.version.outputs.version }}"
+          let version = $env.RELEASE_VERSION
           let repo = $"($env.UPDATE_REGISTRY_HOST)/($env.UPDATE_REPOSITORY)"
           # The `latest-*` tags are spelled out because they are a contract with
           # the shipped client: desktop/src/update.rs names the same strings, and
@@ -315,6 +319,11 @@ jobs:
               { file: "lets-chat-desktop-linux-x86_64",       tag: "latest-linux-x86_64",   version_tag: $"($version)-linux-x86_64" }
               { file: "lets-chat-desktop-windows-x86_64.exe", tag: "latest-windows-x86_64", version_tag: $"($version)-windows-x86_64" }
           ]
+          # oras takes credentials from a registry-config file, not argv: the
+          # token stays out of the process list. The file is copied into each
+          # container for the same reason the binary is (see below).
+          let auth_file = (^mktemp | str trim)
+          {auths: {($env.UPDATE_REGISTRY_HOST): {auth: ($"($env.PACKAGE_OWNER):($env.FORGEJO_TOKEN)" | encode base64)}}} | to json | save --force $auth_file
           for a in $artifacts {
               for tag in [$a.tag, $a.version_tag] {
                   print $"Pushing artifacts/($a.file) to ($repo):($tag)"
@@ -327,23 +336,26 @@ jobs:
                   let container = (
                     ^docker create ghcr.io/oras-project/oras:v1.2.0
                       push
-                      --username $env.PACKAGE_OWNER
-                      --password $env.FORGEJO_TOKEN
+                      --registry-config /workspace/registry-config.json
                       --artifact-type application/vnd.lets-chat.desktop.binary
                       --annotation $"org.opencontainers.image.version=($version)"
                       $"($repo):($tag)"
                       $"($a.file):application/octet-stream"
                   )
                   ^docker cp $"artifacts/($a.file)" $"($container):/workspace/($a.file)"
+                  ^docker cp $auth_file $"($container):/workspace/registry-config.json"
                   ^docker start --attach $container
                   ^docker rm $container
               }
           }
+          rm --force $auth_file
 
       - name: Print release summary
         shell: nu {0}
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          let version = "${{ steps.version.outputs.version }}"
+          let version = $env.RELEASE_VERSION
           let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
           let repo = $"($env.UPDATE_REGISTRY_HOST)/($env.UPDATE_REPOSITORY)"
           print $"Update artifact: ($repo):latest-linux-x86_64 (rollback: ($repo):($version)-linux-x86_64)"
