@@ -66,7 +66,13 @@ async fn main() {
         tracing::warn!(error = %e, "General enclave backfill failed");
     }
     let settings_pool = db::open_settings_pool().await;
-    let secret_key = lets_chat::crypto::load_secret_key_from_env().map(std::sync::Arc::new);
+    let secret_key = match lets_chat::crypto::load_secret_key_from_env() {
+        Ok(k) => k.map(std::sync::Arc::new),
+        Err(e) => {
+            tracing::error!(error = %e, "LETS_CHAT_SECRET_KEY invalid; refusing to start");
+            std::process::exit(1);
+        }
+    };
 
     // VAPID keypair: generate on first boot when a secret key is set, then
     // hold an `Arc` of the decrypted keypair for the lifetime of the process.
