@@ -256,6 +256,16 @@ async fn purge_user_chat(chat: &SqlitePool, user_id: &str) -> Result<(), AppErro
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
+    // LC-923: a ban record for the deleted user and any unexpired
+    // email-reply token must not outlive the account.
+    sqlx::query("DELETE FROM enclave_bans WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM reply_tokens WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
     // LC-908: the remaining user-scoped tables the original enumeration
     // missed. See `chat_user_columns_are_purged_or_allowlisted` in
     // `tests/routes_account_delete.rs` for the schema-walking guard that

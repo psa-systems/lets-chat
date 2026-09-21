@@ -9,8 +9,10 @@ use axum::{
     Router,
 };
 use std::collections::HashMap;
+use tower_http::compression::CompressionLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
+use tower_http::CompressionLevel;
 
 use crate::auth::{enforce_maintenance_mode, inject_user, OptionalUser};
 use crate::db;
@@ -2000,6 +2002,10 @@ pub fn build_router(state: AppState) -> Router {
         // logs (only the webhook id is logged, from the handler).
         .merge(webhooks::public_router())
         .merge(feeds::public_router())
+        // LC-777: gzip / brotli negotiation. OUTSIDE the branding layer so it
+        // compresses the rewritten body, INSIDE the security headers so they
+        // still apply to the compressed response.
+        .layer(CompressionLayer::new().quality(CompressionLevel::Precise(6)))
         // LC-504: security response headers. OUTERMOST layer so it covers
         // every route - cookie pages, the JSON API, webhooks, feeds, static
         // assets, redirects and error responses alike (a layer applied earlier

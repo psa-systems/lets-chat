@@ -545,6 +545,23 @@ async fn delete_wipes_lc908_gap_tables() {
         .await
         .unwrap();
 
+    // enclave_bans / reply_tokens (LC-923)
+    sqlx::query("INSERT INTO enclave_bans (enclave_id, user_id) VALUES (?, ?)")
+        .bind(general_id)
+        .bind(&t.user_id)
+        .execute(&t.chat)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO reply_tokens (token, user_id, message_id, expires_at) \
+         VALUES ('tok', ?, ?, datetime('now', '+1 day'))",
+    )
+    .bind(&t.user_id)
+    .bind(other_msg)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+
     // canned_responses
     sqlx::query(
         "INSERT INTO canned_responses (user_id, name, body) VALUES (?, 'hi', 'hello there')",
@@ -740,6 +757,14 @@ async fn delete_wipes_lc908_gap_tables() {
             "SELECT COUNT(*) FROM canned_responses WHERE user_id = ?",
         ),
         (
+            "enclave_bans",
+            "SELECT COUNT(*) FROM enclave_bans WHERE user_id = ?",
+        ),
+        (
+            "reply_tokens",
+            "SELECT COUNT(*) FROM reply_tokens WHERE user_id = ?",
+        ),
+        (
             "room_role_overrides (user)",
             "SELECT COUNT(*) FROM room_role_overrides WHERE user_id = ?",
         ),
@@ -882,6 +907,8 @@ async fn chat_user_columns_are_purged_or_allowlisted() {
         ("enclave_last_room", "user_id"),
         ("dm_pairs", "user_lo"),
         ("dm_pairs", "user_hi"),
+        ("enclave_bans", "user_id"),
+        ("reply_tokens", "user_id"),
     ];
 
     // (table, column) pairs intentionally left holding a user id after
@@ -912,10 +939,6 @@ async fn chat_user_columns_are_purged_or_allowlisted() {
         ("transcript_segments", "user_id"),
         ("user_groups", "created_by"),
         ("voice_events", "user_id"),
-        // LC-908 audit follow-up, deferred as LC-923: these two are
-        // genuinely user-keyed and not yet purged.
-        ("enclave_bans", "user_id"),
-        ("reply_tokens", "user_id"),
     ];
 
     let tables: Vec<String> = sqlx::query_scalar(
