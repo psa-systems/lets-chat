@@ -64,7 +64,7 @@ docker run --rm --detach --init \
     -e LETS_CHAT_BUNYIP_SSO_CLIENT_ID \
     -e LETS_CHAT_BUNYIP_SSO_CLIENT_SECRET \
     -e LETS_CHAT_BUNYIP_SSO_REDIRECT_URI \
-    ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie \
+    ghcr.io/niceguyit/rust-builder-glibc:v1.2.0-rust1.98.1-trixie \
     bash -c '
         set -euo pipefail
         # Named volumes are created root-owned on first use; hand them to the

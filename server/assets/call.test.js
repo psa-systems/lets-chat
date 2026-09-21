@@ -22,7 +22,13 @@ function load(voiceJoined) {
   const voiceCalls = [];
   const pending = () => new Promise(() => {});
   const window = {
-    LetsChatRtc: { bindControls: (map) => { controls = map; }, watchBus: () => {} },
+    LetsChatRtc: {
+      bindControls: (map) => { controls = map; },
+      watchBus: () => {},
+      control: {
+        events: { START: 'lc:control-start', INPUT: 'lc:control-input', END: 'lc:control-end', KILL: 'lc:control-kill' },
+      },
+    },
     LetsChatVoice: {
       isJoined: () => voiceJoined,
       leave: () => { voiceCalls.push('leave'); voiceJoined = false; },

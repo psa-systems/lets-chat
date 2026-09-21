@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Wrapper: runs cargo for the desktop crate inside the shared org
 # rust-builder image. The image (`ghcr.io/niceguyit/rust-builder-glibc`)
-# bakes in Rust 1.94 + rustfmt + clippy and every GTK/WebKit/Soup/SSL system
+# bakes in Rust 1.98.1 + rustfmt + clippy and every GTK/WebKit/Soup/SSL system
 # library the Tao+Wry desktop crate needs, so no apt step is required at run
 # time and the local check matches the CI build environment one-for-one.
 # Image tag must stay aligned with `ci-build/Dockerfile.desktop-linux`.
@@ -85,7 +85,7 @@ docker run --rm --init \
     -e CARGO_HOME=/usr/local/cargo \
     -e CARGO_TARGET_DIR=/cargo-target \
     "${EXTRA_ARGS[@]}" \
-    ghcr.io/niceguyit/rust-builder-glibc:v1.0.1-rust1.94-trixie \
+    ghcr.io/niceguyit/rust-builder-glibc:v1.2.0-rust1.98.1-trixie \
     bash -c '
         set -euo pipefail
         for d in /usr/local/cargo/registry /usr/local/cargo/git /cargo-target; do

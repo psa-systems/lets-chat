@@ -138,6 +138,13 @@ const I18N_TABLE_ENTRY = '^\s*(?<key>[a-zA-Z_][a-zA-Z0-9_]*):\s*"\{\{\s*"[a-z0-9
 const I18N_KEY_CALL = '\b(__lcS|S|s|str)\(\s*[\x27"](?<key>[a-zA-Z0-9_]+)[\x27"]'
 const I18N_TOAST_KEY_CALL = '\blcToast\(\s*[\x27"][^\x27"]*[\x27"]\s*,\s*[\x27"](?<key>[a-zA-Z0-9_]+)[\x27"]'
 
+# LC-945: `window.__lcS` is the reader function `base.html` defines
+# (`function (k, fb) { ... }`), never the catalog map itself; subscripting it
+# (`window.__lcS[key]`) always reads a property of a function, which is
+# `undefined`, so the fallback is taken unconditionally regardless of catalog
+# content. huddle_ring.js shipped exactly that shape once already.
+const LCS_SUBSCRIPT = 'window\.__lcS\['
+
 # LC-748: the service worker's offline fallback. It is a standalone document
 # outside the template layer, so nothing else here covers it: it must stay
 # mode-aware (no light-only `color-scheme`) and must call the product by its
@@ -725,6 +732,12 @@ def used-i18n-keys [] {
 # LC-891: the key-pairing rule from both directions - a table entry nothing
 # calls, and a call site whose key has no table entry (a broken lookup, not
 # just a dead one).
+# LC-945: the wrong-accessor shape - reading `window.__lcS` as if it were the
+# catalog map instead of calling it as the reader function base.html defines.
+def lcs-subscripts [] {
+    scan-lines (browser-asset-files) $LCS_SUBSCRIPT
+}
+
 def i18n-key-pairing [] {
     let table = (i18n-table-entries)
     let used = (used-i18n-keys)
@@ -863,6 +876,12 @@ def rules [] {
             check: {|| ellipsis-outside-locales }
         }
         {
+            id: "no-lcS-subscript"
+            pending: null
+            fix: "call `window.__lcS(key, fallback)` as a function, matching every other reader in the tree; `window.__lcS[key]` subscripts the reader function itself and is always undefined, so the fallback wins unconditionally regardless of catalog content (LC-945)"
+            check: {|| lcs-subscripts }
+        }
+        {
             id: "i18n-keys-are-paired"
             pending: null
             fix: "every `window.__lcI18n` entry in base.html needs a caller in the templates or server/assets, and every `__lcS`-family call site needs a matching base.html entry; delete whichever side of the pair is now the leftover (LC-891)"
@@ -877,7 +896,7 @@ def rules [] {
         {
             id: "no-em-dash"
             pending: null
-            fix: "U+2014 (em dash) is banned repo-wide: use a hyphen, a colon, parentheses, or a period and a new sentence (internal/CLAUDE.md style rules, folded into this job by LC-749)"
+            fix: "U+2014 (em dash) is banned repo-wide: use a hyphen, a colon, parentheses, or a period and a new sentence (style rule folded into this job by LC-749)"
             check: {|| scan-lines (tracked-text-files) $EM_DASH }
         }
         {
@@ -887,12 +906,36 @@ def rules [] {
             check: {|| cbtn-label-missing-aria }
         }
         {
+            id: "control-input-needs-arm-and-kill"
+            pending: null
+            fix: "a module that dispatches lc:control-input as the controlled side must also dispatch lc:control-start to arm the native injector and listen for lc:control-kill so the hotkey ends the session (LC-931); the four lc:control-* names are exported from rtc_common.js's LetsChatRtc.control.events"
+            check: {|| control-input-without-arm }
+        }
+        {
             id: "env-var-template-parity"
             pending: null
             fix: "add a commented entry mirroring docs/configuration.md's wording to whichever of .env.standalone / .env.saas is missing it, or add it to docs/configuration.md if the code changed first; a name deliberately absent from one of the three surfaces goes on the ENV_VAR_ALLOWLIST above with a one-line reason (LC-937)"
             check: {|| undocumented-env-vars }
         }
     ]
+}
+
+# LC-931: a module that dispatches lc:control-input as the controlled side
+# (hands a controller's frame to the native injector) must also dispatch
+# lc:control-start to arm it and listen for lc:control-kill so the desktop
+# hotkey can end the session; a third surface that ships input relay without
+# the other two leaves the injector unkillable or never armed.
+def control-input-without-arm [] {
+    browser-asset-files | each {|file|
+        let text = (open --raw $file | decode utf-8)
+        if not ($text =~ 'lc:control-input') {
+            []
+        } else if ($text =~ 'lc:control-start') and ($text =~ 'lc:control-kill') {
+            []
+        } else {
+            [$"($file): dispatches lc:control-input without both arming \(lc:control-start\) and a kill listener \(lc:control-kill\)"]
+        }
+    } | flatten
 }
 
 def main [] {

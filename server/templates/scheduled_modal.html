@@ -11,9 +11,9 @@
 
    On open: the trigger button in composer.html calls
    window.__lcOpenScheduledModal(). The function reads the current
-   composer's data-room-id + textarea body + hidden file_id, pre-fills the
-   modal fields, sets the datetime-local picker default to now + 1h, then
-   shows the dialog and installs the focus trap.
+   composer's data-room-id + textarea body + hidden file_id + hidden
+   quote_id, pre-fills the modal fields, sets the datetime-local picker
+   default to now + 1h, then shows the dialog and installs the focus trap.
 #}
 <div data-lc-scheduled-modal
      class="hidden modal-backdrop"
@@ -162,6 +162,7 @@
     fd.set('body', ctx.body);
     fd.set('scheduled_for', iso);
     if (ctx.fileId) fd.set('file_id', ctx.fileId);
+    if (ctx.quoteId) fd.set('quote_id', ctx.quoteId);
     // LC-485: recurrence selection (defaults to 'none').
     var repeatSel = form.querySelector('select[name=repeat]');
     fd.set('repeat', repeatSel ? repeatSel.value : 'none');
@@ -184,6 +185,8 @@
           var send = composer.querySelector('#composer-send');
           if (send) send.disabled = true;
           if (window.__lcClearAttach) window.__lcClearAttach();
+          var qbar = document.getElementById('composer-quote-bar');
+          if (qbar) qbar.innerHTML = '';
         }
         // Close path 5: submit success.
         closeModal();
@@ -207,13 +210,15 @@
     if (!roomId) { return; }
     var bodyEl = composer.querySelector('textarea[name=body]');
     var fileEl = composer.querySelector('input[name=file_id]');
+    var quoteEl = composer.querySelector('input[name=quote_id]');
     var body = bodyEl ? bodyEl.value.trim() : '';
     var fileId = fileEl ? fileEl.value : '';
+    var quoteId = quoteEl ? quoteEl.value : '';
     if (!body && !fileId) {
       // Same precondition as live send.
       return;
     }
-    openModal({ composer: composer, roomId: roomId, body: body, fileId: fileId });
+    openModal({ composer: composer, roomId: roomId, body: body, fileId: fileId, quoteId: quoteId });
   };
 })();
 </script>
