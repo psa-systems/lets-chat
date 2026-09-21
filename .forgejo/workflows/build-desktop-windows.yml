@@ -42,9 +42,6 @@ jobs:
     name: Build desktop (Windows x86_64)
     # HEAVY: runs `docker buildx build` for the Windows cross-build and installer.
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_HEAVY }}
-    permissions:
-      contents: read
-      packages: write
     env:
       # Publish to the shared psa-systems private org Generic Packages
       # registry, matching every other repo in ~/projects/a8n-run/.

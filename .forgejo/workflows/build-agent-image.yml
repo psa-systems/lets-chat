@@ -35,9 +35,6 @@ jobs:
     name: Build and push lets-chat-transcription-agent
     # HEAVY: runs `docker buildx build` for the agent image.
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_HEAVY }}
-    permissions:
-      contents: read
-      packages: write
     env:
       IMAGE_REGISTRY: ""
       REGISTRY_PROVIDER: dev.a8n.run

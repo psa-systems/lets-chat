@@ -39,9 +39,6 @@ jobs:
     name: Build and push lets-chat
     # HEAVY: runs `docker buildx build`, which compiles the server in the image.
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_HEAVY }}
-    permissions:
-      contents: read
-      packages: write
     env:
       IMAGE_REGISTRY: ""
       REGISTRY_PROVIDER: dev.a8n.run
