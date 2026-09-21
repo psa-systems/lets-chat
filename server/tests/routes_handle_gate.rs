@@ -29,7 +29,7 @@ async fn app() -> TestApp {
     let settings = common::pool("settings").await;
 
     // SSO provisioning leaves username_confirmed_at NULL -> the gate should fire.
-    let fresh = db::auth::create_user_from_bunyip(&auth, "fresh.user", "sub-fresh", None, None)
+    let fresh = db::auth::create_user_from_bunyip(&auth, "fresh_user", "sub-fresh", None, None)
         .await
         .unwrap();
     let fresh_session = db::auth::create_session(&auth, &fresh).await.unwrap();
@@ -69,7 +69,7 @@ async fn app() -> TestApp {
     TestApp {
         app: routes::build_router(state),
         fresh_session,
-        fresh_handle: "fresh.user".to_string(),
+        fresh_handle: "fresh_user".to_string(),
         confirmed_session,
     }
 }

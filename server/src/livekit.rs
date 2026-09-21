@@ -350,6 +350,36 @@ pub async fn dispatch_transcription_agent(
     Ok(())
 }
 
+/// Evict `identity` from `room` via RoomService.RemoveParticipant, so a
+/// still-valid access token stops working. Best-effort like the dispatch: the
+/// caller logs the error. A participant who is not in the room yields a 404,
+/// which is the desired end state, so it counts as success.
+pub async fn remove_participant(
+    cfg: &LiveKitConfig,
+    room: &str,
+    identity: &str,
+    now_unix: u64,
+) -> Result<(), DispatchError> {
+    let token = mint_admin_token(cfg, room, now_unix).map_err(DispatchError::Token)?;
+    let url = format!(
+        "{}/twirp/livekit.RoomService/RemoveParticipant",
+        server_api_base(&cfg.url)
+    );
+    let resp = crate::http_client::outbound_trusted_post(&url)
+        .await
+        .map_err(|e| DispatchError::Transport(e.to_string()))?
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "room": room, "identity": identity }))
+        .send()
+        .await
+        .map_err(|e| DispatchError::Transport(e.to_string()))?;
+    let status = resp.status();
+    if !status.is_success() && status.as_u16() != 404 {
+        return Err(DispatchError::Status(status.as_u16()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -55,3 +55,13 @@ verify-email-page-title = Email verification
 verify-email-title = Email verification
 verify-email-open-link = Open Let's Chat
 verify-email-signin-link = Sign in
+
+## Login SSO errors (LC-951)
+login-sso-error-dance = Sign-in could not be completed. Please try again.
+login-sso-error-op = Bunyip rejected the sign-in attempt.
+login-sso-error-banned = Your account is suspended.
+login-sso-error-identity-conflict = This account's email is already linked to a different sign-in identity. Contact an administrator.
+login-sso-error-internal = An internal error occurred. Please try again.
+login-sso-error-unconfigured = Single sign-on is not configured on this server.
+login-sso-error-approval = Your sign-in approval code expired or was already used. Sign in again to get a new one.
+login-sso-error-generic = Sign-in failed.

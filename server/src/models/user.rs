@@ -258,26 +258,45 @@ fn mute_active(muted_until: Option<&str>, now: chrono::DateTime<chrono::Utc>) ->
     }
 }
 
-/// LC-766: maximum handle length, mirroring the `sanitize_username` truncation
-/// in the SSO provisioning path.
-pub const MAX_USERNAME_CHARS: usize = 64;
+/// LC-766: maximum handle length. LC-996: matches the `{1,32}` bound of the
+/// mention token pattern so every handle is addressable.
+pub const MAX_USERNAME_CHARS: usize = 32;
+
+/// LC-993: maximum display-name length, shared by the profile form and the SSO
+/// paths so an IdP `name` claim can never exceed what a user could type.
+pub const MAX_DISPLAY_NAME_CHARS: usize = 64;
+
+/// LC-993: trim and truncate (by chars, not bytes) an SSO name claim to
+/// `MAX_DISPLAY_NAME_CHARS`. Returns `None` for a blank claim.
+pub fn cap_display_name(raw: &str) -> Option<String> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return None;
+    }
+    Some(t.chars().take(MAX_DISPLAY_NAME_CHARS).collect())
+}
 
 /// LC-766: characters allowed in a chat handle. Kept in one place so the SSO
 /// provisioning sanitizer and the user-facing handle editor agree on exactly
-/// what a valid handle is: letters, digits, and `_ - .`.
+/// what a valid handle is. LC-996: ASCII letters, digits and `_` only, a subset
+/// of the mention token pattern, so lookalike (e.g. Cyrillic) handles are refused.
 pub fn handle_char_allowed(c: char) -> bool {
-    c.is_alphanumeric() || matches!(c, '_' | '-' | '.')
+    c.is_ascii_alphanumeric() || c == '_'
 }
 
 /// LC-766: coerce an arbitrary string into a valid handle (drop disallowed
 /// characters, fall back to `user`, truncate). This is the lenient provisioning
 /// path used at SSO signup, where there is no human to correct a bad value.
 pub fn sanitize_handle(s: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    // LC-996: decompose so accented Latin letters keep their base letter
+    // ("José" -> "jose"), then the filter drops the combining marks.
     let mut out: String = s
-        .chars()
+        .nfd()
         .filter(|c| handle_char_allowed(*c))
         .take(MAX_USERNAME_CHARS)
-        .collect();
+        .collect::<String>()
+        .to_ascii_lowercase();
     if out.is_empty() {
         out.push_str("user");
     }
@@ -298,8 +317,7 @@ pub fn validate_handle(input: &str) -> Result<String, String> {
     }
     if t.chars().any(|c| !handle_char_allowed(c)) {
         return Err(
-            "Handles can contain only letters, numbers, and the symbols _ - . (no spaces)."
-                .to_string(),
+            "Handles can contain only the letters a-z, numbers, and _ (no spaces).".to_string(),
         );
     }
     Ok(t.to_string())
@@ -468,10 +486,19 @@ mod tests {
     use super::{sanitize_handle, validate_handle, MAX_USERNAME_CHARS};
 
     #[test]
+    fn cap_display_name_truncates_by_chars_and_skips_blank() {
+        use super::{cap_display_name, MAX_DISPLAY_NAME_CHARS};
+        let out = cap_display_name(&format!("  {}  ", "\u{65e5}".repeat(100))).unwrap();
+        assert_eq!(out.chars().count(), MAX_DISPLAY_NAME_CHARS);
+        assert_eq!(cap_display_name(" Ada ").unwrap(), "Ada");
+        assert!(cap_display_name("   ").is_none());
+    }
+
+    #[test]
     fn valid_handle_is_returned_trimmed() {
         assert_eq!(
-            validate_handle("  Ada_Lovelace-1.0 ").unwrap(),
-            "Ada_Lovelace-1.0"
+            validate_handle("  Ada_Lovelace_1 ").unwrap(),
+            "Ada_Lovelace_1"
         );
     }
 
@@ -482,6 +509,10 @@ mod tests {
         assert!(validate_handle("ada lovelace").is_err());
         assert!(validate_handle("bad/slash").is_err());
         assert!(validate_handle("emoji😀").is_err());
+        // LC-996: Cyrillic "а" lookalike and the old `- .` symbols are refused.
+        assert!(validate_handle("\u{430}da").is_err());
+        assert!(validate_handle("a-b").is_err());
+        assert!(validate_handle("a.b").is_err());
         assert!(validate_handle("   ").is_err());
         let long = "a".repeat(MAX_USERNAME_CHARS + 1);
         assert!(validate_handle(&long).is_err());
@@ -492,6 +523,7 @@ mod tests {
         // The SSO path has no human to correct a bad value, so it strips instead.
         assert_eq!(sanitize_handle("ada lovelace!"), "adalovelace");
         assert_eq!(sanitize_handle("***"), "user");
+        assert_eq!(sanitize_handle("Jos\u{e9}"), "jose");
         assert_eq!(
             sanitize_handle(&"z".repeat(80)).chars().count(),
             MAX_USERNAME_CHARS
@@ -504,7 +536,7 @@ mod tests {
         // byte offsets and panics when the cut falls inside a multi-byte
         // character. 80 three-byte ideographs must still yield exactly 64
         // characters without panicking.
-        let input = "\u{65e5}".repeat(80);
+        let input = format!("{}{}", "\u{65e5}".repeat(80), "a".repeat(80));
         let out = sanitize_handle(&input);
         assert_eq!(out.chars().count(), MAX_USERNAME_CHARS);
     }
@@ -524,6 +556,7 @@ mod tests {
     fn every_sanitize_handle_output_is_accepted_by_validate_handle() {
         let inputs = [
             "Ada_Lovelace-1.0",
+            "Jos\u{e9}",
             &"\u{65e5}".repeat(80),
             &"z".repeat(80),
             "!!!***???",

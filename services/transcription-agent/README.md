@@ -44,7 +44,7 @@ LC-814), so one worker serves every room.
 ## Run
 
 ```
-bun install
+bun install --frozen-lockfile
 bun run start      # production worker (waits for dispatch)
 bun run dev        # local dev worker
 bun test           # unit tests (no LiveKit needed)

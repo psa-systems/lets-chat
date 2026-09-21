@@ -232,7 +232,7 @@ pub type Account = Arc<Mutex<Arc<User>>>;
 /// recorded on LC-838.
 ///
 /// Returns the fresh snapshot, or `None` when the record is gone (the account
-/// was deleted), in which case the caller closes the socket: there is no user
+/// was deleted) or the account is banned (LC-979), in which case the caller closes the socket: there is no user
 /// left to authorize. A transient database error keeps the previous snapshot,
 /// because dropping a live call over a hiccup is worse than one stale read.
 ///
@@ -245,6 +245,7 @@ pub async fn refresh_account(
 ) -> Option<Arc<User>> {
     let prev = account.lock().unwrap().clone();
     let fresh: Arc<User> = match db::auth::find_user_by_id(&state.auth, &prev.id).await {
+        Ok(Some(rec)) if rec.is_banned => return None,
         Ok(Some(rec)) => Arc::new(rec.into()),
         Ok(None) => return None,
         Err(e) => {
@@ -451,7 +452,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     let send_dm_seen = dm_seen_msg.clone();
     let send_current_enclave = current_enclave.clone();
     let send_page = page.clone();
-    let send = tokio::spawn(async move {
+    let mut send = tokio::spawn(async move {
         let mut ping = tokio::time::interval(Duration::from_secs(30));
         ping.tick().await;
         // Per-connection throttle for `last_ws_seen_at` bumps. The
@@ -466,6 +467,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                         Ok(e) => {
                             // LC-838: the current user record for this event.
                             let send_user: Arc<User> = send_account.lock().unwrap().clone();
+                            // LC-979: a ban of this user ends the socket now.
+                            if matches!(&e, ChatEvent::UserBanned { user_id } if user_id == &send_user.id) {
+                                let _ = tx.send(Message::Close(None)).await;
+                                break;
+                            }
                             // LC-337: snapshot this connection's current enclave
                             // (Copy) so the guard is not held across the awaits
                             // in the arms below. Read fresh each event because
@@ -928,7 +934,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         }
     });
 
-    while let Some(Ok(msg)) = rx_ws.next().await {
+    // LC-979: also stop reading when the send task ends (a ban closes it).
+    while let Some(Ok(msg)) = tokio::select! { _ = &mut send => None, m = rx_ws.next() => m } {
         match msg {
             Message::Text(text) => {
                 if let Ok(frame) = serde_json::from_str::<ClientFrame>(text.as_str()) {
@@ -2744,7 +2751,8 @@ async fn relay_huddle_control_signal(
                 echo("unavailable", "not_sharing");
                 return;
             }
-            let Some(requester) = state.hub.take_control_pending(room_id) else {
+            let Some(requester) = state.hub.take_control_pending_for_sharer(room_id, &user.id)
+            else {
                 echo("unavailable", "no_pending_request");
                 return;
             };
@@ -2761,7 +2769,8 @@ async fn relay_huddle_control_signal(
                 echo("unavailable", "not_sharing");
                 return;
             }
-            let Some(requester) = state.hub.take_control_pending(room_id) else {
+            let Some(requester) = state.hub.take_control_pending_for_sharer(room_id, &user.id)
+            else {
                 // Expired or never existed: nobody is waiting on this answer.
                 echo("unavailable", "no_pending_request");
                 return;

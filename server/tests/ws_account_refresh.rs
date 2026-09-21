@@ -299,3 +299,20 @@ async fn a_deleted_account_ends_the_refresh_so_the_socket_closes() {
         "no record, no user to authorize: the receive loop breaks and the socket closes"
     );
 }
+
+/// LC-979: a banned account is refused by the refresh, backstopping the close
+/// signal `post_ban` sends.
+#[tokio::test]
+async fn a_banned_account_ends_the_refresh_so_the_socket_closes() {
+    let fx = fixture().await;
+    let (conn_id, _rx, account) = connect(&fx).await;
+    db::auth::ban_user(&fx.state.auth, &fx.user_id, None)
+        .await
+        .unwrap();
+    assert!(
+        refresh_account(&fx.state, conn_id, &account)
+            .await
+            .is_none(),
+        "a banned account has no rights: the receive loop breaks and the socket closes"
+    );
+}

@@ -18,7 +18,7 @@ use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
 const MAX_AVATAR_BYTES: usize = 1024 * 1024;
-const MAX_DISPLAY_NAME_CHARS: usize = 64;
+use crate::models::user::MAX_DISPLAY_NAME_CHARS;
 const MAX_BIO_CHARS: usize = 500;
 const MAX_EMAIL_CHARS: usize = 254;
 #[derive(Deserialize, Default)]

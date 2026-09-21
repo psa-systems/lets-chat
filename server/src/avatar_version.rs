@@ -60,9 +60,29 @@ fn compute(user_id: &str) -> String {
     "0".to_string()
 }
 
+/// Whether `v` has the shape [`compute`] produces (ASCII digits only), so an
+/// arbitrary `?v=` cannot claim the immutable cache header.
+pub fn is_token(v: &str) -> bool {
+    !v.is_empty() && v.bytes().all(|b| b.is_ascii_digit())
+}
+
 /// Drop the cached token for `user_id` so the next render re-stats the file and
 /// picks up the new mtime. Call after any write to the user's avatar (upload or
 /// removal), so a changed image busts the immutable cache on the next paint.
 pub fn invalidate(user_id: &str) {
     mirror().remove(user_id);
+}
+
+#[cfg(test)]
+mod token_tests {
+    use super::is_token;
+
+    #[test]
+    fn only_digit_tokens_are_valid() {
+        assert!(is_token("0"));
+        assert!(is_token("1725700000123456789"));
+        assert!(!is_token("x"));
+        assert!(!is_token(""));
+        assert!(!is_token("12a"));
+    }
 }
