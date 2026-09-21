@@ -21,7 +21,7 @@
     var el = root.querySelector('[data-lc-flash-toast]');
     if (!el) return;
     var msg = el.textContent.trim();
-    if (msg && window.__lcToast) window.__lcToast('ok', msg);
+    if (msg) window.__lcNotify('ok', msg);
     el.parentNode && el.parentNode.removeChild(el);
   }
 
