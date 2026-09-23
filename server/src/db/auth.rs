@@ -135,6 +135,47 @@ pub async fn find_user_by_id(
     Ok(row.map(row_to_user_record))
 }
 
+/// Batched form of [`find_user_by_id`]: id -> full record for a set of user
+/// ids, in one query. Used by list/panel surfaces (Inbox, Activity) that
+/// previously resolved each row's author/actor with its own `find_user_by_id`
+/// call, so a page of N rows cost N auth queries instead of one.
+pub async fn users_by_ids(
+    pool: &SqlitePool,
+    ids: &[&str],
+) -> Result<std::collections::HashMap<String, UserRecord>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let placeholders = std::iter::repeat_n("?", ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT id, username, display_name, password_hash, role, \
+         is_banned, ban_reason, banned_until, \
+         is_muted, muted_until, mute_reason, \
+         created_at, updated_at, read_receipts_enabled, \
+         bio, avatar_ext, status, custom_status, last_active_at, is_profile_public, \
+         notify_browser_enabled, notify_sound_enabled, notify_push_enabled, \
+         notify_email_digest_enabled, notify_login_alerts_enabled, \
+         notify_email_activity_enabled, \
+         last_ws_seen_at, last_digest_sent_at, \
+         dnd_schedule_json, dnd_paused_until, email, \
+         totp_secret_encrypted, totp_nonce, totp_enabled, totp_recovery_hashes, is_bot, locale, theme_mode, theme_palette, theme_scale, home_landing, density, \
+         pronouns, profile_links, timezone, \
+         username_confirmed_at, username_changed_at \
+         FROM users WHERE id IN ({placeholders})"
+    );
+    let mut q = sqlx::query(&sql);
+    for id in ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get::<String, _>("id"), row_to_user_record(r)))
+        .collect())
+}
+
 fn row_to_user_record(r: sqlx::sqlite::SqliteRow) -> UserRecord {
     UserRecord {
         id: r.get("id"),
