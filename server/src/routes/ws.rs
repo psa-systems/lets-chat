@@ -2580,12 +2580,27 @@ pub async fn relay_control_signal(
 /// the settings KV store (no cache) like the LLM flag, so an admin toggle takes
 /// effect on the next signal without a restart.
 pub(crate) async fn remote_control_flag_on(state: &AppState) -> bool {
-    db::settings::get_setting(&state.settings, REMOTE_CONTROL_ENABLED_KEY)
-        .await
-        .ok()
-        .flatten()
-        .as_deref()
-        == Some("true")
+    resolve_remote_control_flag_on(
+        db::settings::get_setting(&state.settings, REMOTE_CONTROL_ENABLED_KEY).await,
+    )
+}
+
+/// LC-1018: narrows a `remote_control_enabled` settings read to a bool,
+/// logging a `tracing::warn!` on `Err` before narrowing to `false` (remote
+/// control off), which is already the restrictive value here, so an operator
+/// debugging "why did remote control silently stay off" has a log line to
+/// find. Mirrors `ai_gate::resolve_flag_on`'s LC-919 pattern.
+fn resolve_remote_control_flag_on(result: Result<Option<String>, sqlx::Error>) -> bool {
+    match result {
+        Ok(v) => v.as_deref() == Some("true"),
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "remote_control_enabled setting read failed; treating flag as off"
+            );
+            false
+        }
+    }
 }
 
 /// LC-853: validate + relay one remote-control consent signal inside a huddle
@@ -4158,5 +4173,69 @@ mod tests {
         let a = db::auth::create_user(&auth, "alice", "h").await.unwrap();
         verify(&auth, &a).await;
         assert!(!remote_control_allowed(&auth, &a, "missing").await);
+    }
+
+    /// LC-1018: records every event's fields as a formatted string, so a test
+    /// can assert on a `tracing::warn!` call without pulling in a log-capture
+    /// crate. Mirrors `server/tests/common::CapturingSubscriber`, kept local
+    /// here since integration-test helpers aren't reachable from a unit test.
+    #[derive(Clone, Default)]
+    struct CapturingSubscriber {
+        events: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    struct FieldsToString(String);
+    impl tracing::field::Visit for FieldsToString {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            if !self.0.is_empty() {
+                self.0.push(' ');
+            }
+            self.0.push_str(&format!("{}={:?}", field.name(), value));
+        }
+    }
+
+    impl tracing::Subscriber for CapturingSubscriber {
+        fn enabled(&self, _metadata: &tracing::Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _span: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+        fn record(&self, _span: &tracing::span::Id, _values: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _span: &tracing::span::Id, _follows: &tracing::span::Id) {}
+        fn event(&self, event: &tracing::Event<'_>) {
+            let mut visitor = FieldsToString(String::new());
+            event.record(&mut visitor);
+            self.events.lock().unwrap().push(visitor.0);
+        }
+        fn enter(&self, _span: &tracing::span::Id) {}
+        fn exit(&self, _span: &tracing::span::Id) {}
+    }
+
+    #[test]
+    fn remote_control_absent_row_is_off() {
+        assert!(!resolve_remote_control_flag_on(Ok(None)));
+    }
+
+    #[test]
+    fn remote_control_true_row_is_on() {
+        assert!(resolve_remote_control_flag_on(Ok(Some("true".to_string()))));
+    }
+
+    #[test]
+    fn remote_control_read_error_is_off_and_logged() {
+        let capture = CapturingSubscriber::default();
+        let events = capture.events.clone();
+        let enabled = tracing::subscriber::with_default(capture, || {
+            resolve_remote_control_flag_on(Err(sqlx::Error::RowNotFound))
+        });
+        assert!(!enabled);
+        let logged = events.lock().unwrap();
+        assert!(
+            logged
+                .iter()
+                .any(|e| e.contains("remote_control_enabled setting read failed")),
+            "expected a warning logging the read failure, got: {logged:?}"
+        );
     }
 }

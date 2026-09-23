@@ -358,12 +358,9 @@ pub async fn enforce_maintenance_mode(
             return next.run(req).await;
         }
     }
-    let enabled = db::settings::get_setting(&state.settings, "maintenance_mode")
-        .await
-        .ok()
-        .flatten()
-        .as_deref()
-        == Some("true");
+    let enabled = resolve_maintenance_enabled(
+        db::settings::get_setting(&state.settings, "maintenance_mode").await,
+    );
     if !enabled {
         return next.run(req).await;
     }
@@ -384,6 +381,21 @@ pub async fn enforce_maintenance_mode(
         body,
     )
         .into_response()
+}
+
+/// LC-1018: narrows a `maintenance_mode` settings read to a bool, logging a
+/// `tracing::warn!` on `Err` before narrowing to `false` (maintenance off),
+/// which is already the restrictive value here, so an operator debugging "why
+/// didn't maintenance mode take effect" has a log line to find. Mirrors
+/// `ai_gate::resolve_flag_on`'s LC-919 pattern.
+fn resolve_maintenance_enabled(result: Result<Option<String>, sqlx::Error>) -> bool {
+    match result {
+        Ok(v) => v.as_deref() == Some("true"),
+        Err(e) => {
+            tracing::warn!(error = %e, "maintenance_mode setting read failed; treating flag as off");
+            false
+        }
+    }
 }
 
 /// LC-766: first-entry handle gate. A newly provisioned user whose handle is
@@ -574,5 +586,74 @@ impl FromRequestParts<AppState> for ApiAuth {
             user: record.into(),
             scopes,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// LC-1018: records every event's fields as a formatted string, so a test
+    /// can assert on a `tracing::warn!` call without pulling in a log-capture
+    /// crate. Mirrors `server/tests/common::CapturingSubscriber`, kept local
+    /// here since integration-test helpers aren't reachable from a unit test.
+    #[derive(Clone, Default)]
+    struct CapturingSubscriber {
+        events: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    struct FieldsToString(String);
+    impl tracing::field::Visit for FieldsToString {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            if !self.0.is_empty() {
+                self.0.push(' ');
+            }
+            self.0.push_str(&format!("{}={:?}", field.name(), value));
+        }
+    }
+
+    impl tracing::Subscriber for CapturingSubscriber {
+        fn enabled(&self, _metadata: &tracing::Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _span: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+        fn record(&self, _span: &tracing::span::Id, _values: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _span: &tracing::span::Id, _follows: &tracing::span::Id) {}
+        fn event(&self, event: &tracing::Event<'_>) {
+            let mut visitor = FieldsToString(String::new());
+            event.record(&mut visitor);
+            self.events.lock().unwrap().push(visitor.0);
+        }
+        fn enter(&self, _span: &tracing::span::Id) {}
+        fn exit(&self, _span: &tracing::span::Id) {}
+    }
+
+    #[test]
+    fn maintenance_absent_row_is_off() {
+        assert!(!resolve_maintenance_enabled(Ok(None)));
+    }
+
+    #[test]
+    fn maintenance_true_row_is_on() {
+        assert!(resolve_maintenance_enabled(Ok(Some("true".to_string()))));
+    }
+
+    #[test]
+    fn maintenance_read_error_is_off_and_logged() {
+        let capture = CapturingSubscriber::default();
+        let events = capture.events.clone();
+        let enabled = tracing::subscriber::with_default(capture, || {
+            resolve_maintenance_enabled(Err(sqlx::Error::RowNotFound))
+        });
+        assert!(!enabled);
+        let logged = events.lock().unwrap();
+        assert!(
+            logged
+                .iter()
+                .any(|e| e.contains("maintenance_mode setting read failed")),
+            "expected a warning logging the read failure, got: {logged:?}"
+        );
     }
 }
