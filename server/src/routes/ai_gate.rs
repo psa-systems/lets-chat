@@ -219,6 +219,40 @@ pub async fn require_embeddings_in_room(
     }
 }
 
+/// LC-1020: is `user` allowed onto the help desk escalation surface
+/// (`/support`, `/human`) in `room_id`'s context? Audience only - deliberately
+/// skips [`allowed_in_room`]'s room-toggle check. That toggle is the room
+/// manager's opt-in for AI *generating content from the room*; `/support` and
+/// `/human` hand off to docs search or a person instead, so a room opting out
+/// of AI must not also block escalating to a human. Matches what
+/// `allowed_in_room` did before LC-941 introduced the room toggle.
+pub async fn allowed_for_help_desk(
+    state: &AppState,
+    room_id: i64,
+    user: &User,
+) -> Result<bool, AppError> {
+    if audience_is_everyone(state).await {
+        return Ok(true);
+    }
+    privileged_in_room(state, room_id, user).await
+}
+
+/// Route guard for `/support` and `/human`: flag on AND within the help desk
+/// audience, else 403. Use this instead of [`require_llm_in_room`] for those
+/// two handlers so a room's `assistant_enabled = 0` toggle cannot block
+/// escalation to a person.
+pub async fn require_help_desk(
+    state: &AppState,
+    room_id: i64,
+    user: &User,
+) -> Result<(), AppError> {
+    if flag_on(state).await && allowed_for_help_desk(state, room_id, user).await? {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
