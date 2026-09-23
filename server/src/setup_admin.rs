@@ -118,13 +118,19 @@ pub async fn seed_default_admin(pool: &SqlitePool, dev_build: bool, raw: Option<
 
 /// First free handle at or near `base`, mirroring `pick_username` in
 /// `routes/bunyip_sso.rs`. `None` when every candidate is taken.
+///
+/// LC-1019: uses `handle_available_for` rather than bare `username_exists` so
+/// this seed path honours `reserved_usernames` like every other
+/// username-assignment path since LC-913. No account exists yet, so pass an
+/// id no live user can ever have; a standing reservation on the candidate is
+/// then treated exactly like a taken handle.
 async fn pick_handle(pool: &SqlitePool, base: &str) -> Result<Option<String>, sqlx::Error> {
-    if !db::auth::username_exists(pool, base).await? {
+    if db::auth::handle_available_for(pool, base, "").await? {
         return Ok(Some(base.to_string()));
     }
     for n in 2..=5u32 {
         let candidate = format!("{base}-{n}");
-        if !db::auth::username_exists(pool, &candidate).await? {
+        if db::auth::handle_available_for(pool, &candidate, "").await? {
             return Ok(Some(candidate));
         }
     }
@@ -133,7 +139,8 @@ async fn pick_handle(pool: &SqlitePool, base: &str) -> Result<Option<String>, sq
 
 #[cfg(test)]
 mod tests {
-    use super::{decide, Seed};
+    use super::*;
+    use sqlx::SqlitePool;
 
     #[test]
     fn a_release_build_never_seeds() {
@@ -171,5 +178,46 @@ mod tests {
                 "{raw:?}"
             );
         }
+    }
+
+    async fn auth_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/auth")
+            .run(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    // LC-1019: the debug seed path must honour a standing `reserved_usernames`
+    // row exactly like every other assignment path since LC-913, so a
+    // reserved handle is never handed to the seeded admin.
+    #[tokio::test]
+    async fn seeding_a_reserved_handle_retries_instead_of_creating_it() {
+        let pool = auth_pool().await;
+        let holder = db::auth::create_user(&pool, "someone-else", "")
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO reserved_usernames (username, user_id, reserved_until) \
+             VALUES ('devuser', ?, datetime('now', '+1 day'))",
+        )
+        .bind(&holder)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        seed_default_admin(&pool, true, Some("devuser@example.test:hunter2")).await;
+
+        let seeded: Option<String> =
+            sqlx::query_scalar("SELECT username FROM users WHERE role = 'admin'")
+                .fetch_optional(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            seeded.as_deref(),
+            Some("devuser-2"),
+            "the reserved handle must not be handed to the seeded admin"
+        );
     }
 }
