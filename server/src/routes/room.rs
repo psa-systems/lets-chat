@@ -2018,17 +2018,10 @@ async fn fanout_mention_events(
     // synthetic actors) is never blocked.
     let mut events = events;
     if !author_id.is_empty() {
-        let mut kept = Vec::with_capacity(events.len());
-        for (user_id, event) in events {
-            if db::auth::is_blocked_either_way(&state.auth, &user_id, author_id)
-                .await
-                .unwrap_or(false)
-            {
-                continue;
-            }
-            kept.push((user_id, event));
-        }
-        events = kept;
+        let blocked = db::auth::list_blocked_ids_either_way(&state.auth, author_id)
+            .await
+            .unwrap_or_default();
+        events.retain(|(user_id, _)| !blocked.contains(user_id));
     }
     for (user_id, event) in &events {
         state.hub.broadcast_to_user(user_id, event);
