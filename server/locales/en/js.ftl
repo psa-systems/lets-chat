@@ -149,3 +149,4 @@ js-stt-mic-failed = Could not start transcription. Try again.
 # engine, and the start-session request itself failing.
 js-stt-unsupported = Live transcription is not supported in this browser.
 js-stt-start-failed = Could not start transcription (error %status%).
+js-stt-network-error = Could not start transcription (network error).
