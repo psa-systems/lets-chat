@@ -82,12 +82,21 @@ pub fn extract_session_origin(
 /// default migration seeds it `true`. Shared by the session-origin extractor
 /// and the per-IP rate limiter so both honor one switch.
 pub async fn proxy_headers_trusted(settings: &sqlx::SqlitePool) -> bool {
-    crate::db::settings::get_setting(settings, "trust_proxy_headers")
-        .await
-        .ok()
-        .flatten()
-        .as_deref()
-        == Some("true")
+    resolve_proxy_headers_trusted(
+        crate::db::settings::get_setting(settings, "trust_proxy_headers").await,
+    )
+}
+
+/// LC-1018: narrows a `trust_proxy_headers` read to a bool, logging on `Err`
+/// before narrowing to `false` (do not trust client-supplied IP headers).
+fn resolve_proxy_headers_trusted(result: Result<Option<String>, sqlx::Error>) -> bool {
+    match result {
+        Ok(v) => v.as_deref() == Some("true"),
+        Err(e) => {
+            tracing::warn!(error = %e, "trust_proxy_headers setting read failed; treating flag as off");
+            false
+        }
+    }
 }
 
 fn truncate(s: &str, max_chars: usize) -> String {
@@ -628,6 +637,29 @@ mod tests {
         }
         fn enter(&self, _span: &tracing::span::Id) {}
         fn exit(&self, _span: &tracing::span::Id) {}
+    }
+
+    #[test]
+    fn proxy_trust_true_row_is_on_and_absent_is_off() {
+        assert!(resolve_proxy_headers_trusted(Ok(Some("true".to_string()))));
+        assert!(!resolve_proxy_headers_trusted(Ok(None)));
+    }
+
+    #[test]
+    fn proxy_trust_read_error_is_off_and_logged() {
+        let capture = CapturingSubscriber::default();
+        let events = capture.events.clone();
+        let trusted = tracing::subscriber::with_default(capture, || {
+            resolve_proxy_headers_trusted(Err(sqlx::Error::RowNotFound))
+        });
+        assert!(!trusted);
+        let logged = events.lock().unwrap();
+        assert!(
+            logged
+                .iter()
+                .any(|e| e.contains("trust_proxy_headers setting read failed")),
+            "expected a warning logging the read failure, got: {logged:?}"
+        );
     }
 
     #[test]
