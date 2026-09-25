@@ -43,7 +43,7 @@
     var el = (e.detail && e.detail.elt) || e.target;
     if (!el || !el.closest || !el.closest('.lc-table')) return;
     var msg = "{{ "admin-userrow-action-failed"|t }}";
-    if (window.__lcToast) window.__lcToast('err', msg);
+    window.__lcNotify('err', msg);
   }
   document.body.addEventListener('htmx:responseError', onErr);
   document.body.addEventListener('htmx:sendError', onErr);

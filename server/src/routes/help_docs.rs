@@ -19,6 +19,7 @@
 //! rather than guessing (Phase 2, LC-713, hooks the human handoff onto exactly
 //! this branch).
 
+use futures::stream::{StreamExt, TryStreamExt};
 use scraper::{Html, Selector};
 use sha2::{Digest, Sha256};
 
@@ -72,6 +73,10 @@ const MAX_PAGES_PER_SOURCE: usize = 100;
 const MAX_PAGE_BYTES: usize = 512 * 1024;
 /// Per-fetch timeout for the docs HTTP GETs.
 const FETCH_TIMEOUT_SECS: u64 = 15;
+/// LC-1024 (F14): number of embedding calls a single page's chunks issue
+/// concurrently. Polite to a self-hosted embeddings endpoint while cutting the
+/// wall clock of a first index or forced reindex roughly by this factor.
+const EMBED_CONCURRENCY: usize = 4;
 /// LC-713: per-user support escalations (`/human`) per minute. Tighter than the
 /// ask cap because each escalation fans a DM + push + email to every admin.
 const ESCALATE_RATE_PER_MIN: u32 = 3;
@@ -528,6 +533,14 @@ async fn reindex_all_inner(
                 Err(e) => {
                     tracing::warn!(url = %page_url, error = %e, "help docs page index failed");
                     report.errors += 1;
+                    // A fetch/embed error is a transient failure of this run, not
+                    // evidence the page left the source's index; the page is
+                    // still linked from the index we just parsed, so it must not
+                    // be treated as orphaned by the prune step below (which
+                    // would otherwise delete its last successfully indexed
+                    // chunks out from under a page that is still live, on
+                    // nothing more than one flaky fetch or embed call).
+                    visited.insert(page_url);
                 }
             }
         }
@@ -610,18 +623,34 @@ async fn index_page(
 
     // Build the flat chunk list first so a mid-page embed error does not leave a
     // page half-updated (chunks are only written after all embeds succeed).
-    let mut prepared: Vec<(String, String, Vec<u8>, i64)> = Vec::new(); // heading, body, vec bytes, dim
-    for (heading, body) in &page.sections {
-        for chunk in chunk_body(body) {
+    // LC-1024 (F14): the embed calls run through a bounded-concurrency stream
+    // rather than one at a time, so one page's several hundred chunks do not
+    // serialise into that many sequential round trips; `try_collect` still
+    // aborts and propagates the first error, preserving the all-or-nothing
+    // guarantee (the failed page's `prepared` is discarded, nothing is
+    // upserted, and its existing stored chunks are untouched).
+    let flat: Vec<(String, String)> = page
+        .sections
+        .iter()
+        .flat_map(|(heading, body)| {
+            chunk_body(body)
+                .into_iter()
+                .map(move |chunk| (heading.clone(), chunk))
+        })
+        .collect();
+    let prepared: Vec<(String, String, Vec<u8>, i64)> = futures::stream::iter(flat)
+        .map(|(heading, chunk)| async move {
             let embed_input = format!("{}\n{}", heading, chunk);
             let vec = client
                 .embed(&embed_input)
                 .await
                 .map_err(|e| AppError::Internal(format!("embed: {e}")))?;
             let dim = vec.len() as i64;
-            prepared.push((heading.clone(), chunk, embeddings::vec_to_bytes(&vec), dim));
-        }
-    }
+            Ok::<_, AppError>((heading, chunk, embeddings::vec_to_bytes(&vec), dim))
+        })
+        .buffered(EMBED_CONCURRENCY)
+        .try_collect()
+        .await?;
 
     db::doc_chunks::delete_by_source(&state.chat, page_url).await?;
     let n = prepared.len();
@@ -704,10 +733,10 @@ pub(crate) async fn handle_support(
             "The help desk documentation search is not configured on this server.".into(),
         ));
     }
-    // Same runtime flag + audience gate as /ask; refused server-side, not merely
-    // hidden. Unlike /ask this does NOT require the room's assistant opt-in - the
-    // docs helper is a global surface, not a per-room feature.
-    super::ai_gate::require_llm_in_room(state, room.id, asker).await?;
+    // LC-1020: flag + audience gate, not the room-toggle-inclusive
+    // `require_llm_in_room` - the docs helper is a global surface, not a
+    // per-room feature, so a room's `assistant_enabled = 0` must not block it.
+    super::ai_gate::require_help_desk(state, room.id, asker).await?;
 
     let question = question.trim();
     if question.is_empty() {
@@ -807,7 +836,7 @@ pub async fn build_support_answer(
             );
         }
     };
-    let chunks = match db::doc_chunks::list_for_scan(&state.chat, None).await {
+    let ranked = match db::doc_chunks::list_for_scan(&state.chat, None).await {
         Ok(c) => c,
         Err(e) => {
             tracing::warn!(error = %e, "support docs load failed");
@@ -823,7 +852,7 @@ pub async fn build_support_answer(
     // searched and came up empty). Admins get a direct link to the settings
     // panel where sources are added; regular users only get the `/human` hint,
     // so the setup path is not surfaced to non-admins.
-    if chunks.is_empty() {
+    if ranked.is_empty() {
         return if is_admin {
             format!(
                 "{header}\n\n_The help desk has {NO_DOCS_CONFIGURED_MARKER}, so I can't answer \
@@ -839,14 +868,14 @@ pub async fn build_support_answer(
     }
 
     let mut mismatched = 0usize;
-    let mut scored: Vec<(f32, db::doc_chunks::DocChunk)> = chunks
+    let mut scored_ids: Vec<(f32, i64)> = ranked
         .into_iter()
-        .filter_map(|c| {
-            if c.vec.len() != query_vec.len() {
+        .filter_map(|(id, vec)| {
+            if vec.len() != query_vec.len() {
                 mismatched += 1;
                 return None;
             }
-            Some((embeddings::cosine_similarity(&query_vec, &c.vec), c))
+            Some((embeddings::cosine_similarity(&query_vec, &vec), id))
         })
         .filter(|(s, _)| *s >= MIN_SIMILARITY)
         .collect();
@@ -860,17 +889,36 @@ pub async fn build_support_answer(
             "support docs ranking dropped chunks: dimension mismatch, likely a stale embedding model"
         );
     }
-    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
-    scored.truncate(TOP_K);
+    scored_ids.sort_by(|a, b| b.0.total_cmp(&a.0));
+    scored_ids.truncate(TOP_K);
 
     // Low-confidence: nothing above the relevance floor. Answer honestly rather
     // than guessing. (Phase 2 will offer a human handoff on this branch.)
-    if scored.is_empty() {
+    if scored_ids.is_empty() {
         return format!(
             "{header}\n\n_I {NO_MATCH_MARKER}. \
              Try rephrasing, or type `/human` to bring in an admin._"
         );
     }
+
+    // LC-1024 (F13): only the winning chunks' bodies are fetched, an indexed
+    // `WHERE id IN (...)` lookup, instead of materialising the whole corpus's
+    // body text on every question.
+    let winning_ids: Vec<i64> = scored_ids.iter().map(|(_, id)| *id).collect();
+    let mut by_id: std::collections::HashMap<i64, db::doc_chunks::DocChunk> =
+        match db::doc_chunks::by_ids(&state.chat, &winning_ids).await {
+            Ok(rows) => rows.into_iter().map(|c| (c.id, c)).collect(),
+            Err(e) => {
+                tracing::warn!(error = %e, "support docs body fetch failed");
+                return format!(
+                    "{header}\n\n_The support assistant could not answer right now. Try again later._"
+                );
+            }
+        };
+    let scored: Vec<(f32, db::doc_chunks::DocChunk)> = scored_ids
+        .into_iter()
+        .filter_map(|(s, id)| by_id.remove(&id).map(|c| (s, c)))
+        .collect();
 
     let mut context = String::new();
     for (_, c) in &scored {
@@ -952,9 +1000,11 @@ pub(crate) async fn handle_human(
     asker: &User,
     message: &str,
 ) -> Result<(), AppError> {
-    // Same runtime flag + audience gate as /support (the escalation is part of
-    // the one help desk surface, so it toggles with it).
-    super::ai_gate::require_llm_in_room(state, room.id, asker).await?;
+    // LC-1020: same flag + audience gate as /support (the escalation is part
+    // of the one help desk surface, so it toggles with it) - not the room
+    // toggle, since escalating to a person must work even when a room has
+    // opted its own AI content generation off.
+    super::ai_gate::require_help_desk(state, room.id, asker).await?;
     if let Outcome::Deny { .. } = state.rate_limits.check(
         RateLimitKind::SupportEscalate,
         &asker.id,
