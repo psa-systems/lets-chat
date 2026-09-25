@@ -14,6 +14,7 @@ use sqlx::{Row, SqlitePool};
 /// One stored doc chunk decoded for ranking + citation. `vec` is the decoded
 /// embedding; `product`, `title`, and `source_url` render the citation.
 pub struct DocChunk {
+    pub id: i64,
     pub product: String,
     pub source_url: String,
     pub title: String,
@@ -106,25 +107,25 @@ pub async fn delete_by_product(pool: &SqlitePool, product: &str) -> Result<u64, 
     Ok(res.rows_affected())
 }
 
-/// Load the whole corpus decoded for ranking. `product` limits the scan to one
-/// product; `None` scans across all products. At self-host doc-set scale this is
-/// a cheap full load + in-Rust cosine scan (mirrors `message_embeddings`).
+/// Load the whole corpus's `(id, vec)` pairs for ranking, without the `body`
+/// text. `product` limits the scan to one product; `None` scans across all
+/// products. At self-host doc-set scale this is a cheap full load + in-Rust
+/// cosine scan (mirrors `message_embeddings`); the ranking-only projection
+/// means a `/support` question no longer materialises every chunk's `body`,
+/// only the winners' (see [`by_ids`]).
 pub async fn list_for_scan(
     pool: &SqlitePool,
     product: Option<&str>,
-) -> Result<Vec<DocChunk>, sqlx::Error> {
+) -> Result<Vec<(i64, Vec<f32>)>, sqlx::Error> {
     let rows = match product {
         Some(p) => {
-            sqlx::query(
-                "SELECT product, source_url, title, heading, body, vec FROM doc_chunks \
-                 WHERE product = ?",
-            )
-            .bind(p)
-            .fetch_all(pool)
-            .await?
+            sqlx::query("SELECT id, vec FROM doc_chunks WHERE product = ?")
+                .bind(p)
+                .fetch_all(pool)
+                .await?
         }
         None => {
-            sqlx::query("SELECT product, source_url, title, heading, body, vec FROM doc_chunks")
+            sqlx::query("SELECT id, vec FROM doc_chunks")
                 .fetch_all(pool)
                 .await?
         }
@@ -133,7 +134,33 @@ pub async fn list_for_scan(
         .into_iter()
         .map(|r| {
             let bytes: Vec<u8> = r.get("vec");
+            (r.get("id"), crate::embeddings::bytes_to_vec(&bytes))
+        })
+        .collect())
+}
+
+/// Fetch the full rows (including `body`) for a set of chunk ids, e.g. the
+/// top-K winners of a [`list_for_scan`] ranking. Empty `ids` short-circuits to
+/// an empty result without a query.
+pub async fn by_ids(pool: &SqlitePool, ids: &[i64]) -> Result<Vec<DocChunk>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let query = format!(
+        "SELECT id, product, source_url, title, heading, body, vec FROM doc_chunks WHERE id IN ({placeholders})"
+    );
+    let mut q = sqlx::query(&query);
+    for id in ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let bytes: Vec<u8> = r.get("vec");
             DocChunk {
+                id: r.get("id"),
                 product: r.get("product"),
                 source_url: r.get("source_url"),
                 title: r.get("title"),
