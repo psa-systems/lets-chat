@@ -266,6 +266,18 @@ async fn purge_user_chat(chat: &SqlitePool, user_id: &str) -> Result<(), AppErro
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
+    // LC-1017: support_tickets and remote_control_events were added after
+    // LC-908/LC-923 and missed both the purge and the schema-walking guard's
+    // suffix list.
+    sqlx::query("DELETE FROM support_tickets WHERE requester_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM remote_control_events WHERE actor_id = ? OR target_id = ?")
+        .bind(user_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
     // LC-908: the remaining user-scoped tables the original enumeration
     // missed. See `chat_user_columns_are_purged_or_allowlisted` in
     // `tests/routes_account_delete.rs` for the schema-walking guard that

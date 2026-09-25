@@ -260,6 +260,19 @@ pub async fn refresh_account(
     Some(fresh)
 }
 
+/// LC-1021: a lagged receiver's `RecvError::Lagged` arm cannot see what events
+/// it skipped, so a `UserBanned` broadcast dropped in the gap would otherwise
+/// go unnoticed until the `refresh_account` backstop next runs, on the
+/// connection's next `PageContext` frame. Query the user's current ban status
+/// directly so the close-on-ban guarantee does not depend on having received
+/// the event at all.
+pub async fn user_is_currently_banned(state: &AppState, user_id: &str) -> bool {
+    matches!(
+        db::auth::find_user_by_id(&state.auth, user_id).await,
+        Ok(Some(rec)) if rec.is_banned
+    )
+}
+
 /// LC-834: rebuild this connection's page-scoped state for the page the client
 /// has just landed on.
 ///
@@ -917,7 +930,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 }
                             }
                         }
-                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                            // LC-1021: the skipped events may have included this
+                            // user's UserBanned close signal, which the match
+                            // above would never see. Check directly rather than
+                            // waiting for the PageContext backstop.
+                            let send_user: Arc<User> = send_account.lock().unwrap().clone();
+                            if user_is_currently_banned(&send_state, &send_user.id).await {
+                                let _ = tx.send(Message::Close(None)).await;
+                                break;
+                            }
+                            continue;
+                        }
                         Err(_) => break,
                     }
                 }
@@ -4007,6 +4031,10 @@ pub mod test_support {
     // the ticket names (topic authorization, the read-receipt caption), so a
     // test can change the record mid-connection and assert the gates follow.
     pub use super::{refresh_account, render_dm_read, topic_subscribe_allowed, Account};
+    // LC-1021: the direct ban-status check the `Lagged` arm runs so a
+    // regression test can force a lag and assert the close decision without
+    // a full WebSocket upgrade harness.
+    pub use super::user_is_currently_banned;
     // LC-853: the remote-control relay entry (DM + huddle dispatch) and the
     // share-stop auto-revoke, so tests can drive the huddle consent state
     // machine without a WS framing harness. Same reasoning as the call helpers.
