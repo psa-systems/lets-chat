@@ -476,7 +476,7 @@
         startLocalCapture();
       }
     }).catch(function () {
-      window.__lcNotify('err', 'Could not start transcription (network error).');
+      window.__lcNotify('err', window.__lcS('sttNetworkError', 'Could not start transcription (network error).'));
     });
   }
   function endSession() {
