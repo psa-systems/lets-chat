@@ -9,6 +9,7 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
+use lets_chat::embeddings::MockEmbeddingClient;
 use lets_chat::state::AppState;
 use lets_chat::ws::hub::Hub;
 use lets_chat::{db, routes};
@@ -55,6 +56,151 @@ async fn enable_ai(settings: &sqlx::SqlitePool) {
     db::settings::set_setting(settings, "llm_enabled", "true")
         .await
         .unwrap();
+}
+
+fn state_with_embeddings(
+    auth: sqlx::SqlitePool,
+    chat: sqlx::SqlitePool,
+    settings: sqlx::SqlitePool,
+) -> AppState {
+    AppState {
+        embedding_client: Some(Arc::new(MockEmbeddingClient::default())),
+        ..state_from(auth, chat, settings)
+    }
+}
+
+// LC-1020: `/support` and `/human` are the escalation-to-a-person surface, not
+// per-room AI content generation, so a room's own AI toggle (defaulting off)
+// must not block either - only the global flag applies. Regression for the
+// LC-941 fold-in that widened `require_llm_in_room`'s room-toggle check onto
+// both handlers.
+#[tokio::test]
+async fn support_and_human_ignore_the_room_ai_toggle() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+
+    let admin = db::auth::create_user(&auth, "admin", "h").await.unwrap();
+    sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+        .bind(&admin)
+        .execute(&auth)
+        .await
+        .unwrap();
+    let member = db::auth::create_user(&auth, "member", "h").await.unwrap();
+    db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    let session = db::auth::create_session(&auth, &member).await.unwrap();
+    enable_ai(&settings).await;
+
+    // Room 1 (General) has never had its toggle flipped on - the default off
+    // state is exactly the regression scenario.
+    assert!(
+        !db::chat::get_room_assistant_enabled(&chat, 1)
+            .await
+            .unwrap(),
+        "room toggle defaults off"
+    );
+
+    let app: Router = routes::build_router(state_with_embeddings(
+        auth.clone(),
+        chat.clone(),
+        settings.clone(),
+    ));
+
+    // LC-675: a slash-command gate failure is not a raw 4xx - `try_dispatch`
+    // turns it into a 200 carrying an ephemeral `SlashError` body, marked with
+    // the `x-lc-slash-error` header, so the composer shows the real reason
+    // instead of htmx's generic "could not send" banner. So the gate check
+    // here is the header's absence, not the HTTP status.
+    let support_req = Request::builder()
+        .method(Method::POST)
+        .uri("/room/1/messages")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::from("body=/support+how+do+I+reset+my+password"))
+        .unwrap();
+    let res = app.clone().oneshot(support_req).await.unwrap();
+    assert!(
+        res.headers().get("x-lc-slash-error").is_none(),
+        "/support must not be blocked by the room's AI toggle when the room's off, got status {}",
+        res.status()
+    );
+
+    let human_req = Request::builder()
+        .method(Method::POST)
+        .uri("/room/1/messages")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::from("body=/human+need+a+person"))
+        .unwrap();
+    let res = app.oneshot(human_req).await.unwrap();
+    assert!(
+        res.headers().get("x-lc-slash-error").is_none(),
+        "/human must not be blocked by the room's AI toggle when the room's off, got status {}",
+        res.status()
+    );
+}
+
+// LC-1020: dropping the room-toggle check must not also drop the global flag
+// check - with the flag off, /support and /human still refuse exactly as
+// before.
+#[tokio::test]
+async fn support_and_human_still_refuse_with_the_global_flag_off() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+
+    let admin = db::auth::create_user(&auth, "admin", "h").await.unwrap();
+    sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+        .bind(&admin)
+        .execute(&auth)
+        .await
+        .unwrap();
+    let member = db::auth::create_user(&auth, "member", "h").await.unwrap();
+    db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    let session = db::auth::create_session(&auth, &member).await.unwrap();
+    // llm_enabled is left unset (absent row reads OFF).
+
+    let app: Router = routes::build_router(state_with_embeddings(
+        auth.clone(),
+        chat.clone(),
+        settings.clone(),
+    ));
+
+    let support_req = Request::builder()
+        .method(Method::POST)
+        .uri("/room/1/messages")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::from("body=/support+how+do+I+reset+my+password"))
+        .unwrap();
+    let res = app.clone().oneshot(support_req).await.unwrap();
+    assert_eq!(
+        res.headers()
+            .get("x-lc-slash-error")
+            .and_then(|v| v.to_str().ok()),
+        Some("1"),
+        "/support must still refuse when the global LLM flag is off"
+    );
+
+    let human_req = Request::builder()
+        .method(Method::POST)
+        .uri("/room/1/messages")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::from("body=/human+need+a+person"))
+        .unwrap();
+    let res = app.oneshot(human_req).await.unwrap();
+    assert_eq!(
+        res.headers()
+            .get("x-lc-slash-error")
+            .and_then(|v| v.to_str().ok()),
+        Some("1"),
+        "/human must still refuse when the global LLM flag is off"
+    );
 }
 
 #[tokio::test]

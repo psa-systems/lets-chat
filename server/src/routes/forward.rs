@@ -108,12 +108,12 @@ pub async fn post_forward(
     if !db::chat::is_room_accessible(&state.chat, dest.id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
-    if !super::room::can_post_with_policy(&state, &user, dest.id, &dest.posting_allowed_for).await?
-    {
-        return Err(AppError::Forbidden);
-    }
+    // LC-1016: the same send gates the text/API post paths enforce (rate
+    // limit, per-enclave burst, enclave ban, posting policy, slowmode,
+    // new-member cooldown, DM block), previously only partly duplicated here.
+    super::room::check_send_gates(&state, &user, &dest).await?;
 
-    // For a DM destination, resolve the peer and refuse if blocked either way.
+    // For a DM destination, resolve the peer's display label.
     let mut dest_label = format!("#{}", dest.name);
     if dest.room_type == "dm" {
         let dms = db::chat::list_user_dm_rooms(&state.chat, &user.id).await?;
@@ -121,9 +121,6 @@ pub async fn post_forward(
             // A DM the viewer is not a participant of.
             return Err(AppError::Forbidden);
         };
-        if db::auth::is_blocked_either_way(&state.auth, &user.id, &peer_id).await? {
-            return Err(AppError::Forbidden);
-        }
         if let Some(rec) = db::auth::find_user_by_id(&state.auth, &peer_id).await? {
             dest_label = format!("@{}", label_for(&rec));
         }

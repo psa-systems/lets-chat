@@ -24,10 +24,11 @@
 //! `Auto-Submitted: auto-generated` outbound on the next round; see
 //! `crate::email::notification`).
 //!
-//! Posting gates mirror the HTTP `post_message` path: banned/muted
-//! check, `is_room_accessible`, `can_post_with_policy`, DM-block check,
-//! per-user `RateLimitKind::Message` cap. Any gate failure drops the
-//! reply with a specific [`super::DropReason`] so an operator log can
+//! Posting gates mirror the HTTP `post_message` path: banned/muted check,
+//! `is_room_accessible`, then the full [`crate::routes::room::check_send_gates`]
+//! set (rate limit, per-enclave burst, LC-339 enclave ban, posting policy,
+//! LC-534 slowmode, new-member cooldown, DM block). Any gate failure drops
+//! the reply with a specific [`super::DropReason`] so an operator log can
 //! distinguish "user replied from a quarantined account" from "user
 //! replied to a room they were removed from."
 //!
@@ -38,7 +39,6 @@
 
 use crate::db::reply_tokens::ReplyTokenRow;
 use crate::db::{self};
-use crate::rate_limit::{Outcome as RlOutcome, RateLimitKind};
 use crate::state::AppState;
 
 use super::DropReason;
@@ -138,25 +138,8 @@ pub async fn post_reply_message(
         };
     }
 
-    // 3. Per-user message rate limit (same cap the HTTP path reads).
-    let msg_cap = crate::rate_limit::read_u32_setting(&state.settings, "rate_limit_messages").await;
-    if let RlOutcome::Deny { retry_after } =
-        state
-            .rate_limits
-            .check(RateLimitKind::Message, &user.id, msg_cap)
-    {
-        return ReplyOutcome::Dropped {
-            reason: DropReason::RateLimited,
-            detail: format!(
-                "user {} exceeded message rate cap (retry_after {}s)",
-                user.id, retry_after
-            ),
-        };
-    }
-
-    // 4. Room access + posting-policy gates. is_admin matches the HTTP
-    // path: site admins can post in any non-DM room. DMs always require
-    // explicit room membership.
+    // 3. Room access gate. is_admin matches the HTTP path: site admins can
+    // post in any non-DM room. DMs always require explicit room membership.
     let is_admin = user.role == "admin";
     match db::chat::is_room_accessible(&state.chat, room.id, &user.id, is_admin).await {
         Ok(true) => {}
@@ -173,64 +156,27 @@ pub async fn post_reply_message(
             };
         }
     }
-    match crate::routes::room::can_post_with_policy(
-        state,
-        &user,
-        room.id,
-        &room.posting_allowed_for,
-    )
-    .await
-    {
-        Ok(true) => {}
-        Ok(false) => {
-            return ReplyOutcome::Dropped {
-                reason: DropReason::AddressNoMatch,
-                detail: format!(
-                    "user {} cannot post in room {} per posting policy {}",
-                    user.id, room.id, room.posting_allowed_for
+
+    // 4. The same send gates the HTTP/API post paths enforce: per-user rate
+    // limit, per-enclave burst, LC-339 enclave ban, posting policy, LC-534
+    // slowmode, new-member cooldown, DM block. Previously this actor
+    // duplicated only a subset (rate limit, posting policy, DM block) and
+    // silently skipped the enclave-ban and slowmode checks.
+    if let Err(e) = crate::routes::room::check_send_gates(state, &user, &room).await {
+        let (reason, detail) = match e {
+            crate::error::AppError::TooManyRequests(msg, _) => (DropReason::RateLimited, msg),
+            _ => (
+                DropReason::AddressNoMatch,
+                format!(
+                    "user {} cannot post in room {} (send gate failed)",
+                    user.id, room.id
                 ),
-            };
-        }
-        Err(e) => {
-            return ReplyOutcome::Dropped {
-                reason: DropReason::InternalError,
-                detail: format!("can_post_with_policy: {e}"),
-            };
-        }
-    }
-
-    // 5. DM block check. Replies to a DM where either side has blocked
-    // the other are silently dropped, same as the HTTP path.
-    if room.room_type == "dm" {
-        let members = match db::chat::list_room_member_ids(&state.chat, room.id).await {
-            Ok(m) => m,
-            Err(e) => {
-                return ReplyOutcome::Dropped {
-                    reason: DropReason::InternalError,
-                    detail: format!("list_room_member_ids: {e}"),
-                };
-            }
+            ),
         };
-        if let Some(peer_id) = members.iter().find(|id| **id != user.id) {
-            match db::auth::is_blocked_either_way(&state.auth, &user.id, peer_id).await {
-                Ok(true) => {
-                    return ReplyOutcome::Dropped {
-                        reason: DropReason::AddressNoMatch,
-                        detail: format!("DM blocked between {} and {}", user.id, peer_id),
-                    };
-                }
-                Ok(false) => {}
-                Err(e) => {
-                    return ReplyOutcome::Dropped {
-                        reason: DropReason::InternalError,
-                        detail: format!("is_blocked_either_way: {e}"),
-                    };
-                }
-            }
-        }
+        return ReplyOutcome::Dropped { reason, detail };
     }
 
-    // 6. Strip quoted-original + signature, then validate length.
+    // 5. Strip quoted-original + signature, then validate length.
     let body = strip_quoted_reply(email_body);
     let body = body.trim();
     if body.is_empty() {
@@ -250,7 +196,7 @@ pub async fn post_reply_message(
         };
     }
 
-    // 7. Insert the message row + run the standard finalize broadcast.
+    // 6. Insert the message row + run the standard finalize broadcast.
     // We pin the room from the original; no quote_id is constructed (the
     // email reply does not auto-thread on the original message).
     let new_id = match db::chat::insert_message(&state.chat, room.id, &user.id, body).await {
@@ -279,7 +225,7 @@ pub async fn post_reply_message(
         );
     }
 
-    // 8. Consume the token (one-shot). Failure here is non-fatal: the
+    // 7. Consume the token (one-shot). Failure here is non-fatal: the
     // post succeeded, the next sweep will reap the row, and even if a
     // forwarded notification email retries, the original message_id +
     // user_id binding limits replay impact. Logged so an operator can
