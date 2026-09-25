@@ -261,6 +261,29 @@ async fn create_bridge_with_taken_username_shows_error_and_rolls_back() {
     assert_eq!(count, 0);
 }
 
+// LC-1027: `/admin/bridges` refuses a reserved handle (case-insensitively)
+// before minting the bot row, the same as `/admin/bots`.
+#[tokio::test]
+async fn create_bridge_rejects_reserved_bot_username() {
+    let t = app().await;
+    let form = format!(
+        "room_id={}&bot_username=Assistant&kind=matrix&config={}",
+        t.room, TEST_CONFIG
+    );
+    let (status, body) = post_form(&t.app, &t.admin_session, "/admin/bridges", &form).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("reserved"), "body: {body}");
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bridges")
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    assert!(db::auth::find_user_by_username(&t.auth, "Assistant")
+        .await
+        .unwrap()
+        .is_none());
+}
+
 #[tokio::test]
 async fn remove_bridge_preserves_historical_message_snapshot_via_admin_route() {
     let t = app().await;

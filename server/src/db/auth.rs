@@ -39,9 +39,49 @@ pub async fn create_user(
     Ok(id)
 }
 
+/// LC-1027: `create_bot`'s error, distinguished from a bare DB error so
+/// callers can show the same "handle unavailable" message a human
+/// provisioning path would, instead of the generic "already taken" text a
+/// unique-constraint violation would otherwise produce.
+#[derive(Debug)]
+pub enum CreateBotError {
+    /// The requested handle is one of `RESERVED_BOT_HANDLES`.
+    Reserved,
+    Db(sqlx::Error),
+}
+
+impl From<sqlx::Error> for CreateBotError {
+    fn from(e: sqlx::Error) -> Self {
+        CreateBotError::Db(e)
+    }
+}
+
 /// LC-73: create a bot user. `is_bot = 1`, empty password hash (login refuses
 /// it: bots authenticate only via API tokens). Returns the new user id.
-pub async fn create_bot(pool: &SqlitePool, username: &str) -> Result<String, sqlx::Error> {
+///
+/// LC-1027: rejects `RESERVED_BOT_HANDLES` before the insert, matching
+/// `handle_available_for`'s rule for human handles. The two admin-facing
+/// callers (`/admin/bots`, `/admin/bridges`) go through here; the built-in
+/// assistant/automation bots, whose usernames *are* the reserved handles, are
+/// lazily created through `create_reserved_bot` instead.
+pub async fn create_bot(pool: &SqlitePool, username: &str) -> Result<String, CreateBotError> {
+    if RESERVED_BOT_HANDLES
+        .iter()
+        .any(|r| r.eq_ignore_ascii_case(username))
+    {
+        return Err(CreateBotError::Reserved);
+    }
+    Ok(insert_bot(pool, username).await?)
+}
+
+/// LC-978/LC-1027: lazily create one of the two built-in bots (`assistant`,
+/// `automation`). Bypasses `create_bot`'s reserved-handle check, since
+/// `username` here is always one of `RESERVED_BOT_HANDLES` itself.
+pub async fn create_reserved_bot(pool: &SqlitePool, username: &str) -> Result<String, sqlx::Error> {
+    insert_bot(pool, username).await
+}
+
+async fn insert_bot(pool: &SqlitePool, username: &str) -> Result<String, sqlx::Error> {
     let id = uuid::Uuid::new_v4().to_string();
     // Bots get a synthesized placeholder bunyip_sub for the same reason
     // create_user does (UNIQUE constraint, no real Bunyip identity).

@@ -113,7 +113,7 @@ pub(crate) async fn assistant_bot(state: &AppState) -> Result<User, AppError> {
     }
     // Race: a concurrent first-ask may create it between the lookup and here;
     // fall back to a re-lookup on a unique-constraint violation.
-    match db::auth::create_bot(&state.auth, ASSISTANT_USERNAME).await {
+    match db::auth::create_reserved_bot(&state.auth, ASSISTANT_USERNAME).await {
         Ok(id) => db::auth::find_user_by_id(&state.auth, &id)
             .await?
             .map(Into::into)

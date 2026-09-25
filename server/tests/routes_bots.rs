@@ -151,6 +151,32 @@ async fn admin_creates_bot_then_token_authenticates() {
     );
 }
 
+// LC-1027: `/admin/bots` refuses a reserved handle (case-insensitively)
+// before ever inserting a row, matching the "handle unavailable" behavior a
+// human provisioning path already has for these names.
+#[tokio::test]
+async fn admin_creates_bot_rejects_reserved_handle() {
+    let t = app().await;
+    for name in ["assistant", "Automation"] {
+        let (status, body) = post_form(
+            &t.app,
+            &t.admin_session,
+            "/admin/bots",
+            &format!("username={name}&s_messages_write=on"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("reserved"), "body: {body}");
+        assert!(
+            db::auth::find_user_by_username(&t.auth, name)
+                .await
+                .unwrap()
+                .is_none(),
+            "no row inserted for {name}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn bot_cannot_use_cookie_login() {
     let t = app().await;

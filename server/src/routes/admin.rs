@@ -3269,7 +3269,18 @@ pub async fn post_bots(
 
     let bot_id = match db::auth::create_bot(&state.auth, username).await {
         Ok(id) => id,
-        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
+        Err(db::auth::CreateBotError::Reserved) => {
+            return Ok(render_bots_page(
+                &state,
+                &actor,
+                None,
+                None,
+                Some("That username is reserved and cannot be used for a bot.".into()),
+            )
+            .await?
+            .into_response());
+        }
+        Err(db::auth::CreateBotError::Db(sqlx::Error::Database(e))) if e.is_unique_violation() => {
             return Ok(render_bots_page(
                 &state,
                 &actor,
@@ -3280,7 +3291,7 @@ pub async fn post_bots(
             .await?
             .into_response());
         }
-        Err(e) => return Err(AppError::from(e)),
+        Err(db::auth::CreateBotError::Db(e)) => return Err(AppError::from(e)),
     };
     let plaintext = crate::auth::generate_api_token();
     let hash = crate::auth::hash_api_token(secret, &plaintext);
@@ -3625,7 +3636,18 @@ pub async fn post_bridges(
     // 1. Mint bot user.
     let bot_id = match db::auth::create_bot(&state.auth, bot_username).await {
         Ok(id) => id,
-        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
+        Err(db::auth::CreateBotError::Reserved) => {
+            return Ok(render_bridges_page(
+                &state,
+                &actor,
+                None,
+                None,
+                Some("That username is reserved and cannot be used for a bot.".into()),
+            )
+            .await?
+            .into_response());
+        }
+        Err(db::auth::CreateBotError::Db(sqlx::Error::Database(e))) if e.is_unique_violation() => {
             return Ok(render_bridges_page(
                 &state,
                 &actor,
@@ -3636,7 +3658,7 @@ pub async fn post_bridges(
             .await?
             .into_response());
         }
-        Err(e) => return Err(AppError::from(e)),
+        Err(db::auth::CreateBotError::Db(e)) => return Err(AppError::from(e)),
     };
     // 2. Assign the narrow `bridge` role tier (chunk 5 / require_not_bridge).
     if let Err(e) = db::auth::set_user_role(&state.auth, &bot_id, db::auth::ROLE_BRIDGE).await {
