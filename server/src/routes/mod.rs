@@ -1240,7 +1240,6 @@ pub(crate) async fn load_switcher(
     user: &User,
     current_enclave: Option<i64>,
 ) -> Result<Vec<SwitcherEntry>, AppError> {
-    let is_admin = user.role == "admin";
     let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &user.id).await?;
 
     let dm_unread: i64 = db::chat::list_dm_unread_counts(&state.chat, &user.id, &blocked)
@@ -1259,10 +1258,11 @@ pub(crate) async fn load_switcher(
     // `?v=asset_version` matches the cache-bust the login page and admin
     // preview use, so the switcher logo refreshes on deploy alongside the
     // 1-day Cache-Control the logo route sets.
-    let global_logo = db::branding::resolve(&state.chat, db::branding::Scope::Global)
+    let global_logo_upload_id = db::branding::resolve(&state.chat, db::branding::Scope::Global)
         .await?
-        .logo_upload_id
-        .map(|_| format!("/branding/logo?v={}", state.asset_version));
+        .logo_upload_id;
+    let global_logo =
+        global_logo_upload_id.map(|_| format!("/branding/logo?v={}", state.asset_version));
 
     let mut entries = Vec::new();
     entries.push(SwitcherEntry {
@@ -1276,24 +1276,24 @@ pub(crate) async fn load_switcher(
         can_manage: false,
     });
 
-    let enclaves = db::enclave::list_enclaves_for_user(&state.chat, &user.id).await?;
-    let _ = is_admin;
-    for e in enclaves {
+    let enclaves = db::enclave::list_enclaves_for_user_with_role(&state.chat, &user.id).await?;
+    let enclave_ids: Vec<i64> = enclaves.iter().map(|(e, _)| e.id).collect();
+    let logo_ids = db::branding::logo_ids_for_enclaves(&state.chat, &enclave_ids).await?;
+    for (e, role) in enclaves {
         let initial = e
             .name
             .chars()
             .next()
             .map(|c| c.to_uppercase().to_string())
             .unwrap_or_else(|| "?".to_string());
-        let logo_url = db::branding::resolve(&state.chat, db::branding::Scope::Enclave(e.id))
-            .await?
-            .logo_upload_id
+        let logo_url = logo_ids
+            .get(&e.id)
+            .copied()
+            .flatten()
+            .or(global_logo_upload_id)
             .map(|_| format!("/enclave/{}/branding/logo?v={}", e.id, state.asset_version));
         // LC-143: settings gear visibility for the active enclave's tile.
-        let role = db::enclave::get_membership(&state.chat, e.id, &user.id)
-            .await?
-            .map(|m| m.role);
-        let can_manage = crate::perms::enclave_can_manage(role, &user.role);
+        let can_manage = crate::perms::enclave_can_manage(Some(role), &user.role);
         entries.push(SwitcherEntry {
             id: Some(e.id),
             label: e.name,

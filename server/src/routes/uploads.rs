@@ -705,10 +705,21 @@ pub async fn post_file_alt_draft(
 ) -> Result<Response, AppError> {
     use base64::Engine as _;
 
-    // LC-992: like every other LLM entry point, honor the AI flag and audience,
-    // and share the assistant's per-user bucket so a burst can't hammer the
-    // operator's vision endpoint.
-    crate::routes::ai_gate::require_llm_workspace(&state, &user).await?;
+    let (upload, room_id) = db::uploads::get_upload(&state.chat, file_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    // The alt-draft button only renders on an already-posted attachment (see
+    // partials/attachment.html), so an orphan upload here means a hand-crafted
+    // request; reject it the same way post_file_alt/post_file_retranscribe do.
+    let Some(room_id) = room_id else {
+        return Err(AppError::BadRequest("attachment is not posted yet".into()));
+    };
+
+    // LC-941/LC-1028: honor the upload's room's own AI toggle and audience,
+    // same contract as every other room-scoped LLM entry point, and share the
+    // assistant's per-user bucket so a burst can't hammer the operator's
+    // vision endpoint.
+    crate::routes::ai_gate::require_llm_in_room(&state, room_id, &user).await?;
     if let crate::rate_limit::Outcome::Deny { .. } = state.rate_limits.check(
         crate::rate_limit::RateLimitKind::AssistantAsk,
         &user.id,
@@ -720,9 +731,6 @@ pub async fn post_file_alt_draft(
         ));
     }
 
-    let (upload, _room_id) = db::uploads::get_upload(&state.chat, file_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
     if upload.uploader_id != user.id {
         return Err(AppError::Forbidden);
     }

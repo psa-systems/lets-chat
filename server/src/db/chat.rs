@@ -172,6 +172,65 @@ pub async fn get_room(pool: &sqlx::SqlitePool, room_id: i64) -> Result<Option<Ro
     Ok(row.as_ref().map(map_room))
 }
 
+/// Batched form of [`get_room`]: id -> room for a set of room ids, in one
+/// query. Used by list surfaces (Activity) that previously resolved each
+/// row's room with its own `get_room` call.
+pub async fn rooms_by_ids(
+    pool: &sqlx::SqlitePool,
+    room_ids: &[i64],
+) -> Result<std::collections::HashMap<i64, Room>, sqlx::Error> {
+    if room_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let placeholders = std::iter::repeat_n("?", room_ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT id, name, topic, room_type, invite_code, created_at, is_voice, posting_allowed_for, description, wiki_body, wiki_updated_at, wiki_updated_by FROM rooms WHERE id IN ({placeholders})"
+    );
+    let mut q = sqlx::query(&sql);
+    for id in room_ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows
+        .iter()
+        .map(|r| (r.get::<i64, _>("id"), map_room(r)))
+        .collect())
+}
+
+/// Batched form of [`get_dm_peer`]: room id -> the caller's peer in that DM,
+/// for a set of DM room ids, in one query. Used by list surfaces (Inbox,
+/// Activity) that previously resolved each row's peer with its own
+/// `get_dm_peer` call.
+pub async fn dm_peers_for_rooms(
+    pool: &sqlx::SqlitePool,
+    user_id: &str,
+    room_ids: &[i64],
+) -> Result<std::collections::HashMap<i64, String>, sqlx::Error> {
+    if room_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let placeholders = std::iter::repeat_n("?", room_ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT m1.room_id AS room_id, m2.user_id AS peer \
+         FROM room_members m1 \
+         JOIN room_members m2 ON m2.room_id = m1.room_id AND m2.user_id != ? \
+         WHERE m1.user_id = ? AND m1.room_id IN ({placeholders})"
+    );
+    let mut q = sqlx::query(&sql).bind(user_id).bind(user_id);
+    for id in room_ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get::<i64, _>("room_id"), r.get::<String, _>("peer")))
+        .collect())
+}
+
 /// LC-679: the enclave a room belongs to, or `None` for a DM / enclave-less
 /// room. Used by the AI feature gate to resolve enclave Owner/Admin scope.
 pub async fn room_enclave_id(
