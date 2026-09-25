@@ -53,38 +53,51 @@ pub async fn get_inbox(
             .unwrap_or_else(|| format!("@{}", r.username))
     };
 
+    // LC-782: resolve every row's author and DM peer up front in a fixed
+    // number of queries instead of one (or two) per row.
+    let dm_room_ids: Vec<i64> = rows
+        .iter()
+        .filter(|r| r.room_type == "dm")
+        .map(|r| r.room_id)
+        .collect();
+    let dm_peers = db::chat::dm_peers_for_rooms(&state.chat, &user.id, &dm_room_ids).await?;
+    let user_ids: Vec<&str> = rows
+        .iter()
+        .map(|r| r.author_user_id.as_str())
+        .chain(dm_peers.values().map(|s| s.as_str()))
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    let users = db::auth::users_by_ids(&state.auth, &user_ids).await?;
+
     let mut items: Vec<InboxItem> = Vec::with_capacity(rows.len());
     for row in &rows {
-        let author_rec = db::auth::find_user_by_id(&state.auth, &row.author_user_id).await?;
+        let author_rec = users.get(&row.author_user_id);
         // LC-685: carry the author's avatar + presence onto the row so it shows
         // an avatar like every other surface (previously fetched then discarded).
         let author = InboxAuthor {
             user_id: row.author_user_id.clone(),
             label: author_rec
-                .as_ref()
                 .map(&label_of)
                 .unwrap_or_else(|| "(unknown)".to_string()),
-            avatar_ext: author_rec.as_ref().and_then(|r| r.avatar_ext.clone()),
+            avatar_ext: author_rec.and_then(|r| r.avatar_ext.clone()),
             status: super::effective_status(
                 &state,
                 &row.author_user_id,
-                author_rec
-                    .as_ref()
-                    .map(|r| r.status.as_str())
-                    .unwrap_or("offline"),
+                author_rec.map(|r| r.status.as_str()).unwrap_or("offline"),
             ),
-            custom_status: author_rec.as_ref().and_then(|r| r.custom_status.clone()),
+            custom_status: author_rec.and_then(|r| r.custom_status.clone()),
         };
         // For DMs, derive the peer user id (deep-link target) AND resolve its
         // display label so the caption reads a name, not a raw UUID (LC-685).
         let (peer_id, peer_label) = if row.room_type == "dm" {
-            match db::chat::get_dm_peer(&state.chat, row.room_id, &user.id).await? {
+            match dm_peers.get(&row.room_id) {
                 Some(pid) => {
-                    let plabel = db::auth::find_user_by_id(&state.auth, &pid)
-                        .await?
-                        .map(|r| label_of(&r))
+                    let plabel = users
+                        .get(pid)
+                        .map(&label_of)
                         .unwrap_or_else(|| format!("@{pid}"));
-                    (Some(pid), Some(plabel))
+                    (Some(pid.clone()), Some(plabel))
                 }
                 None => (None, None),
             }

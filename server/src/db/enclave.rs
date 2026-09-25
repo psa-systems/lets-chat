@@ -686,8 +686,23 @@ pub async fn list_enclaves_for_user(
     pool: &SqlitePool,
     user_id: &str,
 ) -> Result<Vec<Enclave>, sqlx::Error> {
+    Ok(list_enclaves_for_user_with_role(pool, user_id)
+        .await?
+        .into_iter()
+        .map(|(e, _)| e)
+        .collect())
+}
+
+/// Like [`list_enclaves_for_user`] but also returns the caller's role in each
+/// enclave, read off the same JOIN so callers that need it (the switcher's
+/// gear-visibility check) don't pay a separate `get_membership` query per
+/// enclave.
+pub async fn list_enclaves_for_user_with_role(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Vec<(Enclave, EnclaveRole)>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT e.id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at, e.share_emojis_globally, e.msg_rate_limit_burst, e.coyote_mode, e.shame_tags_enabled \
+        "SELECT e.id, e.name, e.description, e.is_public, e.invite_code, e.created_by, e.created_at, e.share_emojis_globally, e.msg_rate_limit_burst, e.coyote_mode, e.shame_tags_enabled, m.role \
          FROM enclaves e \
          JOIN enclave_members m ON m.enclave_id = e.id AND m.user_id = ? \
          ORDER BY e.name COLLATE NOCASE",
@@ -695,7 +710,14 @@ pub async fn list_enclaves_for_user(
     .bind(user_id)
     .fetch_all(pool)
     .await?;
-    Ok(rows.iter().map(map_enclave).collect())
+    rows.iter()
+        .map(|r| {
+            let role_str: String = r.get("role");
+            let role =
+                EnclaveRole::from_str(&role_str).map_err(|e| sqlx::Error::Decode(e.into()))?;
+            Ok((map_enclave(r), role))
+        })
+        .collect()
 }
 
 pub async fn list_all_enclaves_with_counts(
