@@ -78,7 +78,7 @@ async fn automation_bot(state: &AppState) -> Result<User, crate::error::AppError
     if let Some(rec) = db::auth::find_bot_by_username(&state.auth, AUTOMATION_BOT_USERNAME).await? {
         return Ok(rec.into());
     }
-    match db::auth::create_bot(&state.auth, AUTOMATION_BOT_USERNAME).await {
+    match db::auth::create_reserved_bot(&state.auth, AUTOMATION_BOT_USERNAME).await {
         Ok(id) => db::auth::find_user_by_id(&state.auth, &id)
             .await?
             .map(Into::into)

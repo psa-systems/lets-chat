@@ -1024,7 +1024,7 @@ async fn bot_handles_are_reserved_and_human_row_is_not_the_bot() {
             .unwrap()
             .is_none()
     );
-    let bot = lets_chat::db::auth::create_bot(&pool, "automation")
+    let bot = lets_chat::db::auth::create_reserved_bot(&pool, "automation")
         .await
         .unwrap();
     let rec = lets_chat::db::auth::find_bot_by_username(&pool, "automation")
@@ -1032,4 +1032,26 @@ async fn bot_handles_are_reserved_and_human_row_is_not_the_bot() {
         .unwrap()
         .unwrap();
     assert_eq!(rec.id, bot);
+}
+
+// LC-1027: `create_bot`, the path `/admin/bots` and `/admin/bridges` use to
+// mint a bot, refuses a reserved handle (case-insensitively) without ever
+// inserting a row. The built-in bots themselves go through
+// `create_reserved_bot` instead, exercised above.
+#[tokio::test]
+async fn create_bot_refuses_reserved_handle_and_inserts_no_row() {
+    let pool = setup_pool().await;
+    for name in ["assistant", "AUTOMATION", "Automation"] {
+        let err = lets_chat::db::auth::create_bot(&pool, name)
+            .await
+            .expect_err("reserved bot handle refused");
+        assert!(matches!(err, lets_chat::db::auth::CreateBotError::Reserved));
+        assert!(
+            lets_chat::db::auth::find_user_by_username(&pool, name)
+                .await
+                .unwrap()
+                .is_none(),
+            "no row inserted for {name}"
+        );
+    }
 }
