@@ -111,6 +111,36 @@ pub async fn resolve(pool: &SqlitePool, scope: Scope) -> Result<Branding, sqlx::
     Ok(Branding::defaults_for_global())
 }
 
+/// Batched form of [`resolve`] for the enclave scope: one query returning
+/// each enclave's own `logo_upload_id` (or `None` when the enclave has no
+/// branding row of its own). Callers fall back to the global logo themselves
+/// for ids missing from the map, exactly as `resolve` would.
+pub async fn logo_ids_for_enclaves(
+    pool: &SqlitePool,
+    enclave_ids: &[i64],
+) -> Result<std::collections::HashMap<i64, Option<i64>>, sqlx::Error> {
+    if enclave_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let placeholders = std::iter::repeat_n("?", enclave_ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT scope_id, logo_upload_id FROM branding \
+         WHERE scope_kind = 'enclave' AND scope_id IN ({placeholders})"
+    );
+    let mut q = sqlx::query(&sql);
+    for id in enclave_ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    let mut map = std::collections::HashMap::with_capacity(rows.len());
+    for r in rows {
+        map.insert(r.get("scope_id"), r.get("logo_upload_id"));
+    }
+    Ok(map)
+}
+
 /// Upsert every editable field at once. The caller is responsible
 /// for validating `primary_color` / `accent_color` (see
 /// [`is_valid_hex_color`]) before calling.

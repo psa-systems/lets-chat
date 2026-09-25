@@ -63,36 +63,56 @@ pub async fn get_activity(
             .unwrap_or_else(|| format!("@{}", r.username))
     };
 
+    // LC-782: resolve every row's actor, room and DM peer up front in a fixed
+    // number of queries instead of one (or more) per row.
+    let room_ids: Vec<i64> = raw
+        .iter()
+        .map(|item| item.room_id)
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    let rooms = db::chat::rooms_by_ids(&state.chat, &room_ids).await?;
+    let dm_room_ids: Vec<i64> = rooms
+        .values()
+        .filter(|r| r.room_type == "dm")
+        .map(|r| r.id)
+        .collect();
+    let dm_peers = db::chat::dm_peers_for_rooms(&state.chat, &user.id, &dm_room_ids).await?;
+    let user_ids: Vec<&str> = raw
+        .iter()
+        .map(|item| item.actor_user_id.as_str())
+        .chain(dm_peers.values().map(|s| s.as_str()))
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    let users = db::auth::users_by_ids(&state.auth, &user_ids).await?;
+
     let mut items: Vec<ActivityItem> = Vec::with_capacity(raw.len());
     for item in raw {
-        let actor = db::auth::find_user_by_id(&state.auth, &item.actor_user_id).await?;
+        let actor = users.get(&item.actor_user_id);
         // LC-690: carry the actor's avatar + presence onto the row so it shows an
         // avatar like the Inbox / timeline (previously fetched then discarded).
         let actor_label = actor
-            .as_ref()
             .map(&label_of)
             .unwrap_or_else(|| "(unknown)".to_string());
-        let avatar_ext = actor.as_ref().and_then(|r| r.avatar_ext.clone());
+        let avatar_ext = actor.and_then(|r| r.avatar_ext.clone());
         let actor_status = super::effective_status(
             &state,
             &item.actor_user_id,
-            actor
-                .as_ref()
-                .map(|r| r.status.as_str())
-                .unwrap_or("offline"),
+            actor.map(|r| r.status.as_str()).unwrap_or("offline"),
         );
-        let actor_custom_status = actor.as_ref().and_then(|r| r.custom_status.clone());
-        let room = db::chat::get_room(&state.chat, item.room_id).await?;
-        let (room_label, target_path) = match room.as_ref() {
+        let actor_custom_status = actor.and_then(|r| r.custom_status.clone());
+        let room = rooms.get(&item.room_id);
+        let (room_label, target_path) = match room {
             Some(r) if r.room_type == "dm" => {
-                let peer = db::chat::get_dm_peer(&state.chat, r.id, &user.id).await?;
+                let peer = dm_peers.get(&r.id);
                 match peer {
                     // LC-690: resolve the peer's display name for the caption, not
                     // the raw UUID; the id still drives the deep-link.
                     Some(p) => {
-                        let peer_label = db::auth::find_user_by_id(&state.auth, &p)
-                            .await?
-                            .map(|r| label_of(&r))
+                        let peer_label = users
+                            .get(p)
+                            .map(&label_of)
                             .unwrap_or_else(|| format!("@{p}"));
                         (
                             format!("DM with {peer_label}"),
