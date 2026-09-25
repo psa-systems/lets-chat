@@ -107,6 +107,16 @@ async fn req(app: &Router, method: Method, uri: &str, session: &str, body: &str)
     app.clone().oneshot(req).await.unwrap().status()
 }
 
+async fn post_no_body(app: &Router, uri: &str, session: &str) -> StatusCode {
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(uri)
+        .header(header::COOKIE, format!("session={session}"))
+        .body(Body::empty())
+        .unwrap();
+    app.clone().oneshot(req).await.unwrap().status()
+}
+
 async fn get_body(app: &Router, uri: &str, session: &str) -> String {
     let req = Request::builder()
         .method(Method::GET)
@@ -191,6 +201,33 @@ async fn room_toggle_off_refuses_every_ai_route_guard() {
         .await,
         StatusCode::FORBIDDEN,
         "the per-room summary must refuse when the room's AI toggle is off"
+    );
+
+    // LC-1028: alt-draft is room-scoped too - an upload posted into a
+    // toggled-off room must refuse even for its own uploader.
+    let file_id = db::uploads::insert_upload(
+        &s.state.chat,
+        &s.member_id,
+        "cat.png",
+        "image/png",
+        10,
+        "/p/cat.png",
+        None,
+    )
+    .await
+    .unwrap();
+    db::uploads::link_upload_to_message(&s.state.chat, file_id, msg_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        post_no_body(
+            &s.app,
+            &format!("/api/files/{file_id}/alt-draft"),
+            &s.member_session,
+        )
+        .await,
+        StatusCode::FORBIDDEN,
+        "alt-draft must refuse when the room's AI toggle is off"
     );
 }
 

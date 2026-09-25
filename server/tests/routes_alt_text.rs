@@ -58,6 +58,7 @@ struct Setup {
     other_session: String,
     file_id: i64,
     settings: sqlx::SqlitePool,
+    chat: sqlx::SqlitePool,
 }
 
 async fn setup() -> Setup {
@@ -103,7 +104,7 @@ async fn setup() -> Setup {
         geoip: None,
         login_approval_enabled: false,
         auth,
-        chat,
+        chat: chat.clone(),
         settings: settings.clone(),
         hub: Arc::new(Hub::new()),
         asset_version: "test".into(),
@@ -130,6 +131,7 @@ async fn setup() -> Setup {
         other_session,
         file_id,
         settings,
+        chat,
     }
 }
 
@@ -187,6 +189,10 @@ async fn alt_draft_is_uploader_only_and_needs_a_vision_endpoint() {
     db::settings::set_setting(&s.settings, "llm_enabled", "true")
         .await
         .unwrap();
+    // LC-1028: this test isn't exercising the room toggle, so opt the room in.
+    db::chat::set_room_assistant_enabled(&s.chat, 1, true)
+        .await
+        .unwrap();
     // Non-uploader is refused before anything else.
     assert_eq!(
         post_alt_draft(&s.app, Some(&s.other_session), s.file_id).await,
@@ -209,6 +215,10 @@ async fn alt_draft_is_uploader_only_and_needs_a_vision_endpoint() {
 #[tokio::test]
 async fn alt_draft_honors_ai_flag_audience_and_rate_limit() {
     let s = setup().await;
+    // LC-1028: this test isn't exercising the room toggle, so opt the room in.
+    db::chat::set_room_assistant_enabled(&s.chat, 1, true)
+        .await
+        .unwrap();
     // Flag off (default): even the uploader is refused.
     assert_eq!(
         post_alt_draft(&s.app, Some(&s.author_session), s.file_id).await,
@@ -239,6 +249,34 @@ async fn alt_draft_honors_ai_flag_audience_and_rate_limit() {
     assert_eq!(
         post_alt_draft(&s.app, Some(&s.author_session), s.file_id).await,
         StatusCode::TOO_MANY_REQUESTS
+    );
+}
+
+// LC-1028: alt-draft must honor the upload's own room's AI toggle, same as
+// every other room-scoped LLM entry point, even when the global flag is on.
+#[tokio::test]
+async fn alt_draft_honors_the_rooms_own_ai_toggle() {
+    let s = setup().await;
+    db::settings::set_setting(&s.settings, "llm_enabled", "true")
+        .await
+        .unwrap();
+    // Room's own toggle off (the default): the uploader is refused even
+    // though the workspace flag and audience both allow it.
+    db::chat::set_room_assistant_enabled(&s.chat, 1, false)
+        .await
+        .unwrap();
+    assert_eq!(
+        post_alt_draft(&s.app, Some(&s.author_session), s.file_id).await,
+        StatusCode::FORBIDDEN
+    );
+    // Flip the room's toggle on: the same request now reaches the handler.
+    db::chat::set_room_assistant_enabled(&s.chat, 1, true)
+        .await
+        .unwrap();
+    assert_eq!(
+        post_alt_draft(&s.app, Some(&s.author_session), s.file_id).await,
+        StatusCode::BAD_REQUEST,
+        "room toggle on: request reaches the handler (400, no vision endpoint configured)"
     );
 }
 
