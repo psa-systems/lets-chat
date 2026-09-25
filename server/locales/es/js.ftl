@@ -144,3 +144,4 @@ js-nav-failed = No se pudo cargar - problema de conexion. Intentalo de nuevo.
 js-stt-mic-failed = No se pudo iniciar la transcripcion. Intentalo de nuevo.
 js-stt-unsupported = La transcripción en vivo no es compatible con este navegador.
 js-stt-start-failed = No se pudo iniciar la transcripción (error %status%).
+js-stt-network-error = No se pudo iniciar la transcripción (error de red).

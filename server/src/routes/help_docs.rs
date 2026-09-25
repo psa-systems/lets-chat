@@ -704,10 +704,10 @@ pub(crate) async fn handle_support(
             "The help desk documentation search is not configured on this server.".into(),
         ));
     }
-    // Same runtime flag + audience gate as /ask; refused server-side, not merely
-    // hidden. Unlike /ask this does NOT require the room's assistant opt-in - the
-    // docs helper is a global surface, not a per-room feature.
-    super::ai_gate::require_llm_in_room(state, room.id, asker).await?;
+    // LC-1020: flag + audience gate, not the room-toggle-inclusive
+    // `require_llm_in_room` - the docs helper is a global surface, not a
+    // per-room feature, so a room's `assistant_enabled = 0` must not block it.
+    super::ai_gate::require_help_desk(state, room.id, asker).await?;
 
     let question = question.trim();
     if question.is_empty() {
@@ -952,9 +952,11 @@ pub(crate) async fn handle_human(
     asker: &User,
     message: &str,
 ) -> Result<(), AppError> {
-    // Same runtime flag + audience gate as /support (the escalation is part of
-    // the one help desk surface, so it toggles with it).
-    super::ai_gate::require_llm_in_room(state, room.id, asker).await?;
+    // LC-1020: same flag + audience gate as /support (the escalation is part
+    // of the one help desk surface, so it toggles with it) - not the room
+    // toggle, since escalating to a person must work even when a room has
+    // opted its own AI content generation off.
+    super::ai_gate::require_help_desk(state, room.id, asker).await?;
     if let Outcome::Deny { .. } = state.rate_limits.check(
         RateLimitKind::SupportEscalate,
         &asker.id,
