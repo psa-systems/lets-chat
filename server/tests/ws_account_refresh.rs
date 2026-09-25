@@ -17,7 +17,8 @@
 use lets_chat::models::User;
 use lets_chat::push::{MockPushClient, PushClient};
 use lets_chat::routes::test_support::{
-    refresh_account, relay_call_signal, render_dm_read, topic_subscribe_allowed, Account,
+    refresh_account, relay_call_signal, render_dm_read, topic_subscribe_allowed,
+    user_is_currently_banned, Account,
 };
 use lets_chat::ws::events::ChatEvent;
 use lets_chat::ws::hub::Hub;
@@ -314,5 +315,44 @@ async fn a_banned_account_ends_the_refresh_so_the_socket_closes() {
             .await
             .is_none(),
         "a banned account has no rights: the receive loop breaks and the socket closes"
+    );
+}
+
+/// LC-1021: a lagged receiver's `RecvError::Lagged` arm cannot see what events
+/// it skipped, so a `UserBanned` broadcast dropped in the gap would otherwise
+/// go unnoticed until the next `page_context` frame's `refresh_account`
+/// backstop. Force a lag well past the connection's 64-slot buffer (LC-979's
+/// ban broadcast could be anywhere in that dropped run), ban the user
+/// directly, and assert the `Lagged` arm's own check sees the ban without
+/// ever having received the `UserBanned` event.
+#[tokio::test]
+async fn a_lagged_receiver_still_sees_a_ban_without_receiving_the_event() {
+    let fx = fixture().await;
+    let (_conn_id, mut rx, _account) = connect(&fx).await;
+
+    for _ in 0..100 {
+        fx.hub.broadcast_global(&ChatEvent::UserStatusChanged {
+            user_id: fx.peer_id.clone(),
+            status: "online".to_string(),
+            custom_status: None,
+        });
+    }
+    db::auth::ban_user(&fx.state.auth, &fx.user_id, None)
+        .await
+        .unwrap();
+
+    let err = rx
+        .recv()
+        .await
+        .expect_err("a 100-event flood past the 64-slot buffer must lag, not just drain");
+    assert!(
+        matches!(err, tokio::sync::broadcast::error::RecvError::Lagged(_)),
+        "expected Lagged, got {err:?}"
+    );
+
+    assert!(
+        user_is_currently_banned(&fx.state, &fx.user_id).await,
+        "the Lagged arm's direct query must see the ban even though the \
+         UserBanned event itself may have been among the dropped events"
     );
 }
