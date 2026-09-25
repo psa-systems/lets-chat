@@ -154,6 +154,10 @@ async fn require_post_access(
     if !db::chat::is_room_accessible(&state.chat, room_id, &user.id, is_admin).await? {
         return Err(AppError::Forbidden);
     }
+    // LC-1016: the same send gates the text/API post paths enforce (rate
+    // limit, per-enclave burst, enclave ban, posting policy, slowmode,
+    // new-member cooldown, DM block), previously missing here.
+    super::room::check_send_gates(state, user, &room).await?;
     Ok(room)
 }
 

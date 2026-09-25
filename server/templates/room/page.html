@@ -88,7 +88,7 @@
     if (!el || !el.closest) return;
     if (!el.closest('[data-lc-live-room]')) return; // room controls only
     if (el.closest('#composer')) return;            // composer has its own banner
-    if (window.__lcToast) window.__lcToast('err', "{{ "room-action-failed"|t }}");
+    window.__lcNotify('err', "{{ "room-action-failed"|t }}");
   }
   document.body.addEventListener('htmx:responseError', onErr);
   document.body.addEventListener('htmx:sendError', onErr);
