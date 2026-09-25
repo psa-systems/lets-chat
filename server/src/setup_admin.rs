@@ -120,7 +120,7 @@ pub async fn seed_default_admin(pool: &SqlitePool, dev_build: bool, raw: Option<
 /// `routes/bunyip_sso.rs`. `None` when every candidate is taken.
 ///
 /// LC-1019: uses `handle_available_for` rather than bare `username_exists` so
-/// this seed path honours `reserved_usernames` like every other
+/// this seed path honors `reserved_usernames` like every other
 /// username-assignment path since LC-913. No account exists yet, so pass an
 /// id no live user can ever have; a standing reservation on the candidate is
 /// then treated exactly like a taken handle.
@@ -189,7 +189,7 @@ mod tests {
         pool
     }
 
-    // LC-1019: the debug seed path must honour a standing `reserved_usernames`
+    // LC-1019: the debug seed path must honor a standing `reserved_usernames`
     // row exactly like every other assignment path since LC-913, so a
     // reserved handle is never handed to the seeded admin.
     #[tokio::test]
