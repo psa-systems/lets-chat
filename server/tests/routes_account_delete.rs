@@ -562,6 +562,39 @@ async fn delete_wipes_lc908_gap_tables() {
     .await
     .unwrap();
 
+    // support_tickets / remote_control_events (LC-1017)
+    sqlx::query(
+        "INSERT INTO support_tickets (requester_id, room_id, room_name, body) \
+         VALUES (?, ?, 'gap-room', 'need help')",
+    )
+    .bind(&t.user_id)
+    .bind(room_id)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO remote_control_events (room_id, actor_id, target_id, kind) \
+         VALUES (?, ?, ?, 'request')",
+    )
+    .bind(room_id)
+    .bind(&t.user_id)
+    .bind(&t.peer_id)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+    // Also as the target of someone else's request, so both sides of the
+    // OR-clause delete are exercised.
+    sqlx::query(
+        "INSERT INTO remote_control_events (room_id, actor_id, target_id, kind) \
+         VALUES (?, ?, ?, 'request')",
+    )
+    .bind(room_id)
+    .bind(&t.peer_id)
+    .bind(&t.user_id)
+    .execute(&t.chat)
+    .await
+    .unwrap();
+
     // canned_responses
     sqlx::query(
         "INSERT INTO canned_responses (user_id, name, body) VALUES (?, 'hi', 'hello there')",
@@ -820,6 +853,18 @@ async fn delete_wipes_lc908_gap_tables() {
             "dm_pairs (user_hi)",
             "SELECT COUNT(*) FROM dm_pairs WHERE user_hi = ?",
         ),
+        (
+            "support_tickets",
+            "SELECT COUNT(*) FROM support_tickets WHERE requester_id = ?",
+        ),
+        (
+            "remote_control_events (actor)",
+            "SELECT COUNT(*) FROM remote_control_events WHERE actor_id = ?",
+        ),
+        (
+            "remote_control_events (target)",
+            "SELECT COUNT(*) FROM remote_control_events WHERE target_id = ?",
+        ),
     ] {
         assert_eq!(
             count(&t.chat, sql, &t.user_id).await,
@@ -909,6 +954,9 @@ async fn chat_user_columns_are_purged_or_allowlisted() {
         ("dm_pairs", "user_hi"),
         ("enclave_bans", "user_id"),
         ("reply_tokens", "user_id"),
+        ("support_tickets", "requester_id"),
+        ("remote_control_events", "actor_id"),
+        ("remote_control_events", "target_id"),
     ];
 
     // (table, column) pairs intentionally left holding a user id after
@@ -959,6 +1007,9 @@ async fn chat_user_columns_are_purged_or_allowlisted() {
             || col == "assignee_id"
             || col == "user_lo"
             || col == "user_hi"
+            || col == "requester_id"
+            || col == "actor_id"
+            || col == "target_id"
     };
 
     let mut uncovered = Vec::new();
