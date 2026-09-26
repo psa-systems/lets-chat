@@ -92,7 +92,7 @@ These variables are read by the desktop binary on the user's machine, never by t
 
 Encrypts at-rest secrets used by features that store sensitive data: Web Push (VAPID private key) and the sealed IMAP password for email ingress. Future encrypted-at-rest features will reuse the same key. (SMTP credentials and the Bunyip SSO client secret are passed via environment variables, not the database, so they do not depend on this key.)
 
-**Format.** Any non-empty string. The server SHA-256-hashes it to derive a 32-byte AES-256-GCM key, so length and encoding don't matter; entropy does. Use at least 32 random bytes.
+**Format.** Rejected if unset (see Without it, below): a known placeholder (`change-me-in-production`, `changeme`, `change-me`, `secret`, `password`, `test`, case-insensitive), shorter than 16 characters, or a single repeated character. The server SHA-256-hashes an accepted value to derive a 32-byte AES-256-GCM key, so beyond those floors, length and encoding don't matter; entropy does. Use at least 32 random bytes.
 
 **Generate one:**
 
