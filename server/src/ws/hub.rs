@@ -122,6 +122,17 @@ pub struct Hub {
     /// clip capture, since the agent already transcribes every track (without it
     /// the browser and the agent both run whisper on the same speaker).
     transcript_agents: DashMap<i64, i64>,
+    /// LC-1033: room_id -> the transcript_id of the session currently open for
+    /// that room (`None` once it has finalized), set when a session starts and
+    /// cleared (or advanced to the next session) when it finalizes.
+    /// `set_transcript_agent` checks this before writing so a dispatch
+    /// confirmation that resolves after its own session already ended - and
+    /// after a later session has opened in the same room - cannot stamp
+    /// `transcript_agents` with a transcript id that no longer owns the room.
+    /// A room absent from this map (never routed through `start`) is untracked
+    /// rather than closed, so it is not guarded; every real call always calls
+    /// `set_open_transcript` before a dispatch can be confirmed.
+    open_transcripts: DashMap<i64, Option<i64>>,
     /// LC-928: transcript_id -> (user_id -> resolved display label), scoped to
     /// one call session so a speaker's label is looked up at most once per
     /// session instead of once per live caption. Cleared when the session
@@ -177,6 +188,7 @@ impl Hub {
             voice_screens: DashMap::new(),
             control_pending: DashMap::new(),
             transcript_agents: DashMap::new(),
+            open_transcripts: DashMap::new(),
             speaker_labels: DashMap::new(),
         }
     }
@@ -384,7 +396,20 @@ impl Hub {
     // ---- LC-859 transcription-agent presence --------------------------
 
     /// Mark `room_id`'s server-side transcription agent live for `transcript_id`.
+    /// LC-1033: a no-op if `room_id` has a tracked open transcript (see
+    /// `open_transcripts`) and it is not `transcript_id` - guards against a
+    /// dispatch confirmation that resolves after its own session ended (and
+    /// possibly after a later session has already opened in the same room)
+    /// from re-arming the marker for a session it was never dispatched for.
+    /// A room with no tracked entry at all is not guarded (untracked, not
+    /// closed); every real call path always tracks the room via
+    /// `set_open_transcript` before a dispatch can be confirmed.
     pub fn set_transcript_agent(&self, room_id: i64, transcript_id: i64) {
+        if let Some(open) = self.open_transcripts.get(&room_id) {
+            if *open != Some(transcript_id) {
+                return;
+            }
+        }
         self.transcript_agents.insert(room_id, transcript_id);
     }
 
@@ -397,6 +422,27 @@ impl Hub {
     /// use it to suppress their own per-client capture (the agent covers them).
     pub fn transcript_agent_active(&self, room_id: i64) -> bool {
         self.transcript_agents.contains_key(&room_id)
+    }
+
+    /// LC-1033: record that `transcript_id` is now the open session for
+    /// `room_id`. Called when a session starts (including a re-hit `start`
+    /// that joins the already-open session, which is idempotent here).
+    pub fn set_open_transcript(&self, room_id: i64, transcript_id: i64) {
+        self.open_transcripts.insert(room_id, Some(transcript_id));
+    }
+
+    /// LC-1033: mark `room_id` as having no open transcript, but only if
+    /// `transcript_id` is still the one on record. Called on finalize; the
+    /// guard means a finalize call for a session that has already been
+    /// superseded by a newer one (finalize is also called from backstops that
+    /// can race a fresh `start`) leaves the newer session's marker alone
+    /// instead of wiping it.
+    pub fn clear_open_transcript(&self, room_id: i64, transcript_id: i64) {
+        if let Some(mut open) = self.open_transcripts.get_mut(&room_id) {
+            if *open == Some(transcript_id) {
+                *open = None;
+            }
+        }
     }
 
     /// The cached display label for `user_id` in call session `transcript_id`,
@@ -1019,6 +1065,53 @@ mod tests {
         assert!(
             !hub.transcript_agent_active(7),
             "cleared when the session finalizes"
+        );
+    }
+
+    // LC-1033: a dispatch confirmation for a session that has already ended -
+    // and possibly been superseded by a new session in the same room - must
+    // not re-arm the agent marker on that later session's behalf.
+    #[test]
+    fn stale_dispatch_confirmation_for_a_closed_session_is_a_noop() {
+        let hub = Hub::new();
+        // Session A opens (transcript 100) and finalizes before its dispatch
+        // confirmation resolves.
+        hub.set_open_transcript(7, 100);
+        hub.clear_open_transcript(7, 100);
+        // Session B then opens in the same room (transcript 200).
+        hub.set_open_transcript(7, 200);
+
+        // A's dispatch confirmation resolves late and tries to arm the marker
+        // with A's id: must be a no-op, not a re-arm of the room.
+        hub.set_transcript_agent(7, 100);
+        assert!(
+            !hub.transcript_agent_active(7),
+            "a stale confirmation for a closed session must not set the marker"
+        );
+
+        // B's own confirmation still works normally.
+        hub.set_transcript_agent(7, 200);
+        assert!(
+            hub.transcript_agent_active(7),
+            "the current session's own confirmation must still take effect"
+        );
+    }
+
+    // LC-1033: `clear_open_transcript` only clears the marker it names -
+    // finalize backstops racing a fresh `start` must not wipe a newer
+    // session's own open-transcript marker.
+    #[test]
+    fn clear_open_transcript_leaves_a_newer_sessions_marker_alone() {
+        let hub = Hub::new();
+        hub.set_open_transcript(7, 100);
+        hub.set_open_transcript(7, 200); // session B has already opened
+        hub.clear_open_transcript(7, 100); // stale finalize for session A
+
+        // B's own confirmation must still take effect.
+        hub.set_transcript_agent(7, 200);
+        assert!(
+            hub.transcript_agent_active(7),
+            "a stale finalize for a superseded session must not block the current session"
         );
     }
 
