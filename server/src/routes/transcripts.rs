@@ -568,6 +568,10 @@ pub async fn start(
         db::transcripts::start_session(&state.chat, room_id, &user.id).await?;
     let by = label_for(&state, &user.id).await;
     let tid = session.id;
+    // LC-1033: this session is now the one open for the room, so a late
+    // dispatch confirmation from a since-ended session must not re-arm the
+    // agent marker on its behalf.
+    state.hub.set_open_transcript(room_id, tid);
     broadcast_to_members(&state, &room, |to| ChatEvent::TranscriptStarted {
         room_id,
         to_user_id: to,
@@ -826,6 +830,11 @@ async fn finalize(state: &AppState, room: &Room, transcript_id: i64) {
     // room is stale. Clear it before the end broadcast so a later session in the
     // same room starts from a clean (no-agent) state.
     state.hub.clear_transcript_agent(room.id);
+    // LC-1033: also drop this session's open-transcript marker (only if it is
+    // still the one on record; a later session's marker is left alone), so a
+    // dispatch confirmation for THIS session that resolves after this point is
+    // guaranteed to see it is stale.
+    state.hub.clear_open_transcript(room.id, transcript_id);
     // LC-928: drop this session's cached speaker labels along with it.
     state.hub.clear_speaker_labels(transcript_id);
     broadcast_to_members(state, room, |to| ChatEvent::TranscriptEnded {
@@ -875,6 +884,7 @@ pub async fn finalize_open_for_user(state: &AppState, user_id: &str) {
                 // agent marker, mirroring finalize(). LC-928: same for the
                 // cached speaker labels.
                 state.hub.clear_transcript_agent(room.id);
+                state.hub.clear_open_transcript(room.id, tid);
                 state.hub.clear_speaker_labels(tid);
                 broadcast_to_members(state, &room, |to| ChatEvent::TranscriptEnded {
                     room_id: room.id,
@@ -1863,6 +1873,136 @@ mod finalize_open_for_room_tests {
             .unwrap()
             .unwrap();
         assert_eq!(older_now.status, "ended");
+    }
+}
+
+/// LC-1033: a dispatch confirmation for a session that has already ended, and
+/// whose room has since opened a new session, must never affect the new
+/// session's persist decision. `finalize` and `record_and_broadcast` are
+/// private route-layer fns, so exercised here directly rather than through
+/// the full HTTP + WS stack.
+#[cfg(test)]
+mod stale_dispatch_confirmation_tests {
+    use super::*;
+    use crate::models::User;
+    use crate::ws::hub::Hub;
+    use sqlx::SqlitePool;
+    use std::sync::Arc;
+
+    async fn chat_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/chat")
+            .run(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    async fn test_state() -> AppState {
+        let auth = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations/auth")
+            .run(&auth)
+            .await
+            .unwrap();
+        AppState {
+            geoip: None,
+            login_approval_enabled: false,
+            bg: crate::bg::spawn(auth.clone()),
+            auth,
+            chat: chat_pool().await,
+            settings: {
+                let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+                sqlx::migrate!("./migrations/settings")
+                    .run(&pool)
+                    .await
+                    .unwrap();
+                pool
+            },
+            hub: Arc::new(Hub::new()),
+            asset_version: "test".into(),
+            last_seen_ledger: crate::auth::new_last_seen_ledger(),
+            activity_ledger: crate::auth::new_last_seen_ledger(),
+            secret_key: None,
+            vapid: None,
+            push_client: Arc::new(crate::push::MockPushClient::default()),
+            apns_client: None,
+            fcm_client: None,
+            mailer: None,
+            base_url: "http://localhost:8080".to_string(),
+            ice_servers: "[]".to_string(),
+            rate_limits: crate::rate_limit::RateLimits::new(),
+            bunyip_sso: None,
+            stt_client: None,
+            llm_client: None,
+            embedding_client: None,
+        }
+    }
+
+    /// LC-1033 AC: session A opens and ends before its dispatch confirmation
+    /// resolves; session B then opens in the same room. A's confirmation
+    /// resolving late must be a no-op, so `transcript_agent_active` stays
+    /// false and a browser-origin caption for B is still persisted.
+    #[tokio::test]
+    async fn late_dispatch_confirmation_from_a_closed_session_never_re_arms_the_room() {
+        let state = test_state().await;
+        let room_id = db::chat::create_room(&state.chat, "huddle-room", None, "public", None, None)
+            .await
+            .unwrap();
+        let user_id = db::auth::create_user(&state.auth, "alice", "")
+            .await
+            .unwrap();
+        let record = db::auth::find_user_by_id(&state.auth, &user_id)
+            .await
+            .unwrap()
+            .unwrap();
+        let user: User = record.into();
+        let room = db::chat::get_room(&state.chat, room_id)
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Session A starts (mirrors `start`'s hub bookkeeping) and ends before
+        // its dispatch task's confirmation resolves.
+        let (session_a, _) = db::transcripts::start_session(&state.chat, room_id, &user_id)
+            .await
+            .unwrap();
+        state.hub.set_open_transcript(room_id, session_a.id);
+        finalize(&state, &room, session_a.id).await;
+
+        // Session B opens in the same room.
+        let (session_b, _) = db::transcripts::start_session(&state.chat, room_id, &user_id)
+            .await
+            .unwrap();
+        state.hub.set_open_transcript(room_id, session_b.id);
+
+        // A's dispatch confirmation resolves late, carrying A's transcript id.
+        state.hub.set_transcript_agent(room_id, session_a.id);
+        assert!(
+            !state.hub.transcript_agent_active(room_id),
+            "a stale confirmation for the closed session A must not mark the room agent-active"
+        );
+
+        record_and_broadcast(
+            &state,
+            &room,
+            session_b.id,
+            &user,
+            "hello from session B",
+            500,
+            Origin::Browser,
+        )
+        .await
+        .unwrap();
+
+        let segments = db::transcripts::list_segments(&state.chat, session_b.id)
+            .await
+            .unwrap();
+        assert_eq!(
+            segments.len(),
+            1,
+            "session B's browser caption must persist"
+        );
+        assert_eq!(segments[0].text, "hello from session B");
     }
 }
 
