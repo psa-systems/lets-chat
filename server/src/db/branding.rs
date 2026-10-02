@@ -112,9 +112,12 @@ pub async fn resolve(pool: &SqlitePool, scope: Scope) -> Result<Branding, sqlx::
 }
 
 /// Batched form of [`resolve`] for the enclave scope: one query returning
-/// each enclave's own `logo_upload_id` (or `None` when the enclave has no
-/// branding row of its own). Callers fall back to the global logo themselves
-/// for ids missing from the map, exactly as `resolve` would.
+/// each enclave's own `logo_upload_id`. An enclave with no branding row has
+/// no entry in the map at all; an enclave with a branding row whose logo is
+/// explicitly unset has an entry mapping to `None`. Callers must distinguish
+/// the two: fall back to the global logo only when the key is absent, and
+/// use the row's own value (including `None`) unchanged when the key is
+/// present, exactly as [`resolve`]'s row-level semantics require.
 pub async fn logo_ids_for_enclaves(
     pool: &SqlitePool,
     enclave_ids: &[i64],

@@ -1286,12 +1286,12 @@ pub(crate) async fn load_switcher(
             .next()
             .map(|c| c.to_uppercase().to_string())
             .unwrap_or_else(|| "?".to_string());
-        let logo_url = logo_ids
-            .get(&e.id)
-            .copied()
-            .flatten()
-            .or(global_logo_upload_id)
-            .map(|_| format!("/enclave/{}/branding/logo?v={}", e.id, state.asset_version));
+        let logo_id = match logo_ids.get(&e.id) {
+            Some(inner) => *inner,
+            None => global_logo_upload_id,
+        };
+        let logo_url =
+            logo_id.map(|_| format!("/enclave/{}/branding/logo?v={}", e.id, state.asset_version));
         // LC-143: settings gear visibility for the active enclave's tile.
         let can_manage = crate::perms::enclave_can_manage(Some(role), &user.role);
         entries.push(SwitcherEntry {
