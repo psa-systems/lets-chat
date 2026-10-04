@@ -25,7 +25,7 @@ jobs:
       && startsWith(github.event.pull_request.head.ref, 'release/v')
     # Pinned to the SHA the `common` submodule points at (`git ls-tree HEAD
     # common`); bump both together.
-    uses: psa-systems/common/.forgejo/workflows/create-release.yml@ebaf41a2441de20ffca024def7d514e63f7e971d
+    uses: psa-systems/common/.forgejo/workflows/create-release.yml@7954edcf5cbc261fd6f5ec1a2265ca5453551fa3
     # MEDIUM: tags and publishes a release through the API; compiles nothing.
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_MEDIUM }}
     # The called workflow reads only FORGEJO_PAT, so pass nothing else.
