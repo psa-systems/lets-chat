@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-10-03
+
+Fourth tagged release, cut from `main` after ~76 commits (about two weeks) of work on top of the v0.3.0 baseline. The entries below are curated from the PR titles and descriptions merged since v0.3.0 (`git log --first-parent v0.3.0..v0.4.0`); internal work (refactors, test hygiene, CI changes with no operator impact) is intentionally omitted and lives in the git history.
+
 ### Changed
 
 - **The desktop self-updater now pulls its binary from an OCI registry, authenticated as the signed-in user (LC-733).** Let's Chat binaries are membership-gated, so the previous anonymous fetch of the Generic Packages URL could only ever answer 401. The updater now resolves `{registry}/v2/{repository}/manifests/latest-{platform}` and downloads the single artifact blob it names, using a registry credential the server hands the app after a Bunyip sign-in (`GET /desktop/registry-token`); there is no second sign-in and nothing to paste. The artifact's SHA-256 is still verified before the in-place replace, and the bearer is dropped on any cross-origin redirect. **Action:** the release still uploads binaries and `latest.json` to Forgejo Generic Packages for hand downloads, and since LC-831 it also pushes each binary to the container registry as an OCI artifact tagged `latest-{os}-x86_64` (plus a `{version}-{os}-x86_64` rollback tag), which is what the updater resolves; the registry must serve those artifacts over the OCI distribution API and accept a signed-in user's token. Operators mirroring releases replace `LETS_CHAT_UPDATE_URL` with `LETS_CHAT_UPDATE_REGISTRY_URL` (plus optional `LETS_CHAT_UPDATE_REPOSITORY` / `_TAG` / `_TOKEN`); the old variable is no longer read.
