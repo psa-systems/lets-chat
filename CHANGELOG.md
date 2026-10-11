@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.4.1] - 2026-10-04
+
+No operator-visible changes; this release contains only internal CI tooling (LC-1039).
+
 ## [v0.4.0] - 2026-10-03
 
 Fourth tagged release, cut from `main` after ~76 commits (about two weeks) of work on top of the v0.3.0 baseline. The entries below are curated from the PR titles and descriptions merged since v0.3.0 (`git log --first-parent v0.3.0..v0.4.0`); internal work (refactors, test hygiene, CI changes with no operator impact) is intentionally omitted and lives in the git history.
