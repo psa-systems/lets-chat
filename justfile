@@ -56,7 +56,7 @@ docker_version_args := '--build-arg CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-defaul
 
 # Run every check: asset/template conventions, Rust compile, clippy, fmt, and JS, agent and saas tests.
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-workflow-secrets check-ui-conventions check-update-injection check-count-badge check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js test-agent test-saas
+check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-workflow-secrets check-ui-conventions check-update-injection check-changelog-section check-count-badge check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js test-agent test-saas
     # Note: LC-774: `test-js` runs the browser-asset node:test suites here too, so
     # `just pre-commit` (whose `pre_commit_prepare := "check"` runs this recipe)
     # covers them alongside the Rust checks.
@@ -140,6 +140,11 @@ check-ui-conventions:
 [group('check')]
 check-update-injection:
     nu ci-build/check-update-injection.nu
+
+# A release/v* branch's Cargo.toml version must have a matching `## [vX.Y.Z]` heading in CHANGELOG.md before its release PR can merge; a no-op on every other branch (LC-1047).
+[group('check')]
+check-changelog-section:
+    nu ci-build/check-changelog-section.nu
 
 # Every numeric count badge renders through partials/unread_badge.html's `badge` macro, so it always carries an aria-label (LC-889).
 [group('check')]

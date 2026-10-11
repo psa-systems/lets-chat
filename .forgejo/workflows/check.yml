@@ -74,6 +74,15 @@ jobs:
         # ci-build/check-update-injection.nu and LC-831 / LC-594.
         run: nu ci-build/check-update-injection.nu
 
+      - name: Changelog section guard
+        # A release/v* branch's Cargo.toml version must have grown a matching
+        # `## [vX.Y.Z]` CHANGELOG.md heading before its release PR can merge;
+        # a no-op on every other branch. Three consecutive tagged releases
+        # (v0.3.0 / LC-968, v0.4.0 / LC-1038, v0.4.1 / LC-1046) each skipped
+        # this step at least once before an audit or a human caught it. See
+        # ci-build/check-changelog-section.nu and LC-1047.
+        run: nu ci-build/check-changelog-section.nu
+
       - name: Asset color-token guard
         # The browser assets inject markup in states nobody eyeballs (offline
         # banner, failed send, active search row), so a raw palette shade there
