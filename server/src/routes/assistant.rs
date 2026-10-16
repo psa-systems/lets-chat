@@ -298,15 +298,24 @@ pub(crate) async fn handle_ask(
             tracing::warn!(error = %e, message_id = msg_id, "failed to store assistant answer");
             return;
         }
-        st.hub.broadcast_to_room(
-            room.id,
-            &crate::ws::events::ChatEvent::MessageEdited {
-                message_id: msg_id,
-                room_id: room.id,
-                new_body: final_body,
-                edited_at: String::new(),
-            },
-        );
+        if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+            &st,
+            msg_id,
+            "message_edited",
+        )
+        .await
+        {
+            st.hub.broadcast_to_room(
+                room.id,
+                &crate::ws::events::ChatEvent::MessageEdited {
+                    message_id: msg_id,
+                    room_id: room.id,
+                    new_body: final_body,
+                    edited_at: String::new(),
+                    render,
+                },
+            );
+        }
     });
     Ok(())
 }

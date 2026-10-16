@@ -15,6 +15,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use lets_chat::models::Message;
+use lets_chat::routes::render_context::NewMessageContext;
 use lets_chat::ws::events::ChatEvent;
 use lets_chat::ws::hub::Hub;
 use lets_chat::{db, routes};
@@ -166,7 +167,14 @@ async fn deliver_foreground(
     room: i64,
 ) -> Option<String> {
     let subscribed = Arc::new(Mutex::new(HashSet::from([room])));
-    routes::render_new_message_or_bump(state, message, None, viewer, &subscribed).await
+    let room_row = db::chat::get_room(&state.chat, room)
+        .await
+        .unwrap()
+        .expect("room exists");
+    let render = NewMessageContext::load(state, message, &room_row)
+        .await
+        .unwrap();
+    routes::render_new_message_or_bump(state, message, &render, None, viewer, &subscribed).await
 }
 
 /// One message read by N foreground viewers costs 2N `DmRead` deliveries (each

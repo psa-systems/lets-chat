@@ -791,15 +791,24 @@ pub(crate) async fn handle_support(
             tracing::warn!(error = %e, message_id = msg_id, "failed to store support answer");
             return;
         }
-        st.hub.broadcast_to_room(
-            room_id,
-            &crate::ws::events::ChatEvent::MessageEdited {
-                message_id: msg_id,
+        if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+            &st,
+            msg_id,
+            "message_edited",
+        )
+        .await
+        {
+            st.hub.broadcast_to_room(
                 room_id,
-                new_body: final_body,
-                edited_at: String::new(),
-            },
-        );
+                &crate::ws::events::ChatEvent::MessageEdited {
+                    message_id: msg_id,
+                    room_id,
+                    new_body: final_body,
+                    edited_at: String::new(),
+                    render,
+                },
+            );
+        }
         if notify_panel {
             st.hub.broadcast_to_user(
                 &asker_id,

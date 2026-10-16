@@ -2448,12 +2448,24 @@ pub async fn post_quarantine_approve(
                 bridge_kind: raw.bridge_kind,
                 bridge_foreign_avatar: raw.bridge_foreign_avatar,
             };
-            let event = ChatEvent::NewMessage {
-                message,
-                is_dm: room.room_type == "dm",
-                client_id: None,
-            };
-            let _ = super::broadcast_room_message(&state, &room, &event).await;
+            // Best-effort live delivery of a message that is already released:
+            // a failure here must not fail the release, but it is logged.
+            match super::render_context::NewMessageContext::load(&state, &message, &room).await {
+                Ok(render) => {
+                    let event = ChatEvent::NewMessage {
+                        message,
+                        is_dm: room.room_type == "dm",
+                        client_id: None,
+                        render,
+                    };
+                    if let Err(e) = super::broadcast_room_message(&state, &room, &event).await {
+                        tracing::warn!(error = %e, "failed to broadcast released quarantine message");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, message_id = message.id, "failed to resolve render context for released quarantine message");
+                }
+            }
         }
     }
     Ok(Redirect::to("/admin/quarantine"))

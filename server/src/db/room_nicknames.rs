@@ -1,7 +1,7 @@
 //! LC-321: per-room nicknames. A user's self-set display name scoped to one
-//! room, folded into the author label at `routes::load_author_meta` so every
-//! message render in that room shows the nickname in place of the global
-//! display_name / username. `user_id` references auth.db, so there is no
+//! room, folded into the author label at `routes::load_author_meta_persisted`
+//! so every message render in that room shows the nickname in place of the
+//! global display_name / username. `user_id` references auth.db, so there is no
 //! cross-db FK (same as `room_members`).
 use std::collections::HashMap;
 

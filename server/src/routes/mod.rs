@@ -82,6 +82,7 @@ mod reactions;
 mod read_all;
 pub mod related;
 mod reminders;
+pub mod render_context;
 mod report;
 mod retention;
 pub(crate) mod room;
@@ -353,8 +354,8 @@ pub(crate) async fn room_seen_members_if_applicable(
 
 /// Per-message author metadata cached by callers that build many MessageViews.
 /// Keeps the join across auth.db and chat.db to a single field per author.
-#[derive(Clone)]
-pub(crate) struct AuthorMeta {
+#[derive(Clone, Debug)]
+pub struct AuthorMeta {
     pub username: String,
     pub display_name: Option<String>,
     pub avatar_ext: Option<String>,
@@ -371,6 +372,18 @@ pub(crate) struct AuthorMeta {
 }
 
 impl AuthorMeta {
+    /// The meta as `viewer_id` sees a REAL-USER author: the author's presence
+    /// comes from the hub's connection set, except that the viewer is by
+    /// definition present (they are loading this page) even before their
+    /// WebSocket finishes opening, so their own persisted status is trusted.
+    /// Synthetic actors have no presence and must not go through this.
+    pub(crate) fn for_viewer(mut self, state: &AppState, user_id: &str, viewer_id: &str) -> Self {
+        if user_id != viewer_id {
+            self.status = effective_status(state, user_id, &self.status);
+        }
+        self
+    }
+
     pub fn unknown() -> Self {
         Self {
             username: "(unknown)".to_string(),
@@ -433,35 +446,77 @@ pub(crate) async fn resolve_msg_author(
     // apply a per-room nickname. Synthetic-actor branches ignore it.
     room_id: i64,
 ) -> Result<AuthorMeta, AppError> {
+    let (meta, is_user) = resolve_msg_author_persisted(
+        state,
+        user_id,
+        webhook_id,
+        email_inbox_id,
+        bridge_id,
+        bridge_foreign_name,
+        bridge_kind,
+        bridge_foreign_avatar,
+        room_id,
+    )
+    .await?;
+    Ok(if is_user {
+        meta.for_viewer(state, user_id, viewer_id)
+    } else {
+        meta
+    })
+}
+
+/// LC-780: the viewer-independent half of [`resolve_msg_author`]. Returns the
+/// author with its PERSISTED status plus whether the author is a real user
+/// (only a real user's status is viewer-dependent, see
+/// [`AuthorMeta::for_viewer`]). The broadcast path resolves this once per
+/// event instead of once per recipient.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn resolve_msg_author_persisted(
+    state: &AppState,
+    user_id: &str,
+    webhook_id: Option<i64>,
+    email_inbox_id: Option<i64>,
+    bridge_id: Option<i64>,
+    bridge_foreign_name: Option<&str>,
+    bridge_kind: Option<&str>,
+    bridge_foreign_avatar: Option<&str>,
+    room_id: i64,
+) -> Result<(AuthorMeta, bool), AppError> {
     if let Some(wid) = webhook_id {
         let (name, avatar_url) = db::webhooks::identity(&state.chat, wid)
             .await?
             .map(|w| (w.name, w.avatar_url))
             .unwrap_or_else(|| ("webhook".to_string(), None));
-        return Ok(AuthorMeta {
-            username: name,
-            display_name: None,
-            avatar_ext: None,
-            status: db::auth::STATUS_ACTIVE.to_string(),
-            custom_status: None,
-            is_bot: false,
-            actor: MessageActor::Webhook(avatar_url),
-        });
+        return Ok((
+            AuthorMeta {
+                username: name,
+                display_name: None,
+                avatar_ext: None,
+                status: db::auth::STATUS_ACTIVE.to_string(),
+                custom_status: None,
+                is_bot: false,
+                actor: MessageActor::Webhook(avatar_url),
+            },
+            false,
+        ));
     }
     if let Some(eid) = email_inbox_id {
         let (name, avatar_url) = db::email_inbox::identity(&state.chat, eid)
             .await?
             .map(|w| (w.name, w.avatar_url))
             .unwrap_or_else(|| ("email".to_string(), None));
-        return Ok(AuthorMeta {
-            username: name,
-            display_name: None,
-            avatar_ext: None,
-            status: db::auth::STATUS_ACTIVE.to_string(),
-            custom_status: None,
-            is_bot: false,
-            actor: MessageActor::EmailInbox(avatar_url),
-        });
+        return Ok((
+            AuthorMeta {
+                username: name,
+                display_name: None,
+                avatar_ext: None,
+                status: db::auth::STATUS_ACTIVE.to_string(),
+                custom_status: None,
+                is_bot: false,
+                actor: MessageActor::EmailInbox(avatar_url),
+            },
+            false,
+        ));
     }
     // Gate on the snapshot NAME, not bridge_id: under stop-new removal,
     // `ON DELETE SET NULL` clears bridge_id while the snapshot strings
@@ -478,20 +533,26 @@ pub(crate) async fn resolve_msg_author(
         // template's onerror falls back to initials. None when the message
         // had no foreign avatar OR the proxy gate was off at submit time.
         let avatar_url = bridge_foreign_avatar.map(str::to_string);
-        return Ok(AuthorMeta {
-            username: name,
-            display_name: None,
-            avatar_ext: None,
-            status: db::auth::STATUS_ACTIVE.to_string(),
-            custom_status: None,
-            is_bot: false,
-            actor: MessageActor::Bridge(crate::views::message_actor::BridgeActorMeta {
-                kind,
-                avatar_url,
-            }),
-        });
+        return Ok((
+            AuthorMeta {
+                username: name,
+                display_name: None,
+                avatar_ext: None,
+                status: db::auth::STATUS_ACTIVE.to_string(),
+                custom_status: None,
+                is_bot: false,
+                actor: MessageActor::Bridge(crate::views::message_actor::BridgeActorMeta {
+                    kind,
+                    avatar_url,
+                }),
+            },
+            false,
+        ));
     }
-    load_author_meta(state, user_id, viewer_id, room_id).await
+    Ok((
+        load_author_meta_persisted(state, user_id, room_id).await?,
+        true,
+    ))
 }
 
 /// LC-78: synthesize the `actor` block for the LC-75 outgoing-webhook
@@ -531,27 +592,20 @@ pub(crate) fn outgoing_actor(
     }
 }
 
-pub(crate) async fn load_author_meta(
+/// The author's persisted record plus the per-room nickname (LC-321), resolved
+/// once per event by the broadcast producer (LC-780) and per call elsewhere. `username` is left
+/// untouched so @mentions / DM links / avatar initials still work. Synthetic
+/// actors (webhook/email/bridge) never reach this, so they never pick up a
+/// nickname.
+pub(crate) async fn load_author_meta_persisted(
     state: &AppState,
     user_id: &str,
-    viewer_id: &str,
     room_id: i64,
 ) -> Result<AuthorMeta, AppError> {
     let mut meta = db::auth::find_user_by_id(&state.auth, user_id)
         .await?
         .map(AuthorMeta::from)
         .unwrap_or_else(AuthorMeta::unknown);
-    // The viewer is by definition present (they are loading this page) even
-    // before their WebSocket finishes opening, so trust their persisted
-    // status rather than the hub's connection set.
-    if user_id != viewer_id {
-        meta.status = effective_status(state, user_id, &meta.status);
-    }
-    // LC-321: a per-room nickname overrides the global display_name (and the
-    // username fallback) for this author's messages in this room. `username`
-    // is left untouched so @mentions / DM links / avatar initials still work.
-    // Synthetic actors (webhook/email/bridge) return before this in
-    // `resolve_msg_author`, so they never pick up a nickname.
     if let Some(nick) = db::room_nicknames::get(&state.chat, room_id, user_id).await? {
         if !nick.trim().is_empty() {
             meta.display_name = Some(nick);
@@ -1215,10 +1269,22 @@ pub(crate) async fn channel_refs_for_room(
     room_id: i64,
     viewer: &User,
 ) -> Result<Vec<crate::views::channel_complete::ChannelRef>, AppError> {
-    use crate::views::channel_complete::ChannelRef;
     let Some(enclave_id) = enclave_for_room(state, room_id).await? else {
         return Ok(Vec::new());
     };
+    channel_refs_for_enclave(state, enclave_id, viewer).await
+}
+
+/// LC-780: the per-viewer half of [`channel_refs_for_room`]. The enclave id is
+/// the same for every recipient of a broadcast and is resolved once by the
+/// producer; the room list is NOT shared because which rooms a viewer can
+/// access (private rooms, enclave role) differs per viewer.
+pub(crate) async fn channel_refs_for_enclave(
+    state: &AppState,
+    enclave_id: i64,
+    viewer: &User,
+) -> Result<Vec<crate::views::channel_complete::ChannelRef>, AppError> {
+    use crate::views::channel_complete::ChannelRef;
     let is_admin = viewer.role == "admin";
     let rooms =
         db::chat::list_rooms_in_enclave(&state.chat, enclave_id, &viewer.id, is_admin).await?;

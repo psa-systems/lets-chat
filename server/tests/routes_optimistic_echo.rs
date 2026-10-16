@@ -23,6 +23,7 @@ use askama::Template;
 use axum::body::{to_bytes, Body};
 use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
+use lets_chat::routes::render_context::NewMessageContext;
 use lets_chat::views::message_actor::MessageActor;
 use lets_chat::views::room::MessageView;
 use lets_chat::views::ws_fragments::NewMessageFragment;
@@ -140,21 +141,28 @@ async fn next_new_message(rx: &mut Receiver<ChatEvent>) -> (String, Option<Strin
     panic!("no NewMessage event among the first 10 hub events");
 }
 
-/// Like `next_new_message`, but returns the full `Message` so callers can feed
-/// it back into the per-recipient render.
+/// Like `next_new_message`, but returns the full `Message` and the producer's
+/// render context so callers can feed them back into the per-recipient render.
 async fn next_new_message_full(
     rx: &mut Receiver<ChatEvent>,
-) -> (lets_chat::models::Message, Option<String>) {
+) -> (
+    lets_chat::models::Message,
+    Option<String>,
+    Arc<NewMessageContext>,
+) {
     for _ in 0..10 {
         let evt = tokio::time::timeout(Duration::from_secs(1), rx.recv())
             .await
             .expect("did not receive a hub event within 1s")
             .expect("hub channel closed");
         if let ChatEvent::NewMessage {
-            message, client_id, ..
+            message,
+            client_id,
+            render,
+            ..
         } = evt
         {
-            return (message, client_id);
+            return (message, client_id, render);
         }
     }
     panic!("no NewMessage event among the first 10 hub events");
@@ -180,7 +188,7 @@ async fn author_gets_echo_even_when_not_subscribed() {
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
-    let (message, client_id) = next_new_message_full(&mut rx).await;
+    let (message, client_id, render) = next_new_message_full(&mut rx).await;
     assert_eq!(client_id.as_deref(), Some("cid-xyz"));
 
     let alice = lets_chat::models::User::from(
@@ -195,6 +203,7 @@ async fn author_gets_echo_even_when_not_subscribed() {
     let out = routes::render_new_message_or_bump(
         &t.state,
         &message,
+        &render,
         client_id.as_deref(),
         &alice,
         &not_subscribed,
