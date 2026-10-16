@@ -18,7 +18,7 @@ use crate::models::custom_emoji::EmojiRef;
 use crate::models::reaction::Reaction;
 use crate::models::{Attachment, Message, Room};
 use crate::state::AppState;
-use crate::views::room::QuotePreview;
+use crate::views::room::{AckState, QuotePreview, ReactionView};
 
 use super::AuthorMeta;
 
@@ -226,6 +226,13 @@ pub struct EditedMessageContext {
     pub reactions: Vec<Reaction>,
     /// The "who reacted" tooltip text, aligned to `reactions`.
     pub reactor_titles: Vec<String>,
+    /// LC-783: whether the message currently requires acknowledgement.
+    pub ack_required: bool,
+    /// The acknowledgement roster, with every acker id; a recipient derives
+    /// its own `acked_by_me` from them. Empty when `ack_required` is false.
+    pub ack_acker_ids: Vec<String>,
+    /// The "who acknowledged" tooltip text, shared across every recipient.
+    pub ack_title: String,
 }
 
 impl EditedMessageContext {
@@ -295,6 +302,14 @@ impl EditedMessageContext {
         let is_pinned = db::pinned::pinned_message_ids_for_room(&state.chat, message.room_id)
             .await?
             .contains(&message.id);
+        let ack_required = db::acks::is_required(&state.chat, message.id).await?;
+        let (ack_acker_ids, ack_title) = if ack_required {
+            let rollup = db::acks::rollup(&state.chat, message.id, "").await?;
+            let title = super::build_acker_title(state, &rollup.acker_ids).await;
+            (rollup.acker_ids, title)
+        } else {
+            (Vec::new(), String::new())
+        };
         Ok(Some(Arc::new(Self {
             base,
             message,
@@ -303,7 +318,44 @@ impl EditedMessageContext {
             is_pinned,
             reactions,
             reactor_titles,
+            ack_required,
+            ack_acker_ids,
+            ack_title,
         })))
+    }
+
+    /// `reactions`/`reactor_titles` rendered as `ReactionView`s for `viewer_id`:
+    /// only `reacted_by_me` is resolved per viewer, by membership in each
+    /// reaction's shared `reactor_ids`.
+    pub fn reaction_views_for(&self, viewer_id: &str, emojis: &[EmojiRef]) -> Vec<ReactionView> {
+        self.reactions
+            .iter()
+            .zip(self.reactor_titles.iter())
+            .map(|(r, title)| {
+                let reacted_by_me = r.reactor_ids.iter().any(|id| id == viewer_id);
+                ReactionView::new(
+                    r.emoji.clone(),
+                    r.count,
+                    reacted_by_me,
+                    title.clone(),
+                    emojis,
+                )
+            })
+            .collect()
+    }
+
+    /// The ack state `viewer_id` sees: `None` when the message does not
+    /// require acknowledgement, otherwise the shared count/roster with
+    /// `acked_by_me` resolved per viewer by membership in `ack_acker_ids`.
+    pub fn ack_for(&self, viewer_id: &str) -> Option<AckState> {
+        if !self.ack_required {
+            return None;
+        }
+        Some(AckState {
+            count: self.ack_acker_ids.len() as i64,
+            acked_by_me: self.ack_acker_ids.iter().any(|id| id == viewer_id),
+            ackers_title: self.ack_title.clone(),
+        })
     }
 }
 

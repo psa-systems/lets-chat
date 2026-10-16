@@ -520,24 +520,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 | ChatEvent::AttachmentAltChanged { render, .. } => {
                                     render_edited_message(&send_state, render, &send_user).await
                                 }
-                                ChatEvent::ReactionAdded { message_id, .. }
-                                | ChatEvent::ReactionRemoved { message_id, .. } => {
-                                    render_reaction_bar(&send_state, *message_id, &send_user.id).await
+                                ChatEvent::ReactionAdded { render, .. }
+                                | ChatEvent::ReactionRemoved { render, .. } => {
+                                    render_reaction_bar(&send_state, render, &send_user.id).await
                                 }
                                 ChatEvent::Acknowledged { message_id, .. } => {
                                     render_ack_bar(&send_state, *message_id, &send_user.id).await
                                 }
-                                ChatEvent::AckRequiredChanged {
-                                    room_id,
-                                    message_id,
-                                } => {
-                                    render_ack_required(
-                                        &send_state,
-                                        &send_user,
-                                        *room_id,
-                                        *message_id,
-                                    )
-                                    .await
+                                ChatEvent::AckRequiredChanged { render, .. } => {
+                                    render_ack_required(&send_state, &send_user, render).await
                                 }
                                 ChatEvent::PollUpdated { message_id, .. } => {
                                     render_poll(&send_state, *message_id, &send_user.id).await
@@ -846,37 +837,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     )
                                     .await
                                 }
-                                ChatEvent::MessagePinned {
-                                    room_id,
-                                    message_id,
-                                    ..
-                                } => {
+                                ChatEvent::MessagePinned { render, .. } => {
                                     // Fan out: re-render this viewer's
                                     // bubble OOB (so its hover menu flips
                                     // Pin -> Unpin) and the pinned-strip
                                     // OOB. Per-viewer because can_edit/
                                     // can_delete and the strip's "See all"
                                     // URL depend on identity.
-                                    render_pin_event(
-                                        &send_state,
-                                        &send_user,
-                                        *room_id,
-                                        *message_id,
-                                        true,
-                                    )
-                                    .await
+                                    render_pin_event(&send_state, &send_user, render).await
                                 }
-                                ChatEvent::MessageUnpinned {
-                                    room_id,
-                                    message_id,
-                                } => render_pin_event(
-                                    &send_state,
-                                    &send_user,
-                                    *room_id,
-                                    *message_id,
-                                    false,
-                                )
-                                .await,
+                                ChatEvent::MessageUnpinned { render, .. } => {
+                                    render_pin_event(&send_state, &send_user, render).await
+                                }
                                 ChatEvent::CallSignal { to_user_id, .. }
                                     if to_user_id == &send_user.id =>
                                 {
@@ -1566,27 +1538,17 @@ async fn render_follow_up(state: &AppState, message_id: i64, user_id: &str) -> O
         .ok()
 }
 
+/// LC-783: `ctx` carries the message's reaction counts and reactor titles,
+/// resolved once by the producer; only the viewer's personal emoji set and
+/// `reacted_by_me` (derived from `ctx`'s reactor ids) are per-recipient.
 pub async fn render_reaction_bar(
     state: &AppState,
-    message_id: i64,
+    ctx: &EditedMessageContext,
     user_id: &str,
 ) -> Option<String> {
-    let m = db::chat::get_message(&state.chat, message_id)
-        .await
-        .ok()??;
-    let emojis = db::custom_emojis::refs_for_room_and_user(&state.chat, m.room_id, user_id)
-        .await
-        .ok()
-        .unwrap_or_default();
-    let counts = db::chat::list_reactions(&state.chat, message_id, user_id)
-        .await
-        .ok()?;
-    let reactor_titles = super::build_reactor_titles(state, &counts).await;
-    let reactions: Vec<ReactionView> = counts
-        .into_iter()
-        .zip(reactor_titles)
-        .map(|(r, title)| ReactionView::new(r.emoji, r.count, r.reacted_by_me, title, &emojis))
-        .collect();
+    let message_id = ctx.message.id;
+    let emojis = ctx.base.custom_emojis_for(state, user_id).await.ok()?;
+    let reactions = ctx.reaction_views_for(user_id, &emojis);
     // LC-595: emit BOTH surfaces unconditionally. A viewer may have the timeline
     // showing, an open thread panel showing, or both, and the server does not
     // track which - an OOB fragment whose target is absent is a no-op in htmx,
@@ -1624,25 +1586,21 @@ async fn render_ack_bar(state: &AppState, message_id: i64, user_id: &str) -> Opt
 
 /// LC-490: re-render the whole bubble for one recipient after the ack
 /// requirement is toggled, so the bar + the require/clear menu item flip.
-/// Mirrors `render_pin_event` minus the pinned strip; `load_message_view_for_viewer`
-/// computes the ack state per viewer internally.
-async fn render_ack_required(
+/// Mirrors `render_pin_event` minus the pinned strip. LC-783: `ctx` carries
+/// the pin state and the ack roster, resolved once by the producer; only the
+/// bookmark flag and `load_message_view_for_viewer_with_ctx`'s other
+/// per-viewer pieces vary by recipient.
+pub async fn render_ack_required(
     state: &AppState,
     viewer: &User,
-    room_id: i64,
-    message_id: i64,
+    ctx: &EditedMessageContext,
 ) -> Option<String> {
-    let is_pinned = db::pinned::pinned_message_ids_for_room(&state.chat, room_id)
-        .await
-        .ok()?
-        .contains(&message_id);
-    let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &viewer.id, message_id)
+    let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &viewer.id, ctx.message.id)
         .await
         .unwrap_or(false);
-    let view =
-        super::load_message_view_for_viewer(state, viewer, message_id, is_pinned, is_bookmarked)
-            .await
-            .ok()?;
+    let view = super::load_message_view_for_viewer_with_ctx(state, viewer, ctx, is_bookmarked)
+        .await
+        .ok()?;
     crate::views::room::SingleMessageFragment {
         message: &view,
         oob: true,
@@ -1822,12 +1780,8 @@ pub async fn render_edited_message(
         &viewer.id,
     );
     // LC-490: recompute ack so editing a required message doesn't wipe its bar.
-    let ack = warn_default(
-        super::build_ack_view(state, m.id, &viewer.id).await,
-        "ack",
-        m.id,
-        &viewer.id,
-    );
+    // LC-783: the producer already resolved the ack roster onto `ctx`.
+    let ack = ctx.ack_for(&viewer.id);
     let view = MessageView {
         id: m.id,
         room_id: m.room_id,
@@ -3851,14 +3805,18 @@ pub async fn render_sidebar(
 /// page) - htmx silently drops unmatched OOB targets. If the message has
 /// been deleted between the mutation and the broadcast, the bubble part
 /// is skipped and only the strip is emitted.
-async fn render_pin_event(
+/// LC-783: `ctx` carries the pin state and the message itself, resolved once
+/// by the producer; only the strip's per-viewer pin path, the bookmark flag
+/// and `load_message_view_for_viewer_with_ctx`'s other per-viewer pieces vary
+/// by recipient.
+pub async fn render_pin_event(
     state: &AppState,
     viewer: &User,
-    room_id: i64,
-    message_id: i64,
-    is_pinned: bool,
+    ctx: &EditedMessageContext,
 ) -> Option<String> {
     use askama::Template;
+    let room_id = ctx.message.room_id;
+    let message_id = ctx.message.id;
     let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
     let pin_path = if room.room_type == "dm" {
         let peer_id = db::chat::get_dm_peer(&state.chat, room_id, &viewer.id)
@@ -3877,24 +3835,18 @@ async fn render_pin_event(
     let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &viewer.id, message_id)
         .await
         .unwrap_or(false);
-    let bubble_html = match super::load_message_view_for_viewer(
-        state,
-        viewer,
-        message_id,
-        is_pinned,
-        is_bookmarked,
-    )
-    .await
-    {
-        Ok(view) => crate::views::room::SingleMessageFragment {
-            message: &view,
-            oob: true,
-        }
-        .render()
-        .ok()
-        .unwrap_or_default(),
-        Err(_) => String::new(),
-    };
+    let bubble_html =
+        match super::load_message_view_for_viewer_with_ctx(state, viewer, ctx, is_bookmarked).await
+        {
+            Ok(view) => crate::views::room::SingleMessageFragment {
+                message: &view,
+                oob: true,
+            }
+            .render()
+            .ok()
+            .unwrap_or_default(),
+            Err(_) => String::new(),
+        };
     Some(format!("{bubble_html}{strip_html}"))
 }
 
@@ -3914,6 +3866,10 @@ pub mod test_support {
     // surfaces (an open thread panel used to receive nothing at all).
     pub use super::render_reaction_bar;
     pub use super::{render_edited_message, render_thread_reply};
+    // LC-783: the ack-required and pin/unpin broadcast renders, so a test can
+    // assert the per-viewer render issues no statement the shared context's
+    // producer already ran.
+    pub use super::{render_ack_required, render_pin_event};
     // LC-834: the mid-connection page move and the sidebar render it steers, so
     // a test can drive a topic change on one connection and assert the sidebar
     // shape follows it. Same reasoning as the call helpers above: the logic is

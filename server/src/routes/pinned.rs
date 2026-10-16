@@ -239,14 +239,25 @@ pub async fn post_pin(
         Err(e) => return Err(e.into()),
     }
 
-    state.hub.broadcast_to_room(
-        room_id,
-        &ChatEvent::MessagePinned {
+    // LC-783: resolve the viewer-independent render inputs once here instead
+    // of once per connected recipient; see `routes::render_context`.
+    if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+        &state,
+        message_id,
+        "message_pinned",
+    )
+    .await
+    {
+        state.hub.broadcast_to_room(
             room_id,
-            message_id,
-            pinned_by: user.id.clone(),
-        },
-    );
+            &ChatEvent::MessagePinned {
+                room_id,
+                message_id,
+                pinned_by: user.id.clone(),
+                render,
+            },
+        );
+    }
 
     render_pin_response(&state, &user, room_id, message_id, true).await
 }
@@ -265,13 +276,24 @@ pub async fn delete_pin(
 
     db::pinned::unpin_message(&state.chat, message_id).await?;
 
-    state.hub.broadcast_to_room(
-        room_id,
-        &ChatEvent::MessageUnpinned {
+    // LC-783: resolve the viewer-independent render inputs once here instead
+    // of once per connected recipient; see `routes::render_context`.
+    if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+        &state,
+        message_id,
+        "message_unpinned",
+    )
+    .await
+    {
+        state.hub.broadcast_to_room(
             room_id,
-            message_id,
-        },
-    );
+            &ChatEvent::MessageUnpinned {
+                room_id,
+                message_id,
+                render,
+            },
+        );
+    }
 
     render_pin_response(&state, &user, room_id, message_id, false).await
 }

@@ -252,7 +252,11 @@ async fn live_update_targets_both_the_timeline_and_the_thread() {
         .await
         .unwrap();
 
-    let payload = routes::test_support::render_reaction_bar(&s.state, s.reply, &s.user_id)
+    let ctx = routes::render_context::EditedMessageContext::load(&s.state, s.reply)
+        .await
+        .unwrap()
+        .expect("the message exists");
+    let payload = routes::test_support::render_reaction_bar(&s.state, &ctx, &s.user_id)
         .await
         .expect("renders");
 
