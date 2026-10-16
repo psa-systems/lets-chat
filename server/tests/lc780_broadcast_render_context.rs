@@ -332,6 +332,122 @@ async fn edited_message_render_repeats_no_statement_the_producer_ran() {
     }
 }
 
+/// LC-783: a reaction toggle broadcasts the same `EditedMessageContext`, so a
+/// recipient's reaction-bar render must not repeat any statement the producer
+/// already ran, same contract as an edit.
+#[tokio::test]
+async fn reaction_render_repeats_no_statement_the_producer_ran() {
+    let f = setup(3).await;
+    db::chat::toggle_reaction(&f.state.chat, f.message.id, &f.members[0].id, "\u{1f44d}")
+        .await
+        .unwrap();
+    f.log.take();
+    let ctx = EditedMessageContext::load(&f.state, f.message.id)
+        .await
+        .unwrap()
+        .expect("the message exists");
+    let producer: HashSet<String> = f.log.take().into_iter().collect();
+    assert!(
+        producer.len() >= 8,
+        "the producer must resolve the shared inputs itself, ran: {producer:#?}"
+    );
+
+    for viewer in [&f.author, &f.moderator, &f.members[0]] {
+        f.log.take();
+        let html = routes::test_support::render_reaction_bar(&f.state, &ctx, &viewer.id).await;
+        let statements = f.log.take();
+        assert!(
+            html.is_some(),
+            "{} renders the reaction bar",
+            viewer.username
+        );
+        let repeated: Vec<&String> = statements
+            .iter()
+            .filter(|s| producer.contains(*s))
+            .collect();
+        assert!(
+            repeated.is_empty(),
+            "{}'s reaction-bar render repeated producer statements: {repeated:#?}",
+            viewer.username
+        );
+    }
+}
+
+/// LC-783: the ack-required toggle shares the same roster the producer already
+/// resolved, so `acked_by_me` is a membership check, not a fresh query.
+#[tokio::test]
+async fn ack_required_render_repeats_no_statement_the_producer_ran() {
+    let f = setup(3).await;
+    db::acks::set_required(&f.state.chat, f.message.id, f.room.id, &f.author.id)
+        .await
+        .unwrap();
+    db::acks::acknowledge(&f.state.chat, f.message.id, &f.members[0].id)
+        .await
+        .unwrap();
+    f.log.take();
+    let ctx = EditedMessageContext::load(&f.state, f.message.id)
+        .await
+        .unwrap()
+        .expect("the message exists");
+    let producer: HashSet<String> = f.log.take().into_iter().collect();
+    assert!(
+        producer.len() >= 8,
+        "the producer must resolve the shared inputs itself, ran: {producer:#?}"
+    );
+
+    for viewer in [&f.author, &f.moderator, &f.members[0]] {
+        f.log.take();
+        let html = routes::test_support::render_ack_required(&f.state, viewer, &ctx).await;
+        let statements = f.log.take();
+        assert!(html.is_some(), "{} renders the ack bar", viewer.username);
+        let repeated: Vec<&String> = statements
+            .iter()
+            .filter(|s| producer.contains(*s))
+            .collect();
+        assert!(
+            repeated.is_empty(),
+            "{}'s ack-required render repeated producer statements: {repeated:#?}",
+            viewer.username
+        );
+    }
+}
+
+/// LC-783: pinning/unpinning shares the same producer-resolved context as an
+/// edit; a recipient's pin-event render must not repeat its statements.
+#[tokio::test]
+async fn pin_event_render_repeats_no_statement_the_producer_ran() {
+    let f = setup(3).await;
+    db::pinned::pin_message(&f.state.chat, f.message.id, f.room.id, &f.author.id)
+        .await
+        .unwrap();
+    f.log.take();
+    let ctx = EditedMessageContext::load(&f.state, f.message.id)
+        .await
+        .unwrap()
+        .expect("the message exists");
+    let producer: HashSet<String> = f.log.take().into_iter().collect();
+    assert!(
+        producer.len() >= 8,
+        "the producer must resolve the shared inputs itself, ran: {producer:#?}"
+    );
+
+    for viewer in [&f.author, &f.moderator, &f.members[0]] {
+        f.log.take();
+        let html = routes::test_support::render_pin_event(&f.state, viewer, &ctx).await;
+        let statements = f.log.take();
+        assert!(html.is_some(), "{} renders the pin event", viewer.username);
+        let repeated: Vec<&String> = statements
+            .iter()
+            .filter(|s| producer.contains(*s))
+            .collect();
+        assert!(
+            repeated.is_empty(),
+            "{}'s pin-event render repeated producer statements: {repeated:#?}",
+            viewer.username
+        );
+    }
+}
+
 #[tokio::test]
 async fn thread_reply_render_repeats_no_statement_the_producer_ran() {
     let f = setup(3).await;

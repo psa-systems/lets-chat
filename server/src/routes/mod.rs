@@ -264,7 +264,7 @@ fn reactor_title_from_labels(
 /// LC-490: comma-joined acknowledger display names for the roster tooltip.
 /// Reuses the reactor name-resolution path (`display_names_for_ids` +
 /// `reactor_title_from_labels`).
-async fn build_acker_title(state: &AppState, acker_ids: &[String]) -> String {
+pub(crate) async fn build_acker_title(state: &AppState, acker_ids: &[String]) -> String {
     if acker_ids.is_empty() {
         return String::new();
     }
@@ -731,6 +731,79 @@ pub(crate) async fn load_message_view_for_viewer(
             m.id,
             "follow_up",
         ),
+        author_is_bot: meta.is_bot,
+        actor: meta.actor.clone(),
+    })
+}
+
+/// LC-783: ctx-carrying sibling of [`load_message_view_for_viewer`], for a
+/// recipient that already has an `EditedMessageContext` resolved once by the
+/// event's producer (the reaction, ack-required and pin/unpin broadcast
+/// arms). Skips every query the context already answered - the author,
+/// attachments, mentions, quote preview, room emoji set, reactions, reply
+/// count, follow-up flag, pin state and ack roster - and pays only the
+/// queries that genuinely vary by viewer: the moderator check behind
+/// `can_delete`, the viewer's personal custom emoji, the `#channel` links
+/// their role allows, and the bookmark flag (passed in, since it has no
+/// shared counterpart). `load_message_view_for_viewer` with no context stays
+/// the fallback for every other caller (the per-viewer HTTP routes).
+pub(crate) async fn load_message_view_for_viewer_with_ctx(
+    state: &AppState,
+    viewer: &User,
+    ctx: &render_context::EditedMessageContext,
+    is_bookmarked: bool,
+) -> Result<crate::views::room::MessageView, AppError> {
+    use crate::views::room::MessageView;
+    let m = &ctx.message;
+    let meta = ctx.base.author_for(state, &m.user_id, &viewer.id);
+    let can_edit = m.user_id == viewer.id;
+    let can_delete = m.user_id == viewer.id
+        || db::room_rbac::is_room_moderator(&state.chat, m.room_id, &viewer.id, &viewer.role)
+            .await?;
+    let custom_emojis = ctx.base.custom_emojis_for(state, &viewer.id).await?;
+    let reactions = ctx.reaction_views_for(&viewer.id, &custom_emojis);
+    let channels = ctx.base.channels_for(state, viewer).await?;
+    let ack = ctx.ack_for(&viewer.id);
+    let poll = ctx.base.poll_for(state, m.id, &viewer.id).await;
+    let follow_up = ctx.base.follow_up_for(state, m.id, &viewer.id).await;
+    Ok(MessageView {
+        id: m.id,
+        room_id: m.room_id,
+        user_id: m.user_id.clone(),
+        username: meta.username,
+        display_name: meta.display_name,
+        avatar_ext: meta.avatar_ext,
+        status: meta.status,
+        custom_status: meta.custom_status,
+        created_at: m.created_at.clone(),
+        edited_at: m.edited_at.clone(),
+        body: m.body.clone(),
+        reactions,
+        can_edit,
+        can_delete,
+        viewer_id: viewer.id.clone(),
+        seen_caption: None,
+        is_follow_up: ctx.is_follow_up,
+        show_unread_divider: false,
+        day_label: None,
+        shame_enabled: false,
+        shame_hidden: None,
+        reply_count: ctx.reply_count,
+        parent_id: m.parent_id,
+        attachments: ctx.base.attachments.clone(),
+        mentions: ctx.base.mentions.clone(),
+        is_pinned: ctx.is_pinned,
+        is_bookmarked,
+        ack,
+        custom_emojis,
+        channels,
+        quote_preview: ctx.base.quote_preview.clone(),
+        suppress_quote_preview: false,
+        is_system: m.is_system,
+        sysgroup_open: None,
+        sysgroup_close: false,
+        poll,
+        follow_up,
         author_is_bot: meta.is_bot,
         actor: meta.actor.clone(),
     })

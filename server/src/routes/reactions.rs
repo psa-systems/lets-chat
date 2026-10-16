@@ -92,22 +92,38 @@ pub async fn toggle_reaction(
     }
 
     let added = db::chat::toggle_reaction(&state.chat, message_id, &user.id, &emoji).await?;
-    let event = if added {
-        ChatEvent::ReactionAdded {
-            message_id,
-            room_id: m.room_id,
-            emoji: emoji.clone(),
-            user_id: user.id.clone(),
-        }
-    } else {
-        ChatEvent::ReactionRemoved {
-            message_id,
-            room_id: m.room_id,
-            emoji: emoji.clone(),
-            user_id: user.id.clone(),
-        }
-    };
-    state.hub.broadcast_to_room(m.room_id, &event);
+    // LC-783: resolve the viewer-independent render inputs once here instead
+    // of once per connected recipient; see `routes::render_context`.
+    if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+        &state,
+        message_id,
+        if added {
+            "reaction_added"
+        } else {
+            "reaction_removed"
+        },
+    )
+    .await
+    {
+        let event = if added {
+            ChatEvent::ReactionAdded {
+                message_id,
+                room_id: m.room_id,
+                emoji: emoji.clone(),
+                user_id: user.id.clone(),
+                render,
+            }
+        } else {
+            ChatEvent::ReactionRemoved {
+                message_id,
+                room_id: m.room_id,
+                emoji: emoji.clone(),
+                user_id: user.id.clone(),
+                render,
+            }
+        };
+        state.hub.broadcast_to_room(m.room_id, &event);
+    }
 
     // LC-75: publish reaction.added to outgoing webhooks (additions only).
     // LC-78: actor describes the REACTOR (not the message author). v1 only

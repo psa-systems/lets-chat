@@ -127,12 +127,16 @@ pub enum ChatEvent {
         room_id: i64,
         emoji: String,
         user_id: String,
+        /// LC-783: see `NewMessage::render`.
+        render: Arc<EditedMessageContext>,
     },
     ReactionRemoved {
         message_id: i64,
         room_id: i64,
         emoji: String,
         user_id: String,
+        /// LC-783: see `NewMessage::render`.
+        render: Arc<EditedMessageContext>,
     },
     /// LC-490: a message's acknowledgement requirement was toggled on or off.
     /// Re-renders the full bubble per viewer so the ack bar and the
@@ -140,6 +144,8 @@ pub enum ChatEvent {
     AckRequiredChanged {
         room_id: i64,
         message_id: i64,
+        /// LC-783: see `NewMessage::render`.
+        render: Arc<EditedMessageContext>,
     },
     /// LC-490: someone acknowledged a message. Re-renders the ack-bar
     /// sub-region (`#ack-{id}`) per viewer so the roster + own state stay correct.
@@ -384,6 +390,8 @@ pub enum ChatEvent {
         room_id: i64,
         message_id: i64,
         pinned_by: String,
+        /// LC-783: see `NewMessage::render`.
+        render: Arc<EditedMessageContext>,
     },
     /// The inverse of `MessagePinned`. Recipients re-render the strip; the
     /// strip render filters by `messages.deleted_at IS NULL` so a soft-
@@ -392,6 +400,8 @@ pub enum ChatEvent {
     MessageUnpinned {
         room_id: i64,
         message_id: i64,
+        /// LC-783: see `NewMessage::render`.
+        render: Arc<EditedMessageContext>,
     },
     /// WebRTC 1:1 call signaling relayed verbatim between the two members of
     /// a DM room. The server never interprets `payload`; it is an opaque

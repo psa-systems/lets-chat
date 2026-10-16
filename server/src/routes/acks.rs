@@ -114,13 +114,24 @@ pub async fn post_require(
     require_room_access(&state, &user, m.room_id).await?;
     require_author_or_mod(&state, &user, &m).await?;
     db::acks::set_required(&state.chat, message_id, m.room_id, &user.id).await?;
-    state.hub.broadcast_to_room(
-        m.room_id,
-        &ChatEvent::AckRequiredChanged {
-            room_id: m.room_id,
-            message_id,
-        },
-    );
+    // LC-783: resolve the viewer-independent render inputs once here instead
+    // of once per connected recipient; see `routes::render_context`.
+    if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+        &state,
+        message_id,
+        "ack_required_changed",
+    )
+    .await
+    {
+        state.hub.broadcast_to_room(
+            m.room_id,
+            &ChatEvent::AckRequiredChanged {
+                room_id: m.room_id,
+                message_id,
+                render,
+            },
+        );
+    }
     render_bubble_response(&state, &user, &m).await
 }
 
@@ -136,12 +147,23 @@ pub async fn delete_require(
     require_room_access(&state, &user, m.room_id).await?;
     require_author_or_mod(&state, &user, &m).await?;
     db::acks::clear_required(&state.chat, message_id).await?;
-    state.hub.broadcast_to_room(
-        m.room_id,
-        &ChatEvent::AckRequiredChanged {
-            room_id: m.room_id,
-            message_id,
-        },
-    );
+    // LC-783: resolve the viewer-independent render inputs once here instead
+    // of once per connected recipient; see `routes::render_context`.
+    if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+        &state,
+        message_id,
+        "ack_required_changed",
+    )
+    .await
+    {
+        state.hub.broadcast_to_room(
+            m.room_id,
+            &ChatEvent::AckRequiredChanged {
+                room_id: m.room_id,
+                message_id,
+                render,
+            },
+        );
+    }
     render_bubble_response(&state, &user, &m).await
 }
