@@ -56,7 +56,7 @@ docker_version_args := '--build-arg CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-defaul
 
 # Run every check: asset/template conventions, Rust compile, clippy, fmt, and JS, agent and saas tests.
 [group('check')]
-check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-workflow-secrets check-ui-conventions check-update-injection check-changelog-section check-count-badge check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js test-agent test-saas
+check: check-asset-color-tokens check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-workflow-secrets check-ui-conventions check-update-injection check-changelog-section check-count-badge check-release-pin check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js test-agent test-saas
     # Note: LC-774: `test-js` runs the browser-asset node:test suites here too, so
     # `just pre-commit` (whose `pre_commit_prepare := "check"` runs this recipe)
     # covers them alongside the Rust checks.
@@ -150,6 +150,11 @@ check-changelog-section:
 [group('check')]
 check-count-badge:
     nu ci-build/check-count-badge.nu
+
+# create-release.yml's `uses:` SHA for the common reusable workflow equals `git ls-tree HEAD common`, so a submodule bump that forgets the pin fails fast (LC-1049).
+[group('check')]
+check-release-pin:
+    nu ci-build/check-release-pin.nu
 
 # Check server compilation (standalone)
 [group('check')]
