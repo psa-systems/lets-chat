@@ -11,8 +11,16 @@
 # which pushes release/vX.Y.Z and opens the PR this workflow acts on once merged.
 name: Create release
 
+# pull_request_target, not pull_request (LC-1045): the job needs FORGEJO_PAT to
+# tag and publish the release, and a plain `pull_request` run started from a
+# fork gets a read-only token with secrets masked, so the release call would
+# fail to authenticate. pull_request_target runs in the base-repo context with
+# the secret available. It never checks out PR head code (it only tags the
+# already-merged commit on main via the reusable workflow), so the usual
+# pull_request_target code-execution risk does not apply. The `if` guard below
+# reads only `merged` and `head.ref`, both present on this event too.
 on:
-  pull_request:
+  pull_request_target:
     types:
       - closed
     branches:
