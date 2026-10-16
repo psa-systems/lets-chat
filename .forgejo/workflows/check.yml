@@ -184,6 +184,14 @@ jobs:
         shell: nu {0}
         run: nu ci-build/check-workflow-secrets.nu
 
+      - name: Release workflow pin matches common submodule (LC-1049)
+        # create-release.yml pins the common reusable workflow by SHA, with a
+        # comment stating that SHA must equal `git ls-tree HEAD common`. A
+        # submodule bump that forgets the pin (LC-1044 did, silently) now
+        # fails here instead of waiting for the next parity audit. See
+        # ci-build/check-release-pin.nu.
+        run: nu ci-build/check-release-pin.nu
+
       - name: UI convention guard
         # The classes the 2026-08-11 UI audit closed, held closed by one grep
         # each: palette literals in templates, buttons styled as text links,
