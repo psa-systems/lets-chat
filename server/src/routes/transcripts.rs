@@ -941,10 +941,18 @@ async fn post_saved_message(state: &AppState, room: &Room, transcript_id: i64) {
         bridge_kind: raw.bridge_kind,
         bridge_foreign_avatar: raw.bridge_foreign_avatar,
     };
+    let render = match super::render_context::NewMessageContext::load(state, &message, room).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, message_id = message.id, "failed to resolve render context for transcript-saved message");
+            return;
+        }
+    };
     let event = ChatEvent::NewMessage {
         message,
         is_dm: true,
         client_id: None,
+        render,
     };
     if let Err(e) = super::broadcast_room_message(state, room, &event).await {
         tracing::warn!(error = %e, "failed to broadcast transcript-saved message");

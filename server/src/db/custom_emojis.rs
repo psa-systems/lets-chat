@@ -217,7 +217,14 @@ pub async fn refs_for_room_and_user(
 ) -> Result<Vec<EmojiRef>, sqlx::Error> {
     let room = refs_for_room(pool, room_id).await?;
     let personal = refs_for_user(pool, user_id).await?;
-    Ok(merge_with_own_precedence(room, personal))
+    Ok(merge_room_and_personal(room, personal))
+}
+
+/// LC-780: layer a viewer's personal emoji under an already-loaded room set,
+/// with the same precedence as [`refs_for_room_and_user`]. A broadcast loads the
+/// room set once and each recipient adds only their own personal set.
+pub fn merge_room_and_personal(room: Vec<EmojiRef>, personal: Vec<EmojiRef>) -> Vec<EmojiRef> {
+    merge_with_own_precedence(room, personal)
 }
 
 /// Merge two emoji sets, preferring rows from `own` whenever a shortcode

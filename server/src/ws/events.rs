@@ -1,10 +1,14 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use crate::models::Message;
+use crate::routes::render_context::{EditedMessageContext, NewMessageContext, ThreadReplyContext};
 
-/// Events sent from server to client over WebSocket.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
+/// Events fanned out to connected sockets. Recipients render them to HTML; the
+/// enum is never serialised, which is what lets the render-context variants
+/// below carry shared `Arc`s.
+#[derive(Debug, Clone)]
 pub enum ChatEvent {
     NewMessage {
         message: Message,
@@ -16,14 +20,18 @@ pub enum ChatEvent {
         /// render arrives. Always `None` for non-composer senders (webhooks,
         /// email ingress, bridges, scheduled sends, slash/poll output,
         /// quarantine release, call-started notices).
-        #[serde(default)]
         client_id: Option<String>,
+        /// LC-780: the viewer-independent render inputs, resolved once by the
+        /// producer so each recipient skips those queries.
+        render: Arc<NewMessageContext>,
     },
     MessageEdited {
         message_id: i64,
         room_id: i64,
         new_body: String,
         edited_at: String,
+        /// LC-780: see `NewMessage::render`.
+        render: Arc<EditedMessageContext>,
     },
     /// Emitted by the delete handler when removing a header message exposes a
     /// follow-up that should be promoted to a header. Recipients re-render the
@@ -31,6 +39,8 @@ pub enum ChatEvent {
     MessageRegrouped {
         message_id: i64,
         room_id: i64,
+        /// LC-780: see `NewMessage::render`.
+        render: Arc<EditedMessageContext>,
     },
     /// LC-483: a voice message's server-side transcription finished and was
     /// stored. Recipients re-render the referenced message so the transcript
@@ -39,12 +49,16 @@ pub enum ChatEvent {
     VoiceTranscribed {
         message_id: i64,
         room_id: i64,
+        /// LC-780: see `NewMessage::render`.
+        render: Arc<EditedMessageContext>,
     },
     /// LC-537: an image's alt text was added/edited; re-render the whole
     /// message for every viewer (the alt lives inside the attachment fragment).
     AttachmentAltChanged {
         message_id: i64,
         room_id: i64,
+        /// LC-780: see `NewMessage::render`.
+        render: Arc<EditedMessageContext>,
     },
     MessageDeleted {
         message_id: i64,
@@ -279,6 +293,8 @@ pub enum ChatEvent {
     ThreadReply {
         parent_id: i64,
         message: Message,
+        /// LC-780: see `NewMessage::render`.
+        render: Arc<ThreadReplyContext>,
     },
     /// Typing indicator scoped to the thread panel.
     ThreadTyping {

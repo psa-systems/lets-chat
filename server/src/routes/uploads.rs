@@ -664,13 +664,22 @@ pub async fn post_file_alt(
     let alt_opt = if alt.is_empty() { None } else { Some(alt) };
     db::uploads::set_upload_alt_text(&state.chat, file_id, alt_opt).await?;
 
-    state.hub.broadcast_to_room(
-        room_id,
-        &ChatEvent::AttachmentAltChanged {
-            message_id,
+    if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+        &state,
+        message_id,
+        "attachment_alt_changed",
+    )
+    .await
+    {
+        state.hub.broadcast_to_room(
             room_id,
-        },
-    );
+            &ChatEvent::AttachmentAltChanged {
+                message_id,
+                room_id,
+                render,
+            },
+        );
+    }
 
     let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, room_id).await?;
     let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &user.id, message_id).await?;
@@ -817,13 +826,22 @@ pub async fn post_file_retranscribe(
         });
     }
 
-    state.hub.broadcast_to_room(
-        room_id,
-        &ChatEvent::VoiceTranscribed {
-            message_id,
+    if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+        &state,
+        message_id,
+        "voice_transcribed",
+    )
+    .await
+    {
+        state.hub.broadcast_to_room(
             room_id,
-        },
-    );
+            &ChatEvent::VoiceTranscribed {
+                message_id,
+                room_id,
+                render,
+            },
+        );
+    }
 
     let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, room_id).await?;
     let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &user.id, message_id).await?;

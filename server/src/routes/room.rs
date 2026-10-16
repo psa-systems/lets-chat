@@ -1300,13 +1300,22 @@ pub async fn maybe_transcribe_voice_message(
     }
     let capped: String = trimmed.chars().take(MAX_VOICE_TRANSCRIPT_CHARS).collect();
     db::uploads::set_transcript(&state.chat, upload_id, &capped).await?;
-    state.hub.broadcast_to_room(
-        room_id,
-        &ChatEvent::VoiceTranscribed {
-            message_id,
+    if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+        state,
+        message_id,
+        "voice_transcribed",
+    )
+    .await
+    {
+        state.hub.broadcast_to_room(
             room_id,
-        },
-    );
+            &ChatEvent::VoiceTranscribed {
+                message_id,
+                room_id,
+                render,
+            },
+        );
+    }
     Ok(())
 }
 
@@ -1323,13 +1332,22 @@ async fn mark_transcript_failed(
 ) -> Result<(), AppError> {
     db::uploads::set_transcript_status(&state.chat, upload_id, db::uploads::TRANSCRIPT_FAILED)
         .await?;
-    state.hub.broadcast_to_room(
-        room_id,
-        &ChatEvent::VoiceTranscribed {
-            message_id,
+    if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+        state,
+        message_id,
+        "voice_transcribed",
+    )
+    .await
+    {
+        state.hub.broadcast_to_room(
             room_id,
-        },
-    );
+            &ChatEvent::VoiceTranscribed {
+                message_id,
+                room_id,
+                render,
+            },
+        );
+    }
     Ok(())
 }
 
@@ -1484,10 +1502,12 @@ pub(crate) async fn finalize_message_send(
         bridge_foreign_avatar: raw.bridge_foreign_avatar,
     };
 
+    let render = super::render_context::NewMessageContext::load(state, &message, room).await?;
     let event = ChatEvent::NewMessage {
         message: message.clone(),
         is_dm: room.room_type == "dm",
         client_id: client_id.map(str::to_string),
+        render,
     };
     state.hub.stop_typing(room.id, &author.id);
     super::broadcast_room_message(state, room, &event).await?;
@@ -1665,10 +1685,12 @@ pub(crate) async fn finalize_email_inbox_message_send(
         bridge_kind: None,
         bridge_foreign_avatar: None,
     };
+    let render = super::render_context::NewMessageContext::load(state, &message, room).await?;
     let event = ChatEvent::NewMessage {
         message,
         is_dm: false,
         client_id: None,
+        render,
     };
     super::broadcast_room_message(state, room, &event).await?;
 
@@ -1787,10 +1809,12 @@ pub(crate) async fn finalize_webhook_message_send(
         bridge_kind: None,
         bridge_foreign_avatar: None,
     };
+    let render = super::render_context::NewMessageContext::load(state, &message, room).await?;
     let event = ChatEvent::NewMessage {
         message,
         is_dm: false,
         client_id: None,
+        render,
     };
     super::broadcast_room_message(state, room, &event).await?;
 
@@ -1887,10 +1911,12 @@ pub(crate) async fn finalize_bridge_message_send(
         // hash is on the row. None when the daemon submitted no avatar.
         bridge_foreign_avatar: raw.bridge_foreign_avatar,
     };
+    let render = super::render_context::NewMessageContext::load(state, &message, room).await?;
     let event = ChatEvent::NewMessage {
         message,
         is_dm: false,
         client_id: None,
+        render,
     };
     super::broadcast_room_message(state, room, &event).await?;
 
@@ -2470,13 +2496,22 @@ pub async fn patch_message(
         tracing::warn!(error = %e, message_id, "failed to invalidate cached translations on edit");
     }
 
-    let event = ChatEvent::MessageEdited {
+    if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+        &state,
         message_id,
-        room_id: m.room_id,
-        new_body: body.to_string(),
-        edited_at: edited_at_str.clone(),
-    };
-    state.hub.broadcast_to_room(m.room_id, &event);
+        "message_edited",
+    )
+    .await
+    {
+        let event = ChatEvent::MessageEdited {
+            message_id,
+            room_id: m.room_id,
+            new_body: body.to_string(),
+            edited_at: edited_at_str.clone(),
+            render,
+        };
+        state.hub.broadcast_to_room(m.room_id, &event);
+    }
 
     // LC-75: outgoing webhooks.
     // LC-78: actor describes the message AUTHOR (not the editor) so a bridge
@@ -3303,7 +3338,13 @@ pub async fn post_thread_reply(
         bridge_kind: raw.bridge_kind,
         bridge_foreign_avatar: raw.bridge_foreign_avatar,
     };
-    let event = ChatEvent::ThreadReply { parent_id, message };
+    let render =
+        super::render_context::ThreadReplyContext::load(&state, parent_id, &message).await?;
+    let event = ChatEvent::ThreadReply {
+        parent_id,
+        message,
+        render,
+    };
     state.hub.stop_thread_typing(room_id, parent_id, &user.id);
     super::broadcast_room_message(&state, &room, &event).await?;
 
@@ -3560,11 +3601,20 @@ pub async fn delete_message(
             (n.user_id.as_str(), n.created_at.as_str()),
         );
         if was_follow_up {
-            let regroup = ChatEvent::MessageRegrouped {
-                message_id: n.id,
-                room_id: m.room_id,
-            };
-            state.hub.broadcast_to_room(m.room_id, &regroup);
+            if let Some(render) = super::render_context::EditedMessageContext::load_for_broadcast(
+                &state,
+                n.id,
+                "message_regrouped",
+            )
+            .await
+            {
+                let regroup = ChatEvent::MessageRegrouped {
+                    message_id: n.id,
+                    room_id: m.room_id,
+                    render,
+                };
+                state.hub.broadcast_to_room(m.room_id, &regroup);
+            }
         }
     }
 

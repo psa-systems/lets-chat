@@ -12,8 +12,10 @@ use serde::Deserialize;
 use crate::auth::OptionalUser;
 use crate::db;
 use crate::models::{self, User};
+use crate::routes::render_context::{
+    warn_default, EditedMessageContext, NewMessageContext, ThreadReplyContext,
+};
 use crate::state::AppState;
-use crate::views::message_actor::MessageActor;
 use crate::views::render_template;
 use crate::views::room::ReplyCountFragment;
 use crate::views::room::{MessageView, ReactionView};
@@ -497,22 +499,26 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             let cur_room = send_page.lock().unwrap().and_then(|p| p.room_id);
                             let rendered = match &e {
                                 ChatEvent::NewMessage {
-                                    message, client_id, ..
+                                    message,
+                                    client_id,
+                                    render,
+                                    ..
                                 } => {
                                     render_new_message_or_bump(
                                         &send_state,
                                         message,
+                                        render,
                                         client_id.as_deref(),
                                         &send_user,
                                         &send_subscribed,
                                     )
                                     .await
                                 }
-                                ChatEvent::MessageEdited { message_id, .. }
-                                | ChatEvent::MessageRegrouped { message_id, .. }
-                                | ChatEvent::VoiceTranscribed { message_id, .. }
-                                | ChatEvent::AttachmentAltChanged { message_id, .. } => {
-                                    render_edited_message(&send_state, *message_id, &send_user).await
+                                ChatEvent::MessageEdited { render, .. }
+                                | ChatEvent::MessageRegrouped { render, .. }
+                                | ChatEvent::VoiceTranscribed { render, .. }
+                                | ChatEvent::AttachmentAltChanged { render, .. } => {
+                                    render_edited_message(&send_state, render, &send_user).await
                                 }
                                 ChatEvent::ReactionAdded { message_id, .. }
                                 | ChatEvent::ReactionRemoved { message_id, .. } => {
@@ -720,11 +726,16 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     )
                                     .await
                                 }
-                                ChatEvent::ThreadReply { parent_id, message } => {
+                                ChatEvent::ThreadReply {
+                                    parent_id,
+                                    message,
+                                    render,
+                                } => {
                                     render_thread_reply(
                                         &send_state,
                                         *parent_id,
                                         message,
+                                        render,
                                         &send_user,
                                     )
                                     .await
@@ -1433,6 +1444,8 @@ async fn render_room_seen_bar(
 pub async fn render_new_message_or_bump(
     state: &AppState,
     message: &models::Message,
+    // LC-780: viewer-independent inputs resolved once by the producer.
+    ctx: &NewMessageContext,
     // LC-230: optimistic-echo dedupe id; rendered as `data-lc-client-id` on
     // the OOB wrapper, but only for the author's own connections.
     client_id: Option<&str>,
@@ -1442,10 +1455,12 @@ pub async fn render_new_message_or_bump(
     // Suppress live delivery from blocked authors. Skips both the foreground
     // render and the sidebar unread bump so a blocked user cannot poke the
     // viewer's UI.
-    if db::auth::is_blocked_either_way(&state.auth, &viewer.id, &message.user_id)
-        .await
-        .unwrap_or(false)
-    {
+    if warn_default(
+        db::auth::is_blocked_either_way(&state.auth, &viewer.id, &message.user_id).await,
+        "is_blocked_either_way",
+        message.id,
+        &viewer.id,
+    ) {
         return None;
     }
     let is_subscribed = subscribed.lock().unwrap().contains(&message.room_id);
@@ -1458,7 +1473,7 @@ pub async fn render_new_message_or_bump(
     // swap into #messages, so it self-limits to the tab actually viewing the
     // room; tabs elsewhere drop it harmlessly.
     if message.user_id == viewer.id {
-        return render_new_message(state, message, client_id, viewer).await;
+        return render_new_message(state, message, ctx, client_id, viewer).await;
     }
     if is_subscribed {
         // The viewer (a non-author) has the room open in the foreground, so the
@@ -1493,7 +1508,7 @@ pub async fn render_new_message_or_bump(
             state.hub.broadcast_to_user(&message.user_id, &event);
             state.hub.broadcast_to_user(&viewer.id, &event);
         }
-        return render_new_message(state, message, None, viewer).await;
+        return render_new_message(state, message, ctx, None, viewer).await;
     }
     // Muted rooms suppress the sidebar unread bump for background recipients.
     // The foreground branch above is intentionally left untouched: viewers
@@ -1505,13 +1520,10 @@ pub async fn render_new_message_or_bump(
     if !mode.allows_unread_bump() {
         return None;
     }
-    let room = db::chat::get_room(&state.chat, message.room_id)
-        .await
-        .ok()??;
     // LC-179: a new unread arrived for a background recipient. Emit the sidebar
     // unread badge AND reveal the /inbox refresh bar. The bar's #lc-inbox-refresh
     // id exists only on the /inbox page, so connections elsewhere drop it.
-    let mut out = render_unread_badge(state, viewer, &room)
+    let mut out = render_unread_badge(state, viewer, &ctx.room)
         .await
         .unwrap_or_default();
     if let Ok(bar) = crate::views::ws_fragments::InboxRefreshFragment.render() {
@@ -1645,91 +1657,49 @@ async fn render_ack_required(
 async fn render_new_message(
     state: &AppState,
     message: &models::Message,
+    ctx: &NewMessageContext,
     // LC-230: see render_new_message_or_bump.
     client_id: Option<&str>,
     viewer: &User,
 ) -> Option<String> {
+    let base = &ctx.base;
     let can_edit = message.user_id == viewer.id;
     let can_delete = message.user_id == viewer.id
-        || db::room_rbac::is_room_moderator(&state.chat, message.room_id, &viewer.id, &viewer.role)
-            .await
-            .unwrap_or(false);
-    let prior = db::chat::prior_message_in_room(&state.chat, message.room_id, message.id)
-        .await
-        .ok()
-        .flatten();
-    let is_follow_up = db::chat::is_follow_up_of(
-        prior
-            .as_ref()
-            .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
-        (message.user_id.as_str(), message.created_at.as_str()),
-    );
-    let meta = super::resolve_msg_author(
-        state,
-        &message.user_id,
-        message.webhook_id,
-        message.email_inbox_id,
-        message.bridge_id,
-        message.bridge_foreign_name.as_deref(),
-        message.bridge_kind.as_deref(),
-        message.bridge_foreign_avatar.as_deref(),
+        || warn_default(
+            db::room_rbac::is_room_moderator(
+                &state.chat,
+                message.room_id,
+                &viewer.id,
+                &viewer.role,
+            )
+            .await,
+            "is_room_moderator",
+            message.id,
+            &viewer.id,
+        );
+    let meta = base.author_for(state, &message.user_id, &viewer.id);
+    let custom_emojis = warn_default(
+        base.custom_emojis_for(state, &viewer.id).await,
+        "custom_emojis",
+        message.id,
         &viewer.id,
-        message.room_id,
-    )
-    .await
-    .ok();
-    let (display_name, avatar_ext, status, custom_status, author_is_bot, actor) = match meta {
-        Some(m) => (
-            m.display_name,
-            m.avatar_ext,
-            m.status,
-            m.custom_status,
-            m.is_bot,
-            m.actor,
-        ),
-        None => (
-            None,
-            None,
-            db::auth::STATUS_ACTIVE.to_string(),
-            None,
-            false,
-            MessageActor::User,
-        ),
-    };
-    let attachments = db::uploads::attachments_for_message(&state.chat, message.id)
-        .await
-        .ok()
-        .unwrap_or_default();
-    let mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[message.id])
-        .await
-        .ok()
-        .and_then(|mut m| m.remove(&message.id))
-        .unwrap_or_default();
-    let custom_emojis =
-        db::custom_emojis::refs_for_room_and_user(&state.chat, message.room_id, &viewer.id)
-            .await
-            .ok()
-            .unwrap_or_default();
+    );
     // LC-323: same-enclave #channel link targets for this viewer.
-    let channels = super::channel_refs_for_room(state, message.room_id, viewer)
-        .await
-        .unwrap_or_default();
-    let quote_preview = match message.quote_id {
-        Some(qid) => crate::views::room::build_quote_preview(&state.chat, &state.auth, qid)
-            .await
-            .ok()
-            .flatten(),
-        None => None,
-    };
+    let channels = warn_default(
+        base.channels_for(state, viewer).await,
+        "channel_refs",
+        message.id,
+        &viewer.id,
+    );
     let view = MessageView {
         id: message.id,
         room_id: message.room_id,
         user_id: message.user_id.clone(),
         username: message.author_name.clone(),
-        display_name,
-        avatar_ext,
-        status,
-        custom_status,
+        display_name: meta.display_name,
+        avatar_ext: meta.avatar_ext,
+        status: meta.status,
+        custom_status: meta.custom_status,
         created_at: message.created_at.clone(),
         edited_at: message.edited_at.clone(),
         body: message.body.clone(),
@@ -1738,7 +1708,7 @@ async fn render_new_message(
         can_delete,
         viewer_id: viewer.id.clone(),
         seen_caption: None,
-        is_follow_up,
+        is_follow_up: ctx.is_follow_up,
         show_unread_divider: false,
         // LC-244: per-message render; the client inserts live day dividers.
         day_label: None,
@@ -1746,38 +1716,23 @@ async fn render_new_message(
         shame_hidden: None,
         reply_count: 0,
         parent_id: message.parent_id,
-        attachments,
-        mentions,
+        attachments: base.attachments.clone(),
+        mentions: base.mentions.clone(),
         is_pinned: false,
         is_bookmarked: false,
         // LC-490: a brand-new message cannot yet require acknowledgement.
         ack: None,
         custom_emojis,
         channels,
-        quote_preview,
+        quote_preview: base.quote_preview.clone(),
         suppress_quote_preview: false,
         is_system: message.is_system,
         sysgroup_open: None,
         sysgroup_close: false,
-        poll: crate::views::room::optional_block(
-            crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
-                .await,
-            message.id,
-            "poll",
-        ),
-        follow_up: crate::views::room::optional_block(
-            crate::views::room::build_follow_up_view(
-                &state.chat,
-                &state.auth,
-                message.id,
-                &viewer.id,
-            )
-            .await,
-            message.id,
-            "follow_up",
-        ),
-        author_is_bot,
-        actor,
+        poll: base.poll_for(state, message.id, &viewer.id).await,
+        follow_up: base.follow_up_for(state, message.id, &viewer.id).await,
+        author_is_bot: meta.is_bot,
+        actor: meta.actor,
     };
     // LC-230: only the author's own connections carry the dedupe attribute;
     // every other viewer's frame stays byte-identical to the pre-LC-230 shape.
@@ -1794,168 +1749,126 @@ async fn render_new_message(
     // LC-489: a new message resets the room's "Seen by" bar (only the author is
     // caught up to it). Append the recomputed bar OOB so it refreshes live for
     // anyone viewing the room; ineligible rooms append nothing.
-    // LC-778: a viewer with receipts off never renders a bar, so skip the room
-    // lookup entirely for them rather than loading it and discarding the result.
+    // LC-778: a viewer with receipts off never renders a bar, so skip the
+    // member lookup entirely for them.
     if viewer.read_receipts_enabled {
-        match db::chat::get_room(&state.chat, message.room_id).await {
-            // The bar is best-effort decoration on the message render; a failed
-            // lookup drops it but must not drop the message itself.
-            Err(e) => {
-                tracing::warn!(error = %e, room_id = message.room_id, "seen-bar room lookup failed")
-            }
-            Ok(None) => {}
-            Ok(Some(room)) => {
-                if let Some(bar) = render_room_seen_bar(state, viewer, &room).await {
-                    out.push_str(&bar);
-                }
-            }
+        if let Some(bar) = render_room_seen_bar(state, viewer, &ctx.room).await {
+            out.push_str(&bar);
         }
     }
     Some(out)
 }
 
-/// Re-fetch the edited message and render the per-viewer outerHTML OOB swap.
-/// Loading from the DB ensures the broadcast picks up the canonical body and
-/// edited_at timestamp rather than trusting the event payload.
-async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User) -> Option<String> {
-    let m = db::chat::get_message(&state.chat, message_id)
-        .await
-        .ok()??;
-    if db::auth::is_blocked_either_way(&state.auth, &viewer.id, &m.user_id)
-        .await
-        .unwrap_or(false)
-    {
+/// Render the per-viewer outerHTML OOB swap for an edited message. The producer
+/// loaded the message and its viewer-independent context from the DB when it
+/// emitted the event (LC-780), so the broadcast carries the canonical body and
+/// edited_at timestamp rather than the event payload's copy.
+pub async fn render_edited_message(
+    state: &AppState,
+    ctx: &EditedMessageContext,
+    viewer: &User,
+) -> Option<String> {
+    let m = &ctx.message;
+    let base = &ctx.base;
+    if warn_default(
+        db::auth::is_blocked_either_way(&state.auth, &viewer.id, &m.user_id).await,
+        "is_blocked_either_way",
+        m.id,
+        &viewer.id,
+    ) {
         return None;
     }
-    let meta = super::resolve_msg_author(
-        state,
-        &m.user_id,
-        m.webhook_id,
-        m.email_inbox_id,
-        m.bridge_id,
-        m.bridge_foreign_name.as_deref(),
-        m.bridge_kind.as_deref(),
-        m.bridge_foreign_avatar.as_deref(),
+    let meta = base.author_for(state, &m.user_id, &viewer.id);
+    let custom_emojis = warn_default(
+        base.custom_emojis_for(state, &viewer.id).await,
+        "custom_emojis",
+        m.id,
         &viewer.id,
-        m.room_id,
-    )
-    .await
-    .ok()?;
-    let custom_emojis =
-        db::custom_emojis::refs_for_room_and_user(&state.chat, m.room_id, &viewer.id)
-            .await
-            .ok()
-            .unwrap_or_default();
+    );
     // LC-323: same-enclave #channel link targets for this viewer.
-    let channels = super::channel_refs_for_room(state, m.room_id, viewer)
-        .await
-        .unwrap_or_default();
-    let counts = db::chat::list_reactions(&state.chat, m.id, &viewer.id)
-        .await
-        .ok()?;
-    let reactor_titles = super::build_reactor_titles(state, &counts).await;
-    let reactions: Vec<ReactionView> = counts
-        .into_iter()
-        .zip(reactor_titles)
+    let channels = warn_default(
+        base.channels_for(state, viewer).await,
+        "channel_refs",
+        m.id,
+        &viewer.id,
+    );
+    let reactions: Vec<ReactionView> = ctx
+        .reactions
+        .iter()
+        .zip(&ctx.reactor_titles)
         .map(|(r, title)| {
-            ReactionView::new(r.emoji, r.count, r.reacted_by_me, title, &custom_emojis)
+            ReactionView::new(
+                r.emoji.clone(),
+                r.count,
+                r.reactor_ids.iter().any(|id| id == &viewer.id),
+                title.clone(),
+                &custom_emojis,
+            )
         })
         .collect();
-    let prior = db::chat::prior_message_in_room(&state.chat, m.room_id, m.id)
-        .await
-        .ok()
-        .flatten();
-    let is_follow_up = db::chat::is_follow_up_of(
-        prior
-            .as_ref()
-            .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
-        (m.user_id.as_str(), m.created_at.as_str()),
-    );
     let can_edit = m.user_id == viewer.id;
     let can_delete = m.user_id == viewer.id
-        || db::room_rbac::is_room_moderator(&state.chat, m.room_id, &viewer.id, &viewer.role)
-            .await
-            .unwrap_or(false);
-    let reply_count = db::chat::count_replies(&state.chat, m.id).await.ok()?;
-    let parent_id = m.parent_id;
-    let attachments = db::uploads::attachments_for_message(&state.chat, m.id)
-        .await
-        .ok()
-        .unwrap_or_default();
-    let mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[m.id])
-        .await
-        .ok()
-        .and_then(|mut x| x.remove(&m.id))
-        .unwrap_or_default();
-    let pinned_ids = db::pinned::pinned_message_ids_for_room(&state.chat, m.room_id)
-        .await
-        .ok()
-        .unwrap_or_default();
-    let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &viewer.id, m.id)
-        .await
-        .unwrap_or(false);
-    let quote_preview = match m.quote_id {
-        Some(qid) => crate::views::room::build_quote_preview(&state.chat, &state.auth, qid)
-            .await
-            .ok()
-            .flatten(),
-        None => None,
-    };
+        || warn_default(
+            db::room_rbac::is_room_moderator(&state.chat, m.room_id, &viewer.id, &viewer.role)
+                .await,
+            "is_room_moderator",
+            m.id,
+            &viewer.id,
+        );
+    let is_bookmarked = warn_default(
+        db::bookmarks::is_bookmarked(&state.chat, &viewer.id, m.id).await,
+        "is_bookmarked",
+        m.id,
+        &viewer.id,
+    );
     // LC-490: recompute ack so editing a required message doesn't wipe its bar.
-    let ack = super::build_ack_view(state, m.id, &viewer.id)
-        .await
-        .ok()
-        .flatten();
+    let ack = warn_default(
+        super::build_ack_view(state, m.id, &viewer.id).await,
+        "ack",
+        m.id,
+        &viewer.id,
+    );
     let view = MessageView {
         id: m.id,
         room_id: m.room_id,
-        user_id: m.user_id,
-        username: meta.username,
+        user_id: m.user_id.clone(),
+        username: m.author_name.clone(),
         display_name: meta.display_name,
         avatar_ext: meta.avatar_ext,
         status: meta.status,
         custom_status: meta.custom_status,
-        created_at: m.created_at,
-        edited_at: m.edited_at,
-        body: m.body,
+        created_at: m.created_at.clone(),
+        edited_at: m.edited_at.clone(),
+        body: m.body.clone(),
         reactions,
         can_edit,
         can_delete,
         viewer_id: viewer.id.clone(),
         seen_caption: None,
-        is_follow_up,
+        is_follow_up: ctx.is_follow_up,
         show_unread_divider: false,
         // LC-244: per-message render; the client inserts live day dividers.
         day_label: None,
         shame_enabled: false,
         shame_hidden: None,
-        reply_count,
-        parent_id,
-        attachments,
-        mentions,
-        is_pinned: pinned_ids.contains(&m.id),
+        reply_count: ctx.reply_count,
+        parent_id: m.parent_id,
+        attachments: base.attachments.clone(),
+        mentions: base.mentions.clone(),
+        is_pinned: ctx.is_pinned,
         is_bookmarked,
         ack,
         custom_emojis,
         channels,
-        quote_preview,
+        quote_preview: base.quote_preview.clone(),
         suppress_quote_preview: false,
         is_system: m.is_system,
         sysgroup_open: None,
         sysgroup_close: false,
-        poll: crate::views::room::optional_block(
-            crate::views::room::build_poll_view(&state.chat, &state.auth, m.id, &viewer.id).await,
-            m.id,
-            "poll",
-        ),
-        follow_up: crate::views::room::optional_block(
-            crate::views::room::build_follow_up_view(&state.chat, &state.auth, m.id, &viewer.id)
-                .await,
-            m.id,
-            "follow_up",
-        ),
+        poll: base.poll_for(state, m.id, &viewer.id).await,
+        follow_up: base.follow_up_for(state, m.id, &viewer.id).await,
         author_is_bot: meta.is_bot,
-        actor: meta.actor.clone(),
+        actor: meta.actor,
     };
     render_template(&EditedMessageFragment { message: &view }).ok()
 }
@@ -1966,72 +1879,58 @@ async fn render_edited_message(state: &AppState, message_id: i64, viewer: &User)
 /// viewer has the thread panel open for that parent - HTMX silently drops
 /// the swap otherwise. The reply-count fragment targets `#reply-count-{parent_id}`,
 /// which lives under every top-level message in the main feed.
-async fn render_thread_reply(
+pub async fn render_thread_reply(
     state: &AppState,
     parent_id: i64,
     message: &models::Message,
+    ctx: &ThreadReplyContext,
     viewer: &User,
 ) -> Option<String> {
-    if db::auth::is_blocked_either_way(&state.auth, &viewer.id, &message.user_id)
-        .await
-        .unwrap_or(false)
-    {
+    let base = &ctx.base;
+    if warn_default(
+        db::auth::is_blocked_either_way(&state.auth, &viewer.id, &message.user_id).await,
+        "is_blocked_either_way",
+        message.id,
+        &viewer.id,
+    ) {
         return None;
     }
-    let meta = super::resolve_msg_author(
-        state,
-        &message.user_id,
-        message.webhook_id,
-        message.email_inbox_id,
-        message.bridge_id,
-        message.bridge_foreign_name.as_deref(),
-        message.bridge_kind.as_deref(),
-        message.bridge_foreign_avatar.as_deref(),
+    let meta = base.author_for(state, &message.user_id, &viewer.id);
+    let custom_emojis = warn_default(
+        base.custom_emojis_for(state, &viewer.id).await,
+        "custom_emojis",
+        message.id,
         &viewer.id,
-        message.room_id,
-    )
-    .await
-    .ok()?;
-    let attachments = db::uploads::attachments_for_message(&state.chat, message.id)
-        .await
-        .ok()
-        .unwrap_or_default();
-    let mentions = db::mentions::mentions_for_messages(&state.chat, &state.auth, &[message.id])
-        .await
-        .ok()
-        .and_then(|mut x| x.remove(&message.id))
-        .unwrap_or_default();
-    let custom_emojis =
-        db::custom_emojis::refs_for_room_and_user(&state.chat, message.room_id, &viewer.id)
-            .await
-            .ok()
-            .unwrap_or_default();
+    );
     // LC-323: same-enclave #channel link targets for this viewer.
-    let channels = super::channel_refs_for_room(state, message.room_id, viewer)
-        .await
-        .unwrap_or_default();
+    let channels = warn_default(
+        base.channels_for(state, viewer).await,
+        "channel_refs",
+        message.id,
+        &viewer.id,
+    );
     // LC-806: a live reply groups against the thread's previous visible reply
     // the way a panel row groups against the row above it, and carries a day
     // label when it opens a new UTC day. A predecessor this viewer has blocked
     // is invisible to them, so it counts as no predecessor (fresh header).
-    let prior = match db::chat::thread_reply_prior(&state.chat, parent_id, message.id).await {
-        Ok(Some((uid, at))) => {
-            if db::auth::is_blocked_either_way(&state.auth, &viewer.id, &uid)
-                .await
-                .unwrap_or(false)
-            {
-                None
-            } else {
-                Some((uid, at))
-            }
+    let prior = match ctx.prior.as_ref() {
+        Some((uid, _))
+            if warn_default(
+                db::auth::is_blocked_either_way(&state.auth, &viewer.id, uid).await,
+                "is_blocked_either_way",
+                message.id,
+                &viewer.id,
+            ) =>
+        {
+            None
         }
-        _ => None,
+        other => other,
     };
     let is_follow_up = db::chat::is_follow_up_of(
-        prior.as_ref().map(|(u, t)| (u.as_str(), t.as_str())),
+        prior.map(|(u, t)| (u.as_str(), t.as_str())),
         (&message.user_id, &message.created_at),
     );
-    let day_label = match prior.as_ref().map(|(_, at)| at.get(..10)) {
+    let day_label = match prior.map(|(_, at)| at.get(..10)) {
         Some(prev_day) if prev_day == message.created_at.get(..10) => None,
         _ => Some(crate::views::room::day_label_for(&message.created_at)),
     };
@@ -2059,8 +1958,8 @@ async fn render_thread_reply(
         shame_hidden: None,
         reply_count: 0,
         parent_id: Some(parent_id),
-        attachments,
-        mentions,
+        attachments: base.attachments.clone(),
+        mentions: base.mentions.clone(),
         is_pinned: false,
         is_bookmarked: false,
         // LC-490: thread-reply broadcast; ack bar (if any) updates via its own
@@ -2073,25 +1972,10 @@ async fn render_thread_reply(
         is_system: message.is_system,
         sysgroup_open: None,
         sysgroup_close: false,
-        poll: crate::views::room::optional_block(
-            crate::views::room::build_poll_view(&state.chat, &state.auth, message.id, &viewer.id)
-                .await,
-            message.id,
-            "poll",
-        ),
-        follow_up: crate::views::room::optional_block(
-            crate::views::room::build_follow_up_view(
-                &state.chat,
-                &state.auth,
-                message.id,
-                &viewer.id,
-            )
-            .await,
-            message.id,
-            "follow_up",
-        ),
+        poll: base.poll_for(state, message.id, &viewer.id).await,
+        follow_up: base.follow_up_for(state, message.id, &viewer.id).await,
         author_is_bot: meta.is_bot,
-        actor: meta.actor.clone(),
+        actor: meta.actor,
     };
     let mut html = ThreadReplyOobFragment {
         parent_id,
@@ -2099,11 +1983,10 @@ async fn render_thread_reply(
     }
     .render()
     .ok()?;
-    let count = db::chat::count_replies(&state.chat, parent_id).await.ok()?;
     let pill = ReplyCountFragment {
         message_id: parent_id,
         room_id: message.room_id,
-        reply_count: count,
+        reply_count: ctx.parent_reply_count,
         oob: true,
     }
     .render()
@@ -2403,10 +2286,18 @@ async fn post_call_event_message(state: &AppState, user: &User, room: &models::R
         bridge_kind: raw.bridge_kind,
         bridge_foreign_avatar: raw.bridge_foreign_avatar,
     };
+    let render = match super::render_context::NewMessageContext::load(state, &message, room).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, message_id = message.id, "failed to resolve render context for call-event message");
+            return;
+        }
+    };
     let event = ChatEvent::NewMessage {
         message,
         is_dm: true,
         client_id: None,
+        render,
     };
     if let Err(e) = super::broadcast_room_message(state, room, &event).await {
         tracing::warn!(error = %e, "failed to broadcast call-event message");
@@ -4022,6 +3913,7 @@ pub mod test_support {
     // LC-595: the live reaction OOB payload, so a test can assert it carries BOTH
     // surfaces (an open thread panel used to receive nothing at all).
     pub use super::render_reaction_bar;
+    pub use super::{render_edited_message, render_thread_reply};
     // LC-834: the mid-connection page move and the sidebar render it steers, so
     // a test can drive a topic change on one connection and assert the sidebar
     // shape follows it. Same reasoning as the call helpers above: the logic is
