@@ -475,7 +475,7 @@ verify: build-css vendor-js
     # target volume, so nothing recompiles in the container), fails fast if the
     # container exits, and checks for the sign-in link the login page always
     # renders.
-    let container = "lets-chat-rewrite-server"
+    let container = "lets-chat-dev-server"
     print "Building release binary..."
     ./dev/cargo build --release -p lets-chat-server
     print ""
@@ -542,13 +542,17 @@ dev-clean:
         }
     }
     # Fixed-name volumes from the ad-hoc `docker run` wrappers (dev/cargo,
-    # dev/server-up). These are NOT compose-managed, so `compose down` above
-    # never touches them; remove by name, guarded so a missing one is a no-op.
+    # dev/cargo-desktop, dev/server-up, dev/bun). These are NOT compose-managed,
+    # so `compose down` above never touches them; remove by name, guarded so a
+    # missing one is a no-op. The cargo/target volumes are namespaced by the
+    # invoking uid (LC-773), so only this user's own volumes are listed.
+    let uid = (^id --user | str trim)
     let vols = [
-        "lets-chat-rewrite-cargo-registry"
-        "lets-chat-rewrite-cargo-git"
-        "lets-chat-rewrite-target"
-        "lets-chat-rewrite-data"
+        $"lets-chat-dev-($uid)-cargo-registry"
+        $"lets-chat-dev-($uid)-cargo-git"
+        $"lets-chat-dev-($uid)-target"
+        "lets-chat-dev-data"
+        "lets-chat-dev-bun-cache"
     ]
     let existing = docker volume ls --quiet | lines
     for vol in $vols {

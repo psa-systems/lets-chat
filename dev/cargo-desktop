@@ -74,7 +74,7 @@ EXTRA_ARGS+=(
 # LC-773: namespace the cache/target volumes by the invoking uid. Must match
 # dev/cargo's expression exactly so a same-uid build through either wrapper
 # shares the compiled deps, while a build by another uid mounts its own volumes.
-vol_prefix="lets-chat-rewrite-${HOST_UID}"
+vol_prefix="lets-chat-dev-${HOST_UID}"
 
 docker run --rm --init \
     -v "$PWD:/work" \

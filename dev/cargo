@@ -34,7 +34,7 @@ HOST_GID=$(id -g)
 # another host user on the same machine mounts different volumes and cannot
 # corrupt this one's cargo state. dev/cargo-desktop MUST use the same
 # expression, so a same-uid desktop build still shares these compiled deps.
-vol_prefix="lets-chat-rewrite-${HOST_UID}"
+vol_prefix="lets-chat-dev-${HOST_UID}"
 
 # The container starts as root so it can chown the named volumes to the host
 # user on FIRST use: Docker initialises a new named volume with the image-path

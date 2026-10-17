@@ -5,6 +5,6 @@ docker run --rm --init \
     --user "$(id -u):$(id -g)" \
     -v "$PWD:/work" \
     -w /work \
-    -v lets-chat-rewrite-bun-cache:/home/bun/.bun \
+    -v lets-chat-dev-bun-cache:/home/bun/.bun \
     oven/bun:1 \
     bun "$@"
