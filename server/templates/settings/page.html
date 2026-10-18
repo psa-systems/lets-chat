@@ -615,6 +615,21 @@
       <section id="lc-panel-account" role="tabpanel" aria-labelledby="lc-tab-account" data-lc-tabpanel="account" class="lc-set-panel" hidden>
         <h2 class="lc-set-panel-title">{{ "settings-section-account"|t }}</h2>
 
+        {# LC-1050: read-only view of the Bunyip identity this account is linked
+           to (users.bunyip_sub), so a user can confirm the link. #}
+        <div class="card lc-set-card" id="lc-bunyip-account">
+          <div class="lc-set-card-head">
+            <h3 class="lc-set-card-title">{{ "settings-bunyip-heading"|t }}</h3>
+            <p class="lc-set-card-desc">{{ "settings-bunyip-help"|t }}</p>
+          </div>
+          <dl class="text-sm grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+            <dt class="text-content-muted">{{ "settings-bunyip-id"|t }}</dt>
+            <dd class="font-mono break-all">{% if let Some(s) = bunyip_sub.as_ref() %}{{ s }}{% else %}{{ "settings-bunyip-not-linked"|t }}{% endif %}</dd>
+            <dt class="text-content-muted">{{ "settings-email"|t }}</dt>
+            <dd class="break-all">{% if let Some(e) = email.as_ref() %}{{ e }} <span class="text-content-muted">({% if email_verified %}{{ "settings-bunyip-email-verified"|t }}{% else %}{{ "settings-bunyip-email-unverified"|t }}{% endif %})</span>{% else %}-{% endif %}</dd>
+          </dl>
+        </div>
+
         <div class="card lc-set-card">
           <div class="lc-set-card-head">
             <h3 class="lc-set-card-title">{{ "settings-storage-heading"|t }}</h3>

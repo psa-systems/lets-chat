@@ -1,7 +1,7 @@
 <header id="lc-dm-header" data-lc-density-tight="header" class="lc-header">
   <div class="min-w-0 flex-1 flex items-center gap-3">
     {% let avatar_user_id = peer.id.clone() %}
-    {% let avatar_username = peer.username.clone() %}
+    {% let avatar_label = peer.display_label().to_string() %}
     {% let avatar_ext = peer.avatar_ext.clone() %}
     {% let avatar_status = peer.effective_status() %}
     {% let avatar_custom_status = peer.custom_status.clone() %}

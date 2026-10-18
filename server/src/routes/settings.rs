@@ -186,6 +186,10 @@ pub async fn get_settings(
         sidebar_current_enclave,
     ) = super::load_chrome(&state, &user, None).await?;
     let email = db::auth::get_user_email(&state.auth, &user.id).await?;
+    let bunyip_sub = db::auth::get_bunyip_sub(&state.auth, &user.id).await?;
+    let email_verified = db::auth::get_user_email_verified_at(&state.auth, &user.id)
+        .await?
+        .is_some();
     // LC-514: `current_session` is the raw cookie value; the row id is
     // now the SHA-256 hash. Compare hashes when marking `is_current` so
     // the settings UI keeps highlighting the row that issued the request.
@@ -293,6 +297,8 @@ pub async fn get_settings(
         canned_responses,
         handle_editable,
         handle_available_on,
+        bunyip_sub,
+        email_verified,
     };
     html(&page)
 }

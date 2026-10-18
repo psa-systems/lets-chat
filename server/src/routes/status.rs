@@ -42,7 +42,8 @@ fn expiry_modifier(clear_after: &str) -> Option<&'static str> {
 #[template(path = "status/own_avatar_oob.html")]
 struct OwnAvatarOobFragment {
     user_id: String,
-    username: String,
+    /// LC-1050: display label (display_name, else handle) for the avatar initial.
+    label: String,
     avatar_ext: Option<String>,
     status: String,
     custom_status: Option<String>,
@@ -135,7 +136,7 @@ pub async fn post_status(
 
     let own_avatar = OwnAvatarOobFragment {
         user_id: user.id.clone(),
-        username: user.username.clone(),
+        label: user.display_label().to_string(),
         avatar_ext: user.avatar_ext.clone(),
         status: form.status.clone(),
         custom_status: custom_owned,

@@ -1,7 +1,7 @@
 <div class="flex items-center group">
   <a href="/dm/{{ peer.id }}" {% include "partials/nav_boost.html" %}{% if peer.active %} aria-current="page"{% endif %} data-lc-density-tight="row-dense" class="flex-1 flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-surface-elevated focus:bg-surface-elevated focus:outline-none focus:ring-2 focus:ring-ring{% if peer.active %} lc-room-row-active{% else if peer.unread > 0 && peer.mute_mode == "none" %} font-semibold text-content{% else if peer.mute_mode != "none" %} text-content-subtle{% endif %}">
     {% let avatar_user_id = peer.id.clone() %}
-    {% let avatar_username = peer.username.clone() %}
+    {% let avatar_label = peer.label().to_string() %}
     {% let avatar_ext = peer.avatar_ext.clone() %}
     {% let avatar_status = peer.status.clone() %}
     {% let avatar_custom_status = peer.custom_status.clone() %}

@@ -47,14 +47,20 @@ pub async fn get_avatar(
     // a 404 there is a broken <img> and console noise. Fall back to a generated
     // default so the invariant "this route always resolves to an image" holds.
     let Some(user) = db::auth::find_user_by_id(&state.auth, &user_id).await? else {
-        // Empty username -> the generic "?" initial (default_avatar's fallback).
+        // Empty label -> the generic "?" initial (avatar_initial's fallback).
         return Ok(default_avatar("", &headers));
     };
     let Some(ext) = user.avatar_ext else {
         // No custom avatar: serve a generated initial-on-color SVG so
         // `/avatars/{id}` always resolves to an image (used by the voice
         // grid and DM call overlay, which can't branch on avatar presence).
-        return Ok(default_avatar(&user.username, &headers));
+        // LC-1050: initial of the display label (display_name, else handle),
+        // matching the CSS placeholder in `partials/avatar.html`.
+        let label = match user.display_name.as_deref() {
+            Some(n) if !n.trim().is_empty() => n,
+            _ => user.username.as_str(),
+        };
+        return Ok(default_avatar(label, &headers));
     };
     let path = db::avatars_dir().join(format!("{user_id}.{ext}"));
     // LC-348: stat first so the ETag reflects the current file. The bare
@@ -91,15 +97,11 @@ pub async fn get_avatar(
         .into_response())
 }
 
-/// Generated fallback avatar: the user's first initial on a flat slate
+/// Generated fallback avatar: the display label's initial on a flat slate
 /// background, mirroring the CSS default in `partials/avatar.html`. Returned
 /// as an SVG so it scales cleanly in every avatar slot.
-fn default_avatar(username: &str, headers: &HeaderMap) -> Response {
-    let initial = username
-        .chars()
-        .next()
-        .map(|c| c.to_uppercase().to_string())
-        .unwrap_or_else(|| "?".to_string())
+fn default_avatar(label: &str, headers: &HeaderMap) -> Response {
+    let initial = crate::models::user::avatar_initial(label)
         .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;");

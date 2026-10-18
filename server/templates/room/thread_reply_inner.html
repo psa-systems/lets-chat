@@ -51,7 +51,7 @@
   {% else %}
   <div class="flex items-center gap-3">
     {% let avatar_user_id = message.user_id.clone() %}
-    {% let avatar_username = message.username.clone() %}
+    {% let avatar_label = message.label().to_string() %}
     {% let avatar_ext = message.avatar_ext.clone() %}
     {% let avatar_status = message.status.clone() %}
     {% let avatar_custom_status = message.custom_status.clone() %}

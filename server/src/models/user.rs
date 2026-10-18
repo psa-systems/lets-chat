@@ -276,6 +276,18 @@ pub fn cap_display_name(raw: &str) -> Option<String> {
     Some(t.chars().take(MAX_DISPLAY_NAME_CHARS).collect())
 }
 
+/// LC-1050: the letter shown on a user's placeholder avatar. Takes the display
+/// label (display_name, else handle) so the picture matches the name beside it,
+/// and skips a leading `@` or other punctuation so an `"@alice"` fallback label
+/// renders `A`, not `@`. Uppercased; `?` when the label has no alphanumeric.
+pub fn avatar_initial(label: &str) -> String {
+    label
+        .chars()
+        .find(|c| c.is_alphanumeric())
+        .map(|c| c.to_uppercase().collect())
+        .unwrap_or_else(|| "?".to_string())
+}
+
 /// LC-766: characters allowed in a chat handle. Kept in one place so the SSO
 /// provisioning sanitizer and the user-facing handle editor agree on exactly
 /// what a valid handle is. LC-996: ASCII letters, digits and `_` only, a subset
@@ -434,6 +446,16 @@ impl From<UserRecord> for User {
 mod tests {
     use super::mute_active;
     use chrono::{TimeZone, Utc};
+
+    #[test]
+    fn avatar_initial_uses_first_alphanumeric_uppercased() {
+        use super::avatar_initial;
+        assert_eq!(avatar_initial("zed"), "Z");
+        assert_eq!(avatar_initial("@bob"), "B");
+        assert_eq!(avatar_initial("  élan"), "É");
+        assert_eq!(avatar_initial(""), "?");
+        assert_eq!(avatar_initial("@_!"), "?");
+    }
 
     #[test]
     fn permanent_mute_never_expires() {
