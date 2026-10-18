@@ -271,10 +271,10 @@ settings-avatar-err-type = Unsupported format - use PNG, JPEG, or WebP.
 settings-display-name = Display name
 # LC-809: name the scope so this reads as the everywhere name, distinct from a
 # per-room nickname.
-settings-display-name-help = Shown everywhere, in every room. A per-room nickname (set from a room's Preferences) overrides it in that one room.
+settings-display-name-help = Shown everywhere, in every room, and used for your avatar letter. Synced from your Bunyip name each time you sign in. A per-room nickname (set from a room's Preferences) overrides it in that one room.
 # LC-766: editable chat handle
 settings-handle = Handle
-settings-handle-help = Letters, numbers, and _ - . only. You can change it once every 30 days.
+settings-handle-help = Your @mention name in lets-chat. It is separate from your Bunyip username and Bunyip never changes it. Letters, numbers, and _ only. You can change it once every 30 days.
 settings-handle-locked = You can change your handle again on
 # LC-766: first-entry handle prompt
 welcome-handle-title = Choose your handle
@@ -380,6 +380,12 @@ settings-api-tokens-heading = API tokens
 settings-manage-api-tokens = Manage API tokens
 settings-api-tokens-help = for the HTTP API (bots, scripts, integrations).
 settings-storage-heading = Storage usage
+settings-bunyip-heading = Bunyip account
+settings-bunyip-help = The Bunyip identity this lets-chat account is linked to. Sign-in matches on this ID, not on your handle.
+settings-bunyip-id = Bunyip ID
+settings-bunyip-not-linked = Not linked
+settings-bunyip-email-verified = verified
+settings-bunyip-email-unverified = not verified
 settings-storage-using = You are using
 settings-storage-of-quota = of your
 settings-storage-quota-suffix = upload quota.

@@ -275,3 +275,57 @@ async fn settings_display_name_states_its_scope() {
     let _ = s.auth;
     let _ = s.user_id;
 }
+
+async fn settings_body(s: &Setup) -> String {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/settings")
+        .header(header::COOKIE, format!("session={}", s.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = s.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+/// LC-1050: the Account section shows which Bunyip identity the account is
+/// linked to, or "Not linked" when `bunyip_sub` is empty.
+#[tokio::test]
+async fn settings_shows_linked_bunyip_account() {
+    let s = setup().await;
+    // `create_user` synthesizes a placeholder sub; clear it to the unlinked
+    // empty-string marker first.
+    sqlx::query("UPDATE users SET bunyip_sub = '' WHERE id = ?")
+        .bind(&s.user_id)
+        .execute(&s.auth)
+        .await
+        .unwrap();
+    let body = settings_body(&s).await;
+    assert!(
+        body.contains("id=\"lc-bunyip-account\""),
+        "card missing: {body}"
+    );
+    assert!(body.contains("Not linked"), "unlinked state missing");
+
+    sqlx::query("UPDATE users SET bunyip_sub = 'sub-abc-123' WHERE id = ?")
+        .bind(&s.user_id)
+        .execute(&s.auth)
+        .await
+        .unwrap();
+    let body = settings_body(&s).await;
+    assert!(body.contains("sub-abc-123"), "linked sub missing");
+    assert!(!body.contains("Not linked"));
+}
+
+/// LC-1050: handle help explains it is the local @mention name, independent
+/// of Bunyip, and states the real allowed character set (no `-` or `.`).
+#[tokio::test]
+async fn settings_handle_help_explains_bunyip_independence() {
+    let s = setup().await;
+    let body = settings_body(&s).await;
+    assert!(body.contains("separate from your Bunyip username"));
+    assert!(body.contains("Letters, numbers, and _ only."));
+}

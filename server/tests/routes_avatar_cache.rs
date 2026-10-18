@@ -242,3 +242,26 @@ async fn uploaded_avatar_serves_etag_then_304() {
 
     let _ = tokio::fs::remove_file(dir.join(format!("{}.jpg", s.user_id))).await;
 }
+
+/// LC-1050: the generated default SVG shows the display name's initial
+/// (uppercased), falling back to the handle when no display name is set.
+#[tokio::test]
+async fn default_avatar_initial_follows_display_label() {
+    let s = setup().await;
+    let resp = get_avatar(&s.app, &s.session, &s.user_id, None).await;
+    let body = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    assert!(String::from_utf8_lossy(&body).contains(">A</text>"));
+
+    sqlx::query("UPDATE users SET display_name = 'zed' WHERE id = ?")
+        .bind(&s.user_id)
+        .execute(&s.auth)
+        .await
+        .unwrap();
+    let resp = get_avatar(&s.app, &s.session, &s.user_id, None).await;
+    let body = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    assert!(String::from_utf8_lossy(&body).contains(">Z</text>"));
+}

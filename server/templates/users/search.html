@@ -11,7 +11,7 @@
     {% for r in results %}
     <a href="/dm/{{ r.id }}" data-username="{{ r.username }}" role="option" id="lc-opt-people-{{ r.id }}" aria-selected="false" class="lc-search-row lc-search-row--center">
       {% let avatar_user_id = r.id.clone() %}
-      {% let avatar_username = r.username.clone() %}
+      {% let avatar_label = r.label().to_string() %}
       {% let avatar_ext = r.avatar_ext.clone() %}
       {% let avatar_status = r.status.clone() %}
       {% let avatar_custom_status = r.custom_status.clone() %}

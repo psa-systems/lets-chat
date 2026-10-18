@@ -92,8 +92,12 @@ pub async fn get_autocomplete(
     // User suggestions fill the remainder.
     let candidate_ids = candidate_ids(&state, room_id).await?;
     let viewer_id = viewer.id.clone();
+    // LC-1050: same visibility gates as `db::auth::search_users` (blocks in
+    // either direction, private profiles), so autocomplete never surfaces a
+    // user the people search would hide.
+    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &viewer_id).await?;
     for id in candidate_ids {
-        if id == viewer_id {
+        if id == viewer_id || blocked.contains(&id) {
             continue;
         }
         if results.len() >= MAX {
@@ -102,7 +106,7 @@ pub async fn get_autocomplete(
         let Some(rec) = db::auth::find_user_by_id(&state.auth, &id).await? else {
             continue;
         };
-        if rec.is_banned {
+        if rec.is_banned || !rec.is_profile_public {
             continue;
         }
         if !trimmed.is_empty() {

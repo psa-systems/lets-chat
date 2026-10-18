@@ -457,7 +457,7 @@ async fn resolve_or_provision_user(
 }
 
 /// Username pick: prefer `preferred_username`, fall back to the email
-/// local-part. Try up to 5 collision suffixes (`-2` ... `-5`) before bailing.
+/// local-part. Try up to 5 collision suffixes (`_2` ... `_5`) before bailing.
 async fn pick_username(
     state: &AppState,
     info: &crate::oidc::UserInfo,
@@ -483,8 +483,14 @@ async fn pick_username(
     if db::auth::handle_available_for(&state.auth, &base, "").await? {
         return Ok(base);
     }
+    // LC-1050: `_` not `-`, so the suffixed handle passes `validate_handle`
+    // (the LC-766 invariant); trim `base` so `_N` still fits the length cap.
+    let stem: String = base
+        .chars()
+        .take(crate::models::user::MAX_USERNAME_CHARS - 2)
+        .collect();
     for n in 2..=5u32 {
-        let candidate = format!("{base}-{n}");
+        let candidate = format!("{stem}_{n}");
         if db::auth::handle_available_for(&state.auth, &candidate, "").await? {
             return Ok(candidate);
         }

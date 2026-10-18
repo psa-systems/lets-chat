@@ -103,7 +103,7 @@
     {% for b in blocked %}
     <li class="flex items-center gap-3 p-2 rounded border border-border">
       {% let avatar_user_id = b.id.clone() %}
-      {% let avatar_username = b.username.clone() %}
+      {% let avatar_label = b.label().to_string() %}
       {% let avatar_ext = b.avatar_ext.clone() %}
       {% let avatar_status = b.status.clone() %}
       {% let avatar_custom_status = b.custom_status.clone() %}

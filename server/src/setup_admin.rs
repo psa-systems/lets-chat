@@ -128,8 +128,13 @@ async fn pick_handle(pool: &SqlitePool, base: &str) -> Result<Option<String>, sq
     if db::auth::handle_available_for(pool, base, "").await? {
         return Ok(Some(base.to_string()));
     }
+    // LC-1050: `_N`, not `-N`, so the handle passes `validate_handle`.
+    let stem: String = base
+        .chars()
+        .take(crate::models::user::MAX_USERNAME_CHARS - 2)
+        .collect();
     for n in 2..=5u32 {
-        let candidate = format!("{base}-{n}");
+        let candidate = format!("{stem}_{n}");
         if db::auth::handle_available_for(pool, &candidate, "").await? {
             return Ok(Some(candidate));
         }
@@ -216,7 +221,7 @@ mod tests {
                 .unwrap();
         assert_eq!(
             seeded.as_deref(),
-            Some("devuser-2"),
+            Some("devuser_2"),
             "the reserved handle must not be handed to the seeded admin"
         );
     }

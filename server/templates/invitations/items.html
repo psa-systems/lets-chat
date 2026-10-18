@@ -34,7 +34,7 @@
            partial builds the image URL from it. #}
         <div class="mt-2 flex items-center gap-2">
           {% let avatar_user_id = card.inviter_id.clone() %}
-          {% let avatar_username = card.inviter_name.clone() %}
+          {% let avatar_label = card.inviter_name.clone() %}
           {% let avatar_ext = card.inviter_avatar_ext.clone() %}
           {% let avatar_status = String::new() %}
           {# Askama's `let` can't take a bare `None` (its Option<_> type is then

@@ -121,5 +121,5 @@ async fn a_taken_handle_is_suffixed_rather_than_colliding() {
         .fetch_one(&pool)
         .await
         .expect("the seeded row");
-    assert_eq!(handle, "admin-2");
+    assert_eq!(handle, "admin_2");
 }
