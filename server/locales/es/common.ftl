@@ -266,10 +266,10 @@ settings-avatar-err-type = Formato no admitido: usa PNG, JPEG o WebP.
 settings-display-name = Nombre visible
 # LC-809: indica el alcance para que se lea como el nombre global, distinto de un
 # apodo por sala.
-settings-display-name-help = Se muestra en todas partes, en cada sala. Un apodo por sala (configurado en las Preferencias de una sala) lo reemplaza solo en esa sala.
+settings-display-name-help = Se muestra en todas partes, en cada sala, y se usa para la letra de tu avatar. Se sincroniza con tu nombre de Bunyip cada vez que inicias sesión. Un apodo por sala (configurado en las Preferencias de una sala) lo reemplaza solo en esa sala.
 # LC-766: identificador editable
 settings-handle = Identificador
-settings-handle-help = Solo letras, números y _ - . Puedes cambiarlo una vez cada 30 días.
+settings-handle-help = Tu nombre para @menciones en lets-chat. Es independiente de tu usuario de Bunyip y Bunyip nunca lo cambia. Solo letras, números y _. Puedes cambiarlo una vez cada 30 días.
 settings-handle-locked = Podrás cambiar tu identificador de nuevo el
 # LC-766: elección del identificador en el primer acceso
 welcome-handle-title = Elige tu identificador
@@ -375,6 +375,12 @@ settings-api-tokens-heading = Tokens de API
 settings-manage-api-tokens = Gestionar tokens de API
 settings-api-tokens-help = para la API HTTP (bots, scripts, integraciones).
 settings-storage-heading = Uso de almacenamiento
+settings-bunyip-heading = Cuenta de Bunyip
+settings-bunyip-help = La identidad de Bunyip vinculada a esta cuenta de lets-chat. El inicio de sesión se basa en este ID, no en tu identificador.
+settings-bunyip-id = ID de Bunyip
+settings-bunyip-not-linked = No vinculada
+settings-bunyip-email-verified = verificado
+settings-bunyip-email-unverified = sin verificar
 settings-storage-using = Estás usando
 settings-storage-of-quota = de tu
 settings-storage-quota-suffix = cuota de subidas.

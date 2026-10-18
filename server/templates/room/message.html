@@ -60,18 +60,18 @@
     {% when crate::views::message_actor::MessageActor::Webhook with (webhook_avatar_url) %}
     {# LC-74: webhook author - no user to DM, optional avatar URL. #}
     {% if let Some(url) = webhook_avatar_url %}
-    {# LC-360: onerror -> initials fallback (mirrors the bridge path below) so a broken/blocked external avatar shows no broken-image icon. #}<img src="{{ url }}" alt="" loading="lazy" class="h-9 w-9 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}">
+    {# LC-360: onerror -> initials fallback (mirrors the bridge path below) so a broken/blocked external avatar shows no broken-image icon. #}<img src="{{ url }}" alt="" loading="lazy" class="h-9 w-9 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{{ message.label()|avatar_initial }}">
     {% else %}
-    <div class="h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+    <div class="h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{{ message.label()|avatar_initial }}</div>
     {% endif %}
     <span class="font-semibold">{{ message.label() }}</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-webhook-surface text-webhook-content rounded px-1 py-0.5" title="{{ "room-msg-webhook-title"|t }}">{{ "room-msg-webhook-badge"|t }}</span>
     {% when crate::views::message_actor::MessageActor::EmailInbox with (email_avatar_url) %}
     {# LC-77: email-ingress author - no user to DM, optional avatar URL. #}
     {% if let Some(url) = email_avatar_url %}
-    {# LC-360: onerror -> initials fallback (mirrors the bridge path below) so a broken/blocked external avatar shows no broken-image icon. #}<img src="{{ url }}" alt="" loading="lazy" class="h-9 w-9 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}">
+    {# LC-360: onerror -> initials fallback (mirrors the bridge path below) so a broken/blocked external avatar shows no broken-image icon. #}<img src="{{ url }}" alt="" loading="lazy" class="h-9 w-9 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{{ message.label()|avatar_initial }}">
     {% else %}
-    <div class="h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+    <div class="h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{{ message.label()|avatar_initial }}</div>
     {% endif %}
     <span class="font-semibold">{{ message.label() }}</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-email-surface text-email-content rounded px-1 py-0.5" title="{{ "room-msg-email-title"|t }}">{{ "room-msg-email-badge"|t }}</span>
@@ -79,15 +79,15 @@
     {# LC-78: protocol-bridge author - no user to DM. The kind is shown in the badge so a viewer can see which network the foreign actor came from. #}
     {# LC-78-AVATAR-PROXY: when avatar_url (the proxy cache key) is Some, render <img> pointing at our same-origin proxy endpoint. onerror falls back to initials so a pending / failed fetch degrades gracefully without a page refresh. Falls back to initials immediately when the daemon submitted no foreign_avatar. #}
     {% if let Some(hash) = bridge_meta.avatar_url %}
-    <img src="/media/bridge-avatar-proxy/{{ hash }}" alt="" loading="lazy" class="h-9 w-9 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}">
+    <img src="/media/bridge-avatar-proxy/{{ hash }}" alt="" loading="lazy" class="h-9 w-9 rounded-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold',textContent:(this.dataset.fallback||'?')}))" data-fallback="{{ message.label()|avatar_initial }}">
     {% else %}
-    <div class="h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{% if let Some(c) = message.username.chars().next() %}{{ c }}{% else %}?{% endif %}</div>
+    <div class="h-9 w-9 text-sm rounded-full bg-surface-sunken text-content-muted flex items-center justify-center font-semibold">{{ message.label()|avatar_initial }}</div>
     {% endif %}
     <span class="font-semibold">{{ message.label() }}</span>
     <span class="text-[10px] font-bold uppercase tracking-wide bg-bridge-surface text-bridge-content rounded px-1 py-0.5" title="{{ "room-msg-bridge-title"|t }}">{{ "room-msg-bridge-badge"|t }} {{ bridge_meta.kind }}</span>
     {% when crate::views::message_actor::MessageActor::User %}
     {% let avatar_user_id = message.user_id.clone() %}
-    {% let avatar_username = message.username.clone() %}
+    {% let avatar_label = message.label().to_string() %}
     {% let avatar_ext = message.avatar_ext.clone() %}
     {% let avatar_status = message.status.clone() %}
     {% let avatar_custom_status = message.custom_status.clone() %}

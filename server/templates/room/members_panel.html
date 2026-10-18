@@ -56,7 +56,7 @@
     <a {% if !m.is_self %}href="/dm/{{ m.user_id }}" data-lc-hovercard="{{ m.user_id }}" {% endif %}data-lc-member-key="{{ m.filter_key }}"
        class="lc-member-row flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-sunken">
       {% let avatar_user_id = m.user_id.clone() %}
-      {% let avatar_username = m.username.clone() %}
+      {% let avatar_label = m.label.clone() %}
       {% let avatar_ext = m.avatar_ext.clone() %}
       {% let avatar_status = m.status.clone() %}
       {% let avatar_custom_status = m.custom_status.clone() %}

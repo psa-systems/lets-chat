@@ -52,7 +52,7 @@
       {% for m in speakers %}
       <li class="flex items-center gap-1.5 rounded-full bg-surface-elevated px-2 py-1">
         {% let avatar_user_id = m.user_id.clone() %}
-        {% let avatar_username = m.label.clone() %}
+        {% let avatar_label = m.label.clone() %}
         {% let avatar_ext = m.avatar_ext.clone() %}
         {% let avatar_status = m.status.clone() %}
         {% let avatar_custom_status = m.custom_status.clone() %}
@@ -77,7 +77,7 @@
       <li class="flex items-center gap-1.5 rounded-full {% if m.hand_raised %}bg-warning-surface text-warning{% else %}bg-surface-elevated{% endif %} px-2 py-1">
         {% if m.hand_raised %}<span aria-hidden="true">&#9995;</span>{% endif %}
         {% let avatar_user_id = m.user_id.clone() %}
-        {% let avatar_username = m.label.clone() %}
+        {% let avatar_label = m.label.clone() %}
         {% let avatar_ext = m.avatar_ext.clone() %}
         {% let avatar_status = m.status.clone() %}
         {% let avatar_custom_status = m.custom_status.clone() %}

@@ -200,6 +200,13 @@ pub mod filters {
         ))
     }
 
+    /// LC-1050: `{{ avatar_label|avatar_initial }}` -> the placeholder-avatar
+    /// letter for a display label. Same helper as the `/avatars/{id}` SVG
+    /// default, so the CSS and image fallbacks never disagree.
+    pub fn avatar_initial(label: impl AsRef<str>) -> askama::Result<String> {
+        Ok(crate::models::user::avatar_initial(label.as_ref()))
+    }
+
     /// LC-784: the bare avatar version token for `user_id` (no URL), so a
     /// template can hand it to client JS that builds `/avatars/{id}?v={token}`
     /// itself. The call/voice surfaces build their avatar URLs in JS from a

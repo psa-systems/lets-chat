@@ -32,6 +32,15 @@ pub struct MentionSuggestion {
 }
 
 impl MentionSuggestion {
+    /// LC-1050: display_name when set and non-blank, else the handle. Feeds
+    /// the avatar placeholder letter so it matches every other surface.
+    pub fn label(&self) -> &str {
+        match self.display_name.as_deref() {
+            Some(n) if !n.trim().is_empty() => n,
+            _ => &self.username,
+        }
+    }
+
     /// Convenience constructor for a user-kind suggestion. Used by the
     /// autocomplete handler so the existing call sites are not littered
     /// with `kind: "user"` and `subtitle: None`.
