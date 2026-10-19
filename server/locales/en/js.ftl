@@ -133,6 +133,11 @@ js-huddle-pop-out = Pop out
 js-huddle-bring-back = Bring back
 js-huddle-popped-out = Huddle is popped out
 js-huddle-busy = You are in a huddle in another room
+# LC-1058: floating-panel toolbar (huddle_popout.js).
+js-huddle-back-to-call = Back to call
+js-huddle-expand = Expand
+js-huddle-minimize = Minimize
+js-huddle-restore = Restore
 # LC-825: polite screen-reader announcements for incoming call reactions,
 # throttled and coalesced by call_reactions.js.
 js-react-announce = %name% reacted %emoji%
