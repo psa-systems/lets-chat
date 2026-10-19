@@ -18,7 +18,7 @@
      carries pending_invites, so there is no new Rust-side plumbing. #}
   {% for e in switcher %}{% if e.id.is_none() && e.pending_invites > 0 %}
   <a href="/invitations" {% include "partials/nav_boost.html" %} data-lc-invites-banner
-     class="mx-3 mt-2 flex items-center gap-2 rounded-md border border-border bg-accent-surface px-2 py-1.5 text-accent-surface-content hover:bg-surface-sunken">
+     class="mx-3 mt-2 mb-2 flex items-center gap-2 rounded-md border border-border bg-accent-surface px-2 py-1.5 text-accent-surface-content hover:bg-surface-sunken">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 flex-none" aria-hidden="true">
       <path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z"/>
       <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z"/>
@@ -222,7 +222,7 @@
      LC-1051: Home-only. Inside an enclave the sidebar is that enclave's rooms;
      the global pages are one click away on the Home rail tile. #}
   {% if sidebar_current_enclave.is_none() %}
-  <div class="px-2 pb-2 space-y-0.5 border-b border-border">
+  <div class="px-2 pb-2 mb-2 space-y-0.5 border-b border-border">
     <p class="lc-section-label px-2 pb-1">{{ "sidebar-section-navigation"|t }}</p>
     <a href="/inbox" {% include "partials/nav_boost.html" %} class="lc-nav-row">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
