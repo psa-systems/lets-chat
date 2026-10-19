@@ -27,7 +27,6 @@
    toast. #}
 <div class="flex-1 overflow-y-auto" data-lc-live-topic="enclave:{{ enclave.id }}" data-lc-enclave-settings>
   {% if let Some(m) = flash_ok %}<div data-lc-flash-toast hidden>{{ m }}</div>{% endif %}
-  <noscript><style>.lc-set-panel[hidden]{display:flex !important}.lc-set-nav{display:none}</style></noscript>
   <div class="lc-set-shell">
     <nav class="lc-set-nav" role="tablist" aria-orientation="vertical" aria-label="{{ "enclave-settings-tabs-aria"|t }}">
       <button type="button" role="tab" id="lc-etab-general" data-lc-tab="general" aria-controls="lc-epanel-general" aria-selected="true" class="lc-set-tab">
