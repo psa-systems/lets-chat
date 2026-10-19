@@ -1,5 +1,7 @@
-<div class="flex items-center group">
-  <a href="/dm/{{ peer.id }}" {% include "partials/nav_boost.html" %}{% if peer.active %} aria-current="page"{% endif %} data-lc-density-tight="row-dense" class="flex-1 flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-surface-elevated focus:bg-surface-elevated focus:outline-none focus:ring-2 focus:ring-ring{% if peer.active %} lc-room-row-active{% else if peer.unread > 0 && peer.mute_mode == "none" %} font-semibold text-content{% else if peer.mute_mode != "none" %} text-content-subtle{% endif %}">
+{# LC-1054: the row pill (hover + active fill) lives on the whole row, so the
+   hover controls sit inside it and the pill spans the sidebar gutter. #}
+<div class="lc-sb-row flex items-center group{% if peer.active %} lc-room-row-active{% endif %}">
+  <a href="/dm/{{ peer.id }}" {% include "partials/nav_boost.html" %}{% if peer.active %} aria-current="page"{% endif %} data-lc-density-tight="row-dense" class="flex-1 min-w-0 flex items-center gap-2.5 px-2 py-1.5 rounded-md focus:outline-none focus:ring-2 focus:ring-ring{% if peer.active %}{% else if peer.unread > 0 && peer.mute_mode == "none" %} font-semibold text-content{% else if peer.mute_mode != "none" %} text-content-subtle{% endif %}">
     {% let avatar_user_id = peer.id.clone() %}
     {% let avatar_label = peer.label().to_string() %}
     {% let avatar_ext = peer.avatar_ext.clone() %}
@@ -25,13 +27,18 @@
     {% let mentions = peer.mentions %}
     {% include "partials/mention_badge.html" %}
   </a>
-  {# LC-258: per-room mark-as-read, shown on hover only when this DM is unread. #}
-  {% if peer.unread > 0 %}
-  <form hx-post="/room/{{ peer.dm_room_id }}/read" hx-target="#sidebar" hx-swap="outerHTML" class="flex">
-    <button type="submit" class="text-xs px-1 text-content-subtle opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100 hover:text-content" title="{{ "sidebar-mark-room-read"|t }}" aria-label="{{ "sidebar-mark-room-read"|t }}">&#10003;</button>
-  </form>
-  {% endif %}
-  <form hx-post="/rooms/{{ peer.dm_room_id }}/star" hx-target="#sidebar" hx-swap="outerHTML" class="flex">
-    <button type="submit" class="text-xs px-1{% if is_starred %} text-star{% else %} text-content-subtle opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100 hover:text-star{% endif %}" title="{% if is_starred %}{{ "sidebar-unstar"|t }}{% else %}{{ "sidebar-star"|t }}{% endif %}">{% if is_starred %}&#9733;{% else %}&#9734;{% endif %}</button>
-  </form>
+  {# LC-1054: hover controls. Desktop overlays them on the row pill (no
+     reserved width, so names and badges use the full row); touch keeps them
+     inline. #}
+  <div class="lc-sb-row-actions">
+    {# LC-258: per-room mark-as-read, shown on hover only when this DM is unread. #}
+    {% if peer.unread > 0 %}
+    <form hx-post="/room/{{ peer.dm_room_id }}/read" hx-target="#sidebar" hx-swap="outerHTML" class="flex">
+      <button type="submit" class="text-xs px-1 text-content-subtle opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100 hover:text-content" title="{{ "sidebar-mark-room-read"|t }}" aria-label="{{ "sidebar-mark-room-read"|t }}">&#10003;</button>
+    </form>
+    {% endif %}
+    <form hx-post="/rooms/{{ peer.dm_room_id }}/star" hx-target="#sidebar" hx-swap="outerHTML" class="flex">
+      <button type="submit" class="text-xs px-1{% if is_starred %} text-star{% else %} text-content-subtle opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100 hover:text-star{% endif %}" title="{% if is_starred %}{{ "sidebar-unstar"|t }}{% else %}{{ "sidebar-star"|t }}{% endif %}">{% if is_starred %}&#9733;{% else %}&#9734;{% endif %}</button>
+    </form>
+  </div>
 </div>
