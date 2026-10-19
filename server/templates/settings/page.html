@@ -12,9 +12,8 @@
    enhancement: with no JS the panels all show and the forms full-page submit. #}
 <div class="flex-1 overflow-y-auto" data-lc-settings>
   {# Progressive enhancement: with JS the non-active panels carry `hidden` and
-     the tabs switch them. Without JS, reveal every panel (one long page) and
-     drop the now-inert tab rail. #}
-  <noscript><style>.lc-set-panel[hidden]{display:flex !important}.lc-set-nav{display:none}</style></noscript>
+     the tabs switch them. The no-JS fallback lives in base.html's <head>
+     (LC-1051). #}
   <div class="lc-set-shell">
     <nav class="lc-set-nav" role="tablist" aria-orientation="vertical" aria-label="{{ "settings-sections-nav"|t }}">
       <button type="button" role="tab" id="lc-tab-profile" data-lc-tab="profile" aria-controls="lc-panel-profile" aria-selected="true" class="lc-set-tab">

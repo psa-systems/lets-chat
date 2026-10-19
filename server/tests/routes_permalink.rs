@@ -188,3 +188,28 @@ async fn room_page_renders_copy_link_action() {
     );
     assert!(body.contains("Copy link"), "copy-link i18n must resolve");
 }
+
+/// LC-1051: in-enclave pages name their enclave on `<main>` so live.js's
+/// page_context keeps the enclave sidebar after a boosted move, even on pages
+/// with no `enclave:N` topic of their own (room info). A full load of an
+/// enclave room hides the Home-only Navigation block.
+#[tokio::test]
+async fn in_enclave_pages_name_their_enclave_and_hide_navigation() {
+    let t = setup().await;
+    for uri in ["/room/1", "/room/1/info"] {
+        let (status, _, body) = get(&t.app, &t.alice_session, uri).await;
+        assert_eq!(status, StatusCode::OK, "{uri}");
+        assert!(
+            body.contains("id=\"main\" hx-history-elt data-lc-page-enclave=\"1\""),
+            "{uri} must carry the page enclave on <main>"
+        );
+        assert!(!body.contains("href=\"/inbox\""), "{uri} hides Navigation");
+    }
+    let (status, _, body) = get(&t.app, &t.alice_session, "/inbox").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!body.contains("data-lc-page-enclave"));
+    assert!(
+        body.contains("href=\"/inbox\""),
+        "global pages keep Navigation"
+    );
+}

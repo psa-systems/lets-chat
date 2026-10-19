@@ -30,7 +30,6 @@
    presence events. Other room broadcasts also arrive but harmlessly drop (their
    OOB targets are absent on this page). #}
 <div class="flex-1 overflow-y-auto" data-lc-roominfo data-lc-live-room="{{ room.id }}">
-  <noscript><style>.lc-set-panel[hidden]{display:flex !important}.lc-set-nav{display:none}</style></noscript>
   <div class="lc-set-shell">
     <nav class="lc-set-nav" role="tablist" aria-orientation="vertical" aria-label="{{ "room-info-tabs-aria"|t }}">
       <button type="button" role="tab" id="lc-rtab-docs" data-lc-tab="docs" aria-controls="lc-rpanel-docs" aria-selected="{% if active_tab == "docs" %}true{% else %}false{% endif %}"{% if active_tab != "docs" %} tabindex="-1"{% endif %} class="lc-set-tab">

@@ -202,17 +202,22 @@ async fn nav_links_are_boosted_per_anchor_and_the_exemptions_are_real_navigation
 
     // The room row, a DM-shape link and the account menu's plain settings link
     // are boosted, each on its own anchor.
-    for href in [
-        format!("/room/{}", a.room_id),
-        "/inbox".to_string(),
-        "/settings".to_string(),
-    ] {
+    for href in [format!("/room/{}", a.room_id), "/settings".to_string()] {
         let needle = format!("href=\"{href}\" {BOOST}");
         assert!(
             page.contains(&needle),
             "expected a boosted anchor `{needle}`, got:\n{page}"
         );
     }
+    // LC-1051: the Navigation block (Inbox, ...) is Home-only, so an enclave
+    // room's sidebar no longer carries it; check its boost on a global page.
+    let (status, global) = get(&a, "/transcripts", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    let needle = format!("href=\"/inbox\" {BOOST}");
+    assert!(
+        global.contains(&needle),
+        "expected a boosted anchor `{needle}`, got:\n{global}"
+    );
 
     // The exemptions: logout lands on a page with no #main; the settings deep
     // links depend on location.hash while the page's scripts run.

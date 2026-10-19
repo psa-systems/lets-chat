@@ -218,7 +218,10 @@
   })();
   </script>
   {# LC-367: primary navigation group, surfaced near the top instead of buried
-     in the footer. Icon + label rows on the shared .lc-nav-row rhythm. #}
+     in the footer. Icon + label rows on the shared .lc-nav-row rhythm.
+     LC-1051: Home-only. Inside an enclave the sidebar is that enclave's rooms;
+     the global pages are one click away on the Home rail tile. #}
+  {% if sidebar_current_enclave.is_none() %}
   <div class="px-2 pb-2 space-y-0.5 border-b border-border">
     <p class="lc-section-label px-2 pb-1">{{ "sidebar-section-navigation"|t }}</p>
     <a href="/inbox" {% include "partials/nav_boost.html" %} class="lc-nav-row">
@@ -267,6 +270,7 @@
       <span>{{ "sidebar-link-transcripts"|t }}</span>
     </a>
   </div>
+  {% endif %}
   {# LC-308 + LC-367 + LC-369: room-list controls. Two icon controls on the
      room-list header: the unread-only filter toggle (device-local; hiding is
      pure CSS keyed on <html data-lc-unread-only>, set no-flash in base.html,

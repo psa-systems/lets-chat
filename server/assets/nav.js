@@ -127,7 +127,40 @@
     if (isBoostedNav(evt.detail)) navFailedToast();
   });
 
+  // LC-1051: the room list keeps its scroll position across a #sidebar swap.
+  // A room click swaps #main, then the server's PageChanged re-render OOB-swaps
+  // the whole #sidebar (outerHTML), as do mark-read, star, category move /
+  // collapse and mark-all-read; each replaced the scrolling <nav> and threw a
+  // long room list back to the top. Save before the swap, restore once the new
+  // nav is in the DOM. A different nav id (another enclave's list, or Home)
+  // starts at the top.
+  var SIDEBAR_NAV = '#sidebar nav[id^="sidebar-nav"]';
+  var pendingScroll = null;
+  function restoredTop(saved, navId) {
+    return saved && saved.id === navId ? saved.top : null;
+  }
+  function saveSidebarScroll(evt) {
+    var t = evt.detail && evt.detail.target;
+    if (!t || t.id !== 'sidebar') return;
+    var nav = document.querySelector(SIDEBAR_NAV);
+    pendingScroll = nav ? { id: nav.id, top: nav.scrollTop } : null;
+  }
+  function restoreSidebarScroll() {
+    if (!pendingScroll) return;
+    var nav = document.querySelector(SIDEBAR_NAV);
+    if (!nav) return;
+    var top = restoredTop(pendingScroll, nav.id);
+    pendingScroll = null;
+    if (top !== null) nav.scrollTop = top;
+  }
+  document.body.addEventListener('htmx:beforeSwap', saveSidebarScroll);
+  document.body.addEventListener('htmx:oobBeforeSwap', saveSidebarScroll);
+  document.body.addEventListener('htmx:afterSwap', restoreSidebarScroll);
+  document.body.addEventListener('htmx:oobAfterSwap', restoreSidebarScroll);
+  document.body.addEventListener('htmx:load', restoreSidebarScroll);
+
   window.LetsChatNav = {
+    restoredTop: restoredTop,
     hasMain: hasMain,
     brandCss: brandCss,
     fallbackUrl: fallbackUrl,
