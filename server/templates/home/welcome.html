@@ -145,7 +145,7 @@
                 {# LC-707: avatar of the newest unread message's author - who is waiting.
                    LC-884: routed through the shared partial for lazy-loading + presence. #}
                 {% let avatar_user_id = r.author_id.clone() %}
-                {% let avatar_username = r.author_name.clone() %}
+                {% let avatar_label = r.author_name.clone() %}
                 {% let avatar_ext = r.author_avatar_ext.clone() %}
                 {% let avatar_status = r.author_status.clone() %}
                 {% let avatar_custom_status = r.author_custom_status.clone() %}
@@ -187,7 +187,7 @@
               <a href="/dm/{{ r.peer_id }}" class="lc-home-row">
                 {# LC-884: routed through the shared partial for lazy-loading + presence. #}
                 {% let avatar_user_id = r.peer_id.clone() %}
-                {% let avatar_username = r.username.clone() %}
+                {% let avatar_label = r.label.clone() %}
                 {% let avatar_ext = r.avatar_ext.clone() %}
                 {% let avatar_status = r.status.clone() %}
                 {% let avatar_custom_status = r.custom_status.clone() %}

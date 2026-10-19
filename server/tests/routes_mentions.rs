@@ -541,3 +541,59 @@ async fn self_mention_dropped() {
         "self-mention must not insert a mention row"
     );
 }
+
+/// LC-1050: autocomplete applies the same visibility gates as
+/// `db::auth::search_users`: a user blocked in either direction, or with a
+/// private profile, is not suggested.
+async fn mention_body(t: &TestApp, q: &str) -> String {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/users/mentions?room_id=1&q={q}"))
+        .header(header::COOKIE, format!("session={}", t.session))
+        .body(Body::empty())
+        .unwrap();
+    let resp = t.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+#[tokio::test]
+async fn autocomplete_hides_blocked_users_either_direction() {
+    let t = app_with_two_users("viewer", "alice").await;
+    db::auth::block_user(&t.auth, &t.peer_id, &t.viewer_id)
+        .await
+        .unwrap();
+    let body = mention_body(&t, "al").await;
+    assert!(!body.contains("data-username=\"alice\""), "body: {body}");
+}
+
+#[tokio::test]
+async fn autocomplete_hides_private_profiles() {
+    let t = app_with_two_users("viewer", "alice").await;
+    sqlx::query("UPDATE users SET is_profile_public = 0 WHERE id = ?")
+        .bind(&t.peer_id)
+        .execute(&t.auth)
+        .await
+        .unwrap();
+    let body = mention_body(&t, "al").await;
+    assert!(!body.contains("data-username=\"alice\""), "body: {body}");
+}
+
+/// LC-1050: the avatar placeholder letter follows the display name, not the
+/// handle.
+#[tokio::test]
+async fn autocomplete_avatar_initial_uses_display_name() {
+    let t = app_with_two_users("viewer", "alice").await;
+    sqlx::query("UPDATE users SET display_name = 'Zed' WHERE id = ?")
+        .bind(&t.peer_id)
+        .execute(&t.auth)
+        .await
+        .unwrap();
+    let body = mention_body(&t, "al").await;
+    assert!(body.contains("data-username=\"alice\""), "body: {body}");
+    assert!(
+        body.contains(">Z</div>"),
+        "expected Z initial, body: {body}"
+    );
+}

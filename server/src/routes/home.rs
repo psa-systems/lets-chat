@@ -270,7 +270,12 @@ async fn build_dashboard(
             {
                 Some(a) => {
                     let status = super::effective_status(state, &row.author_user_id, &a.status);
-                    (a.username, a.avatar_ext, status, a.custom_status)
+                    // LC-1050: the avatar initial follows the display label.
+                    let label = match a.display_name.as_deref() {
+                        Some(n) if !n.trim().is_empty() => n.to_string(),
+                        _ => a.username,
+                    };
+                    (label, a.avatar_ext, status, a.custom_status)
                 }
                 None => (
                     row.author_user_id.clone(),

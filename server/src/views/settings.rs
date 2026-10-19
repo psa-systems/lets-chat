@@ -99,6 +99,12 @@ pub struct UserSettingsPage<'a> {
     /// LC-766: the date (YYYY-MM-DD) the handle may next change, shown only when
     /// `handle_editable` is false. Empty when editable.
     pub handle_available_on: String,
+    /// LC-1050: the Bunyip `sub` this account is linked to, shown read-only in
+    /// the Account section so a user can confirm which Bunyip identity owns
+    /// it. None when unlinked (empty-string marker).
+    pub bunyip_sub: Option<String>,
+    /// LC-1050: whether the stored email was verified by Bunyip at sign-in.
+    pub email_verified: bool,
 }
 
 /// LC-426: reusable feedback fragment returned by the settings form handlers

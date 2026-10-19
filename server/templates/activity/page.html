@@ -36,7 +36,7 @@
       <li class="rounded-lg border border-border bg-surface-elevated hover:bg-surface-sunken">
         <a href="{{ item.target_path }}" class="flex items-start gap-3 p-3">
           {% let avatar_user_id = item.actor_user_id.clone() %}
-          {% let avatar_username = item.actor_label.clone() %}
+          {% let avatar_label = item.actor_label.clone() %}
           {% let avatar_ext = item.avatar_ext.clone() %}
           {% let avatar_status = item.actor_status.clone() %}
           {% let avatar_custom_status = item.actor_custom_status.clone() %}
