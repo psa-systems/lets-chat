@@ -2251,13 +2251,15 @@ math {
 .lc-rightcol > .lc-panel.flex { min-height: 0; max-height: calc(100vh - 8rem); }
 
 /* LC-576: sidebar head - product title + collapse chevron, matching the
-   prototype's .sb-head / .sb-title (16px 16px 10px, 18px/700). */
+   prototype's .sb-head / .sb-title (18px/700). LC-1054: horizontal padding is
+   the shared 0.75rem sidebar gutter (head, enclave name, tabs, search, toolbar,
+   nav), so every box and row pill shares one left and right edge. */
 .lc-sidebar-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex: none;
-    padding: 1rem 1rem 0.625rem;
+    padding: 1rem 0.75rem 0.625rem;
 }
 .lc-sidebar-title {
     font-size: 1.125rem;
@@ -2278,7 +2280,7 @@ math {
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    padding: 0.375rem 1rem 0.75rem;
+    padding: 0.375rem 0.75rem 0.75rem;
     font-size: 0.9375rem;
     font-weight: 600;
     color: var(--content);
@@ -2312,7 +2314,7 @@ math {
 .lc-sidebar-tabs {
     display: flex;
     gap: 0.25rem;
-    padding: 0 1rem 0.625rem;
+    padding: 0 0.75rem 0.625rem;
 }
 .lc-sidebar-tab {
     flex: 1;
@@ -2336,7 +2338,7 @@ math {
 .lc-sidebar-search {
     display: flex;
     gap: 0.5rem;
-    padding: 0 1rem 0.875rem;
+    padding: 0 0.75rem 0.75rem;
 }
 .lc-sidebar-field {
     width: 100%;
@@ -2507,11 +2509,56 @@ math {
 .lc-sidebar-add:hover { background-color: var(--accent-hover); }
 .lc-sidebar-add svg { height: 1.125rem; width: 1.125rem; }
 
-/* LC-576: collapsed create-category disclosure at the foot of the room list. */
+/* LC-576: collapsed create-category disclosure at the foot of the room list.
+   LC-1054: no rule above it; it reads as the list's last quiet line. */
 .lc-sb-newcat {
-    margin-top: 0.5rem;
-    padding: 0.5rem 0.5rem 0;
-    border-top: 1px solid var(--border);
+    padding: 0 0.5rem;
+}
+
+/* LC-1054: room-list toolbar on the shared 0.75rem sidebar gutter (tabs, search,
+   nav). Left: the unread-only pill toggle with its label; right: mark-all-read.
+   One glyph size and one hit-target height, so the two read as a set. */
+.lc-sb-tools {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0 0.75rem 0.25rem;
+}
+.lc-sb-chip,
+.lc-sb-tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.75rem;
+    border-radius: 0.4375rem;
+    color: var(--content-muted);
+    cursor: pointer;
+}
+.lc-sb-chip {
+    gap: 0.375rem;
+    padding: 0 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid var(--border);
+}
+.lc-sb-tool { width: 1.75rem; }
+.lc-sb-chip svg,
+.lc-sb-tool svg { height: 1rem; width: 1rem; }
+.lc-sb-chip:hover,
+.lc-sb-tool:hover {
+    color: var(--content);
+    background-color: var(--surface-elevated);
+}
+.lc-sb-chip[aria-pressed="true"] {
+    color: var(--accent-content);
+    background-color: var(--accent);
+    border-color: var(--accent);
+}
+.lc-sb-chip:focus-visible,
+.lc-sb-tool:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
 }
 .lc-sb-newcat > summary {
     list-style: none;
@@ -3713,6 +3760,45 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
 /* LC-569: the active room row is a SOLID accent fill with accent-content text
    (this is what the comps and the prototype show), not a raised tint with accent
    text plus a left bar. The unread pill inverts on it so it stays legible. */
+/* LC-1054: the sidebar row pill is the whole row (link + hover controls), so
+   the active / hover fill spans the gutter instead of stopping where the
+   invisible star / mark-read buttons begin. */
+.lc-sb-row {
+    border-radius: 0.375rem;
+}
+/* Empty badge slots (mention / in-call / draft placeholders kept so a live OOB
+   swap has a target) still took a flex gap each, parking the unread pill short
+   of the row's right edge. */
+.lc-sb-row > a > :empty { display: none; }
+.lc-sb-row:not(.lc-room-row-active):hover,
+.lc-sb-row:not(.lc-room-row-active):focus-within {
+    background-color: var(--surface-elevated);
+}
+.lc-sb-row-actions {
+    display: flex;
+    align-items: center;
+}
+/* Desktop: hover-only controls overlay the row's right end instead of holding
+   width (they used to truncate names and push badges mid-row even while
+   invisible). The inherited fill covers the badges they sit over. An open move
+   menu keeps them up while the pointer is in the menu. */
+@media (min-width: 768px) {
+    .lc-sb-row { position: relative; }
+    .lc-sb-row-actions {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        right: 0.25rem;
+        padding-left: 0.25rem;
+        background-color: inherit;
+        display: none;
+    }
+    .lc-sb-row:hover .lc-sb-row-actions,
+    .lc-sb-row:focus-within .lc-sb-row-actions,
+    .lc-sb-row-actions:has(details[open]) {
+        display: flex;
+    }
+}
 .lc-room-row-active {
     background-color: var(--accent);
     color: var(--accent-content);
@@ -3728,11 +3814,19 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
    inherited value, so they kept their resting grey against the solid accent
    fill instead of inverting with the row. Restate them in the row's own
    content color and carry the hierarchy with opacity. The mention badge is
-   exempt on purpose: it is a self-contained danger pill with its own fill. */
-.lc-room-row-active .text-content-subtle,
-.lc-room-row-active .text-content-muted {
+   exempt on purpose: it is a self-contained danger pill with its own fill.
+   LC-1054: scoped to the link, now that the active class sits on the whole row:
+   the hover-only controls beside it (mark-read, star, move) also carry
+   text-content-subtle, and this opacity beat their md:opacity-0, so they showed
+   permanently on the active row. They take the row's content color only. */
+.lc-room-row-active > a .text-content-subtle,
+.lc-room-row-active > a .text-content-muted {
     color: var(--accent-content);
     opacity: 0.75;
+}
+.lc-room-row-active > .lc-sb-row-actions > form button,
+.lc-room-row-active > .lc-sb-row-actions > details > summary {
+    color: var(--accent-content);
 }
 
 /* LC-569: unread count pill. Neutral at rest (inside .lc-sidebar the surface

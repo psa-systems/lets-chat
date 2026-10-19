@@ -405,3 +405,47 @@ async fn navigation_block_shows_on_home_only() {
         "enclave still lists its rooms"
     );
 }
+
+/// LC-1054: the room-list controls are a labeled toolbar (unread-only pill +
+/// mark-all-read icon), the active fill sits on the whole row so the hover
+/// controls live inside the pill, the add-chat trigger exists once (beside the
+/// search, not again on the ROOMS header), and the category disclosure reads
+/// "New category".
+#[tokio::test]
+async fn sidebar_controls_are_one_toolbar_and_rows_own_their_pill() {
+    let fx = fixture().await;
+    sqlx::query("UPDATE users SET role = 'admin' WHERE id = ?")
+        .bind(&fx.user.id)
+        .execute(&fx.state.auth)
+        .await
+        .unwrap();
+    let mut user = fx.user.clone();
+    user.role = "admin".into();
+    let html = render_sidebar(&fx.state, &user, Some(fx.enclave_id), Some(fx.enclave_room))
+        .await
+        .expect("enclave sidebar renders");
+
+    assert!(
+        html.contains("class=\"lc-sb-tools\""),
+        "toolbar row missing"
+    );
+    assert!(
+        html.contains("data-lc-unread-toggle aria-pressed=\"false\""),
+        "unread-only toggle missing"
+    );
+    assert!(
+        html.contains("<span>Unread only</span>"),
+        "toggle carries its label"
+    );
+    assert_eq!(
+        html.matches("aria-label=\"Add chat\"").count(),
+        1,
+        "one add-chat trigger, beside the search"
+    );
+    assert!(html.contains("+ New category"));
+    assert!(
+        html.contains("class=\"lc-sb-row flex items-center group lc-room-row-active\""),
+        "active fill sits on the whole row"
+    );
+    assert!(html.contains("class=\"lc-sb-row-actions\""));
+}
