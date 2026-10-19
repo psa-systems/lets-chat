@@ -227,6 +227,43 @@ pub struct RemoteControlAuditPage<'a> {
     pub rows: &'a [RcAuditRow],
 }
 
+/// LC-1056: the admin Feature flags tab (`/admin/feature-flags`): every
+/// runtime feature switch in one place. AI keeps its LC-679 on/off + LC-702
+/// audience; remote control and transcription are three-state rollouts
+/// (`routes::feature_flags`), carried as `"off" | "admins" | "everyone"`.
+#[derive(Template)]
+#[template(path = "admin/feature_flags.html")]
+pub struct FeatureFlagsPage<'a> {
+    pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    /// LC-679: current value of the runtime LLM/AI feature flag (`llm_enabled`).
+    pub llm_flag_enabled: bool,
+    /// LC-679: whether an LLM endpoint is configured (`LETS_CHAT_LLM_URL`).
+    pub llm_configured: bool,
+    /// LC-702: true when the AI audience is narrowed to staff.
+    pub llm_audience_staff: bool,
+    /// Remote-control rollout (`Rollout::as_str`).
+    pub remote_control_rollout: &'static str,
+    /// Transcription rollout (`Rollout::as_str`).
+    pub transcription_rollout: &'static str,
+    /// Whether server STT is configured (`LETS_CHAT_STT_URL`). Without it calls
+    /// still transcribe in the browser, but voice messages are not transcribed.
+    pub stt_configured: bool,
+}
+
 /// LC-334: site-admin report-review queue (`/admin/reports`). The open-report
 /// rows render from the shared `admin/reports_items.html` partial (also used by
 /// the live OOB fragment) so a fresh load and a live update render identically.
@@ -363,19 +400,6 @@ pub struct SettingsPage<'a> {
     pub default_notify_email_digest: bool,
     /// Current value of the maintenance-mode toggle.
     pub maintenance_enabled: bool,
-    /// LC-853: current value of the workspace remote-control switch
-    /// (`remote_control_enabled`). Gates the 1:1 DM feature and the huddle
-    /// consent flow alike; defaults off on a fresh deployment.
-    pub remote_control_enabled: bool,
-    /// LC-679: current value of the runtime LLM/AI feature flag (`llm_enabled`).
-    pub llm_flag_enabled: bool,
-    /// LC-679: whether an LLM endpoint is configured (`LETS_CHAT_LLM_URL`). The
-    /// flag is inert without it, so the toggle card surfaces the precondition.
-    pub llm_configured: bool,
-    /// LC-702: whether the AI audience is narrowed to staff (`llm_audience` ==
-    /// "staff"). False means the default "everyone". Drives the audience radio's
-    /// checked state.
-    pub llm_audience_staff: bool,
     /// LC-712: whether an embeddings endpoint is configured
     /// (`LETS_CHAT_EMBEDDINGS_URL`). The help desk docs search needs it, so the
     /// docs card surfaces the precondition when it is missing.

@@ -793,6 +793,10 @@ pub async fn post_file_retranscribe(
     if upload.uploader_id != user.id {
         return Err(AppError::Forbidden);
     }
+    // LC-1056: retrying is transcription, so it follows the same rollout.
+    if !super::feature_flags::allows(&state, &super::feature_flags::TRANSCRIPTION, &user).await {
+        return Err(AppError::Forbidden);
+    }
     let (Some(message_id), Some(room_id)) = (upload.message_id, room_id) else {
         return Err(AppError::BadRequest("attachment is not posted yet".into()));
     };

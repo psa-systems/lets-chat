@@ -585,3 +585,43 @@ async fn share_stop_does_not_release_a_pending_slot_aimed_at_another_sharer() {
         "bob's pending request aimed at alice must survive carol's unrelated share stop"
     );
 }
+
+/// LC-1056: an "Admins only" rollout admits a site-admin controller and refuses
+/// a plain member's request with the same `unavailable` the off switch sends.
+#[tokio::test]
+async fn admins_only_rollout_admits_only_an_admin_controller() {
+    let s = setup().await;
+    enable(&s).await;
+    db::settings::set_setting(&s.state.settings, "remote_control_audience", "admins")
+        .await
+        .unwrap();
+    let mut alice_rx = join(&s, &s.alice, true); // alice shares
+    let mut bob_rx = join(&s, &s.bob, false);
+
+    relay_control_signal(&s.state, &s.bob, "Bob", s.room, "request").await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut bob_rx).await, &s.bob.id),
+        vec!["unavailable"],
+        "a plain member is outside the rollout"
+    );
+    assert!(control_kinds_to(&drain(&mut alice_rx).await, &s.alice.id).is_empty());
+
+    sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+        .bind(&s.bob.id)
+        .execute(&s.state.auth)
+        .await
+        .unwrap();
+    let bob_admin = user_row(&s.state, &s.bob.id).await;
+    relay_control_signal(&s.state, &bob_admin, "Bob", s.room, "request").await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut alice_rx).await, &s.alice.id),
+        vec!["request"],
+        "an admin controller reaches the sharer"
+    );
+    relay_control_signal(&s.state, &s.alice, "Alice", s.room, "grant").await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut bob_rx).await, &s.bob.id),
+        vec!["grant"]
+    );
+    assert_eq!(open_session_count(&s.chat, s.room).await, 1);
+}

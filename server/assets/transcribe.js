@@ -107,6 +107,9 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
         if (j && typeof j.sttServer === 'boolean') sttServer = j.sttServer;
+        // LC-1056: outside the transcription rollout every Transcribe toggle is
+        // hidden (main.css keys on this root attribute); start would 403 anyway.
+        if (j && j.transcribe === false) document.documentElement.setAttribute('data-lc-transcribe-off', '');
         disableIfUnsupported();
       })
       .catch(function (e) {

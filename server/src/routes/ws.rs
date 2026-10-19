@@ -2367,11 +2367,27 @@ pub async fn relay_control_signal(
 
     // LC-853: workspace kill switch, default off. `deny`/`revoke` pass so an
     // in-flight session can always be torn down after the flag flips.
-    if matches!(kind, "request" | "grant") && !remote_control_flag_on(state).await {
-        if kind == "request" {
-            refuse("disabled");
+    // LC-1056: the rollout audience applies to the controller - the sender of a
+    // `request`, the peer a `grant` answers - so under "Admins only" an admin
+    // can test control of anyone's screen, never the reverse.
+    if matches!(kind, "request" | "grant") {
+        let controller = if kind == "request" {
+            &user.id
+        } else {
+            &peer_id
+        };
+        if !super::feature_flags::allows_user_id(
+            state,
+            &super::feature_flags::REMOTE_CONTROL,
+            controller,
+        )
+        .await
+        {
+            if kind == "request" {
+                refuse("disabled");
+            }
+            return;
         }
-        return;
     }
 
     // LC-186: blunt request spam / re-request harassment. Only `request` is
@@ -2547,11 +2563,19 @@ async fn relay_huddle_control_signal(
     };
 
     // Workspace kill switch, default off; `deny`/`revoke` pass (see the key's
-    // doc - a session must always be endable).
+    // doc - a session must always be endable). LC-1056: a `request` also needs
+    // the sender inside the rollout audience; a `grant` re-checks the
+    // requester below, once the pending slot names them.
     if matches!(kind, "request" | "grant") && !remote_control_flag_on(state).await {
         if kind == "request" {
             echo("unavailable", "disabled");
         }
+        return;
+    }
+    if kind == "request"
+        && !super::feature_flags::allows(state, &super::feature_flags::REMOTE_CONTROL, user).await
+    {
+        echo("unavailable", "disabled");
         return;
     }
     // LC-855: the per-room opt-out, layered under the workspace switch. Only a
@@ -2681,7 +2705,14 @@ async fn relay_huddle_control_signal(
                 echo("unavailable", "requester_gone");
                 return;
             }
-            if !remote_control_allowed(&state.auth, &user.id, &requester).await {
+            if !remote_control_allowed(&state.auth, &user.id, &requester).await
+                || !super::feature_flags::allows_user_id(
+                    state,
+                    &super::feature_flags::REMOTE_CONTROL,
+                    &requester,
+                )
+                .await
+            {
                 echo("unavailable", "not_allowed");
                 return;
             }

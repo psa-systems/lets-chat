@@ -223,6 +223,10 @@ async fn get_voice_room(
             custom_status,
         });
     }
+    // LC-1056: per viewer, so an "Admins only" rollout hides the control from
+    // everyone else.
+    let remote_control_enabled =
+        super::feature_flags::allows(state, &super::feature_flags::REMOTE_CONTROL, user).await;
     let page = crate::views::voice::VoicePage {
         user,
         room,
@@ -238,7 +242,7 @@ async fn get_voice_room(
         asset_version: &state.asset_version,
         ice_servers: &state.ice_servers,
         participants: &participants,
-        remote_control_enabled: super::ws::remote_control_flag_on(state).await,
+        remote_control_enabled,
     };
     Ok(html(&page)?.into_response())
 }
@@ -680,6 +684,9 @@ pub async fn get_room(
     // AI affordances.
     let ai_flag_on = super::ai_gate::flag_on(&state).await;
     let ai_allowed = super::ai_gate::allowed_in_room(&state, room_id, &user).await?;
+    // LC-1056: the huddle control renders only for viewers in the rollout.
+    let remote_control_enabled =
+        super::feature_flags::allows(&state, &super::feature_flags::REMOTE_CONTROL, &user).await;
 
     let page = RoomPage {
         user: &user,
@@ -705,14 +712,14 @@ pub async fn get_room(
         embeddings_available: ai_flag_on && state.embeddings_available() && ai_allowed,
         vision_available: crate::vision::available(),
         // LC-679: the teaser stays a config-presence nudge ("set LETS_CHAT_LLM_URL"),
-        // not a flag hint - the runtime flag lives in /admin/settings instead.
+        // not a flag hint - the runtime flag lives in /admin/feature-flags instead.
         llm_teaser: !state.llm_available() && user.role == "admin",
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
         gif_available: crate::gif::available(),
         gif_teaser: !crate::gif::available() && user.role == "admin",
         room_seen_bar_html,
         huddle_enabled,
-        remote_control_enabled: super::ws::remote_control_flag_on(&state).await,
+        remote_control_enabled,
         ice_servers: &state.ice_servers,
         huddle_sfu: crate::livekit::available(),
         huddle_participants,
@@ -1230,6 +1237,17 @@ pub async fn maybe_transcribe_voice_message(
         return Ok(());
     }
     if row.transcript.is_some() {
+        return Ok(());
+    }
+    // LC-1056: the transcription rollout, keyed on the uploader. Skipped like
+    // the LC-592 scope below: no status, so no Retry control.
+    if !super::feature_flags::allows_user_id(
+        state,
+        &super::feature_flags::TRANSCRIPTION,
+        &row.uploader_id,
+    )
+    .await
+    {
         return Ok(());
     }
     // LC-592: operator gating. Excluding a whole category is a policy decision,
