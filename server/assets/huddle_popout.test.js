@@ -236,3 +236,87 @@ test('LC-822 regression: Pop out falls back to the floating panel without PiP su
   assert.equal(root.classList.contains('lc-huddle--float'), true);
   assert.equal(api.isPopped(), true);
 });
+
+// ---- LC-1058: floating-panel toolbar ----------------------------------------
+function withNav(env) {
+  const clicks = [];
+  const processed = [];
+  env.window.htmx = { process: (el) => processed.push(el) };
+  // test_dom's El has no click(); record the navigation instead.
+  El.prototype.click = function () { clicks.push(this.getAttribute('href')); };
+  return { clicks, processed };
+}
+
+test('LC-1058: a floated dock gets Back to call / Minimize / Expand, and docking removes them', () => {
+  const env = load({ pip: pendingPip });
+  const host = new El('div');
+  env.body.appendChild(host);
+  const root = makeDock(7);
+  host.appendChild(root);
+
+  env.api.floatOut(root);
+  for (const a of ['data-lc-float-back', 'data-lc-float-min', 'data-lc-float-max']) {
+    assert.ok(root.querySelector('[' + a + ']'), a + ' is on the floating panel');
+  }
+
+  env.api.bringBack(); // the placeholder is on this page: dock
+  assert.equal(env.api.isPopped(), false);
+  assert.equal(root.querySelector('[data-lc-float-tools]'), null, 'no toolbar in the page dock');
+});
+
+test('LC-1058: Back to call from another room navigates (boosted) and docks on arrival', () => {
+  const env = load({ pip: pendingPip });
+  const nav = withNav(env);
+  const root = makeDock(7);
+  env.api.floatOut(root); // a swap already took us away: no placeholder here
+
+  env.api.goToCall();
+  assert.deepEqual(nav.clicks, ['/room/7']);
+  const a = env.body.querySelector('[data-lc-float-nav]');
+  assert.equal(a.getAttribute('hx-boost'), 'true');
+  assert.equal(a.getAttribute('hx-target'), '#main');
+  assert.equal(a.getAttribute('hx-select'), '#main');
+  assert.equal(nav.processed[0], a, 'htmx processes the anchor before the click');
+  assert.equal(env.api.isPopped(), true, 'still floating until the room renders');
+
+  // The room renders its own dock; voice.js scan() hands it over.
+  const host = new El('div');
+  env.body.appendChild(host);
+  const fresh = makeDock(7);
+  host.appendChild(fresh);
+  env.api.adoptPageDock(fresh);
+  assert.equal(env.api.isPopped(), false, 'docked on arrival');
+  assert.equal(root.parentNode, host, 'the live dock took the fresh one\'s place');
+});
+
+test('LC-1058: Bring back off-room takes the same path; another room\'s dock does not dock', () => {
+  const env = load({ pip: pendingPip });
+  const nav = withNav(env);
+  const root = makeDock(7);
+  env.api.floatOut(root);
+  env.api.bringBack();
+  assert.deepEqual(nav.clicks, ['/room/7']);
+
+  const other = makeDock(9);
+  env.body.appendChild(other);
+  env.api.adoptPageDock(other);
+  assert.equal(env.api.isPopped(), true, 'a different room is only marked busy');
+});
+
+test('LC-1058: Expand and Minimize are exclusive views that never overwrite the saved geometry', () => {
+  const env = load({ pip: pendingPip });
+  const root = makeDock(7);
+  env.api.floatOut(root);
+
+  env.api.setSize('max');
+  assert.equal(root.classList.contains('lc-huddle--float-max'), true);
+  assert.equal(root.querySelector('[data-lc-float-max]').getAttribute('aria-pressed'), 'true');
+
+  env.api.setSize('min');
+  assert.equal(root.classList.contains('lc-huddle--float-max'), false, 'exclusive');
+  assert.equal(root.classList.contains('lc-huddle--float-min'), true);
+
+  env.api.setSize('min');
+  assert.equal(root.classList.contains('lc-huddle--float-min'), false, 'second click restores');
+  assert.equal(env.store.size, 0, 'no geometry saved by a size toggle');
+});
