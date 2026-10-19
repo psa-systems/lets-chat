@@ -55,7 +55,10 @@
           <input type="hidden" name="collapsed" value="1">
           {% endif %}
           <button type="submit" class="w-full text-left lc-section-label hover:text-content focus:outline-none focus:ring-2 focus:ring-ring rounded flex items-center gap-1" title="{% if category.collapsed %}{{ "sidebar-category-expand"|t }}{% else %}{{ "sidebar-category-collapse"|t }}{% endif %}">
-            <span class="flex-1 truncate">{% if category.collapsed %}&#9656;{% else %}&#9662;{% endif %} {{ category.name }}{% if category.collapsed %} <span class="text-content-subtle normal-case">({{ category.rooms.len() }})</span>{% endif %}</span>
+            {# LC-1054: same SVG chevron as the ROOMS / DMs group headers (was a
+               text triangle), rotated when folded. #}
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3 shrink-0{% if category.collapsed %} -rotate-90{% endif %}" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+            <span class="flex-1 truncate">{{ category.name }}{% if category.collapsed %} <span class="text-content-subtle normal-case">({{ category.rooms.len() }})</span>{% endif %}</span>
             {% if category.collapsed && category.unread_total > 0 %}
             {% let unread_noun = "home-dash-unread-aria"|t %}
             <span data-lc-unread class="normal-case">{% call unread_badge::badge(category.unread_total, unread_noun, "normal") %}</span>
@@ -67,7 +70,7 @@
         </form>
         {% if can_manage_sidebar_categories %}
         <details class="relative">
-          <summary class="list-none cursor-pointer text-content-subtle hover:text-content px-1" title="{{ "sidebar-category-actions"|t }}">...</summary>
+          <summary class="list-none cursor-pointer text-content-subtle hover:text-content px-1 py-0.5 rounded flex items-center" title="{{ "sidebar-category-actions"|t }}" aria-label="{{ "sidebar-category-actions"|t }}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true"><path d="M3 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM8.5 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM15.5 8.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/></svg></summary>
           <div class="absolute right-0 top-full mt-1 z-30 bg-surface-elevated border border-border rounded shadow text-sm w-56 p-2 space-y-2">
             <form hx-patch="/enclave/{{ category.enclave_id }}/sidebar/categories/{{ category.id }}" hx-target="#sidebar" hx-swap="outerHTML" class="flex flex-col gap-1">
               <label class="text-xs text-content-muted">{{ "sidebar-category-name-label"|t }}{% include "partials/required_mark.html" %}
@@ -97,9 +100,10 @@
     {% endfor %}
     </div>
     {% endif %}
-    {# LC-336: in an enclave the ROOMS header always renders (even with no rooms)
-       so the `+` create-chat affordance is always reachable; outside an enclave
-       (Home) it shows only when there are rooms and carries no `+`. #}
+    {# LC-336: in an enclave the ROOMS header always renders (even with no rooms);
+       outside an enclave (Home) it shows only when there are rooms. LC-1054: the
+       header's `+` was a duplicate of the add-chat button beside the search and
+       is gone. #}
     {% if sidebar_current_enclave.is_some() || !sidebar_rooms.is_empty() %}
     <section data-lc-sb-section data-lc-sb-group="rooms">
       <div class="flex items-center justify-between gap-1 px-2">
@@ -111,17 +115,6 @@
           </svg>
           <span class="flex-1 text-left truncate">{% if !sidebar_categories.is_empty() %}{{ "sidebar-section-all-rooms"|t }}{% else %}{{ "sidebar-section-rooms"|t }}{% endif %}</span>
         </button>
-        {% if can_manage_sidebar_categories %}{% if sidebar_current_enclave.is_some() %}
-        {# LC-400: the create-room form moved to a modal in the persistent shell
-           (add_room_modal.html). The old inline <details> popover lived inside
-           this live-swapped nav, so a WS sidebar OOB swap (EnclaveRoomAdded ...)
-           destroyed the open form + half-typed name mid-typing. This button only
-           opens the modal; it is safe to re-render on every swap. #}
-        <button type="button"
-          onclick="window.__lcOpenAddRoom && window.__lcOpenAddRoom()"
-          class="cursor-pointer text-content-subtle hover:text-content px-1 leading-none"
-          title="{{ "sidebar-room-add"|t }}" aria-label="{{ "sidebar-room-add"|t }}">+</button>
-        {% endif %}{% endif %}
       </div>
       {% if !sidebar_rooms.is_empty() %}
       <div data-lc-sb-group-body id="lc-sb-body-rooms">
@@ -168,7 +161,7 @@
        hx-wiring are unchanged. #}
     {% if can_manage_sidebar_categories %}{% if let Some(eid) = sidebar_current_enclave %}
     <details class="lc-sb-newcat">
-      <summary class="lc-section-label">+ {{ "sidebar-category-add"|t }}</summary>
+      <summary class="lc-section-label">+ {{ "sidebar-category-new"|t }}</summary>
       <form hx-post="/enclave/{{ eid }}/sidebar/categories" hx-target="#sidebar" hx-swap="outerHTML" class="px-2 pt-2">
         <label for="lc-newcat-{{ eid }}" class="block text-xs text-content-muted">{{ "sidebar-category-name-label"|t }}{% include "partials/required_mark.html" %}</label>
         <div class="mt-0.5 flex gap-1">

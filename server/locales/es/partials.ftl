@@ -56,6 +56,7 @@ sidebar-category-delete-confirm = ¿Eliminar la categoría? Sus salas volverán 
 sidebar-category-name-label = Nombre de la categoría
 sidebar-category-new-placeholder = Nueva categoría
 sidebar-category-add = Añadir
+sidebar-category-new = Nueva categoría
 
 ## Enclave switcher
 # LC-750 (F28): accessible name for the enclave rail <nav> landmark.

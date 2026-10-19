@@ -56,6 +56,7 @@ sidebar-category-delete-confirm = Delete category? Its rooms move back to All ro
 sidebar-category-name-label = Category name
 sidebar-category-new-placeholder = New category
 sidebar-category-add = Add
+sidebar-category-new = New category
 
 ## Enclave switcher
 # LC-750 (F28): accessible name for the enclave rail <nav> landmark.
