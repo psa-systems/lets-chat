@@ -8,6 +8,25 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.5.0] - 2026-10-19
+
+Fifth tagged release, cut from `main` after 11 merged PRs on top of v0.4.1 (`git log --first-parent v0.4.1..v0.5.0`). No operator action is required; the entries below are the user-visible changes. Internal work (broadcast render performance LC-780 / LC-783, release CI LC-1045 / LC-1047 / LC-1049, `common` submodule bumps) is omitted and lives in the git history.
+
+### Added
+
+- **Settings shows the linked Bunyip account (LC-1050).** A "Bunyip account" card lists the account's SSO subject and whether its email is verified, so users and admins can tell which identity a local account is tied to. No action required.
+
+### Changed
+
+- **Avatar initials come from the display name, not the handle (LC-1050).** Default avatars and actor badges now use the first letter of the user's display label. Handle collisions on SSO provisioning and admin setup now get a `{handle}_{n}` suffix (for example `admin_2`). Existing handles are unchanged.
+- **The sidebar Navigation block shows only on Home and global pages (LC-1051).** Inside an enclave the sidebar shows that enclave's rooms only, and the room list keeps its scroll position across live sidebar refreshes.
+- **The sidebar room-list controls are one labeled toolbar (LC-1054).** "Unread only" is a labeled pill toggle beside a mark-all-read button, every sidebar block shares one gutter, the active-room highlight spans the full row, and the duplicate ROOMS-header add button is gone. On desktop a starred room's star now shows on hover with the other row controls.
+
+### Fixed
+
+- **Mention autocomplete no longer suggests blocked users or users with a private profile (LC-1050).**
+- **The settings, enclave settings and room info pages no longer collapse to a narrow column after in-app navigation (LC-1051).**
+
 ## [v0.4.1] - 2026-10-04
 
 No operator-visible changes; this release contains only internal CI tooling (LC-1039).
