@@ -13,16 +13,6 @@ use crate::views::html;
 use crate::views::room::{MessageView, ReactionView};
 use crate::ws::events::ChatEvent;
 
-/// Extract the HH:MM portion from a timestamp string. Accepts both the
-/// "YYYY-MM-DD HH:MM:SS" SQLite format and RFC3339 strings.
-pub(crate) fn format_hhmm(read_at: &str) -> String {
-    let after_date = read_at
-        .split_once([' ', 'T'])
-        .map(|(_, rest)| rest)
-        .unwrap_or(read_at);
-    after_date.chars().take(5).collect()
-}
-
 /// GET /dm/{peer_id} - render a DM view between the authenticated user and
 /// the peer. Resolves to (or creates) a room with `room_type = "dm"` and
 /// renders the same composer/messages layout used by regular rooms.
@@ -365,16 +355,15 @@ pub async fn get_dm(
     // expandable block so they stop drowning the human conversation.
     crate::views::room::group_system_events(&mut messages);
 
-    // Compute the "Seen HH:MM" caption for the most recent own-authored
+    // Compute the "Seen HH:MM" caption (LC-1057: localized in the browser) for the most recent own-authored
     // message that the peer has read. Gated symmetrically: both viewer and
     // peer must have read receipts enabled.
     if user.read_receipts_enabled && peer.read_receipts_enabled {
         if let Some((seen_msg_id, read_at)) =
             db::chat::find_dm_seen_state(&state.chat, room_id, &user.id, &peer.id).await?
         {
-            let hhmm = format_hhmm(&read_at);
             if let Some(msg) = messages.iter_mut().find(|m| m.id == seen_msg_id) {
-                msg.seen_caption = Some(hhmm);
+                msg.seen_caption = Some(read_at);
             }
         }
     }

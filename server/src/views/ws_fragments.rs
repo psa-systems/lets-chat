@@ -118,14 +118,17 @@ pub struct DraftBadgeFragment {
 }
 
 /// Out-of-band swap that updates the "Seen HH:MM" caption under one DM
-/// message. `caption = None` clears the slot; `Some(text)` populates it. The
+/// message. `seen_at_iso = None` clears the slot; `Some(iso)` populates it. The
 /// element id is `seen-{message_id}`, present in the DOM for every
 /// own-authored DM message via `room/message.html`.
 #[derive(Template)]
 #[template(path = "ws/seen_indicator.html")]
-pub struct SeenIndicatorFragment<'a> {
+pub struct SeenIndicatorFragment {
     pub message_id: i64,
-    pub caption: Option<&'a str>,
+    /// LC-1057: ISO UTC read time for `<time data-lc-ts>`; None clears the slot.
+    pub seen_at_iso: Option<String>,
+    /// UTC `HH:MM` no-JS fallback text.
+    pub seen_at_hhmm: String,
 }
 
 /// OOB sidebar replacement. Used when the user's room/DM membership changes

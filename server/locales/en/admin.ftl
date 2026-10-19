@@ -340,7 +340,6 @@ admin-settings-maintenance-save = Save maintenance mode
 # LC-853: workspace remote-control switch
 admin-settings-rc-heading = Remote control of shared screens
 admin-settings-rc-note = Lets a call participant ask to control a shared screen; the sharer approves every request explicitly. One switch for the whole surface: 1:1 calls and huddles alike. Off by default.
-admin-settings-rc-enable = Enable remote control
 admin-settings-rc-enable-note = Takes effect immediately, no restart. Sessions already granted can still be revoked while off.
 admin-settings-rc-save = Save remote control setting
 
@@ -542,3 +541,19 @@ admin-bridge-avatars-th-reason = Failure reason
 admin-bridge-avatars-th-type = Type
 admin-bridge-avatars-th-last-seen = Last referenced
 admin-bridge-avatars-empty = No failed bridge-avatar fetches.
+
+# LC-1056: Admin > Feature flags tab.
+admin-feature-flags-intro = Runtime switches for features that are new or still being tested. Changes take effect on the next request, with no restart.
+admin-flag-rollout-label = Who can use it
+admin-flag-rollout-off = Off
+admin-flag-rollout-off-note = Hidden from everyone.
+admin-flag-rollout-admins = Admins only
+admin-flag-rollout-admins-note = Site admins only, for testing live before opening it up.
+admin-flag-rollout-everyone = Everyone
+admin-flag-rollout-everyone-note = Every member.
+admin-settings-transcription-heading = Transcription
+admin-settings-transcription-note = Live call transcription (the Transcribe button in calls, huddles and stages) and automatic transcripts of voice messages and video clips. Saved transcripts stay readable whatever is chosen here. Off by default.
+admin-settings-transcription-admins-note = With Admins only, an admin can start transcribing a call; everyone in that call is notified and transcribed. Voice messages are transcribed when an admin posts them.
+admin-settings-transcription-save = Save transcription setting
+admin-settings-transcription-unconfigured-title = No server speech-to-text configured.
+admin-settings-transcription-unconfigured-body = Calls still transcribe in browsers that support it; voice messages need a server engine, set via

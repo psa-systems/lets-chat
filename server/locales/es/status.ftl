@@ -18,4 +18,7 @@ status-clear-after-1h = 1 hora
 status-clear-after-4h = 4 horas
 status-clear-after-1d = 1 día
 status-clear-after-1w = 1 semana
+# LC-1057: keep a running timer when saving again.
+status-clear-after-keep = Mantener el temporizador actual
+status-clear-after-note = Pasado este tiempo, Ausente o No molestar vuelve a En línea y el estado personalizado se borra.
 status-auto-clears = Se borra automáticamente

@@ -48,6 +48,7 @@ mod canned;
 mod channel_complete;
 mod compose_assist;
 mod custom_emojis;
+pub(crate) mod feature_flags;
 // LC-541: developer-only theme/component gallery (debug builds answer it, a
 // release build 404s inside the handler). Declared unconditionally so `just
 // check` compiles it in every profile.

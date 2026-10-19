@@ -338,7 +338,6 @@ admin-settings-maintenance-save = Guardar modo de mantenimiento
 # LC-853: interruptor de control remoto del espacio de trabajo
 admin-settings-rc-heading = Control remoto de pantallas compartidas
 admin-settings-rc-note = Permite a un participante de una llamada pedir el control de una pantalla compartida; quien comparte aprueba cada solicitud de forma explicita. Un solo interruptor para toda la superficie: llamadas 1:1 y huddles por igual. Desactivado por defecto.
-admin-settings-rc-enable = Activar control remoto
 admin-settings-rc-enable-note = Surte efecto de inmediato, sin reiniciar. Las sesiones ya concedidas se pueden revocar aunque este desactivado.
 admin-settings-rc-save = Guardar ajuste de control remoto
 
@@ -538,3 +537,19 @@ admin-bridge-avatars-th-reason = Motivo del fallo
 admin-bridge-avatars-th-type = Tipo
 admin-bridge-avatars-th-last-seen = Ultima referencia
 admin-bridge-avatars-empty = No hay descargas de avatar de puente fallidas.
+
+# LC-1056: pestaña Administración > Funciones experimentales.
+admin-feature-flags-intro = Interruptores en tiempo de ejecución para funciones nuevas o aún en pruebas. Los cambios surten efecto en la siguiente solicitud, sin reiniciar.
+admin-flag-rollout-label = Quién puede usarlo
+admin-flag-rollout-off = Desactivado
+admin-flag-rollout-off-note = Oculto para todos.
+admin-flag-rollout-admins = Solo administradores
+admin-flag-rollout-admins-note = Solo administradores del sitio, para probarlo en vivo antes de abrirlo.
+admin-flag-rollout-everyone = Todos
+admin-flag-rollout-everyone-note = Todos los miembros.
+admin-settings-transcription-heading = Transcripción
+admin-settings-transcription-note = Transcripción en vivo de llamadas (el botón Transcribir en llamadas, huddles y escenarios) y transcripción automatica de mensajes de voz y videoclips. Las transcripciónes guardadas siguen siendo legibles elijas lo que elijas aqui. Desactivado por defecto.
+admin-settings-transcription-admins-note = Con Solo administradores, un administrador puede empezar a transcribir una llamada; todos en esa llamada reciben el aviso y se transcriben. Los mensajes de voz se transcriben cuando los publica un administrador.
+admin-settings-transcription-save = Guardar ajuste de transcripción
+admin-settings-transcription-unconfigured-title = No hay voz a texto en el servidor.
+admin-settings-transcription-unconfigured-body = Las llamadas siguen transcribiéndose en los navegadores compatibles; los mensajes de voz necesitan un motor en el servidor, configurado con

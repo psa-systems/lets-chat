@@ -1,0 +1,26 @@
+{# LC-1056: the three-state rollout radio (routes::feature_flags::Rollout).
+   Caller sets `rollout` to "off" | "admins" | "everyone". #}
+<fieldset class="lc-set-field">
+  <legend class="lc-set-label">{{ "admin-flag-rollout-label"|t }}</legend>
+  <label class="lc-radio">
+    <input type="radio" name="rollout" value="off" {% if rollout == "off" %}checked{% endif %}>
+    <span class="lc-radio-text">
+      <span class="lc-radio-title">{{ "admin-flag-rollout-off"|t }}</span>
+      <span class="lc-radio-desc">{{ "admin-flag-rollout-off-note"|t }}</span>
+    </span>
+  </label>
+  <label class="lc-radio">
+    <input type="radio" name="rollout" value="admins" {% if rollout == "admins" %}checked{% endif %}>
+    <span class="lc-radio-text">
+      <span class="lc-radio-title">{{ "admin-flag-rollout-admins"|t }}</span>
+      <span class="lc-radio-desc">{{ "admin-flag-rollout-admins-note"|t }}</span>
+    </span>
+  </label>
+  <label class="lc-radio">
+    <input type="radio" name="rollout" value="everyone" {% if rollout == "everyone" %}checked{% endif %}>
+    <span class="lc-radio-text">
+      <span class="lc-radio-title">{{ "admin-flag-rollout-everyone"|t }}</span>
+      <span class="lc-radio-desc">{{ "admin-flag-rollout-everyone-note"|t }}</span>
+    </span>
+  </label>
+</fieldset>

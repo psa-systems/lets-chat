@@ -41,8 +41,6 @@
             c.textContent = n + ' / 50';
             c.classList.toggle('text-danger', n >= 45);
             document.getElementById('status-clear-custom').classList.toggle('hidden', n === 0);
-            var sel = document.getElementById('status-clear-after');
-            if (sel) sel.disabled = (n === 0);
           "
         >
         <button
@@ -65,8 +63,13 @@
         id="status-clear-after"
         name="clear_after"
         class="input mt-1"
-        {% if current_custom.is_none() %}disabled{% endif %}
       >
+        {# LC-1057: "Clear after" resets the whole status (Away / DND back to
+           Online, custom text cleared). A running timer is preselected as
+           "Keep current" so saving again never wipes it. #}
+        {% if current_expires_at.is_some() %}
+        <option value="keep" selected>{{ "status-clear-after-keep"|t }}</option>
+        {% endif %}
         <option value="">{{ "status-clear-after-never"|t }}</option>
         <option value="30m">{{ "status-clear-after-30m"|t }}</option>
         <option value="1h">{{ "status-clear-after-1h"|t }}</option>
@@ -74,6 +77,7 @@
         <option value="1d">{{ "status-clear-after-1d"|t }}</option>
         <option value="1w">{{ "status-clear-after-1w"|t }}</option>
       </select>
+      <span class="block mt-1 text-xs text-content-subtle">{{ "status-clear-after-note"|t }}</span>
     </label>
     {% if let Some(exp) = current_expires_at %}
     <p class="text-xs text-content-muted">

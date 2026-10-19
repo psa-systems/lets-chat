@@ -17,9 +17,9 @@ use crate::ws::events::ChatEvent;
 struct PickerFragment<'a> {
     current_status: &'a str,
     current_custom: Option<&'a str>,
-    /// LC-319: absolute ISO expiry of the active custom status, if scheduled.
-    /// Drives the "auto-clears" hint; the `clear_after` select itself always
-    /// defaults to "never" (the form is authoritative, Slack-style).
+    /// LC-319: absolute ISO expiry of the current status, if scheduled. LC-1057:
+    /// when present the `clear_after` select preselects "Keep current", so
+    /// saving again (e.g. only editing the text) does not wipe the timer.
     current_expires_at: Option<String>,
 }
 
@@ -38,31 +38,15 @@ fn expiry_modifier(clear_after: &str) -> Option<&'static str> {
     }
 }
 
-#[derive(Template)]
-#[template(path = "status/own_avatar_oob.html")]
-struct OwnAvatarOobFragment {
-    user_id: String,
-    /// LC-1050: display label (display_name, else handle) for the avatar initial.
-    label: String,
-    avatar_ext: Option<String>,
-    status: String,
-    custom_status: Option<String>,
-}
-
 /// GET /status/picker - render the inline status picker for the caller.
 pub async fn get_picker(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
 ) -> Result<Html, AppError> {
-    // Only surface an expiry hint when there is actually a custom status; a
-    // bare expiry on empty text is meaningless and the sweep would clear it.
-    let current_expires_at = if user.custom_status.is_some() {
-        db::auth::get_custom_status_expiry(&state.auth, &user.id)
-            .await?
-            .map(|ts| crate::views::room::to_iso_utc(&ts))
-    } else {
-        None
-    };
+    // LC-1057: the expiry covers the whole status, so it is shown whenever set.
+    let current_expires_at = db::auth::get_custom_status_expiry(&state.auth, &user.id)
+        .await?
+        .map(|ts| crate::views::room::to_iso_utc(&ts));
     let frag = PickerFragment {
         current_status: &user.status,
         current_custom: user.custom_status.as_deref(),
@@ -82,15 +66,17 @@ pub struct StatusForm {
     #[serde(default)]
     custom_status: String,
     /// LC-319: auto-clear preset (`30m`/`1h`/`4h`/`1d`/`1w`); empty / absent =
-    /// never expire. Ignored when there is no custom text.
+    /// never expire; LC-1057: `keep` leaves a running timer as it is. Ignored
+    /// for plain Online with no custom text, which has nothing to clear.
     #[serde(default)]
     clear_after: String,
 }
 
-/// POST /status - persist the caller's status + custom text, broadcast the
-/// change so other viewers' sidebars refresh. Returns an empty body for the
-/// `#status-picker` slot (closing the dialog) plus an OOB swap for the
-/// caller's own avatar.
+/// POST /status - persist the caller's status + custom text and broadcast the
+/// change so other viewers' avatars refresh. Returns an empty body for the
+/// `#status-picker` slot (closing the dialog) plus an OOB refresh of the
+/// caller's own `#sidebar-self` block (LC-1057: the full account-menu partial,
+/// the same fragment a profile edit pushes, so the menu keeps working).
 pub async fn post_status(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -103,12 +89,16 @@ pub async fn post_status(
         Some(custom_trimmed)
     };
 
-    // An expiry without custom text is meaningless: only schedule a clear when
-    // there is something to clear.
-    let expires_modifier = if custom_opt.is_some() {
-        expiry_modifier(&form.clear_after)
-    } else {
+    // LC-1057: "Clear after" resets the whole status (Away / DND back to
+    // Online, custom text cleared), so it applies whenever there is something
+    // to reset: a non-Online status or custom text.
+    let resettable = form.status != db::auth::STATUS_ACTIVE || custom_opt.is_some();
+    let expires_modifier = if !resettable {
         None
+    } else if form.clear_after == db::auth::KEEP_STATUS_EXPIRY {
+        Some(db::auth::KEEP_STATUS_EXPIRY)
+    } else {
+        expiry_modifier(&form.clear_after)
     };
 
     db::auth::set_user_status(
@@ -127,19 +117,42 @@ pub async fn post_status(
         db::auth::SetStatusError::Db(e) => AppError::from(e),
     })?;
 
-    let custom_owned = custom_opt.map(|s| s.to_string());
     state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
         user_id: user.id.clone(),
         status: form.status.clone(),
-        custom_status: custom_owned.clone(),
+        custom_status: custom_opt.map(|s| s.to_string()),
     });
+    // The caller's other tabs refresh their own block the same way.
+    state.hub.broadcast_to_user(
+        &user.id,
+        &ChatEvent::UserProfileChanged {
+            user_id: user.id.clone(),
+        },
+    );
 
-    let own_avatar = OwnAvatarOobFragment {
-        user_id: user.id.clone(),
-        label: user.display_label().to_string(),
-        avatar_ext: user.avatar_ext.clone(),
-        status: form.status.clone(),
-        custom_status: custom_owned,
-    };
-    Ok(Html(own_avatar.render()?))
+    let fresh: crate::models::User = db::auth::find_user_by_id(&state.auth, &user.id)
+        .await?
+        .ok_or(AppError::NotFound)?
+        .into();
+    Ok(Html(
+        crate::views::ws_fragments::OwnProfileLiveFragment { user: &fresh }.render()?,
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::expiry_modifier;
+
+    #[test]
+    fn expiry_presets_map_to_fixed_modifiers() {
+        assert_eq!(expiry_modifier("30m"), Some("+30 minutes"));
+        assert_eq!(expiry_modifier("1w"), Some("+7 days"));
+        assert_eq!(expiry_modifier(""), None);
+        assert_eq!(
+            expiry_modifier("keep"),
+            None,
+            "keep is handled by the route"
+        );
+        assert_eq!(expiry_modifier("+1 years"), None, "never raw input");
+    }
 }
