@@ -39,12 +39,33 @@
     <span class="lc-sysgroup-toggle" aria-hidden="true"></span>
   </summary>
 {% endif %}
-<div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="lc-anim-swap lc-sysevent">
+<div id="msg-{{ message.id }}" data-lc-day="{{ message.day() }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %} class="lc-anim-swap lc-sysevent{% if message.is_welcome() %} lc-sysevent--welcome{% endif %}">
   <span class="lc-sysevent-ico" aria-hidden="true">
+    {% if message.is_welcome() %}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M11 5a3 3 0 11-6 0 3 3 0 016 0zM2.615 16.428a1.224 1.224 0 01-.569-1.175 6.002 6.002 0 0111.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 018 18a9.953 9.953 0 01-5.385-1.572zM16.25 5.75a.75.75 0 00-1.5 0v2h-2a.75.75 0 000 1.5h2v2a.75.75 0 001.5 0v-2h2a.75.75 0 000-1.5h-2v-2z"/></svg>
+    {% else %}
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 3.5A1.5 1.5 0 013.5 2h1.148a1.5 1.5 0 011.465 1.175l.716 3.223a1.5 1.5 0 01-1.052 1.767l-.933.267c.41 1.163 1.162 2.255 2.124 3.217.962.962 2.054 1.715 3.217 2.124l.267-.933a1.5 1.5 0 011.767-1.052l3.223.716A1.5 1.5 0 0118 15.352V16.5a1.5 1.5 0 01-1.5 1.5H15c-1.149 0-2.263-.15-3.326-.43A13.022 13.022 0 012.43 8.326 13.019 13.019 0 012 5V3.5z" clip-rule="evenodd"/></svg>
+    {% endif %}
   </span>
   <span class="lc-sysevent-text"><span class="font-bold">{{ message.label() }}</span> {{ message.system_html()|safe }}</span>
   <time data-lc-ts datetime="{{ message.created_at_iso() }}" title="{{ message.created_at }}" class="lc-sysevent-time">{{ message.created_at }}</time>
+  {# LC-1059: an enclave welcome gets a one-click wave (a plain 👋 reaction, so
+     the reaction bar below and its live WS swap work unchanged). The newcomer
+     does not wave at themself. #}
+  {% if message.is_welcome() %}
+  {% if message.user_id != message.viewer_id %}
+  <button type="button" data-lc-welcome-wave
+          hx-post="/messages/{{ message.id }}/reactions/👋"
+          hx-target="#reactions-{{ message.id }}"
+          hx-swap="outerHTML"
+          class="lc-welcome-wave">👋 {{ "room-welcome-wave"|t }}</button>
+  {% endif %}
+  {% let message_id = message.id %}
+  {% let reactions = message.reactions.as_slice() %}
+  {% let surface = crate::views::room::ReactionSurface::Timeline %}
+  {% let oob = false %}
+  {% include "partials/reaction_bar.html" %}
+  {% endif %}
 </div>
 {% if message.sysgroup_close %}</details>{% endif %}
 {% else %}

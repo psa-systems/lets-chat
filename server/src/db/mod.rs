@@ -18,6 +18,7 @@ pub mod email_inbox;
 pub mod email_ingress_dedup;
 pub mod email_ingress_drops;
 pub mod enclave;
+pub mod enclave_welcome;
 pub mod fcm_subscriptions;
 pub mod followups;
 pub mod highlights;
