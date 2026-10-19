@@ -20,6 +20,7 @@ use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use super::feature_flags;
 use crate::auth::AuthUser;
 use crate::db;
 use crate::error::AppError;
@@ -113,6 +114,22 @@ fn admitted_surface(in_mesh: bool, is_stage_speaker: bool) -> Option<crate::live
 /// LC-915: returns WHICH surface admitted the caller (`None` for a DM, which
 /// has no SFU surface at all), so a caller that needs to know - the dispatch
 /// gate - can name the room the caller is actually IN instead of guessing.
+/// LC-1056: capture routes (`segment`, `audio`, `agent_clip`) need the
+/// transcription rollout ON at all, but not the caller inside its audience:
+/// under "Admins only" an admin opens the session for the whole call, and the
+/// other participants' captions must still land. Opening a session is the
+/// audience-gated step (`start`).
+async fn require_transcription_on(state: &AppState) -> Result<(), AppError> {
+    if feature_flags::rollout(state, &feature_flags::TRANSCRIPTION)
+        .await
+        .is_on()
+    {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
+}
+
 async fn require_participant(
     state: &AppState,
     user: &User,
@@ -557,6 +574,12 @@ pub async fn start(
     AuthUser(user): AuthUser,
     Path(room_id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
+    // LC-1056: only a viewer inside the transcription rollout may open a
+    // session. Once open, every participant's capture is accepted (see
+    // `require_transcription_on`) and everyone saw the "being transcribed" notice.
+    if !feature_flags::allows(&state, &feature_flags::TRANSCRIPTION, &user).await {
+        return Err(AppError::Forbidden);
+    }
     let room = fetch_call_room(&state, room_id).await?;
     let surface = require_participant(&state, &user, &room).await?;
     // LC-814 / LC-914: dispatch the agent only when THIS call opens a NEW
@@ -598,9 +621,18 @@ pub async fn active(
 ) -> Result<Json<Value>, AppError> {
     let room = fetch_call_room(&state, room_id).await?;
     require_participant(&state, &user, &room).await?;
-    let tid = db::transcripts::open_session_for_room(&state.chat, room_id)
-        .await?
-        .map(|s| s.id);
+    // LC-1056: with transcription off, a still-open session is not adopted, so
+    // a late joiner never starts capture the capture routes would refuse.
+    let tid = if feature_flags::rollout(&state, &feature_flags::TRANSCRIPTION)
+        .await
+        .is_on()
+    {
+        db::transcripts::open_session_for_room(&state.chat, room_id)
+            .await?
+            .map(|s| s.id)
+    } else {
+        None
+    };
     // LC-859: tell a late joiner whether the server-side transcription agent is
     // already covering this room, so it adopts the session without also starting
     // its own per-client capture (which would double every speaker to whisper).
@@ -623,6 +655,7 @@ pub async fn segment(
     Path(transcript_id): Path<i64>,
     Form(SegmentForm { text }): Form<SegmentForm>,
 ) -> Result<Html, AppError> {
+    require_transcription_on(&state).await?;
     let session = db::transcripts::get(&state.chat, transcript_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -663,6 +696,7 @@ pub async fn audio(
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> Result<Html, AppError> {
+    require_transcription_on(&state).await?;
     let session = db::transcripts::get(&state.chat, transcript_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -732,6 +766,7 @@ pub async fn agent_clip(
     if !agent_token_ok(Some(&configured), bearer(&headers)) {
         return Err(AppError::Unauthorized);
     }
+    require_transcription_on(&state).await?;
     // The speaker is the track's LiveKit participant (identity == user id),
     // carried explicitly by the agent.
     let speaker_id = headers

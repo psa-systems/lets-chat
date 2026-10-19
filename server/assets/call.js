@@ -336,6 +336,10 @@
       .then(function (j) {
         iceServers = Array.isArray(j.iceServers) ? j.iceServers
           : [{ urls: 'stun:stun.l.google.com:19302' }];
+        // LC-1056: outside the remote-control rollout the "Request control"
+        // button stays hidden (main.css keys on this root attribute); the WS
+        // relay refuses the request anyway.
+        if (j.remoteControl === false) document.documentElement.setAttribute('data-lc-remote-control-off', '');
         return iceServers;
       })
       .catch(function () {

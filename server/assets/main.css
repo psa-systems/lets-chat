@@ -6628,3 +6628,9 @@ html[data-lc-support-open] .lc-support-panel { animation: lc-support-pop 160ms e
 @media (prefers-reduced-motion: reduce) {
     html[data-lc-support-open] .lc-support-panel { animation: none; }
 }
+
+/* LC-1056: features outside the viewer's rollout (/call/config). The buttons
+   render on every call surface, so one root attribute hides them all. */
+:root[data-lc-transcribe-off] [data-lc-transcribe-toggle],
+:root[data-lc-transcribe-off] [data-lc-transcript-panel-toggle],
+:root[data-lc-remote-control-off] [data-lc-control-request] { display: none !important; }

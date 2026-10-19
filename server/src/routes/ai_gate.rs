@@ -43,7 +43,7 @@ pub const LLM_ENABLED_KEY: &str = "llm_enabled";
 pub const LLM_AUDIENCE_KEY: &str = "llm_audience";
 
 /// True when the runtime LLM feature flag is ON. Read live from the settings KV
-/// store (no cache), so toggling in `/admin/settings` takes effect on the next
+/// store (no cache), so toggling in `/admin/feature-flags` takes effect on the next
 /// request without a restart. LC-919: a read error is treated as OFF (already
 /// the restrictive value here) and logged, rather than silently swallowed.
 pub async fn flag_on(state: &AppState) -> bool {

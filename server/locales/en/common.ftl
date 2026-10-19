@@ -15,6 +15,7 @@ a11y-status-picker-dialog-label = Set status
 
 ## Admin nav
 admin-nav-settings = Settings
+admin-nav-feature-flags = Feature flags
 admin-nav-users = Users
 admin-nav-invites = Invites
 admin-nav-rooms = Rooms

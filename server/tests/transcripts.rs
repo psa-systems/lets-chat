@@ -160,6 +160,10 @@ async fn setup_with_clients(
     db::settings::set_setting(&settings, "llm_enabled", "true")
         .await
         .unwrap();
+    // LC-1056: transcription is a runtime rollout, default off.
+    db::settings::set_setting(&settings, "transcription_enabled", "true")
+        .await
+        .unwrap();
 
     let a = db::auth::create_user(&auth, "alice", "h").await.unwrap();
     let b = db::auth::create_user(&auth, "bob", "h").await.unwrap();
@@ -2755,4 +2759,98 @@ async fn concurrent_starts_for_one_room_share_a_single_session() {
         vec![parse_id(&body_a)],
         "exactly one call_transcripts row must exist for the room"
     );
+}
+
+// LC-1056: the transcription rollout (`transcription_enabled` +
+// `transcription_audience`, routes::feature_flags). Alice is the site admin.
+
+async fn call_config(s: &Setup, sess: &str) -> serde_json::Value {
+    let (st, body) = get(&s.app, sess, "/call/config").await;
+    assert_eq!(st, StatusCode::OK);
+    serde_json::from_str(&body).expect("json")
+}
+
+#[tokio::test]
+async fn transcription_off_refuses_start_capture_and_hides_open_session() {
+    let s = setup().await;
+    let (_, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    let tid = parse_id(&body);
+
+    db::settings::set_setting(&s.state.settings, "transcription_enabled", "false")
+        .await
+        .unwrap();
+    let (st, _) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN, "start is refused while off");
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=hello"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN, "capture is refused while off");
+    let (st, body) = get(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/active", s.dm_room),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        body.contains(r#""transcript_id":null"#),
+        "a late joiner must not adopt the open session while off: {body}"
+    );
+    assert_eq!(call_config(&s, &s.a_session).await["transcribe"], false);
+}
+
+#[tokio::test]
+async fn transcription_admins_only_lets_an_admin_open_for_the_whole_call() {
+    let s = setup().await;
+    db::settings::set_setting(&s.state.settings, "transcription_audience", "admins")
+        .await
+        .unwrap();
+
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN, "a plain member cannot start");
+
+    let (st, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{}/transcript/start", s.dm_room),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "the admin can start: {body}");
+    let tid = parse_id(&body);
+
+    // Once an admin opened it, the other participant's captions still land.
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=general+kenobi"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    assert_eq!(call_config(&s, &s.a_session).await["transcribe"], true);
+    assert_eq!(call_config(&s, &s.b_session).await["transcribe"], false);
 }

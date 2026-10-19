@@ -43,6 +43,10 @@ async fn setup(stt: Arc<dyn lets_chat::stt::SttClient>) -> Setup {
     let auth = common::pool("auth").await;
     let chat = common::pool("chat").await;
     let settings = common::pool("settings").await;
+    // LC-1056: transcription is a runtime rollout, default off.
+    db::settings::set_setting(&settings, "transcription_enabled", "true")
+        .await
+        .unwrap();
 
     let a = db::auth::create_user(&auth, "alice", "h").await.unwrap();
     let b = db::auth::create_user(&auth, "bob", "h").await.unwrap();
@@ -338,4 +342,46 @@ async fn concurrent_burst_is_bounded_and_drains() {
         lets_chat::stt_load::DEFAULT_STT_WORKERS,
         mock.max_concurrent()
     );
+}
+
+/// LC-1056: the transcription rollout gates voice messages by uploader. Off, and
+/// "Admins only" for a plain-member uploader (bob), skip like the LC-592 scope:
+/// no transcript and no status, so no Retry control. "Everyone" transcribes.
+#[tokio::test]
+async fn transcription_rollout_gates_voice_messages_by_uploader() {
+    let _guard = ENV_LOCK.lock().await;
+    let s = setup(Arc::new(lets_chat::stt::MockSttClient::text("heard it"))).await;
+
+    for (enabled, audience, rel) in [
+        ("false", "everyone", "lc1056-off.webm"),
+        ("true", "admins", "lc1056-admins.webm"),
+    ] {
+        db::settings::set_setting(&s.state.settings, "transcription_enabled", enabled)
+            .await
+            .unwrap();
+        db::settings::set_setting(&s.state.settings, "transcription_audience", audience)
+            .await
+            .unwrap();
+        let (id, mid) = seed(&s, rel, "audio/webm", Some(VOICE_WAVEFORM)).await;
+        routes::maybe_transcribe_voice_message(&s.state, id, mid, s.room)
+            .await
+            .unwrap();
+        assert_eq!(transcript_of(&s, id).await, None, "{enabled}/{audience}");
+        assert_eq!(status_of(&s, id).await, None, "{enabled}/{audience}");
+    }
+
+    db::settings::set_setting(&s.state.settings, "transcription_audience", "everyone")
+        .await
+        .unwrap();
+    let (id, mid) = seed(
+        &s,
+        "lc1056-everyone.webm",
+        "audio/webm",
+        Some(VOICE_WAVEFORM),
+    )
+    .await;
+    routes::maybe_transcribe_voice_message(&s.state, id, mid, s.room)
+        .await
+        .unwrap();
+    assert_eq!(transcript_of(&s, id).await.as_deref(), Some("heard it"));
 }

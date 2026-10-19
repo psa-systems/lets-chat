@@ -39,10 +39,15 @@ pub fn router() -> Router<AppState> {
         .route("/admin", get(get_settings))
         .route("/admin/settings", get(get_settings).post(post_settings))
         .route("/admin/settings/imap", post(post_imap_settings))
+        .route("/admin/feature-flags", get(get_feature_flags))
         .route("/admin/settings/llm", post(post_llm_flag))
         .route(
             "/admin/settings/remote-control",
             post(post_remote_control_flag),
+        )
+        .route(
+            "/admin/settings/transcription",
+            post(post_transcription_flag),
         )
         .route("/admin/settings/help-docs", post(post_help_docs_sources))
         .route("/admin/help-docs/reindex", post(post_help_docs_reindex))
@@ -291,17 +296,6 @@ pub async fn get_settings(
     let maintenance_message = db::settings::get_setting(&state.settings, "maintenance_message")
         .await?
         .unwrap_or_default();
-    // LC-853: workspace remote-control switch (default off; see the key's doc).
-    let remote_control_enabled =
-        db::settings::get_setting(&state.settings, super::ws::REMOTE_CONTROL_ENABLED_KEY)
-            .await?
-            .as_deref()
-            == Some("true");
-    // LC-679: runtime LLM feature flag + config precondition for the toggle card.
-    let llm_flag_enabled = super::ai_gate::flag_on(&state).await;
-    let llm_configured = state.llm_available();
-    // LC-702: audience selector - true when narrowed to staff, else "everyone".
-    let llm_audience_staff = !super::ai_gate::audience_is_everyone(&state).await;
     // LC-712: AI help desk documentation config + index status.
     let embeddings_configured = state.embeddings_available();
     let help_docs_sources =
@@ -384,10 +378,6 @@ pub async fn get_settings(
         section: "settings",
         default_notify_email_digest,
         maintenance_enabled,
-        remote_control_enabled,
-        llm_flag_enabled,
-        llm_configured,
-        llm_audience_staff,
         embeddings_configured,
         help_docs_sources,
         help_docs_status,
@@ -809,45 +799,129 @@ pub async fn post_llm_flag(
     if is_hx(&headers) {
         return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
     }
-    Ok(Redirect::to("/admin/settings").into_response())
+    Ok(Redirect::to("/admin/feature-flags").into_response())
 }
 
-/// LC-853: form for the remote-control toggle (checkbox present = on).
-#[derive(serde::Deserialize)]
-pub struct RemoteControlFlagForm {
+/// LC-1056: a three-state rollout radio (`off` / `admins` / `everyone`).
+#[derive(Deserialize)]
+pub struct RolloutForm {
     #[serde(default)]
-    pub enabled: Option<String>,
+    pub rollout: Option<String>,
 }
 
-/// LC-853: flip the workspace remote-control switch
-/// (`settings.remote_control_enabled`). One switch gates the whole surface -
-/// the 1:1 DM feature (LC-181) and the huddle consent flow alike - and is read
-/// live per signal in `routes::ws`, so flipping it needs no restart. Audited to
-/// the moderation log like maintenance mode and the LLM flag.
+/// LC-1056: `GET /admin/feature-flags` - every runtime feature switch in one
+/// tab. Each card posts to its own `/admin/settings/*` handler, so the LC-679
+/// AI form is unchanged by the move.
+pub async fn get_feature_flags(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+) -> Result<Html, AppError> {
+    use super::feature_flags::{rollout, REMOTE_CONTROL, TRANSCRIPTION};
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+    let page = crate::views::admin::FeatureFlagsPage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "feature_flags",
+        llm_flag_enabled: super::ai_gate::flag_on(&state).await,
+        llm_configured: state.llm_available(),
+        llm_audience_staff: !super::ai_gate::audience_is_everyone(&state).await,
+        remote_control_rollout: rollout(&state, &REMOTE_CONTROL).await.as_str(),
+        transcription_rollout: rollout(&state, &TRANSCRIPTION).await.as_str(),
+        stt_configured: state.stt_available(),
+    };
+    html(&page)
+}
+
+/// LC-1056: persist one three-state rollout and audit it to the moderation log
+/// (`{action}_on` / `{action}_off`, detail `rollout=...`), then answer htmx with
+/// the shared feedback fragment and a plain POST with a redirect to the tab.
+async fn save_rollout(
+    state: &AppState,
+    actor: &crate::models::User,
+    headers: &HeaderMap,
+    flag: &super::feature_flags::Flag,
+    action: &str,
+    form: RolloutForm,
+) -> Result<Response, AppError> {
+    let rollout = super::feature_flags::Rollout::from_form(form.rollout.as_deref());
+    super::feature_flags::set_rollout(state, flag, rollout).await?;
+    let action = format!("{action}_{}", if rollout.is_on() { "on" } else { "off" });
+    let detail = format!("rollout={}", rollout.as_str());
+    db::moderation::log_mod_action(
+        &state.chat,
+        &action,
+        "",
+        &actor.id,
+        Some(&detail),
+        None,
+        None,
+    )
+    .await?;
+    if is_hx(headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
+    }
+    Ok(Redirect::to("/admin/feature-flags").into_response())
+}
+
+/// LC-853: set the workspace remote-control rollout. One rollout gates the
+/// whole surface - the 1:1 DM feature (LC-181) and the huddle consent flow
+/// alike - and is read live per signal in `routes::ws`, so a change needs no
+/// restart. LC-1056: three-state; "admins" lets site admins test it live.
 pub async fn post_remote_control_flag(
     State(state): State<AppState>,
     AdminUser(actor): AdminUser,
     headers: HeaderMap,
-    axum::Form(form): axum::Form<RemoteControlFlagForm>,
+    axum::Form(form): axum::Form<RolloutForm>,
 ) -> Result<Response, AppError> {
-    let on = form.enabled.is_some();
-    let value = if on { "true" } else { "false" };
-    db::settings::set_setting(
-        &state.settings,
-        super::ws::REMOTE_CONTROL_ENABLED_KEY,
-        value,
+    save_rollout(
+        &state,
+        &actor,
+        &headers,
+        &super::feature_flags::REMOTE_CONTROL,
+        "remote_control",
+        form,
     )
-    .await?;
-    let action = if on {
-        "remote_control_on"
-    } else {
-        "remote_control_off"
-    };
-    db::moderation::log_mod_action(&state.chat, action, "", &actor.id, None, None, None).await?;
-    if is_hx(&headers) {
-        return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
-    }
-    Ok(Redirect::to("/admin/settings").into_response())
+    .await
+}
+
+/// LC-1056: set the transcription rollout (call transcription plus voice-message
+/// and clip auto-transcription). Read live, like the other flags.
+pub async fn post_transcription_flag(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    headers: HeaderMap,
+    axum::Form(form): axum::Form<RolloutForm>,
+) -> Result<Response, AppError> {
+    save_rollout(
+        &state,
+        &actor,
+        &headers,
+        &super::feature_flags::TRANSCRIPTION,
+        "transcription",
+        form,
+    )
+    .await
 }
 
 // Help desk documentation (LC-712) ------------------------------------------
