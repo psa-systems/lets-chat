@@ -103,6 +103,14 @@
     var enclave = topicEl
       ? Number(topicEl.getAttribute('data-lc-live-topic').slice('enclave:'.length))
       : NaN;
+    // LC-1051: in-enclave pages with no enclave topic of their own (room info,
+    // pins, voice, ...) still name their enclave on <main>, so the sidebar
+    // re-render does not fall back to the Home layout. The server authorizes
+    // the id in apply_page_context either way.
+    if (!Number.isFinite(enclave)) {
+      var pageEl = root.querySelector('[data-lc-page-enclave]');
+      enclave = pageEl ? Number(pageEl.getAttribute('data-lc-page-enclave')) : NaN;
+    }
     return {
       type: 'page_context',
       room_id: Number.isFinite(room) ? room : null,

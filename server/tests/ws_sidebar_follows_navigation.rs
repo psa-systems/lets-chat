@@ -374,3 +374,34 @@ async fn the_refresh_reaches_only_the_connection_that_moved() {
         "the user's other tab, which did not move, receives nothing"
     );
 }
+
+/// LC-1051: the Navigation block (Inbox, Activity, Saved, ...) is Home-only.
+/// Inside an enclave the sidebar is that enclave's rooms, on both the live
+/// re-render and (same partial) a full page load.
+#[tokio::test]
+async fn navigation_block_shows_on_home_only() {
+    let fx = fixture().await;
+    let home = render_sidebar(&fx.state, &fx.user, None, None)
+        .await
+        .expect("home sidebar renders");
+    assert!(home.contains("href=\"/inbox\""), "Home keeps Navigation");
+    assert!(home.contains("href=\"/transcripts\""));
+
+    let enclave = render_sidebar(
+        &fx.state,
+        &fx.user,
+        Some(fx.enclave_id),
+        Some(fx.enclave_room),
+    )
+    .await
+    .expect("enclave sidebar renders");
+    assert!(
+        !enclave.contains("href=\"/inbox\""),
+        "enclave hides Navigation"
+    );
+    assert!(!enclave.contains("href=\"/transcripts\""));
+    assert!(
+        enclave.contains(&format!("/room/{}", fx.other_room)),
+        "enclave still lists its rooms"
+    );
+}

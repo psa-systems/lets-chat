@@ -17,6 +17,8 @@ function load() {
   const toasts = [];
   const brand = { textContent: ':root{--brand-primary:#111111}' };
   const closed = { count: 0 };
+  // LC-1051: the sidebar scroll container, swappable by a test.
+  const sidebar = { nav: null };
   const window = {
     htmx: { config: { historyCacheSize: 10 } },
     location: { assign: (u) => assigned.push(u) },
@@ -33,12 +35,13 @@ function load() {
       },
     },
     head: { querySelector: (sel) => (sel === 'style[data-lc-brand]' ? brand : null) },
+    querySelector: (sel) => (sel === '#sidebar nav[id^="sidebar-nav"]' ? sidebar.nav : null),
   };
   vm.runInNewContext(src, { window, document });
   const fire = (type, detail, target) => {
     for (const fn of listeners[type] || []) fn({ type, detail, target });
   };
-  return { window, listeners, assigned, toasts, brand, closed, fire };
+  return { window, listeners, assigned, toasts, brand, closed, sidebar, fire };
 }
 
 const page = '<html><head><style data-lc-brand>:root{--brand-primary:#abcdef}</style></head><body><main id="main" hx-history-elt>hi</main></body></html>';
@@ -173,4 +176,50 @@ test('a dropped BACKGROUND request does not toast', () => {
   // A boosted request aimed elsewhere is likewise not a shell navigation.
   t.fire('htmx:timeout', { boosted: true, target: { id: 'lc-rail-support-badge' } });
   assert.deepEqual(t.toasts, [], 'only shell navigation failures are surfaced');
+});
+
+// LC-1051: a #sidebar swap (WS PageChanged re-render, mark-read, star, ...)
+// replaces the scrolling <nav>; its scroll position is carried over to the new
+// nav when it is the same list, and reset when it is another enclave's.
+test('restoredTop keeps only the same list', () => {
+  const nav = load().window.LetsChatNav;
+  assert.equal(nav.restoredTop({ id: 'sidebar-nav-1', top: 420 }, 'sidebar-nav-1'), 420);
+  assert.equal(nav.restoredTop({ id: 'sidebar-nav-1', top: 420 }, 'sidebar-nav-2'), null);
+  assert.equal(nav.restoredTop(null, 'sidebar-nav-1'), null);
+});
+
+test('an OOB #sidebar swap keeps the room list scroll', () => {
+  const t = load();
+  t.sidebar.nav = { id: 'sidebar-nav-1', scrollTop: 420 };
+  t.fire('htmx:oobBeforeSwap', { target: { id: 'sidebar' } });
+  t.sidebar.nav = { id: 'sidebar-nav-1', scrollTop: 0 };
+  t.fire('htmx:load', {});
+  assert.equal(t.sidebar.nav.scrollTop, 420);
+});
+
+test('a targeted #sidebar swap (mark-all-read) keeps the room list scroll', () => {
+  const t = load();
+  t.sidebar.nav = { id: 'sidebar-nav', scrollTop: 300 };
+  t.fire('htmx:beforeSwap', { target: { id: 'sidebar' } });
+  t.sidebar.nav = { id: 'sidebar-nav', scrollTop: 0 };
+  t.fire('htmx:afterSwap', { target: { id: 'sidebar' } });
+  assert.equal(t.sidebar.nav.scrollTop, 300);
+});
+
+test('moving to another enclave list starts at the top', () => {
+  const t = load();
+  t.sidebar.nav = { id: 'sidebar-nav-1', scrollTop: 420 };
+  t.fire('htmx:oobBeforeSwap', { target: { id: 'sidebar' } });
+  t.sidebar.nav = { id: 'sidebar-nav-2', scrollTop: 0 };
+  t.fire('htmx:oobAfterSwap', {});
+  assert.equal(t.sidebar.nav.scrollTop, 0);
+});
+
+test('a swap of anything but #sidebar does not touch the room list', () => {
+  const t = load();
+  t.sidebar.nav = { id: 'sidebar-nav-1', scrollTop: 420 };
+  t.fire('htmx:oobBeforeSwap', { target: { id: 'room-row-5' } });
+  t.sidebar.nav.scrollTop = 10;
+  t.fire('htmx:load', {});
+  assert.equal(t.sidebar.nav.scrollTop, 10);
 });

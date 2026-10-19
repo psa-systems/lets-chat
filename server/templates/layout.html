@@ -18,7 +18,10 @@
      and the element htmx snapshots/restores for history. The ws-connect
      wrapper above and the nav panel are never swapped, so the socket and the
      sidebar outlive a page move. #}
-  <main id="main" hx-history-elt class="flex-1 flex flex-col overflow-hidden min-h-0">
+  {# LC-1051: data-lc-page-enclave names the page's enclave for live.js's
+     page_context frame on pages that carry no enclave topic of their own (room
+     info, pins, voice, ...), so the live sidebar keeps the enclave layout. #}
+  <main id="main" hx-history-elt{% if let Some(eid) = sidebar_current_enclave %} data-lc-page-enclave="{{ eid }}"{% endif %} class="flex-1 flex flex-col overflow-hidden min-h-0">
     <button type="button" id="lc-nav-toggle" aria-label="{{ "layout-toggle-nav"|t }}"
       aria-expanded="false" aria-controls="lc-nav-panel"
       class="md:hidden inline-flex items-center gap-2 border-b border-border px-3 py-2 text-content-muted hover:text-content"

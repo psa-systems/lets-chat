@@ -620,6 +620,14 @@
   {# LC-550: mermaid diagram enhancement. The loader is tiny; the ~3.5MB vendored
      bundle it pulls loads lazily, only on pages that actually contain a diagram. #}
   <script src="/assets/mermaid.js?v={{ asset_version }}" defer></script>
+  {# Tabbed settings shells (settings, enclave settings, room info): without JS,
+     reveal every panel as one long page and drop the inert tab rail.
+     LC-1051: this must stay in <head>, never in a page body. htmx parses a
+     boosted response with DOMParser (scripting off), so a <noscript> inside
+     #main becomes a LIVE <style> after the swap; this one hid .lc-set-nav and
+     collapsed the settings column into the 13rem nav track until a reload.
+     server/tests/lc1051_noscript_head_only.rs holds the rule. #}
+  <noscript><style>.lc-set-panel[hidden]{display:flex !important}.lc-set-nav{display:none}</style></noscript>
 </head>
 <body class="{% block body_class %}h-screen overflow-hidden{% endblock %} bg-surface text-content">
   {# LC-197: keyboard skip link. Invisible until it receives keyboard focus
