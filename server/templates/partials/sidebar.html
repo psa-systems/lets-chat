@@ -18,7 +18,7 @@
      carries pending_invites, so there is no new Rust-side plumbing. #}
   {% for e in switcher %}{% if e.id.is_none() && e.pending_invites > 0 %}
   <a href="/invitations" {% include "partials/nav_boost.html" %} data-lc-invites-banner
-     class="mx-2 mt-2 flex items-center gap-2 rounded-md border border-border bg-accent-surface px-2 py-1.5 text-accent-surface-content hover:bg-surface-sunken">
+     class="mx-3 mt-2 flex items-center gap-2 rounded-md border border-border bg-accent-surface px-2 py-1.5 text-accent-surface-content hover:bg-surface-sunken">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 flex-none" aria-hidden="true">
       <path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z"/>
       <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z"/>
@@ -124,10 +124,10 @@
         </span>
         <div id="sidebar-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
       </form>
-      {# Opens the SAME modal the ROOMS-header `+` opens (LC-400 moved the create
-         form into the persistent shell so a sidebar OOB swap cannot destroy a
-         half-typed name). This is only a second trigger, beside the search where
-         the prototype puts it. #}
+      {# Opens the add-chat modal (LC-400 moved the create form into the
+         persistent shell so a sidebar OOB swap cannot destroy a half-typed
+         name). LC-1054: the only add-room trigger; the ROOMS header's bare `+`
+         duplicate is gone. #}
       {% if can_manage_sidebar_categories %}{% if sidebar_current_enclave.is_some() %}
       <button type="button" class="lc-sidebar-add"
               onclick="window.__lcOpenAddRoom && window.__lcOpenAddRoom()"
@@ -275,15 +275,19 @@
      room-list header: the unread-only filter toggle (device-local; hiding is
      pure CSS keyed on <html data-lc-unread-only>, set no-flash in base.html,
      tracking live unread-badge swaps with no JS scan; aria-pressed drives the
-     accent fill) and mark-all-read. #}
-  <div class="px-3 pt-2 flex items-center justify-end gap-1">
+     accent fill) and mark-all-read.
+     LC-1054: a labeled toolbar on the shared .lc-sidebar gutter (was two bare,
+     mismatched icons floating right on their own row): the filter is a pill
+     toggle with its label, mark-all-read an icon button with a matching solid
+     16px glyph. #}
+  <div class="lc-sb-tools">
     <button type="button" data-lc-unread-toggle aria-pressed="false"
-      aria-label="{{ "sidebar-unread-only"|t }}" data-lc-tip="{{ "sidebar-unread-only"|t }}" data-lc-tip-pos="bottom"
       onclick="window.__lcToggleUnreadOnly && window.__lcToggleUnreadOnly()"
-      class="p-1 rounded text-content-muted hover:text-content hover:bg-surface-elevated aria-pressed:bg-accent aria-pressed:text-accent-content">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+      class="lc-sb-chip">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 01.628.74v2.288a2.25 2.25 0 01-.659 1.59l-4.682 4.683a2.25 2.25 0 00-.659 1.59v3.037c0 .684-.31 1.331-.844 1.757l-1.937 1.55A.75.75 0 018 19.25v-5.757a2.25 2.25 0 00-.659-1.591L2.659 7.22A2.25 2.25 0 012 5.629V3.34a.75.75 0 01.628-.74z" clip-rule="evenodd"/>
       </svg>
+      <span>{{ "sidebar-unread-only"|t }}</span>
     </button>
     {# LC-250: clear unread (and paired mention chips) across every conversation.
        Swaps the whole sidebar so cleared badges land at once; other tabs refresh
@@ -291,9 +295,9 @@
     <form hx-post="/read-all" hx-target="#sidebar" hx-swap="outerHTML" class="contents">
       <button type="submit" aria-label="{{ "sidebar-mark-all-read"|t }}"
         data-lc-tip="{{ "sidebar-mark-all-read"|t }}" data-lc-tip-pos="bottom"
-        class="p-1 rounded text-content-muted hover:text-content hover:bg-surface-elevated">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
-          <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/>
+        class="lc-sb-tool">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/>
         </svg>
       </button>
     </form>
@@ -301,7 +305,7 @@
   {# LC-174: enclave-keyed id so an enclave room add/remove can OOB-swap just
      this nav for members currently viewing that enclave. A connection on Home
      or a different enclave has a different id and htmx drops the swap. #}
-  <nav id="sidebar-nav{% if let Some(eid) = sidebar_current_enclave %}-{{ eid }}{% endif %}" aria-label="{{ "sidebar-nav-label"|t }}" class="flex-1 overflow-y-auto p-2 space-y-4">
+  <nav id="sidebar-nav{% if let Some(eid) = sidebar_current_enclave %}-{{ eid }}{% endif %}" aria-label="{{ "sidebar-nav-label"|t }}" class="flex-1 overflow-y-auto px-3 py-2 space-y-4">
     {% include "partials/sidebar_nav.html" %}
   </nav>
   {# LC-368: the former footer account/utility group (Settings, theme, shortcuts,
