@@ -409,8 +409,9 @@
   {% include "room/reply_count.html" %}
   {% if message.user_id == message.viewer_id %}
   <div id="seen-{{ message.id }}">
-    {% if let Some(t) = message.seen_caption.as_ref() %}
-    <div class="text-xs text-content-subtle">{{ "room-msg-seen"|t }} {{ t }}</div>
+    {# LC-1057: UTC on the server; data-lc-ts shows the viewer's local HH:MM. #}
+    {% if let Some(iso) = message.seen_at_iso() %}
+    <div class="text-xs text-content-subtle">{{ "room-msg-seen"|t }} <time data-lc-ts data-lc-ts-mode="time" datetime="{{ iso }}">{% if let Some(hhmm) = message.seen_at_hhmm() %}{{ hhmm }}{% endif %}</time></div>
     {% endif %}
   </div>
   {% endif %}

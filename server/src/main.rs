@@ -365,7 +365,10 @@ fn newest_asset_mtime_secs(dir: &std::path::Path) -> Option<u64> {
 /// `last_active_at` is older than 30 minutes. Runs every 60s. Each flip is
 /// broadcast over the hub so other viewers can refresh status circles.
 fn spawn_idle_scanner(state: AppState) {
-    const IDLE_AFTER_SECS: i64 = 30 * 60;
+    // LC-1057: 10 minutes, Discord-style. `last_active_at` now moves only on
+    // real input (presence.js `activity` frames, typing, posting), so this is
+    // "no input for 10 minutes" rather than "no HTTP for 30".
+    const IDLE_AFTER_SECS: i64 = 10 * 60;
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
         tick.tick().await;
@@ -374,6 +377,12 @@ fn spawn_idle_scanner(state: AppState) {
             match db::auth::mark_idle_users(&state.auth, IDLE_AFTER_SECS).await {
                 Ok(flipped) => {
                     for uid in flipped {
+                        // LC-1057: an offline user already reads grey on every
+                        // screen (the disconnect broadcast); repainting them
+                        // yellow would claim a presence they do not have.
+                        if !state.hub.is_user_connected(&uid) {
+                            continue;
+                        }
                         let custom = db::auth::find_user_by_id(&state.auth, &uid)
                             .await
                             .ok()
@@ -392,10 +401,11 @@ fn spawn_idle_scanner(state: AppState) {
     });
 }
 
-/// LC-319: periodically clear custom statuses whose `custom_status_expires_at`
-/// has passed. Runs every 60s, mirroring `spawn_idle_scanner`. Each cleared row
-/// is broadcast over the hub (presence value unchanged, custom text now None)
-/// so other viewers' avatars/hovercards drop the stale text live. The 60s
+/// LC-319: periodically clear statuses whose `custom_status_expires_at` has
+/// passed. Runs every 60s, mirroring `spawn_idle_scanner`. LC-1057: the expiry
+/// covers the whole chosen status, so Away / DND revert to Online along with
+/// the custom text. Each cleared, connected user is broadcast over the hub so
+/// other viewers' avatars/hovercards update live. The 60s
 /// granularity matches the idle-flip tolerance.
 fn spawn_status_expiry_scanner(state: AppState) {
     tokio::spawn(async move {
@@ -406,6 +416,11 @@ fn spawn_status_expiry_scanner(state: AppState) {
             match db::auth::clear_expired_custom_statuses(&state.auth).await {
                 Ok(cleared) => {
                     for (uid, status) in cleared {
+                        // LC-1057: as in the idle scanner, never repaint an
+                        // offline user with their stored (often `active`) value.
+                        if !state.hub.is_user_connected(&uid) {
+                            continue;
+                        }
                         state.hub.broadcast_global(&ChatEvent::UserStatusChanged {
                             user_id: uid,
                             status,

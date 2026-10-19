@@ -17,4 +17,7 @@ status-clear-after-1h = 1 hour
 status-clear-after-4h = 4 hours
 status-clear-after-1d = 1 day
 status-clear-after-1w = 1 week
+# LC-1057: keep a running timer when saving again.
+status-clear-after-keep = Keep current timer
+status-clear-after-note = After this time, Away or Do not disturb goes back to Online and the custom text clears.
 status-auto-clears = Auto-clears

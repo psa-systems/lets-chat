@@ -27,8 +27,11 @@ pub struct MessageView {
     pub can_edit: bool,
     pub can_delete: bool,
     pub viewer_id: String,
-    /// HH:MM peer-read timestamp shown under this message in a DM, or None.
-    /// Only one own-authored message in a DM should have this set at a time.
+    /// UTC peer-read timestamp (the stored `read_at`) shown as "Seen HH:MM"
+    /// under this message in a DM, or None. Only one own-authored message in a
+    /// DM should have this set at a time. LC-1057: rendered through
+    /// `seen_at_iso` / `seen_at_hhmm` so the browser shows the viewer's local
+    /// time; the raw value is UTC.
     pub seen_caption: Option<String>,
     /// True when this message follows another message from the same author
     /// within MESSAGE_GROUPING_WINDOW. Hides the username/timestamp header.
@@ -346,6 +349,17 @@ pub(crate) fn day_label_for(created_at: &str) -> String {
 /// LC-319: also reused by the status picker for the auto-clear expiry hint.
 /// LC-746: also accepts the minute-precision `YYYY-MM-DD HH:MM` shape, which a
 /// space alone would leave invalid as a `<time datetime>` value.
+/// Extract the HH:MM portion from a timestamp string. Accepts both the
+/// "YYYY-MM-DD HH:MM:SS" SQLite format and RFC3339 strings. LC-1057: only the
+/// no-JS fallback for the DM Seen time (moved here from `routes::dm`).
+pub(crate) fn format_hhmm(read_at: &str) -> String {
+    let after_date = read_at
+        .split_once([' ', 'T'])
+        .map(|(_, rest)| rest)
+        .unwrap_or(read_at);
+    after_date.chars().take(5).collect()
+}
+
 pub(crate) fn to_iso_utc(created_at: &str) -> String {
     let s = created_at.trim();
     if s.as_bytes().get(10) != Some(&b' ') {
@@ -361,6 +375,16 @@ pub(crate) fn to_iso_utc(created_at: &str) -> String {
 }
 
 impl MessageView {
+    /// LC-1057: the Seen timestamp as ISO UTC for `<time data-lc-ts>`.
+    pub fn seen_at_iso(&self) -> Option<String> {
+        self.seen_caption.as_deref().map(to_iso_utc)
+    }
+
+    /// LC-1057: the UTC `HH:MM` no-JS fallback text for the Seen time.
+    pub fn seen_at_hhmm(&self) -> Option<String> {
+        self.seen_caption.as_deref().map(format_hhmm)
+    }
+
     pub fn label(&self) -> &str {
         match self.display_name.as_deref() {
             Some(n) if !n.trim().is_empty() => n,

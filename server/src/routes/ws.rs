@@ -44,6 +44,15 @@ enum ClientFrame {
     /// rather than adding to it (see [`apply_page_context`]).
     #[serde(rename = "page_context")]
     PageContext(PageContext),
+    /// LC-1057: the browser saw real input (presence.js, throttled to one per
+    /// minute while the page is visible). The only client signal that keeps a
+    /// user `active`; a socket that is merely open goes idle.
+    #[serde(rename = "activity")]
+    Activity,
+    /// LC-1057: reply to the server's `<!-- ping -->`. Carries nothing; any
+    /// inbound frame resets the read timeout that drops half-open sockets.
+    #[serde(rename = "pong")]
+    Pong,
     #[serde(rename = "typing")]
     Typing { room_id: i64 },
     #[serde(rename = "thread_typing")]
@@ -411,7 +420,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
             });
         }
     }
-    super::touch_user_and_maybe_broadcast(&state, &user.id).await;
+    // LC-1057: no activity touch here. A reconnect (network blip, watchdog,
+    // laptop wake) is not the person coming back; presence.js sends an
+    // `activity` frame on open when the page is actually visible and focused.
     // Record that the in-app notification surface is alive for this user.
     // Bumped again, throttled, on each outbound Mentioned frame in the send
     // task below. Consumed by the email-digest "missed" predicate alongside
@@ -942,7 +953,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     });
 
     // LC-979: also stop reading when the send task ends (a ban closes it).
-    while let Some(Ok(msg)) = tokio::select! { _ = &mut send => None, m = rx_ws.next() => m } {
+    // LC-1057: a connection that sends nothing for READ_TIMEOUT (three missed
+    // pongs to the 30s ping) is half-open or abandoned; drop it so it stops
+    // counting as online. The send-side ping only notices a dead socket when
+    // the kernel finally fails the write, which can take many minutes.
+    const READ_TIMEOUT: Duration = Duration::from_secs(90);
+    while let Some(Ok(msg)) = tokio::select! {
+        _ = &mut send => None,
+        m = tokio::time::timeout(READ_TIMEOUT, rx_ws.next()) => m.unwrap_or_else(|_| {
+            tracing::debug!(conn_id, "ws read timeout; closing");
+            None
+        }),
+    } {
         match msg {
             Message::Text(text) => {
                 if let Ok(frame) = serde_json::from_str::<ClientFrame>(text.as_str()) {
@@ -1023,6 +1045,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 );
                             }
                         }
+                        ClientFrame::Activity => {
+                            super::touch_user_and_maybe_broadcast(&state, &user.id).await;
+                        }
+                        ClientFrame::Pong => {}
                         ClientFrame::Typing { room_id } => {
                             if subscribed.lock().unwrap().contains(&room_id) {
                                 state.hub.notify_typing(conn_id, room_id);
@@ -1339,7 +1365,8 @@ pub async fn render_dm_read(
         if Some(prev) != new_seen_id {
             if let Ok(frag) = (SeenIndicatorFragment {
                 message_id: prev,
-                caption: None,
+                seen_at_iso: None,
+                seen_at_hhmm: String::new(),
             })
             .render()
             {
@@ -1348,10 +1375,10 @@ pub async fn render_dm_read(
         }
     }
     if let Some(new_id) = new_seen_id {
-        let hhmm = super::dm::format_hhmm(read_at);
         if let Ok(frag) = (SeenIndicatorFragment {
             message_id: new_id,
-            caption: Some(&hhmm),
+            seen_at_iso: Some(crate::views::room::to_iso_utc(read_at)),
+            seen_at_hhmm: crate::views::room::format_hhmm(read_at),
         })
         .render()
         {
