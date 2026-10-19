@@ -4593,6 +4593,58 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
    page, which now floats too, drags by its .lc-callbar. */
 .lc-huddle--float .lc-huddle-bar,
 .lc-huddle--float .lc-callbar { cursor: move; }
+/* LC-1058: the floating panel's own Back to call / Minimize / Expand toolbar
+   (huddle_popout.js addTools), top-right; the bar keeps room for it. */
+.lc-float-tools {
+    position: absolute;
+    top: 0.375rem;
+    right: 0.5rem;
+    z-index: 1;
+    display: flex;
+    gap: 0.125rem;
+}
+.lc-float-tool {
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 0.375rem;
+    color: var(--content-muted);
+    cursor: pointer;
+}
+.lc-float-tool:hover,
+.lc-float-tool[aria-pressed="true"] { background-color: var(--surface-sunken); color: var(--content); }
+.lc-float-tool:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.lc-float-tool svg { width: 1rem; height: 1rem; }
+.lc-huddle--float > .lc-huddle-bar,
+.lc-huddle--float > .lc-callbar { padding-right: 6.5rem; }
+/* Expand: a large centered panel over the inline (saved) geometry. */
+.lc-huddle--float.lc-huddle--float-max {
+    left: 10vw !important;
+    top: 10vh !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 80vw !important;
+    height: 80vh !important;
+    resize: none;
+}
+/* Minimize: just the bar, pinned bottom-right. */
+.lc-huddle--float.lc-huddle--float-min {
+    left: auto !important;
+    top: auto !important;
+    right: 1rem !important;
+    bottom: 1rem !important;
+    width: min(32rem, calc(100vw - 2rem)) !important;
+    height: auto !important;
+    min-height: 0;
+    resize: none;
+    container-type: normal;
+}
+.lc-huddle--float-min > :not(.lc-huddle-bar):not(.lc-callbar):not(.lc-float-tools):not(.sr-only) { display: none !important; }
+.lc-huddle--float-max .lc-huddle-bar,
+.lc-huddle--float-max .lc-callbar,
+.lc-huddle--float-min .lc-huddle-bar,
+.lc-huddle--float-min .lc-callbar { cursor: default; }
 .lc-huddle--dragging { user-select: none; }
 /* The participant area fills the host and the tiles follow its height (the
    bar takes ~4.5rem). Selectors carry the .lc-huddle class so they outrank the

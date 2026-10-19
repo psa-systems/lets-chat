@@ -23,10 +23,16 @@
 // out click and prefers PiP; floatOut() is the automatic one voice.js takes when
 // a swap leaves no dock in the page, and goes straight to the floating panel
 // (see floatOut for why it must not try PiP).
+// LC-1058: the floating panel carries its own Back to call / Minimize / Expand
+// toolbar, and Back to call (also Bring back off-room) navigates to the call's
+// room and docks it there.
 (function () {
   'use strict';
 
-  var st = { mode: null, root: null, roomId: null, pip: null, ro: null };
+  // LC-1058: size is the floating panel's 'normal' | 'max' | 'min' state, and
+  // dockOnArrival asks adoptPageDock() to re-dock as soon as Back to call has
+  // navigated to the call's room.
+  var st = { mode: null, root: null, roomId: null, pip: null, ro: null, size: 'normal', dockOnArrival: false };
 
   function S(k, fb) { return window.__lcS ? window.__lcS(k, fb) : fb; }
   function delegate() { return window.LetsChatDelegate || null; }
@@ -72,10 +78,105 @@
     return ph;
   }
   function clearHostStyles(root) {
-    root.classList.remove('lc-huddle--popout', 'lc-huddle--float', 'lc-huddle--dragging');
+    root.classList.remove('lc-huddle--popout', 'lc-huddle--float', 'lc-huddle--dragging',
+      'lc-huddle--float-max', 'lc-huddle--float-min');
+    var tools = root.querySelector('[data-lc-float-tools]');
+    if (tools && tools.parentNode) tools.parentNode.removeChild(tools);
+    st.size = 'normal';
     ['left', 'top', 'right', 'bottom', 'width', 'height'].forEach(function (p) {
       root.style.removeProperty(p);
     });
+  }
+
+  // ---- LC-1058: floating-panel toolbar ----------------------------------
+  // Back to call, Minimize and Expand, top-right of the floating panel. Built
+  // here rather than in the templates so every floated dock gets it: the huddle
+  // (room/huddle.html) and the enclave voice channel (voice/page.html), which
+  // has no Pop out / Bring back button of its own.
+  var ICONS = {
+    back: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h5a.75.75 0 010 1.5h-5z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M6.194 12.753a.75.75 0 001.06.053L16.5 4.44v2.81a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 000 1.5h2.553l-9.056 8.194a.75.75 0 00-.053 1.06z" clip-rule="evenodd"/></svg>',
+    min: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 10a.75.75 0 01.75-.75h10.5a.75.75 0 010 1.5H4.75A.75.75 0 014 10z" clip-rule="evenodd"/></svg>',
+    max: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M13.28 7.78l3.22-3.22v2.69a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 000 1.5h2.69l-3.22 3.22a.75.75 0 001.06 1.06zM2 17.25v-4.5a.75.75 0 011.5 0v2.69l3.22-3.22a.75.75 0 011.06 1.06L4.56 16.5h2.69a.75.75 0 010 1.5h-4.5a.747.747 0 01-.75-.75z"/></svg>',
+  };
+  function toolButton(attr, icon, label) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute(attr, '');
+    b.className = 'lc-float-tool';
+    var ico = document.createElement('span');
+    ico.setAttribute('aria-hidden', 'true');
+    ico.innerHTML = icon;
+    b.appendChild(ico);
+    var lab = document.createElement('span');
+    lab.className = 'lc-cbtn-label sr-only';
+    b.appendChild(lab);
+    window.LetsChatRtc.setLabel(b, label);
+    return b;
+  }
+  function syncTools() {
+    var root = st.root;
+    var tools = root && root.querySelector('[data-lc-float-tools]');
+    if (!tools) return;
+    var min = tools.querySelector('[data-lc-float-min]');
+    var max = tools.querySelector('[data-lc-float-max]');
+    if (min) {
+      min.setAttribute('aria-pressed', st.size === 'min' ? 'true' : 'false');
+      window.LetsChatRtc.setLabel(min, st.size === 'min' ? S('huddleRestore', 'Restore') : S('huddleMinimize', 'Minimize'));
+    }
+    if (max) {
+      max.setAttribute('aria-pressed', st.size === 'max' ? 'true' : 'false');
+      window.LetsChatRtc.setLabel(max, st.size === 'max' ? S('huddleRestore', 'Restore') : S('huddleExpand', 'Expand'));
+    }
+  }
+  function addTools(root) {
+    if (root.querySelector('[data-lc-float-tools]')) return;
+    var tools = document.createElement('div');
+    tools.setAttribute('data-lc-float-tools', '');
+    tools.className = 'lc-float-tools';
+    tools.appendChild(toolButton('data-lc-float-back', ICONS.back, S('huddleBackToCall', 'Back to call')));
+    tools.appendChild(toolButton('data-lc-float-min', ICONS.min, S('huddleMinimize', 'Minimize')));
+    tools.appendChild(toolButton('data-lc-float-max', ICONS.max, S('huddleExpand', 'Expand')));
+    root.appendChild(tools);
+    syncTools();
+  }
+  // Expand / Minimize are exclusive views of the floating panel; the saved
+  // per-room geometry is the 'normal' one and is left alone while either is on.
+  function setSize(next) {
+    var root = st.root;
+    if (st.mode !== 'float' || !root) return;
+    st.size = st.size === next ? 'normal' : next;
+    root.classList.toggle('lc-huddle--float-max', st.size === 'max');
+    root.classList.toggle('lc-huddle--float-min', st.size === 'min');
+    syncTools();
+  }
+
+  // Back to call: a boosted navigation (the partials/nav_boost.html attributes
+  // on one reused hidden anchor) swaps #main only, so the media session living
+  // outside #main survives and the URL is pushed. adoptPageDock() then docks
+  // on arrival because dockOnArrival is set.
+  var navAnchor = null;
+  function navigate(url) {
+    if (!navAnchor) {
+      navAnchor = document.createElement('a');
+      navAnchor.setAttribute('hx-boost', 'true');
+      navAnchor.setAttribute('hx-target', '#main');
+      navAnchor.setAttribute('hx-select', '#main');
+      navAnchor.setAttribute('hx-swap', 'outerHTML');
+      navAnchor.setAttribute('hidden', '');
+      navAnchor.setAttribute('data-lc-float-nav', '');
+      document.body.appendChild(navAnchor);
+    }
+    navAnchor.setAttribute('href', url);
+    if (window.htmx && window.htmx.process) window.htmx.process(navAnchor);
+    if (typeof navAnchor.click === 'function') navAnchor.click();
+  }
+  function goToCall() {
+    if (!st.mode || !st.root) return;
+    var ph = placeholderInPage();
+    if (ph) { dockInto(ph); return; }
+    if (st.roomId == null || st.roomId === '') return;
+    st.dockOnArrival = true;
+    navigate('/room/' + encodeURIComponent(st.roomId));
   }
 
   // ---- host 1: Document Picture-in-Picture window -----------------------
@@ -129,6 +230,8 @@
   function saveGeometry() {
     var root = st.root;
     if (!root || st.mode !== 'float') return;
+    // LC-1058: Expand / Minimize are views, not the user's chosen geometry.
+    if (st.size !== 'normal') return;
     var r = root.getBoundingClientRect();
     try {
       localStorage.setItem(floatKey(), JSON.stringify({
@@ -177,12 +280,14 @@
       st.ro = new ResizeObserver(function () { clearTimeout(t); t = setTimeout(saveGeometry, 200); });
       st.ro.observe(root);
     }
+    addTools(root);
     setBtn(root, true);
     resumeMedia(root);
   }
   // Drag the floating panel by its bar (not by the controls in it).
   document.addEventListener('pointerdown', function (e) {
     if (st.mode !== 'float' || !st.root || e.button !== 0) return;
+    if (st.size !== 'normal') return; // LC-1058: Expand / Minimize pin the panel
     // LC-832: the enclave voice channel page floats too, and its bar is
     // .lc-callbar rather than the huddle dock's .lc-huddle-bar.
     var bar = e.target.closest && e.target.closest('.lc-huddle-bar, .lc-callbar');
@@ -264,14 +369,16 @@
     clearHostStyles(root);
     if (ph.parentNode) ph.parentNode.replaceChild(root, ph);
     st.mode = null;
+    st.dockOnArrival = false;
     setBtn(root, false);
   }
   function bringBack() {
     if (!st.mode || !st.root) return;
     var ph = placeholderInPage();
     if (ph) { dockInto(ph); return; }
-    // Not on the huddle's page: nowhere to dock, so keep it floating.
-    if (st.mode === 'pip') toFloat();
+    // Not on the huddle's page. LC-1058: from a PiP window come back to the
+    // floating panel; from the floating panel go to the call's room and dock.
+    if (st.mode === 'pip') toFloat(); else goToCall();
   }
 
   // ---- page-swap integration (voice.js scan / leave) ---------------------
@@ -309,6 +416,9 @@
       // the live one docks back into.
       if (placeholderInPage()) freshEl.remove();
       else if (freshEl.parentNode) freshEl.parentNode.replaceChild(makePlaceholder(), freshEl);
+      // LC-1058: Back to call brought us here; finish the job.
+      var ph = st.dockOnArrival && placeholderInPage();
+      if (ph) dockInto(ph);
     } else {
       markBusy(freshEl);
     }
@@ -332,6 +442,7 @@
     st.root = null;
     st.roomId = null;
     st.pip = null;
+    st.dockOnArrival = false;
   }
 
   function onClick(e) {
@@ -343,6 +454,9 @@
       return;
     }
     if (t.closest('[data-lc-huddle-bringback]')) { bringBack(); return; }
+    if (t.closest('[data-lc-float-back]')) { goToCall(); return; }
+    if (t.closest('[data-lc-float-min]')) { setSize('min'); return; }
+    if (t.closest('[data-lc-float-max]')) { setSize('max'); return; }
     // Join on another room's dock, or the header Huddle button, while a huddle
     // is live elsewhere: voice.js ignores it (one session per tab). Reveal the
     // busy note so the click is not silent.
@@ -362,5 +476,7 @@
     popOut: popOut,
     floatOut: floatOut,
     bringBack: bringBack,
+    goToCall: goToCall,
+    setSize: setSize,
   };
 })();
