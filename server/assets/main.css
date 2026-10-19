@@ -2669,6 +2669,10 @@ math {
 .lc-rail-statuspicker {
     position: relative;
     flex: none;
+    /* LC-1057: the rail is items-center, which shrank this slot to zero width
+       on the rail's center line, so `left: 100%` opened the picker on top of
+       the avatar. Stretch it to the rail width so it flies out to the right. */
+    align-self: stretch;
 }
 .lc-rail-statuspicker:not(:empty) > * {
     position: absolute;

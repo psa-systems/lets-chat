@@ -225,7 +225,7 @@ async fn clear_expired_custom_statuses_clears_past_expiry_only() {
     let future = auth_db::create_user(&pool, "peggy", "hash").await.unwrap();
     let no_expiry = auth_db::create_user(&pool, "trent", "hash").await.unwrap();
 
-    // `away` presence so we can confirm the sweep preserves it.
+    // LC-1057: `away` so we can confirm the sweep resets it to `active`.
     auth_db::set_user_status(&pool, &expired, "away", Some("lunch"), Some("+1 hours"))
         .await
         .unwrap();
@@ -246,9 +246,9 @@ async fn clear_expired_custom_statuses_clears_past_expiry_only() {
     .unwrap();
 
     let cleared = auth_db::clear_expired_custom_statuses(&pool).await.unwrap();
-    assert_eq!(cleared, vec![(expired.clone(), "away".to_string())]);
+    assert_eq!(cleared, vec![(expired.clone(), "active".to_string())]);
 
-    // Expired user: text gone, presence kept.
+    // Expired user: text gone, and (LC-1057) the whole status reset.
     let u = auth_db::find_user_by_id(&pool, &expired)
         .await
         .unwrap()
@@ -257,7 +257,7 @@ async fn clear_expired_custom_statuses_clears_past_expiry_only() {
         u.custom_status.is_none(),
         "expired custom text must be cleared"
     );
-    assert_eq!(u.status, "away", "presence value must be untouched");
+    assert_eq!(u.status, "active", "Clear after resets Away to Online");
     assert!(auth_db::get_custom_status_expiry(&pool, &expired)
         .await
         .unwrap()
@@ -287,4 +287,68 @@ async fn clear_expired_custom_statuses_noop_when_nothing_expired() {
     assert!(cleared.is_empty());
     let u = auth_db::find_user_by_id(&pool, &id).await.unwrap().unwrap();
     assert_eq!(u.custom_status.as_deref(), Some("brb"));
+}
+
+/// LC-1057: "Clear after" applies to the whole status: an expired DND with no
+/// custom text goes back to `active`, and an `idle` row keeps its value (only
+/// a manual Away / DND is reset).
+#[tokio::test]
+async fn clear_expired_resets_dnd_without_custom_text_and_leaves_idle() {
+    let pool = setup_pool().await;
+    let dnd = auth_db::create_user(&pool, "wendy", "hash").await.unwrap();
+    let idle = auth_db::create_user(&pool, "xavier", "hash").await.unwrap();
+    auth_db::set_user_status(&pool, &dnd, "dnd", None, Some("+30 minutes"))
+        .await
+        .unwrap();
+    auth_db::set_user_status(&pool, &idle, "idle", Some("afk"), Some("+30 minutes"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET custom_status_expires_at = datetime('now', '-1 minute')")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let mut cleared = auth_db::clear_expired_custom_statuses(&pool).await.unwrap();
+    cleared.sort();
+    let mut want = vec![
+        (dnd.clone(), "active".to_string()),
+        (idle.clone(), "idle".to_string()),
+    ];
+    want.sort();
+    assert_eq!(cleared, want);
+}
+
+/// LC-1057: re-saving with `KEEP_STATUS_EXPIRY` leaves a running timer as is;
+/// `None` still clears it.
+#[tokio::test]
+async fn set_user_status_keep_preserves_the_running_expiry() {
+    let pool = setup_pool().await;
+    let id = auth_db::create_user(&pool, "yvonne", "hash").await.unwrap();
+    auth_db::set_user_status(&pool, &id, "away", Some("brb"), Some("+1 hours"))
+        .await
+        .unwrap();
+    let before = auth_db::get_custom_status_expiry(&pool, &id).await.unwrap();
+    assert!(before.is_some());
+
+    auth_db::set_user_status(
+        &pool,
+        &id,
+        "dnd",
+        Some("brb, heads down"),
+        Some(auth_db::KEEP_STATUS_EXPIRY),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        auth_db::get_custom_status_expiry(&pool, &id).await.unwrap(),
+        before
+    );
+
+    auth_db::set_user_status(&pool, &id, "dnd", None, None)
+        .await
+        .unwrap();
+    assert!(auth_db::get_custom_status_expiry(&pool, &id)
+        .await
+        .unwrap()
+        .is_none());
 }
