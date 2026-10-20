@@ -169,6 +169,11 @@ pub struct PageScope {
 /// values into a peer's call state machine.
 const CALL_SIGNAL_KINDS: &[&str] = &[
     "invite", "offer", "answer", "ice", "accept", "reject", "cancel", "hangup",
+    // LC-1063: an ephemeral floating emoji reaction in a 1-1 call. The glyph
+    // rides in `payload`; it is relayed to the peer only (no self-echo) and,
+    // being non-terminal, neither posts a system message nor touches the
+    // ringing slot.
+    "react",
 ];
 
 /// Recognized `kind` discriminators for a voice-channel mesh signal.
