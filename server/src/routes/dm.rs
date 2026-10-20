@@ -433,6 +433,9 @@ pub async fn get_dm(
     let ai_flag_on = super::ai_gate::flag_on(&state).await;
     let ai_allowed = super::ai_gate::allowed_in_room(&state, room.id, &user).await?;
 
+    // LC-1065: one GIF-availability read feeds both the picker gate and the
+    // admin-only "not configured" teaser.
+    let gif_available = crate::gif::available(&state).await;
     let page = DmPage {
         user: &user,
         peer: &peer,
@@ -454,8 +457,8 @@ pub async fn get_dm(
         llm_available: ai_flag_on && state.llm_available() && ai_allowed,
         embeddings_available: ai_flag_on && state.embeddings_available() && ai_allowed,
         vision_available: crate::vision::available(),
-        gif_available: crate::gif::available(),
-        gif_teaser: !crate::gif::available() && user.role == "admin",
+        gif_available,
+        gif_teaser: !gif_available && user.role == "admin",
     };
     let body = html(&page)?;
     let mut response = body.into_response();

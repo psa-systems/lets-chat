@@ -437,6 +437,18 @@ pub struct SettingsPage<'a> {
     /// sweep has ticked at least once.
     pub retention_sweep_enabled: bool,
     pub retention_status: Option<RetentionStatusView>,
+    /// LC-1065: GIF picker (Giphy) admin config. `giphy_key_configured` is true
+    /// when a usable sealed key is stored in settings (never the plaintext);
+    /// `giphy_env_fallback` is true when no DB key is stored but the
+    /// `LETS_CHAT_GIPHY_API_KEY` env var is, so the template can show which
+    /// source is active. `giphy_secret_key_present` gates the input: without
+    /// `LETS_CHAT_SECRET_KEY` the key cannot be sealed, mirroring IMAP.
+    pub giphy_key_configured: bool,
+    pub giphy_env_fallback: bool,
+    pub giphy_rating: String,
+    pub giphy_secret_key_present: bool,
+    pub giphy_error: Option<String>,
+    pub giphy_saved: bool,
 }
 
 /// LC-207-OBSERVABILITY (#278): admin-page view of the IMAP poll-loop health.

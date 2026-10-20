@@ -688,6 +688,9 @@ pub async fn get_room(
     let remote_control_enabled =
         super::feature_flags::allows(&state, &super::feature_flags::REMOTE_CONTROL, &user).await;
 
+    // LC-1065: one GIF-availability read feeds both the picker gate and the
+    // admin-only "not configured" teaser.
+    let gif_available = crate::gif::available(&state).await;
     let page = RoomPage {
         user: &user,
         room: &room,
@@ -715,8 +718,8 @@ pub async fn get_room(
         // not a flag hint - the runtime flag lives in /admin/feature-flags instead.
         llm_teaser: !state.llm_available() && user.role == "admin",
         max_upload_bytes: db::settings::max_upload_bytes(&state.settings).await,
-        gif_available: crate::gif::available(),
-        gif_teaser: !crate::gif::available() && user.role == "admin",
+        gif_available,
+        gif_teaser: !gif_available && user.role == "admin",
         room_seen_bar_html,
         huddle_enabled,
         remote_control_enabled,

@@ -165,6 +165,57 @@
     </form>
   </div>
 
+  {# --- GIF picker (Giphy) --- LC-1065 #}
+  <div class="card lc-set-card">
+    <div class="lc-set-card-head">
+      <h3 class="lc-set-card-title">{{ "admin-settings-giphy-heading"|t }}</h3>
+      <p class="lc-set-card-desc">{{ "admin-settings-giphy-intro"|t }}</p>
+    </div>
+    {% if giphy_saved %}
+    <div class="mb-3 alert alert-success">{{ "admin-settings-giphy-saved"|t }}</div>
+    {% endif %}
+    {% if !giphy_secret_key_present %}
+    <div class="mb-3 alert alert-warning">{{ "admin-settings-giphy-no-secret-key"|t }} <code>LETS_CHAT_SECRET_KEY</code>.</div>
+    {% endif %}
+    {% if giphy_key_configured %}
+    <p class="lc-set-help">{{ "admin-settings-giphy-state-configured"|t }}</p>
+    {% else if giphy_env_fallback %}
+    <p class="lc-set-help">{{ "admin-settings-giphy-state-env"|t }}</p>
+    {% else %}
+    <p class="lc-set-help">{{ "admin-settings-giphy-state-off"|t }}</p>
+    {% endif %}
+    <form class="lc-set-form" method="post" action="/admin/settings/giphy"
+          hx-post="/admin/settings/giphy" hx-target="#st-giphy" hx-swap="innerHTML" hx-disabled-elt="this">
+      <div class="lc-set-field lc-set-field--narrow">
+        <label class="lc-set-label" for="giphy_api_key">{{ "admin-settings-giphy-key"|t }}</label>
+        <input id="giphy_api_key" name="giphy_api_key" type="password" value="" autocomplete="off"
+               placeholder="{% if giphy_key_configured %}{{ "admin-settings-giphy-key-keep"|t }}{% else %}{{ "admin-settings-giphy-key-unset"|t }}{% endif %}"
+               {% if !giphy_secret_key_present %}disabled{% endif %} class="input">
+      </div>
+      <div class="lc-set-field lc-set-field--narrow">
+        <label class="lc-set-label" for="giphy_rating">{{ "admin-settings-giphy-rating"|t }}</label>
+        <select id="giphy_rating" name="giphy_rating" class="input">
+          <option value="g"{% if giphy_rating == "g" %} selected{% endif %}>G</option>
+          <option value="pg"{% if giphy_rating == "pg" %} selected{% endif %}>PG</option>
+          <option value="pg-13"{% if giphy_rating == "pg-13" %} selected{% endif %}>PG-13</option>
+          <option value="r"{% if giphy_rating == "r" %} selected{% endif %}>R</option>
+        </select>
+      </div>
+      {% if giphy_key_configured %}
+      {% let name = "giphy_clear" %}
+      {% let checked = false %}
+      {% let disabled = false %}
+      {% let title = "admin-settings-giphy-clear"|t %}
+      {% let desc = "admin-settings-giphy-clear-note"|t %}
+      {% include "partials/toggle_row.html" %}
+      {% endif %}
+      <div class="lc-set-actions">
+        <button type="submit" class="btn btn-primary"{% if !giphy_secret_key_present %} disabled{% endif %}><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-settings-giphy-save"|t }}</span></button>
+        <span id="st-giphy" class="lc-set-status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </div>
+
   {# --- Email ingress health (read-only) --- #}
   {# LC-207-OBSERVABILITY (#278): poll-loop health + recent drops, so an operator can answer "is ingress alive / why didn't my email post?" without container logs. #}
   <div class="card lc-set-card">
