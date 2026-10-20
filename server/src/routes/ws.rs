@@ -1367,6 +1367,7 @@ pub async fn render_dm_read(
                 message_id: prev,
                 seen_at_iso: None,
                 seen_at_hhmm: String::new(),
+                seen_at_title: String::new(),
             })
             .render()
             {
@@ -1379,6 +1380,7 @@ pub async fn render_dm_read(
             message_id: new_id,
             seen_at_iso: Some(crate::views::room::to_iso_utc(read_at)),
             seen_at_hhmm: crate::views::room::format_hhmm(read_at),
+            seen_at_title: read_at.to_string(),
         })
         .render()
         {
