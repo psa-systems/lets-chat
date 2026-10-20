@@ -1330,6 +1330,10 @@
       // Someone joined after us; they will offer, we answer. Skip when the
       // event is about us (we already created our own tile in join()).
       if (joined && userId !== cfg.selfId) {
+        // LC-1063: a short cue when a REMOTE participant joins while we are in
+        // the call. Never for our own join (guarded above) and never during the
+        // initial roster rebuild (that path returns before here).
+        if (window.LetsChatSfx) window.LetsChatSfx.playJoin();
         addPeer(userId, username, false);
         // LC-402/408: a fresh joiner has no record of our current mic / screen
         // state, so re-announce whatever is active (broadcast reaches them too).
@@ -1341,6 +1345,9 @@
     if (kind === 'left') {
       if (userId) delete participants[userId];
       renderPreview();
+      // LC-1063: distinct falling cue when a remote participant leaves, only
+      // while we are in the call and never for our own departure echo.
+      if (joined && userId && userId !== cfg.selfId && window.LetsChatSfx) window.LetsChatSfx.playLeave();
       removePeer(userId);
       return;
     }
