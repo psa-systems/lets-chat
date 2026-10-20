@@ -141,6 +141,15 @@ pub struct SeenIndicatorFragment {
 #[derive(Template)]
 #[template(path = "ws/sidebar_update.html")]
 pub struct SidebarUpdateFragment<'a> {
+    /// LC-1060: `true` for the WS push (an OOB swap onto `#sidebar`), `false`
+    /// for an HTTP response to a sidebar control (`hx-target="#sidebar"`). The
+    /// HTTP shape must NOT be OOB: the same mutation also pushes a WS nav swap
+    /// that can land first and detach the control that sent the request, and
+    /// htmx then resolves the response's OOB target against the detached tree
+    /// and removes the live `#sidebar` (the whole sidebar vanished on add /
+    /// delete category until a reload). A plain element swaps the still
+    /// connected `#sidebar` target either way.
+    pub oob: bool,
     pub user: &'a User,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
