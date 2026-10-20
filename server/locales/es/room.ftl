@@ -619,3 +619,6 @@ room-details-leave-confirm = ¿Salir de esta sala? Necesitarás una nueva invita
 
 # LC-805: room page htmx error toast (mirrors en room-action-failed).
 room-action-failed = No se pudo completar esa accion. Intentalo de nuevo.
+
+# LC-1059: wave at an enclave newcomer
+room-welcome-wave = Saluda

@@ -221,3 +221,10 @@ enclave-branding-no-file = No file chosen
 enclave-branding-logo-err-type = Use a PNG, JPEG, WebP, or GIF image.
 enclave-branding-logo-err-size = Image must be under 1 MiB.
 enclave-branding-saving = Saving...
+
+# LC-1059: welcome message on join
+enclave-settings-welcome-heading = Welcome messages
+enclave-settings-welcome-help = When someone joins, post a friendly welcome line in this channel so members can wave hello.
+enclave-settings-welcome-channel = Welcome channel
+enclave-settings-welcome-default = Default (first channel)
+enclave-settings-welcome-off = Off (no welcome)

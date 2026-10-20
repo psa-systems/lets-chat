@@ -159,6 +159,7 @@ pub fn router() -> Router<AppState> {
         .route("/enclaves/discover/{id}/join", post(post_discover_join))
         .route("/enclaves/join", post(post_join_by_code))
         .route("/enclave/{id}/visibility", post(post_visibility))
+        .route("/enclave/{id}/welcome", post(post_welcome))
         .route("/enclave/{id}/share-emojis", post(post_share_emojis))
         .route("/enclave/{id}/rate-limit", post(post_msg_rate_limit))
         .route("/enclave/{id}/coyote-mode", post(post_coyote_mode))
@@ -397,6 +398,47 @@ pub async fn post_visibility(
 }
 
 #[derive(Deserialize)]
+pub struct WelcomeForm {
+    /// `off`, `default`, or the id of a public text room in this enclave.
+    pub room: String,
+}
+
+/// LC-1059: pick the welcome channel (or turn welcomes off). Manager-gated; a
+/// room id that is not an eligible room of THIS enclave is a 400, so a forged
+/// POST cannot aim the welcome at another enclave's room.
+pub async fn post_welcome(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+    axum::Form(form): axum::Form<WelcomeForm>,
+) -> Result<Response, AppError> {
+    require_manage(&state, &user, id).await?;
+    let cfg = match form.room.trim() {
+        "off" => db::enclave_welcome::WelcomeConfig {
+            enabled: false,
+            room_id: None,
+        },
+        "default" => db::enclave_welcome::WelcomeConfig::default(),
+        raw => {
+            let rid: i64 = raw
+                .parse()
+                .map_err(|_| AppError::BadRequest("invalid welcome room".into()))?;
+            let eligible = db::enclave_welcome::eligible_rooms(&state.chat, id).await?;
+            if !eligible.iter().any(|(e, _)| *e == rid) {
+                return Err(AppError::BadRequest("invalid welcome room".into()));
+            }
+            db::enclave_welcome::WelcomeConfig {
+                enabled: true,
+                room_id: Some(rid),
+            }
+        }
+    };
+    db::enclave_welcome::set(&state.chat, id, cfg).await?;
+    saved_or_redirect(&headers, id, "updated")
+}
+
+#[derive(Deserialize)]
 pub struct ShareEmojisForm {
     /// Absent when the sharing checkbox is unchecked (see `VisibilityForm`).
     #[serde(default)]
@@ -562,7 +604,72 @@ pub async fn post_discover_join(
             user_id: user.id.clone(),
         },
     );
+    post_welcome_message(&state, id, &user).await;
     Ok(Redirect::to(&format!("/enclave/{id}")))
+}
+
+/// LC-1059: post a Discord-style welcome line for `user` in the enclave's
+/// welcome room (see `db::enclave_welcome::resolve_room`) and fan it out like
+/// a normal message. Best-effort: any failure logs and never fails the join.
+async fn post_welcome_message(state: &AppState, enclave_id: i64, user: &User) {
+    let room_id = match db::enclave_welcome::resolve_room(&state.chat, enclave_id).await {
+        Ok(Some(id)) => id,
+        Ok(None) => return,
+        Err(e) => {
+            tracing::warn!(error = %e, enclave_id, "failed to resolve welcome room");
+            return;
+        }
+    };
+    let Ok(Some(room)) = db::chat::get_room(&state.chat, room_id).await else {
+        return;
+    };
+    let lines = db::enclave_welcome::WELCOME_LINES;
+    let line = lines[rand::thread_rng().gen_range(0..lines.len())];
+    let new_id = match db::chat::insert_system_message(&state.chat, room.id, &user.id, line).await {
+        Ok(id) => id,
+        Err(e) => {
+            tracing::warn!(error = %e, enclave_id, "failed to insert welcome message");
+            return;
+        }
+    };
+    let Ok(Some(raw)) = db::chat::get_message(&state.chat, new_id).await else {
+        return;
+    };
+    let message = crate::models::Message {
+        id: raw.id,
+        room_id: raw.room_id,
+        user_id: raw.user_id,
+        author_name: user.username.clone(),
+        body: raw.body,
+        created_at: raw.created_at,
+        edited_at: raw.edited_at,
+        parent_id: raw.parent_id,
+        quote_id: raw.quote_id,
+        is_system: raw.is_system,
+        webhook_id: raw.webhook_id,
+        email_inbox_id: raw.email_inbox_id,
+        bridge_id: raw.bridge_id,
+        bridge_foreign_name: raw.bridge_foreign_name,
+        bridge_kind: raw.bridge_kind,
+        bridge_foreign_avatar: raw.bridge_foreign_avatar,
+    };
+    let render = match super::render_context::NewMessageContext::load(state, &message, &room).await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, enclave_id, "failed to resolve render context for welcome message");
+            return;
+        }
+    };
+    let event = ChatEvent::NewMessage {
+        message,
+        is_dm: false,
+        client_id: None,
+        render,
+    };
+    if let Err(e) = super::broadcast_room_message(state, &room, &event).await {
+        tracing::warn!(error = %e, enclave_id, "failed to broadcast welcome message");
+    }
 }
 
 #[derive(Deserialize)]
@@ -604,6 +711,7 @@ pub async fn post_join_by_code(
             user_id: user.id.clone(),
         },
     );
+    post_welcome_message(&state, enclave.id, &user).await;
     Ok(Redirect::to(&format!("/enclave/{}", enclave.id)))
 }
 
@@ -788,7 +896,15 @@ pub async fn post_invitation_accept(
     if inv.invitee_id != user.id {
         return Err(AppError::Forbidden);
     }
+    // LC-1059: an invite for a user who is already a member only clears the
+    // invite (INSERT OR IGNORE), so it must not post a second welcome.
+    let was_member = db::enclave::get_membership(&state.chat, inv.enclave_id, &user.id)
+        .await?
+        .is_some();
     let (eid, _) = db::enclave::accept_invitation(&state.chat, id).await?;
+    if !was_member {
+        post_welcome_message(&state, eid, &user).await;
+    }
     broadcast_enclave_topic(
         &state,
         eid,
@@ -934,11 +1050,29 @@ pub async fn get_settings(
         .await?
         .logo_upload_id
         .is_some();
+    // LC-1059: welcome channel picker. A configured room that is no longer
+    // eligible shows as "default", which is where resolve_room falls back to.
+    let welcome = db::enclave_welcome::get(&state.chat, id).await?;
+    let eligible = db::enclave_welcome::eligible_rooms(&state.chat, id).await?;
+    let welcome_room = welcome
+        .room_id
+        .filter(|rid| eligible.iter().any(|(e, _)| e == rid));
+    let welcome_rooms: Vec<crate::views::enclave::WelcomeRoomOption> = eligible
+        .into_iter()
+        .map(|(rid, name)| crate::views::enclave::WelcomeRoomOption {
+            id: rid,
+            name,
+            selected: welcome.enabled && welcome_room == Some(rid),
+        })
+        .collect();
     html(&EnclaveSettingsPage {
         user: &user,
         enclave: &enclave,
         members: &member_views,
         bots: &bots,
+        welcome_off: !welcome.enabled,
+        welcome_default: welcome.enabled && welcome_room.is_none(),
+        welcome_rooms: &welcome_rooms,
         bans: &bans,
         groups: &groups,
         emojis: &emojis,

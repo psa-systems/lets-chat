@@ -26,6 +26,13 @@ pub struct EnclaveBotOption {
     pub label: String,
 }
 
+/// LC-1059: one room in the "Welcome messages" channel picker.
+pub struct WelcomeRoomOption {
+    pub id: i64,
+    pub name: String,
+    pub selected: bool,
+}
+
 /// LC-336: empty-state placeholder shown by `get_landing` only when the enclave
 /// has no openable rooms. The full landing menu was removed; create-chat now
 /// lives on the sidebar `+` and member management in settings.
@@ -131,6 +138,11 @@ pub struct EnclaveSettingsPage<'a> {
     pub members: &'a [EnclaveMemberView],
     /// LC-516: site bots not already in this enclave, for the add-bot picker.
     pub bots: &'a [EnclaveBotOption],
+    /// LC-1059: welcome-message config. `welcome_off` = feature off;
+    /// `welcome_default` = post to the default (first) room.
+    pub welcome_off: bool,
+    pub welcome_default: bool,
+    pub welcome_rooms: &'a [WelcomeRoomOption],
     pub bans: &'a [EnclaveBanView],
     pub groups: &'a [EnclaveGroupView],
     pub emojis: &'a [CustomEmoji],

@@ -622,3 +622,6 @@ room-details-leave-confirm = Leave this room? You'll need a new invite to rejoin
 # fails; htmx does not swap a non-2xx body, so without this the click would look
 # like it did nothing. The composer keeps its own inline .composer-error banner.
 room-action-failed = That action could not be completed. Please try again.
+
+# LC-1059: wave at an enclave newcomer
+room-welcome-wave = Wave to say hi
