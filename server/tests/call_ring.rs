@@ -269,6 +269,53 @@ async fn reject_and_cancel_post_a_message_and_release_the_slot() {
 }
 
 #[tokio::test]
+async fn react_relays_the_glyph_to_the_peer_only_with_no_side_effects() {
+    // LC-1063: a 1-1 call reaction rides the call_signal channel as kind
+    // "react" with the emoji in the payload. It must reach the peer (so they
+    // see it float) and NOT echo back to the sender (who already floated it
+    // locally), and it must not post a system message or disturb the ringing
+    // slot the way the terminal kinds do.
+    let s = setup().await;
+    let (_ba, mut alice_rx, _) = s.hub.connect(&s.alice.id, "alice");
+    let (_bb, mut bob_rx, _) = s.hub.connect(&s.bob_id, "bob");
+
+    relay_call_signal(
+        &s.state,
+        &s.alice,
+        "Alice",
+        s.dm_room,
+        "react",
+        Some("🎉".into()),
+    )
+    .await;
+
+    let bob_ev = drain(&mut bob_rx).await;
+    let to_bob = call_signals_to(&bob_ev, &s.bob_id);
+    assert_eq!(to_bob.len(), 1, "the peer receives the reaction once");
+    assert_eq!(signal_kind(to_bob[0]), "react");
+    match to_bob[0] {
+        ChatEvent::CallSignal { payload, .. } => {
+            assert_eq!(
+                payload.as_deref(),
+                Some("🎉"),
+                "the glyph rides in the payload"
+            );
+        }
+        _ => unreachable!(),
+    }
+    let alice_ev = drain(&mut alice_rx).await;
+    assert!(
+        call_signals_to(&alice_ev, &s.alice.id).is_empty(),
+        "the sender gets no self-echo"
+    );
+    assert_eq!(
+        message_count(&s.chat, s.dm_room).await,
+        0,
+        "a reaction posts no system message"
+    );
+}
+
+#[tokio::test]
 async fn relay_refuses_outsiders_non_dm_oversize_and_unknown_kind() {
     let s = setup().await;
     let (_bc, mut bob_rx, _) = s.hub.connect(&s.bob_id, "bob");
