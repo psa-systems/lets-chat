@@ -66,6 +66,10 @@ call-hang-up = Colgar
 call-controlling-suffix = está controlando tu pantalla.
 call-stop-control = Detener control
 call-stop-control-hint = o pulsa Ctrl+Alt+F9
+# LC-1063: resumen posterior a la llamada.
+call-ended = Llamada finalizada
+call-duration = Duración de la llamada
+call-close = Cerrar
 
 ## Maintenance page
 maintenance-page-title = Mantenimiento en curso
