@@ -440,8 +440,11 @@ async fn sidebar_controls_are_one_toolbar_and_rows_own_their_pill() {
     assert_eq!(
         html.matches("aria-label=\"Add chat\"").count(),
         1,
-        "one add-chat trigger, beside the search"
+        "one add-chat trigger"
     );
+    // LC-1060: it lives on the Rooms section header, not beside the search box.
+    assert!(html.contains("class=\"lc-sb-section-add\" data-lc-add-chat"));
+    assert!(!html.contains("lc-sidebar-add"));
     assert!(html.contains("+ New category"));
     assert!(
         html.contains("class=\"lc-sb-row flex items-center group lc-room-row-active\""),

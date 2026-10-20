@@ -55,6 +55,9 @@ sidebar-category-delete-confirm = ¿Eliminar la categoría? Sus salas volverán 
 # and so had nowhere to hang a required marker.
 sidebar-category-name-label = Nombre de la categoría
 sidebar-category-new-placeholder = Nueva categoría
+# LC-1060: category purpose note and empty-category drop hint
+sidebar-category-help = Agrupa chats bajo un encabezado. Arrastra chats hacia ella.
+sidebar-category-empty = Arrastra un chat aquí
 sidebar-category-add = Añadir
 sidebar-category-new = Nueva categoría
 

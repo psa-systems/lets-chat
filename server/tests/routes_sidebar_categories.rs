@@ -376,3 +376,92 @@ async fn member_collapse_only_affects_self() {
         .unwrap();
     assert!(collapsed.contains(&cat));
 }
+
+async fn get_page(app: &Router, sess: &str, uri: &str) -> String {
+    let req = Request::builder()
+        .uri(uri)
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    String::from_utf8_lossy(&bytes).to_string()
+}
+
+/// LC-1060 regression: every HTTP control that targets `#sidebar` (category
+/// add / rename / delete / collapse, star, read-all) must get a PLAIN `<aside
+/// id="sidebar">` back, never the OOB shape. The same mutation also pushes a
+/// WS nav swap; when that lands first it detaches the control that sent the
+/// request, htmx then resolves an OOB response against the detached tree and
+/// deletes the live #sidebar, so the whole sidebar vanished until a reload.
+#[tokio::test]
+async fn sidebar_http_responses_are_not_oob() {
+    let t = app().await;
+    let cat = db::sidebar_categories::create_category(&t.chat, 1, "Work")
+        .await
+        .unwrap();
+    for (method, uri, body) in [
+        (
+            Method::POST,
+            "/enclave/1/sidebar/categories".to_string(),
+            "name=Second",
+        ),
+        (
+            Method::PATCH,
+            format!("/enclave/1/sidebar/categories/{cat}"),
+            "name=Renamed",
+        ),
+        (
+            Method::PATCH,
+            format!("/sidebar/categories/{cat}/collapse"),
+            "collapsed=1",
+        ),
+        (Method::POST, "/rooms/1/star".to_string(), ""),
+        (Method::POST, "/read-all".to_string(), ""),
+        (
+            Method::DELETE,
+            format!("/enclave/1/sidebar/categories/{cat}"),
+            "",
+        ),
+    ] {
+        let (status, html) = send_body(&t.app, &t.admin_session, method.clone(), &uri, body).await;
+        assert_eq!(status, StatusCode::OK, "{method} {uri}");
+        assert!(
+            html.trim_start()
+                .starts_with("<aside id=\"sidebar\" class="),
+            "{method} {uri} must return a plain #sidebar: {}",
+            &html[..html.len().min(120)]
+        );
+        assert!(
+            !html.contains("id=\"sidebar\" hx-swap-oob"),
+            "{method} {uri} must not be an OOB swap"
+        );
+    }
+}
+
+/// LC-1060: an empty category shows a drop hint to managers and is hidden
+/// from members (a bare heading with nothing under it read as broken); the
+/// New category form explains what a category is for.
+#[tokio::test]
+async fn empty_category_hint_for_managers_hidden_for_members() {
+    let t = app().await;
+    db::sidebar_categories::create_category(&t.chat, 1, "GhostCat")
+        .await
+        .unwrap();
+
+    let admin = get_page(&t.app, &t.admin_session, "/room/1").await;
+    assert!(admin.contains("GhostCat"));
+    assert!(admin.contains("data-lc-cat-empty"));
+    assert!(admin.contains("Drag a chat here"));
+    assert!(admin.contains("Group chats under a heading. Drag chats into it."));
+
+    let member = get_page(&t.app, &t.member_session, "/room/1").await;
+    assert!(
+        !member.contains("GhostCat"),
+        "members do not see empty categories"
+    );
+    assert!(!member.contains("data-lc-cat-empty"));
+}
