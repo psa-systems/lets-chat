@@ -23,6 +23,10 @@ js-call-declined-by = %name% declined the call
 js-call-missed-from = Missed call from %name%
 js-call-no-answer = No answer
 js-call-peer-left = %name% left the call
+# LC-1064: the callee is already in a voice call/huddle, so the incoming 1-1
+# call auto-declines. Caller-facing (busy), and the recipient's own quiet toast.
+js-call-peer-busy = %name% is in a call
+js-call-missed-while-busy = Missed call from %name% (you were in a call)
 js-call-no-mic-camera = Could not access your microphone or camera.
 js-call-no-camera = Could not access your camera.
 js-call-no-mic = Could not access your microphone.

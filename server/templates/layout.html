@@ -73,7 +73,11 @@
        that happens to be dark. Chrome painted straight onto it (PiP border,
        status chip) uses on-dark constants for the same reason; the cards that
        float above it are tokenized and follow the mode. #}
-    <div data-lc-call-active class="hidden fixed inset-0 z-50 flex flex-col bg-black"
+    {# LC-1063: data-lc-call-react marks this overlay as a reaction host for
+       call_reactions.js (the same float/tray engine as the voice page). It is
+       deliberately NOT data-lc-voice-root: that attribute is global-shell-wide
+       and would collide with voice.js's single-voice-root lookup. #}
+    <div data-lc-call-active data-lc-call-react class="hidden fixed inset-0 z-50 flex flex-col bg-black"
          role="dialog" aria-modal="true" aria-labelledby="lc-call-active-title" aria-hidden="true">
       <h2 id="lc-call-active-title" class="sr-only">{{ "call-active"|t }}</h2>
       <div class="relative flex-1 overflow-hidden">
@@ -120,6 +124,10 @@
              class="hidden absolute left-1/2 bottom-6 -translate-x-1/2 z-10 max-w-[80vw] rounded bg-warning px-3 py-1 text-center text-xs text-warning-content">
           {{ "call-control-web-peer"|t }}
         </div>
+        {# LC-1063: floating-reaction layer + its polite live region, over the
+           video stage. call_reactions.js spawns ephemeral glyphs here. #}
+        <div data-lc-react-layer class="lc-react-layer" aria-hidden="true"></div>
+        <div data-lc-react-live class="sr-only" aria-live="polite" aria-atomic="true"></div>
       </div>
       {# LC-412: 1:1 call control bar, on the same .lc-cbtn token system as the
          enclave voice page (LC-402). Two clusters - media controls (devices /
@@ -173,6 +181,10 @@
             <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.75A2.75 2.75 0 014.75 2h10.5A2.75 2.75 0 0118 4.75v7.5A2.75 2.75 0 0115.25 15H8.06l-3.03 2.78A.75.75 0 013.75 17.2V15A2.75 2.75 0 011 12.25v-7.5A.75.75 0 002 4.75zm3.5 2.5a.75.75 0 000 1.5h7a.75.75 0 000-1.5h-7zm0 3a.75.75 0 000 1.5h4a.75.75 0 000-1.5h-4z" clip-rule="evenodd"/></svg></span>
             <span class="lc-cbtn-label">{{ "voice-transcript-panel"|t }}</span>
           </button>
+          {# LC-1063: floating emoji reactions in the 1-1 call, same tray as the
+             voice page / huddle. Unhidden by call.js once the call connects. #}
+          {% let tip_pos = "top" %}
+          {% include "partials/react_tray.html" %}
           {# LC-184: controller-side "Request control" affordance. Hidden until the
              peer's video is live; toggles to "Stop controlling" while active. #}
           <button type="button" data-lc-control-request aria-pressed="false"
@@ -201,6 +213,20 @@
          every mode without a second hardcoded red. #}
       <button type="button" data-lc-control-stop class="rounded bg-danger-content px-3 py-1 text-xs font-semibold text-danger hover:opacity-90">{{ "call-stop-control"|t }}</button>
       <span class="text-xs text-danger-content">{{ "call-stop-control-hint"|t }}</span>
+    </div>
+    {# LC-1063: post-call summary. A 1-1 hang up used to vanish instantly; this
+       briefly reports how long the call lasted (shown only when it actually
+       connected). call.js fills data-lc-call-duration, shows it, and
+       auto-dismisses it after a few seconds (or on Close). Standalone sibling
+       of the call dialog so teardown can hide the dialog without hiding it. #}
+    <div data-lc-call-summary class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+         role="dialog" aria-modal="true" aria-labelledby="lc-call-summary-title" aria-hidden="true">
+      <div class="w-72 rounded-lg bg-surface-elevated p-6 text-center shadow-xl">
+        <div id="lc-call-summary-title" class="text-base font-semibold text-content">{{ "call-ended"|t }}</div>
+        <div class="mt-1 text-sm text-content-muted">{{ "call-duration"|t }}</div>
+        <div data-lc-call-duration class="mt-1 text-2xl font-semibold tabular-nums text-content">0:00</div>
+        <button type="button" data-lc-call-summary-close class="btn btn-secondary mt-5">{{ "call-close"|t }}</button>
+      </div>
     </div>
   </div>
   {# LC-393 / LC-402 / LC-416: shared live transcript drawer, used by BOTH 1:1
@@ -1927,6 +1953,9 @@ if (window.__lcSyncSidebarToggles) {
    call/huddle, so it's the only base.html extender that fills in the
    call/voice/huddle bundle base.html leaves empty. #}
 {% block call_bundle %}
+  {# LC-1063: synthesized call sound cues + duration formatter; loaded first so
+     call.js and voice.js can read window.LetsChatSfx. #}
+  <script src="/assets/call_sfx.js?v={{ asset_version }}" defer></script>
   <script src="/assets/call.js?v={{ asset_version }}" defer></script>
   <script src="/assets/voice.js?v={{ asset_version }}" defer></script>
   <script src="/assets/huddle_control.js?v={{ asset_version }}" defer></script>
