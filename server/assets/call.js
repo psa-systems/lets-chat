@@ -1144,6 +1144,22 @@
     switch (kind) {
       case 'invite':
         if (phase === 'idle') {
+          // LC-1064: if we are already in a voice channel or huddle (the same
+          // engagement acceptCall drops before answering), do not let the
+          // incoming 1-1 panel hijack that call. Auto-decline as busy so the
+          // caller learns we are in a call (not a snub), and surface a quiet
+          // missed-call toast instead of the full-screen ring. No persistent
+          // busy status is broadcast; the caller learns only on the attempt.
+          if (window.LetsChatVoice && window.LetsChatVoice.isJoined()) {
+            try {
+              var busyWs = window.__lcWS;
+              if (busyWs) busyWs.send(JSON.stringify({
+                type: 'call_signal', room_id: msgRoomId, kind: 'reject', payload: 'busy',
+              }));
+            } catch (e) {}
+            lcToast('info', 'callMissedWhileBusy', 'Missed call from %name% (you were in a call)', fromName);
+            return;
+          }
           roomId = msgRoomId;
           peerId = fromId;
           peerName = fromName;
@@ -1181,8 +1197,15 @@
         // LC-438: the callee declined. Tell the caller clearly (toast + status)
         // instead of the call just vanishing; the thread also gets a record.
         if (phase === 'outgoing') {
-          setStatus(window.__lcS('callDeclined', 'Call declined'));
-          lcToast('err', 'callDeclinedBy', '%name% declined the call', peerName);
+          // LC-1064: payload 'busy' = an auto-decline because the callee was
+          // already in a call. Say so distinctly, not a plain "declined".
+          if (payload === 'busy') {
+            setStatus(window.__lcS('callPeerBusy', '%name% is in a call').replace('%name%', peerName));
+            lcToast('info', 'callPeerBusy', '%name% is in a call', peerName);
+          } else {
+            setStatus(window.__lcS('callDeclined', 'Call declined'));
+            lcToast('err', 'callDeclinedBy', '%name% declined the call', peerName);
+          }
           setTimeout(teardown, 1200);
         }
         break;

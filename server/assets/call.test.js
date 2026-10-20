@@ -16,15 +16,27 @@ function load(voiceJoined) {
   const root = new El('div');
   root.setAttribute('id', 'lc-call-root');
   root.setAttribute('data-self-id', 'me');
+  // LC-1064: minimal incoming-call dialog so handleSignal's show()/hide() and
+  // the name fill have something to touch; starts hidden like the real markup.
+  const incoming = new El('div');
+  incoming.setAttribute('data-lc-call-incoming', '');
+  incoming.classList.add('hidden');
+  const incomingName = new El('div');
+  incomingName.setAttribute('data-lc-call-incoming-name', '');
+  incoming.appendChild(incomingName);
+  root.appendChild(incoming);
   const body = new El('body');
   body.appendChild(root);
   let controls = {};
+  let signalHandler = null;
+  const wsSends = [];
+  const notifies = [];
   const voiceCalls = [];
   const pending = () => new Promise(() => {});
   const window = {
     LetsChatRtc: {
       bindControls: (map) => { controls = map; },
-      watchBus: () => {},
+      watchBus: (bus, _attr, fn) => { if (bus === 'lc-call-bus' && typeof fn === 'function') signalHandler = fn; },
       control: {
         events: { START: 'lc:control-start', INPUT: 'lc:control-input', END: 'lc:control-end', KILL: 'lc:control-kill' },
       },
@@ -35,6 +47,8 @@ function load(voiceJoined) {
     },
     LetsChatDevices: { getUserMedia: pending },
     __lcS: (k, fb) => fb,
+    __lcWS: { send: (s) => { try { wsSends.push(JSON.parse(s)); } catch (e) { wsSends.push(s); } } },
+    __lcNotify: (kind, msg) => notifies.push({ kind, msg }),
     location: { pathname: '/dm/peer', search: '', hash: '', origin: 'https://x' },
     addEventListener: () => {},
     matchMedia: () => ({ matches: false, addEventListener: () => {} }),
@@ -76,7 +90,19 @@ function load(voiceJoined) {
     btn.setAttribute('data-peer-name', 'Peer');
     controls['[data-lc-call-start]'](btn, { preventDefault() {} });
   };
-  return { start, voiceCalls };
+  // Feed an inbound call_signal to the captured bus handler.
+  const signal = (kind, attrs) => {
+    if (!signalHandler) throw new Error('lc-call-bus handler was not captured');
+    const n = new El('div');
+    n.setAttribute('data-kind', kind);
+    n.setAttribute('data-room-id', (attrs && attrs.roomId) || '42');
+    n.setAttribute('data-from-id', (attrs && attrs.fromId) || 'peer');
+    n.setAttribute('data-from-name', (attrs && attrs.fromName) || 'Peer');
+    if (attrs && attrs.payload != null) n.setAttribute('data-payload', attrs.payload);
+    signalHandler(n);
+  };
+  const incomingShown = () => !incoming.classList.contains('hidden');
+  return { start, voiceCalls, signal, wsSends, notifies, incomingShown };
 }
 
 test('LC-839: placing an outgoing call leaves a joined voice channel or huddle first', () => {
@@ -89,4 +115,25 @@ test('LC-839: placing a call with no voice session leaves nothing', () => {
   const h = load(false);
   h.start(true);
   assert.deepEqual(h.voiceCalls, []);
+});
+
+test('LC-1064: an invite arriving while in a voice call auto-declines busy and does not ring', () => {
+  const h = load(true); // already joined to a voice channel / huddle
+  h.signal('invite', { payload: 'audio' });
+  const busy = h.wsSends.filter((m) => m && m.kind === 'reject' && m.payload === 'busy');
+  assert.equal(busy.length, 1, 'a busy reject is sent to the caller');
+  assert.equal(busy[0].room_id, 42, 'the reject targets the inviting DM room');
+  assert.equal(h.incomingShown(), false, 'the full-screen incoming panel never shows');
+  assert.equal(h.notifies.length, 1, 'a quiet missed-call toast is surfaced');
+});
+
+test('LC-1064: an invite while idle still rings and sends no busy decline', () => {
+  const h = load(false); // not in any voice call
+  h.signal('invite', { payload: 'audio' });
+  assert.equal(
+    h.wsSends.filter((m) => m && m.kind === 'reject').length,
+    0,
+    'an idle recipient does not auto-decline',
+  );
+  assert.equal(h.incomingShown(), true, 'the incoming panel rings');
 });
