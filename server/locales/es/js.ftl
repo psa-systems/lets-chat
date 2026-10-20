@@ -21,6 +21,10 @@ js-call-declined-by = %name% rechazó la llamada
 js-call-missed-from = Llamada perdida de %name%
 js-call-no-answer = Sin respuesta
 js-call-peer-left = %name% salió de la llamada
+# LC-1064: el destinatario ya está en una llamada de voz/huddle, así que la
+# llamada 1-1 entrante se rechaza automáticamente. Para quien llama y aviso discreto.
+js-call-peer-busy = %name% está en una llamada
+js-call-missed-while-busy = Llamada perdida de %name% (estabas en una llamada)
 js-call-no-mic-camera = No se pudo acceder al micrófono o la cámara.
 js-call-no-camera = No se pudo acceder a la cámara.
 js-call-no-mic = No se pudo acceder al micrófono.
