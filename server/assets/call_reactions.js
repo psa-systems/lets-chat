@@ -104,7 +104,11 @@
   // ---- DOM ------------------------------------------------------------
   function S(k, fb) { return window.__lcS ? window.__lcS(k, fb) : fb; }
   function cssEscape(s) { return String(s).replace(/["\\]/g, '\\$&'); }
-  function rootOf(el) { return el && el.closest ? el.closest('[data-lc-voice-root]') : null; }
+  // LC-1063: the voice/huddle root, or the 1-1 call overlay (data-lc-call-react),
+  // which reuses the same tray + float engine but routes sends peer-to-peer. The
+  // call overlay deliberately does NOT carry data-lc-voice-root: it lives in the
+  // global shell and would collide with voice.js's single-voice-root lookup.
+  function rootOf(el) { return el && el.closest ? el.closest('[data-lc-voice-root], [data-lc-call-react]') : null; }
   function trayOf(root) { return root ? root.querySelector('[data-lc-react-tray]') : null; }
   function toggleOf(root) { return root ? root.querySelector('[data-lc-voice-react]') : null; }
   function isOpen(root) { var t = trayOf(root); return !!(t && !t.hidden); }
@@ -300,9 +304,20 @@
 
   // ---- send / receive --------------------------------------------------
   function send(root, emoji) {
+    if (!isLikelyEmoji(emoji)) return;
+    // LC-1063: a 1-1 call (data-lc-call-react) has no room to broadcast into.
+    // Float the glyph locally (the server never echoes it back to us as voice
+    // does) and hand it to call.js, which relays it to the peer over the
+    // call_signal channel.
+    if (root && root.hasAttribute && root.hasAttribute('data-lc-call-react')) {
+      spawn(root, emoji.trim());
+      recordRecent(emoji);
+      try { root.dispatchEvent(new CustomEvent('lc-call-react', { detail: { emoji: emoji.trim() } })); } catch (e) {}
+      return;
+    }
     var sock = window.__lcWS;
     var roomId = parseInt(root.getAttribute('data-room-id'), 10);
-    if (!sock || !roomId || !isLikelyEmoji(emoji)) return;
+    if (!sock || !roomId) return;
     try { sock.send(JSON.stringify({ type: 'voice_reaction', room_id: roomId, emoji: emoji.trim() })); } catch (e) { /* reconnecting */ }
     recordRecent(emoji); // LC-827: surfaces first in the row on the next open
   }
