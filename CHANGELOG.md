@@ -8,6 +8,27 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.6.0] - 2026-10-20
+
+Sixth tagged release, cut from `main` after 4 merged PRs on top of v0.5.0 (`git log --first-parent v0.5.0..v0.6.0`). One entry needs operator attention: transcription is now off after upgrade until a site admin enables it (LC-1056).
+
+### Changed
+
+- **Transcription is OFF after upgrade until a site admin enables it (LC-1056).** Live call transcription and voice-message / clip auto-transcripts are now behind a feature flag. **Action:** to keep transcription, a site admin sets it to Admins or Everyone on Admin > Feature flags. The AI and remote-control switches moved from Admin > Settings to that tab; their stored values are unchanged.
+- **Presence is Discord-style (LC-1057).** Users go idle after 10 minutes without input (was 30), a closed or silent tab shows offline within about 90 seconds, and a reconnect no longer counts as activity. Status "Clear after" now resets the whole status (Away / Do not disturb back to Online, custom text cleared) and a running timer is kept when the status is saved again.
+
+### Added
+
+- **Admin > Feature flags tab (LC-1056).** Off / Admins only / Everyone rollouts for AI features, remote control and transcription.
+- **Welcome message when a user joins an enclave (LC-1059).** A friendly system line posts in the enclave's welcome channel, with a "Wave to say hi" button for other members. On by default; enclave managers pick the channel or turn it off on enclave settings > General. Re-joins, startup General backfill and bot creation do not post.
+- **Floating call controls (LC-1058).** The popped-out call panel has Back to call (navigates to the call's room without dropping it), Expand and Minimize buttons, on huddles and voice channels.
+
+### Fixed
+
+- **"Seen" times show in the viewer's local time instead of UTC (LC-1057).**
+- **The status picker's Clear after dropdown works without custom text (LC-1057).**
+- **"Bring back" on the floating call works from any page (LC-1058).**
+
 ## [v0.5.0] - 2026-10-19
 
 Fifth tagged release, cut from `main` after 11 merged PRs on top of v0.4.1 (`git log --first-parent v0.4.1..v0.5.0`). No operator action is required; the entries below are the user-visible changes. Internal work (broadcast render performance LC-780 / LC-783, release CI LC-1045 / LC-1047 / LC-1049, `common` submodule bumps) is omitted and lives in the git history.
