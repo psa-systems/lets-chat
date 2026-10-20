@@ -8,6 +8,25 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.7.0] - 2026-10-20
+
+Seventh tagged release, cut from `main` on top of v0.6.0. One entry is operator-facing: the GIF picker can now be configured from the admin panel instead of only a startup env var (LC-1065).
+
+### Changed
+
+- **An incoming 1-1 call auto-declines while you are already in a voice call (LC-1064).** In an enclave voice channel or huddle, a direct call no longer interrupts with the full-screen ring: the caller is told you are in a call and you get a quiet missed-call toast instead. An idle recipient still rings normally.
+
+### Added
+
+- **Configure the Giphy API key from Admin > Settings (LC-1065).** A GIF picker card sets or rotates the key at runtime, sealed at rest under `LETS_CHAT_SECRET_KEY`, taking effect with no redeploy. A stored key overrides the `LETS_CHAT_GIPHY_API_KEY` env var; with no key set the GIF button stays hidden.
+- **1-1 call reactions, sounds, and a call-duration summary (LC-1063).** Floating emoji reactions in a direct call, a ringtone on an incoming call, join/leave cues in voice rooms, and a short duration panel when a call ends. Every sound follows the per-user notification-sound preference.
+- **"Add chat" on the Rooms header (LC-1060).**
+
+### Fixed
+
+- **The sidebar no longer vanishes on enclave category changes (LC-1060).**
+- **Seen-receipt timestamps show the full time on hover (LC-1062).**
+
 ## [v0.6.0] - 2026-10-20
 
 Sixth tagged release, cut from `main` after 4 merged PRs on top of v0.5.0 (`git log --first-parent v0.5.0..v0.6.0`). One entry needs operator attention: transcription is now off after upgrade until a site admin enables it (LC-1056).
