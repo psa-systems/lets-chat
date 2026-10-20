@@ -39,6 +39,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin", get(get_settings))
         .route("/admin/settings", get(get_settings).post(post_settings))
         .route("/admin/settings/imap", post(post_imap_settings))
+        .route("/admin/settings/giphy", post(post_giphy_settings))
         .route("/admin/feature-flags", get(get_feature_flags))
         .route("/admin/settings/llm", post(post_llm_flag))
         .route(
@@ -244,6 +245,9 @@ pub struct SettingsQuery {
     /// (distinct from the SMTP `saved` banner, which uses the in-place
     /// render flag instead of a query param).
     pub imap_saved: Option<i64>,
+    /// LC-1065: set after a successful /admin/settings/giphy POST so the page
+    /// renders the Giphy-saved confirmation banner.
+    pub giphy_saved: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -360,6 +364,19 @@ pub async fn get_settings(
                 runs: s.runs,
                 last_error: s.last_error,
             });
+    // LC-1065: GIF picker (Giphy) config state for the settings card. Never
+    // reads the plaintext key back to the page - only whether one is stored.
+    let giphy_key_configured = crate::gif::GifConfig::settings_key_present(&state).await;
+    let giphy_env_fallback = !giphy_key_configured
+        && std::env::var("LETS_CHAT_GIPHY_API_KEY")
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+    let giphy_rating = db::settings::get_setting(&state.settings, crate::gif::GIPHY_RATING_SETTING)
+        .await?
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| matches!(s.as_str(), "g" | "pg" | "pg-13" | "r"))
+        .unwrap_or_else(|| "pg-13".to_string());
+    let giphy_secret_key_present = state.secret_key.is_some();
     let page = SettingsPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -404,6 +421,12 @@ pub async fn get_settings(
         imap_recent_drops,
         retention_sweep_enabled,
         retention_status,
+        giphy_key_configured,
+        giphy_env_fallback,
+        giphy_rating,
+        giphy_secret_key_present,
+        giphy_error: None,
+        giphy_saved: q.giphy_saved.is_some(),
     };
     html(&page)
 }
@@ -680,6 +703,73 @@ pub async fn post_imap_settings(
         return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
     }
     Ok(Redirect::to("/admin/settings?imap_saved=1").into_response())
+}
+
+#[derive(Deserialize)]
+pub struct GiphySettingsForm {
+    /// Write-only API key. Empty input preserves the existing sealed key;
+    /// a non-empty input re-seals and overwrites (mirrors the IMAP password).
+    pub giphy_api_key: String,
+    /// Content rating; invalid/empty falls back to pg-13.
+    #[serde(default)]
+    pub giphy_rating: String,
+    /// Checkbox: present clears the stored key so the picker is disabled (or
+    /// falls back to the env var, if one is set).
+    #[serde(default)]
+    pub giphy_clear: Option<String>,
+}
+
+/// LC-1065: save the admin-managed Giphy config. The key is AES-256-GCM-sealed
+/// under the process secret key, like the IMAP password: an empty input keeps
+/// the existing sealed value, a non-empty input re-seals, and the clear
+/// checkbox removes it. The DB key wins over the env var at read time.
+pub async fn post_giphy_settings(
+    State(state): State<AppState>,
+    AdminUser(_user): AdminUser,
+    headers: HeaderMap,
+    Form(form): Form<GiphySettingsForm>,
+) -> Result<Response, AppError> {
+    let rating = {
+        let r = form.giphy_rating.trim().to_lowercase();
+        if matches!(r.as_str(), "g" | "pg" | "pg-13" | "r") {
+            r
+        } else {
+            "pg-13".to_string()
+        }
+    };
+    db::settings::set_setting(&state.settings, crate::gif::GIPHY_RATING_SETTING, &rating).await?;
+
+    if form.giphy_clear.is_some() {
+        // Empty value = no stored key; from_settings treats it as absent and
+        // the env fallback (if any) takes over.
+        db::settings::set_setting(&state.settings, crate::gif::GIPHY_KEY_SETTING, "").await?;
+        if is_hx(&headers) {
+            return Ok(
+                html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response(),
+            );
+        }
+        return Ok(Redirect::to("/admin/settings?giphy_saved=1").into_response());
+    }
+
+    let trimmed = form.giphy_api_key.trim();
+    if !trimmed.is_empty() {
+        let Some(key) = state.secret_key.as_ref() else {
+            let msg =
+                "GIF picker key requires LETS_CHAT_SECRET_KEY to be set on the server".to_string();
+            if is_hx(&headers) {
+                return Ok(html(&SettingsFeedback::err(msg))?.into_response());
+            }
+            return Err(AppError::BadRequest(msg));
+        };
+        let sealed = crate::gif::seal_api_key(key.as_ref(), trimmed)
+            .map_err(|e| AppError::Internal(format!("giphy key seal: {e}")))?;
+        db::settings::set_setting(&state.settings, crate::gif::GIPHY_KEY_SETTING, &sealed).await?;
+    }
+
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
+    }
+    Ok(Redirect::to("/admin/settings?giphy_saved=1").into_response())
 }
 
 #[derive(Deserialize)]
