@@ -41,6 +41,12 @@
   var pendingCandidates = [];
   var noAnswerTimer = null;   // LC-438: auto-ends a ringing outgoing call with "No answer"
   var NO_ANSWER_MS = 45000;
+  // LC-1063: epoch ms when the call first reached 'in-call', or null until
+  // then; used to show the elapsed time in the post-call summary. The summary
+  // auto-dismisses after SUMMARY_MS (or a Close click), on its own timer.
+  var connectedAt = null;
+  var summaryTimer = null;
+  var SUMMARY_MS = 6000;
 
   // Screen-share state. While sharing, screenTrack is the live display capture
   // and replaces the camera in the peer connection's video sender. cameraTrack
@@ -306,6 +312,16 @@
     // finalizes the shared transcript (a huddle 'voice' end only stops local
     // capture, since others may still be on the line).
     try { document.dispatchEvent(new CustomEvent('lc:rtc-session-ended', { detail: { surface: 'call' } })); } catch (e) {}
+    // LC-1063: silence any ringtone, clear floating reactions, and reset the
+    // reaction control so nothing lingers into the next call.
+    if (window.LetsChatSfx) window.LetsChatSfx.stopRing();
+    connectedAt = null;
+    var ract = q('[data-lc-call-active]');
+    if (ract) {
+      if (window.LetsChatCallReactions) window.LetsChatCallReactions.reset(ract);
+      ract.removeAttribute('data-room-id');
+    }
+    var rwrap = q('[data-lc-react-wrap]'); if (rwrap) rwrap.classList.add('hidden');
     hide(q('[data-lc-call-incoming]'));
     hide(q('[data-lc-call-active]'));
     var rv = q('[data-lc-remote-video]'); if (rv) rv.srcObject = null;
@@ -410,6 +426,13 @@
       if (pc.connectionState === 'connected') {
         phase = 'in-call';
         setStatus(peerName || '');
+        // LC-1063: stamp the connect time once (a later reconnect keeps the
+        // original), enable the reaction control, and point the tray's emoji
+        // picker at this DM room.
+        if (connectedAt == null) connectedAt = Date.now();
+        var act = q('[data-lc-call-active]');
+        if (act && roomId != null) act.setAttribute('data-room-id', roomId);
+        var rw = q('[data-lc-react-wrap]'); if (rw) rw.classList.remove('hidden');
       } else if (pc.connectionState === 'failed') {
         setStatus(window.__lcS('callConnectionFailed', 'Connection failed'));
         endCall();
@@ -559,6 +582,7 @@
 
   function acceptCall() {
     if (phase !== 'incoming' || !incoming) return;
+    if (window.LetsChatSfx) window.LetsChatSfx.stopRing(); // LC-1063
     // Drop any active enclave voice channel first - the OS only has one
     // mic/camera and the user can't be in two calls at once.
     if (window.LetsChatVoice && window.LetsChatVoice.isJoined()) {
@@ -598,6 +622,7 @@
 
   function declineCall() {
     if (phase !== 'incoming') return;
+    if (window.LetsChatSfx) window.LetsChatSfx.stopRing(); // LC-1063
     signal('reject');
     teardown();
   }
@@ -605,7 +630,30 @@
   function endCall() {
     if (phase === 'idle') return;
     signal(phase === 'outgoing' ? 'cancel' : 'hangup');
+    concludeCall();
+  }
+
+  // LC-1063: end the call, then (only if it had actually connected) show a
+  // brief panel with how long it lasted. The duration is read BEFORE teardown,
+  // which clears connectedAt. An outgoing call that was never answered has no
+  // connectedAt, so it just tears down with no summary.
+  function concludeCall() {
+    var secs = connectedAt != null ? Math.round((Date.now() - connectedAt) / 1000) : null;
     teardown();
+    if (secs != null) showSummary(secs);
+  }
+  function showSummary(secs) {
+    var panel = q('[data-lc-call-summary]');
+    if (!panel) return;
+    var durEl = q('[data-lc-call-duration]');
+    if (durEl && window.LetsChatSfx) durEl.textContent = window.LetsChatSfx.formatDuration(secs);
+    show(panel);
+    if (summaryTimer) clearTimeout(summaryTimer);
+    summaryTimer = setTimeout(hideSummary, SUMMARY_MS);
+  }
+  function hideSummary() {
+    if (summaryTimer) { clearTimeout(summaryTimer); summaryTimer = null; }
+    hide(q('[data-lc-call-summary]'));
   }
 
   function onAccept() {
@@ -1170,6 +1218,7 @@
           phase = 'incoming';
           show(q('[data-lc-call-incoming]'));
           installDialogTrap(q('[data-lc-call-incoming]'));
+          if (window.LetsChatSfx) window.LetsChatSfx.startRing(); // LC-1063
           return;
         }
         if (phase === 'outgoing' && msgRoomId === roomId && fromId === peerId) {
@@ -1228,7 +1277,16 @@
           var who = peerName || window.__lcS('callAContact', 'A contact');
           setStatus(window.__lcS('callPeerLeft', '%name% left the call').replace('%name%', who));
           lcToast('info', 'callPeerLeft', '%name% left the call', who);
-          setTimeout(teardown, 1000);
+          // LC-1063: let the "left" status read for a beat, then tear down and
+          // (if it had connected) show the call-duration summary.
+          setTimeout(concludeCall, 1000);
+        }
+        break;
+      case 'react':
+        // LC-1063: the peer floated an emoji over the shared 1-1 call. Only
+        // meaningful while a call is up; reuse the voice/huddle float engine.
+        if (phase !== 'idle' && payload && window.LetsChatCallReactions) {
+          window.LetsChatCallReactions.receive(q('[data-lc-call-active]'), fromId, fromName, payload);
         }
         break;
       case 'offer':
@@ -1274,6 +1332,7 @@
     '[data-lc-call-accept]': function () { acceptCall(); },
     '[data-lc-call-decline]': function () { declineCall(); },
     '[data-lc-call-hangup]': function () { endCall(); },
+    '[data-lc-call-summary-close]': function () { hideSummary(); }, // LC-1063
     '[data-lc-call-mute]': function () { toggleMute(); },
     '[data-lc-call-camera]': function () { toggleCamera(); },
     '[data-lc-call-screen]': function () { toggleScreen(); },
@@ -1298,6 +1357,14 @@
     readSelfId();
     watchBus();
     watchControlBus();
+    // LC-1063: call_reactions.js spawns a picked emoji locally and fires
+    // `lc-call-react` on the call overlay (a 1-1 call has no room to broadcast
+    // into); relay the glyph to the peer over the existing call_signal channel.
+    var active = q('[data-lc-call-active]');
+    if (active) active.addEventListener('lc-call-react', function (e) {
+      var emoji = e && e.detail && e.detail.emoji;
+      if (emoji) signal('react', emoji);
+    });
   });
 
   // LC-186: the desktop global kill-switch hotkey fires this DOM event (the
