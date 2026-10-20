@@ -441,6 +441,12 @@ impl MessageView {
         render_system_inline(&self.body)
     }
 
+    /// LC-1059: a server-posted enclave welcome ("**alice** just showed up!").
+    /// Only the server writes system rows, so a body match is unspoofable.
+    pub fn is_welcome(&self) -> bool {
+        self.is_system && crate::db::enclave_welcome::is_welcome_line(&self.body)
+    }
+
     /// LC-284: true when this message directly `@`-mentions the viewer, so the
     /// template can highlight it. The resolved mention set is already loaded for
     /// chip rendering, so this is a cheap membership check (no extra query).
@@ -591,7 +597,13 @@ fn system_group_ranges(rows: &[(bool, bool)]) -> Vec<(usize, usize)> {
 pub fn group_system_events(messages: &mut [MessageView]) {
     let rows: Vec<(bool, bool)> = messages
         .iter()
-        .map(|m| (m.is_system, m.day_label.is_some() || m.show_unread_divider))
+        // LC-1059: a welcome row is not a call event; it breaks a call run.
+        .map(|m| {
+            (
+                m.is_system && !m.is_welcome(),
+                m.day_label.is_some() || m.show_unread_divider,
+            )
+        })
         .collect();
     for (start, end) in system_group_ranges(&rows) {
         let transcripts: Vec<TranscriptLink> = messages[start..end]

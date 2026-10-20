@@ -3459,6 +3459,27 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
     opacity: 0.75;
 }
 
+/* LC-1059: enclave welcome. Louder than a call event (it is a social moment,
+   not noise) with a one-click wave and its reaction bar on its own line. */
+.lc-sysevent--welcome {
+    padding: 0.375rem 1rem;
+    font-size: 0.8125rem;
+    color: var(--content-muted);
+}
+.lc-sysevent--welcome .lc-sysevent-ico { color: var(--accent); opacity: 1; }
+.lc-sysevent--welcome .lc-sysevent-ico svg { height: 0.875rem; width: 0.875rem; }
+.lc-sysevent--welcome > [id^="reactions-"] { flex-basis: 100%; justify-content: center; }
+.lc-welcome-wave {
+    flex: none;
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    background: var(--surface-elevated);
+    padding: 0.0625rem 0.625rem;
+    font-size: 0.75rem;
+    color: var(--content-muted);
+}
+.lc-welcome-wave:hover { background: var(--surface-sunken); color: var(--content); }
+
 /* LC-680: collapsed group of consecutive call events. The <summary> is a quiet,
    centered, clickable row (event count + any transcript links); expanding
    reveals the individual .lc-sysevent rows. Native disclosure triangle is
