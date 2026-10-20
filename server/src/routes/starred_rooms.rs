@@ -90,6 +90,7 @@ async fn render_sidebar_fragment(
     ) = super::load_sidebar(state, user, current_enclave).await?;
     let switcher = super::load_switcher(state, user, sidebar_current_enclave).await?;
     let fragment = SidebarUpdateFragment {
+        oob: false,
         user,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,

@@ -2,6 +2,6 @@
   {# LC-1057: same markup as room/message.html; the layout's data-lc-ts scan
      localizes it on oobAfterSwap. #}
   {% if let Some(iso) = seen_at_iso.as_ref() %}
-  <div class="text-xs text-content-subtle">{{ "room-msg-seen"|t }} <time data-lc-ts data-lc-ts-mode="time" datetime="{{ iso }}">{{ seen_at_hhmm }}</time></div>
+  <div class="text-xs text-content-subtle">{{ "room-msg-seen"|t }} <time data-lc-ts data-lc-ts-mode="time" datetime="{{ iso }}" title="{{ seen_at_title }}">{{ seen_at_hhmm }}</time></div>
   {% endif %}
 </div>

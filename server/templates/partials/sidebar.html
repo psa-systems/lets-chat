@@ -124,19 +124,9 @@
         </span>
         <div id="sidebar-search-results" class="absolute left-0 right-0 top-full mt-1 z-40 empty:hidden"></div>
       </form>
-      {# Opens the add-chat modal (LC-400 moved the create form into the
-         persistent shell so a sidebar OOB swap cannot destroy a half-typed
-         name). LC-1054: the only add-room trigger; the ROOMS header's bare `+`
-         duplicate is gone. #}
-      {% if can_manage_sidebar_categories %}{% if sidebar_current_enclave.is_some() %}
-      <button type="button" class="lc-sidebar-add"
-              onclick="window.__lcOpenAddRoom && window.__lcOpenAddRoom()"
-              aria-label="{{ "sidebar-room-add"|t }}" data-lc-tip="{{ "sidebar-room-add"|t }}" data-lc-tip-pos="bottom">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-          <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
-        </svg>
-      </button>
-      {% endif %}{% endif %}
+      {# LC-1060: the add-chat button moved from beside the search box to the
+         Rooms section header (partials/sidebar_nav.html), next to the rooms it
+         creates. #}
     </div>
   </div>
   {# LC-576: the identity block (avatar / display name / @handle / status) used to
