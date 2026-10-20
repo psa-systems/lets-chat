@@ -360,8 +360,8 @@ jobs:
           let version = $env.RELEASE_VERSION
           let base = $"($env.GITHUB_SERVER_URL)/api/packages/($env.PACKAGE_OWNER)/generic/($env.PACKAGE_NAME)"
           let repo = $"($env.UPDATE_REGISTRY_HOST)/($env.UPDATE_REPOSITORY)"
-          print $"Update artifact: ($repo):latest-linux-x86_64 (rollback: ($repo):($version)-linux-x86_64)"
-          print $"Update artifact: ($repo):latest-windows-x86_64 (rollback: ($repo):($version)-windows-x86_64)"
+          print $"Update artifact: ($repo):latest-linux-x86_64 \(rollback: ($repo):($version)-linux-x86_64\)"
+          print $"Update artifact: ($repo):latest-windows-x86_64 \(rollback: ($repo):($version)-windows-x86_64\)"
           print $"Manifest:        ($base)/latest/latest.json"
           print $"Linux binary:    ($base)/($version)/lets-chat-desktop-linux-x86_64"
           print $"Linux .deb:      ($base)/($version)/lets-chat-desktop-linux-amd64.deb"
