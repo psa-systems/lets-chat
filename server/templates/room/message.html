@@ -432,7 +432,7 @@
   <div id="seen-{{ message.id }}">
     {# LC-1057: UTC on the server; data-lc-ts shows the viewer's local HH:MM. #}
     {% if let Some(iso) = message.seen_at_iso() %}
-    <div class="text-xs text-content-subtle">{{ "room-msg-seen"|t }} <time data-lc-ts data-lc-ts-mode="time" datetime="{{ iso }}">{% if let Some(hhmm) = message.seen_at_hhmm() %}{{ hhmm }}{% endif %}</time></div>
+    <div class="text-xs text-content-subtle">{{ "room-msg-seen"|t }} <time data-lc-ts data-lc-ts-mode="time" datetime="{{ iso }}" title="{{ message.seen_caption.as_deref().unwrap_or_default() }}">{% if let Some(hhmm) = message.seen_at_hhmm() %}{{ hhmm }}{% endif %}</time></div>
     {% endif %}
   </div>
   {% endif %}

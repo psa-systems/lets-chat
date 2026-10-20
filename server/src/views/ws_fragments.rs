@@ -129,6 +129,10 @@ pub struct SeenIndicatorFragment {
     pub seen_at_iso: Option<String>,
     /// UTC `HH:MM` no-JS fallback text.
     pub seen_at_hhmm: String,
+    /// LC-1062: full raw read time for the `title` tooltip, matching the
+    /// `title="{{ message.created_at }}"` convention on every other
+    /// `data-lc-ts` timestamp.
+    pub seen_at_title: String,
 }
 
 /// OOB sidebar replacement. Used when the user's room/DM membership changes
