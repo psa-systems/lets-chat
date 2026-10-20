@@ -55,6 +55,9 @@ sidebar-category-delete-confirm = Delete category? Its rooms move back to All ro
 # and so had nowhere to hang a required marker.
 sidebar-category-name-label = Category name
 sidebar-category-new-placeholder = New category
+# LC-1060: category purpose note and empty-category drop hint
+sidebar-category-help = Group chats under a heading. Drag chats into it.
+sidebar-category-empty = Drag a chat here
 sidebar-category-add = Add
 sidebar-category-new = New category
 

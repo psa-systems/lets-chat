@@ -1,2 +1,3 @@
-{% let oob = true %}
+{# LC-1060: `oob` is a field (true for the WS push, false for an HTTP response
+   to a hx-target="#sidebar" control); see SidebarUpdateFragment. #}
 {% include "partials/sidebar.html" %}
