@@ -44,6 +44,9 @@
     {% if let Some(_eid) = sidebar_current_enclave %}
     <div data-category-list{% if can_manage_sidebar_categories %} data-positions-url="/enclave/{{ _eid }}/sidebar/categories/positions"{% endif %} class="space-y-4">
     {% for category in sidebar_categories %}
+    {# LC-1060: a member never sees an empty category (a bare heading with no
+       chats under it reads as broken); a manager does, with a drop hint. #}
+    {% if !category.rooms.is_empty() || can_manage_sidebar_categories %}
     <section data-lc-sb-section data-category-id="{{ category.id }}"{% if can_manage_sidebar_categories %} draggable="true"{% endif %}>
       <div class="flex items-center justify-between px-2">
         {# Per-user collapse toggle. Any enclave member may fold their own
@@ -94,16 +97,22 @@
           {% include "partials/sidebar_room_row.html" %}
         </li>
         {% endfor %}
+        {% if category.rooms.is_empty() && can_manage_sidebar_categories %}
+        {# LC-1060: an empty category shows where its chats will go. No
+           data-room-id, so sidebar_dnd.js ignores it when reading the order. #}
+        <li data-lc-cat-empty class="lc-sb-cat-empty">{{ "sidebar-category-empty"|t }}</li>
+        {% endif %}
       </ul>
       {% endif %}
     </section>
+    {% endif %}
     {% endfor %}
     </div>
     {% endif %}
     {# LC-336: in an enclave the ROOMS header always renders (even with no rooms);
-       outside an enclave (Home) it shows only when there are rooms. LC-1054: the
-       header's `+` was a duplicate of the add-chat button beside the search and
-       is gone. #}
+       outside an enclave (Home) it shows only when there are rooms. LC-1060: the
+       header carries the single add-chat `+` (it sat beside the search box from
+       LC-1054 until LC-1060). #}
     {% if sidebar_current_enclave.is_some() || !sidebar_rooms.is_empty() %}
     <section data-lc-sb-section data-lc-sb-group="rooms">
       <div class="flex items-center justify-between gap-1 px-2">
@@ -115,6 +124,18 @@
           </svg>
           <span class="flex-1 text-left truncate">{% if !sidebar_categories.is_empty() %}{{ "sidebar-section-all-rooms"|t }}{% else %}{{ "sidebar-section-rooms"|t }}{% endif %}</span>
         </button>
+        {# LC-1060: Add chat lives on the Rooms header (Discord-style), not beside
+           the search box. Opens the shell's add-chat modal (LC-400), so a sidebar
+           swap cannot destroy a half-typed name. Manager-only, as before. #}
+        {% if can_manage_sidebar_categories %}{% if sidebar_current_enclave.is_some() %}
+        <button type="button" class="lc-sb-section-add" data-lc-add-chat
+                onclick="window.__lcOpenAddRoom && window.__lcOpenAddRoom()"
+                aria-label="{{ "sidebar-room-add"|t }}" data-lc-tip="{{ "sidebar-room-add"|t }}" data-lc-tip-pos="right">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
+          </svg>
+        </button>
+        {% endif %}{% endif %}
       </div>
       {% if !sidebar_rooms.is_empty() %}
       <div data-lc-sb-group-body id="lc-sb-body-rooms">
@@ -163,6 +184,7 @@
     <details class="lc-sb-newcat">
       <summary class="lc-section-label">+ {{ "sidebar-category-new"|t }}</summary>
       <form hx-post="/enclave/{{ eid }}/sidebar/categories" hx-target="#sidebar" hx-swap="outerHTML" class="px-2 pt-2">
+        <p class="lc-sb-newcat-help">{{ "sidebar-category-help"|t }}</p>
         <label for="lc-newcat-{{ eid }}" class="block text-xs text-content-muted">{{ "sidebar-category-name-label"|t }}{% include "partials/required_mark.html" %}</label>
         <div class="mt-0.5 flex gap-1">
           <input id="lc-newcat-{{ eid }}" type="text" name="name" placeholder="{{ "sidebar-category-new-placeholder"|t }}" maxlength="50" required aria-required="true" class="input min-w-0 flex-1 text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">

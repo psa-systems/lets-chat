@@ -3828,6 +3828,7 @@ pub async fn render_sidebar(
         .await
         .ok()?;
     let sidebar = SidebarUpdateFragment {
+        oob: true,
         user: viewer,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
