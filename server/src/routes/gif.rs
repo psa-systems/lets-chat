@@ -34,11 +34,11 @@ pub struct SearchQuery {
 
 /// GET /api/gifs?q= - render the result grid (featured when q is empty).
 pub async fn search(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     AuthUser(_user): AuthUser,
     Query(SearchQuery { q }): Query<SearchQuery>,
 ) -> Result<Html, AppError> {
-    let Some(cfg) = GifConfig::from_env() else {
+    let Some(cfg) = GifConfig::resolve(&state).await else {
         return Err(AppError::BadRequest("GIF picker is not configured".into()));
     };
     let q = q.trim();
@@ -89,7 +89,7 @@ pub async fn post_gif(
     Path(room_id): Path<i64>,
     Form(form): Form<PostGifForm>,
 ) -> Result<Response, AppError> {
-    if GifConfig::from_env().is_none() {
+    if GifConfig::resolve(&state).await.is_none() {
         return Err(AppError::BadRequest("GIF picker is not configured".into()));
     }
     // Mirror the poll/event posting gate.
