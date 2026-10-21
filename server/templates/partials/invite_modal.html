@@ -1,0 +1,71 @@
+{# LC-1080: "Invite to the enclave" modal in the persistent shell, opened from
+   the Invite button beside the enclave gear (partials/sidebar.html). The enclave
+   invite is an enclave-level action used often, so it lives at the enclave level
+   rather than in every room header. A shell modal (not the #thread-panel drawer
+   the room-header invite used) works from any page, including Home / an enclave
+   landing where no room - and so no thread panel - is open.
+
+   No new invite flow: the search input reuses GET /enclave/{id}/invite/search
+   and each result row posts POST /enclave/{id}/invite (invite_search.html), the
+   same endpoints the settings member search uses. window.__lcOpenInviteModal(id)
+   retargets the search at the CURRENT enclave before opening, because the shell
+   is not re-rendered on a boosted enclave switch (same reason as the add-room
+   modal, LC-1067). Gated identically to the opener (manage + enclave context). #}
+{% if can_manage_sidebar_categories %}{% if let Some(eid) = sidebar_current_enclave %}
+<div data-lc-invite-modal class="hidden modal-backdrop" role="dialog" aria-modal="true"
+     aria-labelledby="lc-invite-title" aria-hidden="true">
+  <div class="modal-panel">
+    <div class="flex items-center justify-between gap-2 mb-1">
+      <h2 id="lc-invite-title" class="text-lg font-semibold">{{ "invite-panel-title"|t }}</h2>
+      <button type="button" data-lc-invite-close aria-label="{{ "action-cancel"|t }}"
+              class="text-content-subtle hover:text-content-muted text-xl leading-none">&times;</button>
+    </div>
+    <p class="text-xs text-content-muted mb-3">{{ "invite-panel-sub"|t }}</p>
+    <input data-lc-invite-search name="q"
+           placeholder="{{ "enclave-invite-placeholder"|t }}"
+           aria-label="{{ "enclave-invite-placeholder"|t }}"
+           hx-get="/enclave/{{ eid }}/invite/search"
+           hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+           hx-target="#lc-invite-modal-results"
+           hx-swap="innerHTML"
+           autocomplete="off"
+           data-lc-search data-lc-search-results="#lc-invite-modal-results"
+           role="combobox" aria-expanded="false" aria-controls="lc-invite-modal-results" aria-autocomplete="list"
+           class="input text-sm">
+    <div id="lc-invite-modal-results" class="mt-2 empty:hidden"></div>
+  </div>
+</div>
+<script data-lc-guard="none">
+(function(){
+  var modal = document.querySelector('[data-lc-invite-modal]');
+  if (!modal) return;
+  var search = modal.querySelector('[data-lc-invite-search]');
+  var results = modal.querySelector('#lc-invite-modal-results');
+  var opener = null, trap = null;
+  function close(){
+    if (modal.classList.contains('hidden')) return;
+    if (trap) { trap.dispose(); trap = null; }
+    modal.classList.add('hidden'); modal.setAttribute('aria-hidden', 'true');
+    if (opener && document.contains(opener)) { try { opener.focus(); } catch (e) {} }
+    opener = null;
+  }
+  modal.querySelector('[data-lc-invite-close]').addEventListener('click', close);
+  modal.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !modal.classList.contains('hidden')) { e.preventDefault(); close(); } });
+  modal.addEventListener('mousedown', function(e){ if (e.target === modal) close(); });
+  // LC-1080: retarget the search at the enclave being viewed NOW (the shell
+  // modal is not re-rendered on a boosted enclave switch); the live sidebar
+  // Invite button passes the current enclave id.
+  window.__lcOpenInviteModal = function(enclaveId){
+    if (enclaveId != null && enclaveId !== '' && search) {
+      search.setAttribute('hx-get', '/enclave/' + encodeURIComponent(enclaveId) + '/invite/search');
+      if (window.htmx) { try { window.htmx.process(search); } catch (e) {} }
+    }
+    opener = document.activeElement;
+    search.value = ''; if (results) results.innerHTML = '';
+    modal.classList.remove('hidden'); modal.setAttribute('aria-hidden', 'false');
+    try { search.focus(); } catch (e) {}
+    if (window.__lcDialogTrap) trap = window.__lcDialogTrap(modal);
+  };
+})();
+</script>
+{% endif %}{% endif %}

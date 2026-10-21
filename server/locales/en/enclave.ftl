@@ -61,6 +61,12 @@ enclave-invite-placeholder = Invite by username...
 # from the room header and the member panel.
 invite-panel-title = Invite people
 invite-panel-sub = Search by name to add someone to this space.
+# LC-1080: room-member picker for a private room (add existing enclave members).
+room-member-add = Add member
+room-member-panel-title = Add people to this room
+room-member-panel-sub = Add enclave members to this private room.
+room-member-placeholder = Search enclave members
+room-member-in-room = In room
 # LC-516: add a bot (which cannot accept invitations) directly to the enclave.
 enclave-add-bot-title = Add a bot
 enclave-add-bot-button = Add bot

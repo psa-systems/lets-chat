@@ -1,0 +1,9 @@
+{# LC-1080: swap target after POST /enclave/{id}/rooms/{room_id}/members from the
+   room-member picker row. Mirrors enclave/group_member_row_result.html. #}
+<div data-room-member-row class="lc-search-row lc-search-row--center">
+  {% if ok %}
+  <span class="text-sm text-success-surface-content">{{ message }}</span>
+  {% else %}
+  <span class="text-sm text-danger">{{ message }}</span>
+  {% endif %}
+</div>

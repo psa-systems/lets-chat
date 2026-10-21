@@ -121,6 +121,34 @@ pub struct GroupMemberRowResult<'a> {
     pub message: &'a str,
 }
 
+/// LC-1080: room-member picker for a PRIVATE room. Reuses `GroupMemberCandidate`
+/// (its `AlreadyInGroup` state reads as "already in this room" in the template).
+#[derive(Template)]
+#[template(path = "room/room_member_search.html")]
+pub struct RoomMemberSearchFragment<'a> {
+    pub enclave_id: i64,
+    pub room_id: i64,
+    pub query: &'a str,
+    pub results: &'a [GroupMemberCandidate],
+}
+
+/// Per-row response after `POST /enclave/{id}/rooms/{room_id}/members` from the
+/// picker; the row swaps itself via `hx-swap="outerHTML"`.
+#[derive(Template)]
+#[template(path = "room/room_member_row_result.html")]
+pub struct RoomMemberRowResult<'a> {
+    pub ok: bool,
+    pub message: &'a str,
+}
+
+/// The "Add people to this room" drawer hosted in `#thread-panel`.
+#[derive(Template)]
+#[template(path = "room/room_member_panel.html")]
+pub struct RoomMemberPanel {
+    pub enclave_id: i64,
+    pub room_id: i64,
+}
+
 /// LC-340: one row of the enclave ban-list as rendered in settings. `label` is
 /// the resolved display name; `user_id` keys the unban form.
 pub struct EnclaveBanView {
