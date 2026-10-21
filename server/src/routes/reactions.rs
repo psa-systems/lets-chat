@@ -11,6 +11,20 @@ use crate::views::room::{ReactionBarFragment, ReactionSurface, ReactionView};
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
 
+/// LC-1066: the glyph the enclave-welcome "Wave to say hi" button posts; a
+/// reaction with this emoji on a welcome message drives the wave animation.
+const WELCOME_WAVE_EMOJI: &str = "👋";
+
+/// LC-1066: whether a just-applied reaction should also fire the "wave to say
+/// hi" animation: only a NEWLY ADDED 👋 on an enclave welcome system message.
+/// Un-reacting, any other glyph, and a 👋 on an ordinary message never wave.
+fn should_wave(added: bool, emoji: &str, is_system: bool, body: &str) -> bool {
+    added
+        && emoji == WELCOME_WAVE_EMOJI
+        && is_system
+        && crate::db::enclave_welcome::is_welcome_line(body)
+}
+
 /// LC-595: `?surface=thread` on the reaction endpoints. Absent (the timeline,
 /// and every pre-LC-595 caller) deserializes to the default, so existing URLs
 /// keep working untouched.
@@ -123,6 +137,21 @@ pub async fn toggle_reaction(
             }
         };
         state.hub.broadcast_to_room(m.room_id, &event);
+    }
+
+    // LC-1066: a 👋 added to an enclave welcome message is a "wave to say hi".
+    // Broadcast a transient big-wave animation to the whole room (the waver
+    // included); the durable 👋 reaction broadcast above stays the record. Add
+    // only, welcome system messages only - so a 👋 on an ordinary message, or
+    // un-reacting, never triggers it.
+    if should_wave(added, &emoji, m.is_system, &m.body) {
+        state.hub.broadcast_to_room(
+            m.room_id,
+            &ChatEvent::Wave {
+                room_id: m.room_id,
+                username: user.display_label().to_string(),
+            },
+        );
     }
 
     // LC-75: publish reaction.added to outgoing webhooks (additions only).
@@ -318,4 +347,35 @@ pub async fn cancel_picker(Path(message_id): Path<i64>) -> Response {
         r##"<button hx-get="/messages/{message_id}/reactions/picker" hx-target="this" hx-swap="outerHTML" aria-label="{add_label}" data-lc-tip="{add_label}" data-lc-tip-pos="top" aria-haspopup="dialog" class="lc-react-add inline-flex items-center justify-center h-6 rounded-full border border-border bg-surface-sunken px-1.5 text-content-muted hover:bg-surface-elevated hover:text-content"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/></svg></button>"##,
     );
     axum::response::Html(body).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_wave;
+    use crate::db::enclave_welcome::WELCOME_LINES;
+
+    #[test]
+    fn waves_only_on_an_added_welcome_hand() {
+        let welcome = WELCOME_LINES[0];
+        assert!(
+            should_wave(true, "👋", true, welcome),
+            "an added 👋 on a welcome waves"
+        );
+        assert!(
+            !should_wave(false, "👋", true, welcome),
+            "un-reacting never waves"
+        );
+        assert!(
+            !should_wave(true, "😀", true, welcome),
+            "a different glyph does not wave"
+        );
+        assert!(
+            !should_wave(true, "👋", true, "hello team"),
+            "a non-welcome body does not wave"
+        );
+        assert!(
+            !should_wave(true, "👋", false, welcome),
+            "a non-system message does not wave"
+        );
+    }
 }

@@ -622,3 +622,5 @@ room-action-failed = No se pudo completar esa accion. Intentalo de nuevo.
 
 # LC-1059: wave at an enclave newcomer
 room-welcome-wave = Saluda
+# LC-1066: aviso en la región activa cuando se reproduce la animación de saludo.
+room-waved = saludó
