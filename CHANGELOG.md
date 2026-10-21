@@ -8,6 +8,21 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.8.2] - 2026-10-21
+
+Patch release on top of v0.8.1: five UI and call-history fixes, no operator action.
+
+### Changed
+
+- **Invite people moved next to the enclave gear (LC-1080).** The Invite control was always an enclave-wide invite, so it now opens from a modal beside the enclave settings gear (reachable from any page, not just a room), and the per-room Invite button is gone. Private rooms instead get a room-specific picker in their header to add existing enclave members to that room.
+- **Support entries hide when the AI help desk is off (LC-1079).** The support rail link and help bubble no longer appear for admins when the AI help desk is disabled (no LLM/embeddings or the AI gate is closed), so there is no dead support entry that leads nowhere.
+
+### Fixed
+
+- **Voice room Manage is discoverable and icon-only (LC-1078, LC-1080).** The Manage control now renders for managers on a boosted navigation (the gate is computed on the voice page itself, like text rooms), stays beside the room name, and is icon-only to match the app's other header actions.
+- **Add room creates the room in the enclave you are viewing (LC-1077).** A follow-up to LC-1067: the add-room dialog could still target a stale enclave in the window between a navigation landing and the sidebar refresh resolving. It now reads the current enclave synchronously from the page context.
+- **A busy auto-decline reads as "missed a call: busy" (LC-1075).** When an invite arrived while you were already in another call, the auto-decline was logged with the same "declined the call." text as a deliberate decline. It now persists a distinct "missed a call: busy." message, so the caller's history no longer reads as an intentional decline.
+
 ## [v0.8.1] - 2026-10-20
 
 Patch release on top of v0.8.0: two UI fixes, no operator action. (Backfilled: the release PR merged before this section landed on the release branch.)
