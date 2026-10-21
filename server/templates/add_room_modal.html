@@ -80,9 +80,20 @@
     // LC-1067: retarget to the enclave being viewed NOW. The modal lives in the
     // shell and is not re-rendered on a boosted enclave switch, so its baked
     // action goes stale; the opener (the live sidebar + button) passes the
-    // current enclave id each time. Guarded so a missing id keeps the action.
-    if (enclaveId != null && enclaveId !== '' && form) {
-      form.setAttribute('action', '/enclave/' + encodeURIComponent(enclaveId) + '/rooms');
+    // current enclave id each time.
+    //
+    // LC-1077: the sidebar is swapped out-of-band over the WS (live.js's
+    // PageChanged round-trip), decoupled from the boosted #main navigation
+    // that lands first. Opening the modal in that window read the passed-in
+    // id from the sidebar's own last-rendered markup, still the PREVIOUS
+    // enclave. window.LetsChatPageContext mirrors the value live.js already
+    // derives synchronously from #main on its own htmx:afterSwap, so it is
+    // always the enclave actually on screen; prefer it over the argument and
+    // fall back to the argument only when the module is unavailable.
+    var current = window.LetsChatPageContext ? window.LetsChatPageContext.get() : null;
+    var targetId = current ? current.enclave_id : enclaveId;
+    if (targetId != null && targetId !== '' && form) {
+      form.setAttribute('action', '/enclave/' + encodeURIComponent(targetId) + '/rooms');
     }
     opener = document.activeElement;
     form.reset();

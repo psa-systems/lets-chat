@@ -118,6 +118,13 @@
     };
   }
 
+  // LC-1077: exposed so other shell scripts (the add-room modal) can read the
+  // viewer's CURRENT enclave synchronously, the same value this module sends
+  // over the socket on #main's own htmx:afterSwap. Reading this instead of the
+  // sidebar's last-rendered `{{ add_eid }}` means the add-room target no longer
+  // depends on the sidebar's OOB swap having landed.
+  window.LetsChatPageContext = { get: function () { return pageContext(document); } };
+
   function sendPageContext(ws) {
     if (!ws) return;
     try {
