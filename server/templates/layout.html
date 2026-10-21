@@ -367,7 +367,42 @@
      the top banner. `GET /support/bubble` still exists for direct fetches, but
      nothing triggers it on load anymore. #}
   <div id="lc-support-slot"></div>
+  {# LC-1066: "wave to say hi" overlay. A Wave WS event OOB-appends a floating
+     👋 into #lc-wave-layer (removed on animationend by the shell script below);
+     #lc-wave-live politely announces the waver. Fixed, pointer-events-none, so
+     it never blocks the UI underneath. #}
+  <div id="lc-wave-layer" aria-hidden="true" class="lc-wave-layer"></div>
+  <div id="lc-wave-live" class="sr-only" role="status" aria-live="polite"></div>
 </div>
+<script>
+// LC-1066: remove each "wave to say hi" float once its CSS animation ends (a
+// timeout backstop covers a dropped animationend, e.g. reduced-motion). The
+// Wave WS event OOB-appends the span; nothing else cleans it up. Lifetime-of-
+// page, independent of the notification bus below.
+(function(){
+  function sweep(el){ if (el && el.parentNode) el.parentNode.removeChild(el); }
+  // Primary: drop each float when its animation finishes.
+  document.addEventListener('animationend', function(e){
+    var t = e.target;
+    if (t && t.classList && t.classList.contains('lc-wave-float')) sweep(t);
+  });
+  // Backstop: if animationend never fires, remove the float a few seconds after
+  // it is appended, and cap concurrent floats so a burst cannot fill the DOM.
+  var layer = document.getElementById('lc-wave-layer');
+  if (layer && typeof MutationObserver !== 'undefined') {
+    new MutationObserver(function(muts){
+      muts.forEach(function(m){
+        m.addedNodes && m.addedNodes.forEach(function(n){
+          if (n.nodeType === 1 && n.classList.contains('lc-wave-float')) {
+            setTimeout(function(){ sweep(n); }, 5000);
+          }
+        });
+      });
+      while (layer.childElementCount > 24) sweep(layer.firstElementChild);
+    }).observe(layer, { childList: true });
+  }
+})();
+</script>
 <script>
 // Persistent-shell script: lives in layout.html, runs once per full browser
 // page load, never re-rendered by in-place swaps (the reconnect soft-refresh
