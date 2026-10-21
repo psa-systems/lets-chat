@@ -210,8 +210,28 @@ pub async fn inject_branding_css(
     } else {
         crate::db::branding::DEFAULT_ACCENT
     };
+    // LC-1079: hide the support entry points (left-rail headset + admin nav
+    // Support tab) when the AI help desk is not usable for the viewer (AI flag
+    // off, LLM/embeddings unconfigured, or outside the AI audience) - the same
+    // gate the support bubble uses below. Done here, not per-template, because
+    // the switcher is carried by ~54 page structs; a head-level style also
+    // survives the rail's live OOB re-renders. Empty when support is usable or
+    // on an anonymous (shell-less) response.
+    // Only admins ever render the support entries, so the rule is pointless (and
+    // would pollute the response string) for anyone else; gate it on the admin
+    // role as well as support being off.
+    let support_hidden = if let Some(user) = &user {
+        if user.role == "admin" && !crate::routes::support_panel::bubble_enabled(&state, user).await
+        {
+            ".lc-rail-support,.lc-admin-support-tab{display:none}"
+        } else {
+            ""
+        }
+    } else {
+        ""
+    };
     let style = format!(
-        "<style data-lc-brand>:root{{--brand-primary:{primary};--brand-accent:{accent}}}</style>"
+        "<style data-lc-brand>:root{{--brand-primary:{primary};--brand-accent:{accent}}}{support_hidden}</style>"
     );
     let injected = if let Some(idx) = original.find("</head>") {
         let mut out = String::with_capacity(original.len() + style.len());

@@ -269,8 +269,9 @@ fn panel_msg(m: &db::chat::RawMessage, mine: bool, show_avatar: bool) -> PanelMs
 /// True when the support assistant is usable for `user`: the LLM and embeddings
 /// are configured, the runtime flag is on, and the viewer is within the AI
 /// audience. Mirrors what `/support` itself requires, so the bubble is shown only
-/// when clicking it would actually work.
-async fn bubble_enabled(state: &AppState, user: &User) -> bool {
+/// when clicking it would actually work. LC-1079: also gates the support entry
+/// points (rail tile + admin nav tab) via inject_branding_css.
+pub(crate) async fn bubble_enabled(state: &AppState, user: &User) -> bool {
     state.llm_available()
         && state.embeddings_available()
         && ai_gate::flag_on(state).await
