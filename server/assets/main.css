@@ -2271,10 +2271,8 @@ math {
 /* LC-576: org row + its enclave menu (prototype .sb-org: 6px 16px 12px, 15px/600,
    muted chevron). A native <details> so it needs no JS; the summary marker is
    stripped because the chevron is drawn explicitly. */
-.lc-sidebar-org-wrap {
-    position: relative;
-    flex: none;
-}
+/* LC-1071: the current-enclave row - the name, plus a manager-only Settings
+   gear. Was a chevron <details> flyout; see partials/sidebar.html. */
 .lc-sidebar-org {
     display: flex;
     align-items: center;
@@ -2284,29 +2282,20 @@ math {
     font-size: 0.9375rem;
     font-weight: 600;
     color: var(--content);
-    cursor: pointer;
-    list-style: none;
 }
-.lc-sidebar-org::-webkit-details-marker { display: none; }
-.lc-sidebar-org-chev {
-    height: 1rem;
-    width: 1rem;
+.lc-sidebar-org-gear {
     flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.75rem;
+    width: 1.75rem;
+    border-radius: 0.375rem;
     color: var(--content-muted);
-    transition: transform 0.15s ease;
 }
-.lc-sidebar-org-wrap[open] .lc-sidebar-org-chev { transform: rotate(180deg); }
-.lc-sidebar-org-menu {
-    position: absolute;
-    left: 0.75rem;
-    right: 0.75rem;
-    top: 100%;
-    z-index: 40;
-    padding: 0.375rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--border);
-    background-color: var(--surface-elevated);
-    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2);
+.lc-sidebar-org-gear:hover {
+    color: var(--content);
+    background-color: var(--surface-sunken);
 }
 
 /* LC-576: search tabs (prototype .sb-tabs / .sb-tab: two evenly split tabs on the
