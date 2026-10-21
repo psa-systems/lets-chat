@@ -448,6 +448,67 @@ async fn pin_event_render_repeats_no_statement_the_producer_ran() {
     }
 }
 
+/// LC-1073: a viewer who has blocked (or is blocked by) the message's author
+/// must not see a live reaction, ack-required, or pin update for that
+/// message, same guarantee `render_edited_message` already gives edits.
+#[tokio::test]
+async fn blocked_viewer_receives_no_reaction_ack_or_pin_broadcast() {
+    let f = setup(1).await;
+    db::auth::block_user(&f.state.auth, &f.members[0].id, &f.author.id)
+        .await
+        .unwrap();
+
+    db::chat::toggle_reaction(&f.state.chat, f.message.id, &f.author.id, "\u{1f44d}")
+        .await
+        .unwrap();
+    db::acks::set_required(&f.state.chat, f.message.id, f.room.id, &f.author.id)
+        .await
+        .unwrap();
+    db::pinned::pin_message(&f.state.chat, f.message.id, f.room.id, &f.author.id)
+        .await
+        .unwrap();
+    let ctx = EditedMessageContext::load(&f.state, f.message.id)
+        .await
+        .unwrap()
+        .expect("the message exists");
+
+    assert!(
+        routes::test_support::render_reaction_bar(&f.state, &ctx, &f.members[0].id)
+            .await
+            .is_none(),
+        "a blocked viewer must not render the reaction bar"
+    );
+    assert!(
+        routes::test_support::render_ack_required(&f.state, &f.members[0], &ctx)
+            .await
+            .is_none(),
+        "a blocked viewer must not render the ack-required bubble"
+    );
+    assert!(
+        routes::test_support::render_pin_event(&f.state, &f.members[0], &ctx)
+            .await
+            .is_none(),
+        "a blocked viewer must not render the pin event"
+    );
+
+    // An unrelated viewer with no block relationship still renders normally.
+    assert!(
+        routes::test_support::render_reaction_bar(&f.state, &ctx, &f.moderator.id)
+            .await
+            .is_some()
+    );
+    assert!(
+        routes::test_support::render_ack_required(&f.state, &f.moderator, &ctx)
+            .await
+            .is_some()
+    );
+    assert!(
+        routes::test_support::render_pin_event(&f.state, &f.moderator, &ctx)
+            .await
+            .is_some()
+    );
+}
+
 #[tokio::test]
 async fn thread_reply_render_repeats_no_statement_the_producer_ran() {
     let f = setup(3).await;
