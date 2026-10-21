@@ -121,6 +121,16 @@ async fn message_count(chat: &sqlx::SqlitePool, room: i64) -> i64 {
         .unwrap()
 }
 
+async fn last_message_body(chat: &sqlx::SqlitePool, room: i64) -> String {
+    sqlx::query_scalar::<_, String>(
+        "SELECT body FROM messages WHERE room_id = ? ORDER BY id DESC LIMIT 1",
+    )
+    .bind(room)
+    .fetch_one(chat)
+    .await
+    .unwrap()
+}
+
 async fn user_row(state: &AppState, id: &str) -> User {
     db::auth::find_user_by_id(&state.auth, id)
         .await
@@ -265,6 +275,41 @@ async fn reject_and_cancel_post_a_message_and_release_the_slot() {
             RingingResult::Started
         ),
         "reject released the ringing slot"
+    );
+}
+
+#[tokio::test]
+async fn busy_auto_decline_persists_a_distinct_message_from_a_plain_decline() {
+    // LC-1075: call.js sends `{kind: "reject", payload: "busy"}` for its
+    // auto-decline while the callee is already in another call. That must
+    // persist as something other than the plain user-initiated "declined the
+    // call." text, since the callee never saw or acted on the attempt.
+    let s = setup().await;
+
+    relay_call_signal(&s.state, &s.alice, "Alice", s.dm_room, "invite", None).await;
+    let bob = user_row(&s.state, &s.bob_id).await;
+    relay_call_signal(
+        &s.state,
+        &bob,
+        "Bob",
+        s.dm_room,
+        "reject",
+        Some("busy".into()),
+    )
+    .await;
+    let busy_body = last_message_body(&s.chat, s.dm_room).await;
+    assert_ne!(
+        busy_body, "declined the call.",
+        "a busy auto-decline must not read like a user-initiated decline"
+    );
+
+    // A plain user-initiated reject (no "busy" payload) still gets the
+    // original wording.
+    relay_call_signal(&s.state, &s.alice, "Alice", s.dm_room, "invite", None).await;
+    relay_call_signal(&s.state, &bob, "Bob", s.dm_room, "reject", None).await;
+    assert_eq!(
+        last_message_body(&s.chat, s.dm_room).await,
+        "declined the call."
     );
 }
 
