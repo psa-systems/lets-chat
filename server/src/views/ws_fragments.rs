@@ -52,6 +52,15 @@ pub struct TypingFragment<'a> {
 #[template(path = "ws/stopped_typing.html")]
 pub struct StoppedTypingFragment;
 
+/// LC-1066: the "wave to say hi" animation. OOB-appends a floating 👋 into the
+/// shell's `#lc-wave-layer` and announces the waver politely. Recipient-
+/// independent, like typing.
+#[derive(Template)]
+#[template(path = "ws/wave.html")]
+pub struct WaveFragment<'a> {
+    pub username: &'a str,
+}
+
 /// LC-498: "X is editing the wiki" presence banner (mirrors the typing
 /// fragment). Recipient-independent, so like typing it renders one shared
 /// string for all viewers.
@@ -377,6 +386,7 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         .ok(),
         ChatEvent::UserTyping { username, .. } => TypingFragment { username }.render().ok(),
         ChatEvent::UserStoppedTyping { .. } => StoppedTypingFragment.render().ok(),
+        ChatEvent::Wave { username, .. } => WaveFragment { username }.render().ok(),
         ChatEvent::WikiEditing { username, .. } => {
             WikiEditingFragment { username }.render().ok()
         }
