@@ -48,13 +48,27 @@
   <div class="lc-sidebar-org">
     <span class="truncate">{% for e in switcher %}{% if e.active %}{% if e.id.is_some() %}{{ e.label }}{% endif %}{% endif %}{% endfor %}</span>
     {% for e in switcher %}{% if e.active %}{% if e.can_manage %}
-    <a href="/enclave/{{ eid }}/settings" {% include "partials/nav_boost.html" %}
-       class="lc-sidebar-org-gear" aria-label="{{ "switcher-enclave-settings"|t }}"
-       data-lc-tip="{{ "switcher-enclave-settings"|t }}" data-lc-tip-pos="bottom">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
-        <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
-      </svg>
-    </a>
+    <span class="flex flex-none items-center gap-0.5">
+      {# LC-1080: enclave-level "Invite people" beside the gear (the invite is an
+         enclave action used often, so it lives here rather than in every room
+         header). Opens the shell invite modal (partials/invite_modal.html) at the
+         current enclave. #}
+      <button type="button" class="lc-sidebar-org-gear"
+              onclick="window.__lcOpenInviteModal && window.__lcOpenInviteModal({{ eid }})"
+              aria-label="{{ "invite-panel-title"|t }}" data-lc-tip="{{ "invite-panel-title"|t }}" data-lc-tip-pos="bottom">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+          <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z"/>
+          <path d="M15.75 6.75a.75.75 0 00-1.5 0v1.5h-1.5a.75.75 0 000 1.5h1.5v1.5a.75.75 0 001.5 0v-1.5h1.5a.75.75 0 000-1.5h-1.5v-1.5z"/>
+        </svg>
+      </button>
+      <a href="/enclave/{{ eid }}/settings" {% include "partials/nav_boost.html" %}
+         class="lc-sidebar-org-gear" aria-label="{{ "switcher-enclave-settings"|t }}"
+         data-lc-tip="{{ "switcher-enclave-settings"|t }}" data-lc-tip-pos="bottom">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+          <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+        </svg>
+      </a>
+    </span>
     {% endif %}{% endif %}{% endfor %}
   </div>
   {% endif %}

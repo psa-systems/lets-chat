@@ -324,6 +324,9 @@
   {# LC-400: add-room modal in the persistent shell so a live sidebar OOB swap
      cannot clobber it mid-typing (the `+` button opens it). #}
   {% include "add_room_modal.html" %}
+  {# LC-1080: enclave "Invite people" modal, opened from the Invite button beside
+     the enclave gear. In the shell so it works from any page. #}
+  {% include "partials/invite_modal.html" %}
   {% include "lightbox_modal.html" %}
   <div id="lc-mention-counts" class="hidden"
        data-base-title="Let's Chat"
