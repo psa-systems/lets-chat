@@ -692,6 +692,12 @@ async fn pending_support_surfaces_on_home_for_admins_only() {
         admin_home.contains("lc-home-support-card") && admin_home.contains("printer on fire"),
         "admin dashboard shows the pending request card"
     );
+    // LC-1079: the help desk is AI-powered and AI is unconfigured in this test,
+    // so inject_branding_css hides the support entries via the branding style.
+    assert!(
+        admin_home.contains(".lc-rail-support,.lc-admin-support-tab{display:none}"),
+        "with the AI help desk off, the support entries are hidden via the injected style"
+    );
 
     // Non-admin: neither surface.
     let member_home = home(member_session).await;
