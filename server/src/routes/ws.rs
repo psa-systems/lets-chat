@@ -2215,7 +2215,15 @@ pub async fn relay_call_signal(
     // LC-438: log the silent end-states as call-event rows so both members keep
     // a record (mirrors "started a call."). `user` is the signal sender: the
     // callee for a decline, the caller for a cancel/no-answer.
+    //
+    // LC-1075: call.js sends payload "busy" for its auto-decline while the
+    // callee is already in another call (see call.js's `handleSignal`
+    // "invite" case). That auto-decline is not a user-initiated decline, so
+    // it gets its own persisted wording rather than "declined the call.".
     match kind {
+        "reject" if payload.as_deref() == Some("busy") => {
+            post_call_event_message(state, user, &room, "missed a call: busy.").await
+        }
         "reject" => post_call_event_message(state, user, &room, "declined the call.").await,
         "cancel" => post_call_event_message(state, user, &room, "cancelled the call.").await,
         _ => {}
