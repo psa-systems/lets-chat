@@ -8,6 +8,18 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.8.1] - 2026-10-20
+
+Patch release on top of v0.8.0: two UI fixes, no operator action.
+
+### Fixed
+
+- **A voice room can now be deleted (LC-1070).** The voice page had no Manage link, so there was no path to the room's delete option. Managers now get a Manage link in the voice header, reaching the same manage / Danger-zone delete flow text rooms already had.
+
+### Changed
+
+- **Enclave settings is a discoverable gear (LC-1071).** The current-enclave header replaces its chevron menu with a labelled Settings gear (manager-only) and drops the "Discover or create enclaves" item, which duplicated the enclave rail's + button. A non-manager now sees just the enclave name.
+
 ## [v0.8.0] - 2026-10-20
 
 Eighth tagged release, on top of v0.7.0. All three changes are user-facing; none needs operator action.
