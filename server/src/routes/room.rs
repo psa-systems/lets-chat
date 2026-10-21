@@ -227,6 +227,16 @@ async fn get_voice_room(
     // everyone else.
     let remote_control_enabled =
         super::feature_flags::allows(state, &super::feature_flags::REMOTE_CONTROL, user).await;
+    // LC-1078: the room-manage right, computed directly (same as the room page,
+    // room.rs). load_chrome's can_manage_sidebar_categories is false on a
+    // boosted nav, which hid the Manage control on the normal path into a voice
+    // room; this flag is boosted-nav-safe.
+    let can_manage_overrides = {
+        let enclave_role = db::enclave::get_membership(&state.chat, enclave_id, &user.id)
+            .await?
+            .map(|m| m.role);
+        crate::perms::room_can_manage_overrides(enclave_role, &user.role)
+    };
     let page = crate::views::voice::VoicePage {
         user,
         room,
@@ -235,6 +245,7 @@ async fn get_voice_room(
         sidebar_starred_rooms: &sidebar_starred_rooms,
         sidebar_starred_peers: &sidebar_starred_peers,
         can_manage_sidebar_categories,
+        can_manage_overrides,
         sidebar_current_enclave,
         sidebar_rooms: &sidebar_rooms,
         sidebar_peers: &sidebar_peers,
