@@ -127,9 +127,13 @@
         {# LC-1060: Add chat lives on the Rooms header (Discord-style), not beside
            the search box. Opens the shell's add-chat modal (LC-400), so a sidebar
            swap cannot destroy a half-typed name. Manager-only, as before. #}
-        {% if can_manage_sidebar_categories %}{% if sidebar_current_enclave.is_some() %}
+        {% if can_manage_sidebar_categories %}{% if let Some(add_eid) = sidebar_current_enclave %}
+        {# LC-1067: pass the CURRENT enclave id so the shell modal (rendered once
+           at page load) retargets to the enclave actually being viewed, not the
+           one the page first loaded in. Without this, adding a room after a
+           boosted enclave switch posts to the stale enclave. #}
         <button type="button" class="lc-sb-section-add" data-lc-add-chat
-                onclick="window.__lcOpenAddRoom && window.__lcOpenAddRoom()"
+                onclick="window.__lcOpenAddRoom && window.__lcOpenAddRoom({{ add_eid }})"
                 aria-label="{{ "sidebar-room-add"|t }}" data-lc-tip="{{ "sidebar-room-add"|t }}" data-lc-tip-pos="right">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
             <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>

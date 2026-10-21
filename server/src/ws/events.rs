@@ -83,6 +83,14 @@ pub enum ChatEvent {
         room_id: i64,
         user_id: String,
     },
+    /// LC-1066: someone clicked "Wave to say hi" (a 👋 landed on an enclave
+    /// welcome message). Transient, no DB; broadcast to the whole room INCLUDING
+    /// the waver so everyone sees the one-shot animation. The durable 👋
+    /// reaction is a separate `ReactionAdded`; this only drives the animation.
+    Wave {
+        room_id: i64,
+        username: String,
+    },
     /// LC-498: someone is actively editing this room's wiki (presence only -
     /// true co-editing is deferred). Broadcast to the room except the editor so
     /// other viewers of the room About page see an "X is editing the wiki"

@@ -4827,6 +4827,50 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     70%  { opacity: 1; }
     100% { opacity: 0; transform: translate(-50%, 0) scale(1); }
 }
+/* LC-1066: the "wave to say hi" overlay. A fixed, click-through layer in the
+   shell; a Wave WS event appends one .lc-wave-float, which the shell script
+   removes on animationend. Sits above the timeline but below modals (z-50). */
+.lc-wave-layer {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 40;
+}
+/* A big 👋 that rises from the lower-centre, waves a few times, and fades. Only
+   transform and opacity animate. */
+.lc-wave-float {
+    position: absolute;
+    left: 50%;
+    bottom: 18%;
+    font-size: clamp(3rem, 12vw, 7rem);
+    line-height: 1;
+    transform-origin: 70% 90%;
+    will-change: transform, opacity;
+    animation: lc-wave 2200ms ease-out both;
+}
+@keyframes lc-wave {
+    0%   { opacity: 0; transform: translate(-50%, 20px) scale(0.4) rotate(0deg); }
+    12%  { opacity: 1; transform: translate(-50%, 0) scale(1) rotate(0deg); }
+    24%  { transform: translate(-50%, -4px) scale(1.06) rotate(18deg); }
+    36%  { transform: translate(-50%, -8px) scale(1.08) rotate(-16deg); }
+    48%  { transform: translate(-50%, -12px) scale(1.1) rotate(16deg); }
+    60%  { transform: translate(-50%, -18px) scale(1.08) rotate(-14deg); }
+    72%  { transform: translate(-50%, -26px) scale(1.06) rotate(8deg); }
+    100% { opacity: 0; transform: translate(-50%, -80px) scale(0.9) rotate(0deg); }
+}
+/* Reduced motion: the hand still fades in and out where it appeared (opacity
+   only, no rise or wave), so animationend still fires and the shell script
+   cleans it up. */
+@media (prefers-reduced-motion: reduce) {
+    .lc-wave-float { bottom: 30%; animation: lc-wave-static 1400ms ease both; }
+}
+@keyframes lc-wave-static {
+    0%   { opacity: 0; transform: translateX(-50%) scale(0.9); }
+    15%  { opacity: 1; transform: translateX(-50%) scale(1); }
+    70%  { opacity: 1; }
+    100% { opacity: 0; transform: translateX(-50%) scale(1); }
+}
 /* The tray: a card anchored above the toggle (below it when the bar sits at
    the top of its window, e.g. the voice page or a pop-out; call_reactions.js
    measures and flips). The row reuses .lc-emoji-cell; More opens the existing
