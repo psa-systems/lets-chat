@@ -284,6 +284,60 @@ async fn presence_fans_out_to_members_with_the_current_count() {
     );
 }
 
+/// LC-1068: a voice channel's presence reaches every ENCLAVE member (voice
+/// membership is enclave-scoped, not `room_members`), so the sidebar in-call
+/// indicator lights up for members who are not in the room - the Discord-style
+/// "which voice room is active" signal. A huddle, by contrast, fans out over
+/// `room_members` only.
+#[tokio::test]
+async fn voice_channel_presence_fans_out_to_enclave_members() {
+    use lets_chat::models::enclave::EnclaveRole;
+    let (state, _room, users) = setup().await;
+    let (alice, bob) = (&users[0], &users[1]);
+
+    let enclave = db::enclave::create_enclave(&state.chat, "Guild", None, alice)
+        .await
+        .unwrap();
+    db::enclave::add_member(&state.chat, enclave, bob, EnclaveRole::Member)
+        .await
+        .unwrap();
+    let voice = db::chat::create_room(
+        &state.chat,
+        "voicechan",
+        None,
+        "public",
+        None,
+        Some(enclave),
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE rooms SET is_voice = 1 WHERE id = ?")
+        .bind(voice)
+        .execute(&state.chat)
+        .await
+        .unwrap();
+
+    // Bob belongs to the enclave but is NOT in the room and has it nowhere open;
+    // only the enclave-scoped fan-out can reach his sidebar.
+    let (_bc, mut bob_rx, _) = state.hub.connect(bob, "bob");
+    let (alice_conn, _rx, _) = state.hub.connect(alice, "alice");
+    state.hub.voice_join(alice_conn, voice);
+    lets_chat::huddle_ring::broadcast_presence(&state, voice).await;
+
+    let ev = drain(&mut bob_rx);
+    let p = presence_for(&ev, bob);
+    assert_eq!(
+        p.len(),
+        1,
+        "an enclave member not in the voice room still gets the sidebar presence"
+    );
+    assert_eq!(
+        presence_count(p[0]),
+        1,
+        "count reflects the one participant"
+    );
+}
+
 /// LC-612: unlike the ring, the indicator ignores mute - it is passive presence,
 /// not an interruption, so a member who muted the room still sees the dot.
 #[tokio::test]

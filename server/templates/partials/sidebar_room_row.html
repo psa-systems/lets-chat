@@ -6,6 +6,12 @@
     <span class="w-6 text-center shrink-0 text-content-subtle">{% if room.is_voice %}&#128266;{% else %}#{% endif %}</span>
     {% if room.is_voice %}
     <span class="flex-1 truncate min-w-0">{{ room.name }}</span>
+    {# LC-1068: voice rooms carry the same live in-call indicator as huddles, so
+       an active voice channel shows its participant count in the sidebar
+       (Discord-style). Target span present even at 0 for the OOB swap. #}
+    {% let incall_room_id = room.id %}
+    {% let in_call = room.in_call %}
+    {% include "partials/incall_badge.html" %}
     {% else %}
     <span class="flex-1 truncate min-w-0">{{ room.name }}</span>
     {# LC-612: in-call indicator. Present (empty) even at 0 so the live OOB swap
