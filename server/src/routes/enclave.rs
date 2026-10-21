@@ -98,7 +98,8 @@ use crate::state::AppState;
 use crate::views::enclave::{
     DiscoverPage, EnclaveBrandingPage, EnclaveInviteCandidate, EnclaveInviteCandidateState,
     EnclaveInvitePanel, EnclaveInviteRowResult, EnclaveInviteSearchFragment, EnclaveMemberView,
-    EnclavePage, EnclaveSettingsPage,
+    EnclavePage, EnclaveSettingsPage, GroupMemberCandidate, GroupMemberCandidateState,
+    RoomMemberPanel, RoomMemberRowResult, RoomMemberSearchFragment,
 };
 use crate::views::settings::SettingsFeedback;
 use crate::views::{html, Html};
@@ -212,6 +213,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/enclave/{id}/rooms/{room_id}/members",
             post(post_add_room_member),
+        )
+        .route(
+            "/enclave/{id}/rooms/{room_id}/members/panel",
+            get(get_room_member_panel),
+        )
+        .route(
+            "/enclave/{id}/rooms/{room_id}/members/search",
+            get(get_room_member_search),
         )
         .route(
             "/enclave/{id}/rooms/{room_id}/members/{user_id}/remove",
@@ -1603,12 +1612,16 @@ pub struct RoomMemberForm {
     pub user_id: String,
 }
 
+/// POST /enclave/{id}/rooms/{room_id}/members - add an enclave member to a
+/// (private) room. LC-1080: returns the picker's per-row fragment so the
+/// room-member typeahead swaps the row to "Added" (mirrors the group member
+/// add); the target must already belong to the enclave.
 pub async fn post_add_room_member(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
     Path((id, room_id)): Path<(i64, i64)>,
     axum::Form(form): axum::Form<RoomMemberForm>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Html, AppError> {
     require_manage(&state, &user, id).await?;
     assert_room_in_enclave(&state.chat, id, room_id).await?;
     let target = form.user_id.trim();
@@ -1616,10 +1629,88 @@ pub async fn post_add_room_member(
         .await?
         .is_none()
     {
-        return Err(AppError::BadRequest("user is not an enclave member".into()));
+        return html(&RoomMemberRowResult {
+            ok: false,
+            message: "Not a member of this enclave.",
+        });
     }
     db::chat::add_room_member(&state.chat, room_id, target).await?;
-    Ok(Redirect::to(&format!("/enclave/{id}")))
+    html(&RoomMemberRowResult {
+        ok: true,
+        message: "Added",
+    })
+}
+
+/// GET /enclave/{id}/rooms/{room_id}/members/panel - LC-1080. The "Add people to
+/// this room" drawer in `#thread-panel`, opened from a private room's header.
+pub async fn get_room_member_panel(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, room_id)): Path<(i64, i64)>,
+) -> Result<Html, AppError> {
+    require_manage(&state, &user, id).await?;
+    assert_room_in_enclave(&state.chat, id, room_id).await?;
+    html(&RoomMemberPanel {
+        enclave_id: id,
+        room_id,
+    })
+}
+
+/// GET /enclave/{id}/rooms/{room_id}/members/search?q=... - LC-1080. Typeahead
+/// over enclave users for adding to the room; marks who is already in the room
+/// or not yet in the enclave. Blank query returns an empty body, like the
+/// invite / group-member searches.
+pub async fn get_room_member_search(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path((id, room_id)): Path<(i64, i64)>,
+    Query(InviteSearchQuery { q }): Query<InviteSearchQuery>,
+) -> Result<Html, AppError> {
+    require_manage(&state, &user, id).await?;
+    assert_room_in_enclave(&state.chat, id, room_id).await?;
+    let query = q.unwrap_or_default();
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Ok(Html(String::new()));
+    }
+    let records = db::auth::search_users(&state.auth, trimmed, &user.id, 50).await?;
+    let enclave_ids: std::collections::HashSet<String> = db::enclave::list_members(&state.chat, id)
+        .await?
+        .into_iter()
+        .map(|m| m.user_id)
+        .collect();
+    let room_ids: std::collections::HashSet<String> =
+        db::chat::list_room_member_ids(&state.chat, room_id)
+            .await?
+            .into_iter()
+            .collect();
+    let results: Vec<GroupMemberCandidate> = records
+        .into_iter()
+        .map(|r| {
+            let state = if room_ids.contains(&r.id) {
+                GroupMemberCandidateState::AlreadyInGroup
+            } else if !enclave_ids.contains(&r.id) {
+                GroupMemberCandidateState::NotInEnclave
+            } else {
+                GroupMemberCandidateState::Addable
+            };
+            GroupMemberCandidate {
+                id: r.id,
+                username: r.username,
+                display_name: r.display_name,
+                avatar_ext: r.avatar_ext,
+                status: r.status,
+                custom_status: r.custom_status,
+                state,
+            }
+        })
+        .collect();
+    html(&RoomMemberSearchFragment {
+        enclave_id: id,
+        room_id,
+        query: trimmed,
+        results: &results,
+    })
 }
 
 pub async fn post_remove_room_member(

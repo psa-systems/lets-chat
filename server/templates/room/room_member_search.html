@@ -1,0 +1,44 @@
+{# LC-1080: room-member typeahead for a PRIVATE room. Mirrors
+   enclave/group_member_search.html, but adds the person to this ROOM
+   (POST /enclave/{id}/rooms/{room_id}/members) instead of a group. Reuses the
+   GroupMemberCandidate shape: `is_in_group()` here means "already in this room". #}
+{% if results.is_empty() %}
+<div class="lc-search-panel">
+  <p class="px-3 py-3 text-sm text-content-muted">{{ "enclave-search-no-matches"|t }}</p>
+</div>
+{% else %}
+<div class="lc-search-panel">
+  <div role="listbox" class="max-h-80 overflow-y-auto">
+    {% for r in results %}
+    <div data-room-member-row role="option" id="lc-opt-room-{{ room_id }}-{{ r.id }}" aria-selected="false" class="lc-search-row lc-search-row--center">
+      {% let avatar_user_id = r.id.clone() %}
+      {% let avatar_label = r.label().to_string() %}
+      {% let avatar_ext = r.avatar_ext.clone() %}
+      {% let avatar_status = r.status.clone() %}
+      {% let avatar_custom_status = r.custom_status.clone() %}
+      {% let avatar_size = "h-6 w-6 text-xs" %}
+      {% include "partials/avatar.html" %}
+      <div class="min-w-0 flex-1">
+        <div class="flex items-baseline gap-2">
+          <span class="font-medium truncate text-sm">{{ r.label() }}</span>
+          <span class="text-xs text-content-muted truncate">@{{ r.username }}</span>
+        </div>
+      </div>
+      {% if r.is_addable() %}
+      <form hx-post="/enclave/{{ enclave_id }}/rooms/{{ room_id }}/members"
+            hx-target="closest [data-room-member-row]"
+            hx-swap="outerHTML"
+            class="inline">
+        <input type="hidden" name="user_id" value="{{ r.id }}">
+        <button type="submit" class="btn btn-sm btn-primary">{{ "enclave-search-add"|t }}</button>
+      </form>
+      {% else if r.is_in_group() %}
+      <span class="text-xs text-content-subtle">{{ "room-member-in-room"|t }}</span>
+      {% else if r.is_outside_enclave() %}
+      <span class="text-xs text-content-subtle">{{ "enclave-search-not-in-enclave"|t }}</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
