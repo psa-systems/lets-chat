@@ -27,6 +27,13 @@ pub struct VoicePage<'a> {
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],
     pub can_manage_sidebar_categories: bool,
+    /// LC-1078: whether the viewer can manage this room (site admin, or enclave
+    /// owner/admin), computed DIRECTLY in the handler - not from load_chrome,
+    /// which zeroes its chrome flags on a boosted nav, so gating the Manage
+    /// control on `can_manage_sidebar_categories` hid it on the normal
+    /// (boosted) navigation into a voice room. Mirrors the room page's
+    /// `can_manage_overrides`.
+    pub can_manage_overrides: bool,
     pub sidebar_current_enclave: Option<i64>,
     pub sidebar_rooms: &'a [SidebarRoom],
     pub sidebar_peers: &'a [SidebarPeer],
