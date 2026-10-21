@@ -1581,6 +1581,14 @@ pub async fn render_reaction_bar(
     user_id: &str,
 ) -> Option<String> {
     let message_id = ctx.message.id;
+    if warn_default(
+        db::auth::is_blocked_either_way(&state.auth, user_id, &ctx.message.user_id).await,
+        "is_blocked_either_way",
+        message_id,
+        user_id,
+    ) {
+        return None;
+    }
     let emojis = ctx.base.custom_emojis_for(state, user_id).await.ok()?;
     let reactions = ctx.reaction_views_for(user_id, &emojis);
     // LC-595: emit BOTH surfaces unconditionally. A viewer may have the timeline
@@ -1629,6 +1637,14 @@ pub async fn render_ack_required(
     viewer: &User,
     ctx: &EditedMessageContext,
 ) -> Option<String> {
+    if warn_default(
+        db::auth::is_blocked_either_way(&state.auth, &viewer.id, &ctx.message.user_id).await,
+        "is_blocked_either_way",
+        ctx.message.id,
+        &viewer.id,
+    ) {
+        return None;
+    }
     let is_bookmarked = db::bookmarks::is_bookmarked(&state.chat, &viewer.id, ctx.message.id)
         .await
         .unwrap_or(false);
@@ -3883,6 +3899,14 @@ pub async fn render_pin_event(
     use askama::Template;
     let room_id = ctx.message.room_id;
     let message_id = ctx.message.id;
+    if warn_default(
+        db::auth::is_blocked_either_way(&state.auth, &viewer.id, &ctx.message.user_id).await,
+        "is_blocked_either_way",
+        message_id,
+        &viewer.id,
+    ) {
+        return None;
+    }
     let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
     let pin_path = if room.room_type == "dm" {
         let peer_id = db::chat::get_dm_peer(&state.chat, room_id, &viewer.id)
