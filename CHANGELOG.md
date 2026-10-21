@@ -8,6 +8,19 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.8.0] - 2026-10-20
+
+Eighth tagged release, on top of v0.7.0. All three changes are user-facing; none needs operator action.
+
+### Added
+
+- **"Wave to say hi" plays a big wave animation (LC-1066).** Clicking the enclave-welcome wave now floats a large waving 👋 over the room for everyone viewing (the waver included), on top of the existing 👋 reaction. Respects reduced-motion.
+- **Active voice rooms show a live participant count in the sidebar (LC-1068).** A voice channel with people on the call now carries an in-call badge, Discord-style, updated live as people join and leave, so you can see which call is active without opening it.
+
+### Fixed
+
+- **Add room creates the room in the enclave you are viewing (LC-1067).** After navigating between enclaves, the add-room dialog could post to a stale enclave, creating the room in the wrong place (e.g. General) and jumping you there. It now targets the current enclave.
+
 ## [v0.7.0] - 2026-10-20
 
 Seventh tagged release, cut from `main` on top of v0.6.0. One entry is operator-facing: the GIF picker can now be configured from the admin panel instead of only a startup env var (LC-1065).
