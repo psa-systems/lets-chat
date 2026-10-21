@@ -34,6 +34,19 @@
         </svg>
         <span data-lc-voice-count-n>0</span>
       </span>
+      {# LC-1070/LC-1078: Manage room, beside the room name (not in the control
+         cluster with the device gear, which is "Call devices"). A voice room
+         otherwise had no path to its manage page / Danger-zone delete. Gated on
+         can_manage_overrides, computed directly in the handler - NOT
+         can_manage_sidebar_categories, which load_chrome zeroes on a boosted
+         nav, so the link never rendered on the normal path into a voice room. #}
+      {% if can_manage_overrides %}
+      <a href="/room/{{ room.id }}/manage" {% include "partials/nav_boost.html" %}
+         class="lc-header-action" data-lc-tip="{{ "partials-room-manage-title"|t }}" data-lc-tip-pos="bottom">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true"><path fill-rule="evenodd" d="M9.661 2.237a.531.531 0 01.678 0 11.947 11.947 0 007.078 2.749.5.5 0 01.479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 01-.332 0C4.939 16.913 1.68 12.512 1.68 7.35c0-.54.035-1.07.104-1.59a.5.5 0 01.48-.425 11.947 11.947 0 007.397-3.098z" clip-rule="evenodd"/></svg>
+        <span>{{ "partials-room-manage"|t }}</span>
+      </a>
+      {% endif %}
     </div>
     <div class="lc-callbar-spacer flex-1"></div>
 
@@ -42,22 +55,6 @@
     <div class="lc-callbar-controls">
     {# media controls #}
     <div class="lc-callbar-group">
-      {# LC-1078: Manage room, in the header control cluster next to the device
-         gear so it is discoverable (the LC-1070 version sat muted beside the
-         title and was missed; the device gear there is "Call devices", not room
-         settings). Labelled, visible regardless of join state - opens the room
-         manage page whose Danger zone deletes the room. Gated on
-         can_manage_overrides (NOT can_manage_sidebar_categories, which is false
-         on a boosted nav, so the LC-1070 link never showed on the normal path
-         into a voice room). #}
-      {% if can_manage_overrides %}
-      <a href="/room/{{ room.id }}/manage" {% include "partials/nav_boost.html" %}
-         data-lc-tip="{{ "partials-room-manage-title"|t }}" data-lc-tip-pos="bottom"
-         aria-label="{{ "partials-room-manage-title"|t }}" class="lc-cbtn">
-        <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.661 2.237a.531.531 0 01.678 0 11.947 11.947 0 007.078 2.749.5.5 0 01.479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 01-.332 0C4.939 16.913 1.68 12.512 1.68 7.35c0-.54.035-1.07.104-1.59a.5.5 0 01.48-.425 11.947 11.947 0 007.397-3.098z" clip-rule="evenodd"/></svg></span>
-        <span class="lc-cbtn-label">{{ "partials-room-manage"|t }}</span>
-      </a>
-      {% endif %}
       <button type="button" data-lc-open-devices data-lc-tip="{{ "voice-devices"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "voice-choose-devices"|t }}"
               class="lc-cbtn lc-cbtn--icon">
         <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
