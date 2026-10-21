@@ -625,3 +625,5 @@ room-action-failed = That action could not be completed. Please try again.
 
 # LC-1059: wave at an enclave newcomer
 room-welcome-wave = Wave to say hi
+# LC-1066: polite live-region announcement when a wave animation plays.
+room-waved = waved to say hi

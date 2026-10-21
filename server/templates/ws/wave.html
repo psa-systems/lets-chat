@@ -1,0 +1,6 @@
+{# LC-1066: the "wave to say hi" animation. One OOB swap appends a floating 👋
+   into the shell's #lc-wave-layer (the persistent-shell script removes it on
+   animationend); the other announces the waver in the polite live region. The
+   durable 👋 reaction is a separate broadcast; this only drives the animation. #}
+<div id="lc-wave-layer" hx-swap-oob="beforeend"><span class="lc-wave-float" aria-hidden="true">👋</span></div>
+<div id="lc-wave-live" hx-swap-oob="innerHTML">{{ username }} {{ "room-waved"|t }}</div>
