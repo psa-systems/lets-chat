@@ -22,11 +22,11 @@ pub struct SidebarRoom {
     /// Renders the pencil draft indicator (`partials/draft_badge.html`);
     /// updated live over `ChatEvent::DraftChanged`.
     pub has_draft: bool,
-    /// LC-612: number of people currently in this room's huddle, 0 when none.
-    /// Renders the sidebar in-call indicator so an ongoing group call is visible
+    /// LC-612 / LC-1068: number of people currently in this room's call, 0 when
+    /// none. Renders the sidebar in-call indicator so an ongoing call is visible
     /// without opening the room; updated live over `ChatEvent::HuddlePresence`.
-    /// Always 0 for voice channels (`is_voice`) - the indicator is scoped to
-    /// ad-hoc huddles, matching the LC-611 ring.
+    /// Covers both ad-hoc huddles and voice channels (`is_voice`); for voice the
+    /// live fan-out reaches enclave members rather than `room_members`.
     pub in_call: i64,
 }
 
