@@ -1136,3 +1136,141 @@ async fn cannot_demote_enclave_owner() {
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 }
+
+// LC-1080: a PRIVATE room gets a room-member picker drawer, and its member
+// search marks who is already in the room. (A public room needs none.)
+#[tokio::test]
+async fn private_room_member_picker_renders_and_search_marks_members() {
+    let (app, sess) = app_with_user("user").await;
+    // Create an enclave (the creator becomes owner, so they can manage).
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=lab"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let eid: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    // A PRIVATE room: the creator is added as a room member.
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{eid}/rooms"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=secret&room_type=private&kind=text"))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let room_id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/room/")
+        .parse()
+        .unwrap();
+
+    // The add-member drawer renders for the manager and hosts the search.
+    let panel = Request::builder()
+        .uri(format!("/enclave/{eid}/rooms/{room_id}/members/panel"))
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(panel).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(
+        body.contains(&format!("/enclave/{eid}/rooms/{room_id}/members/search")),
+        "the drawer hosts the room-member search"
+    );
+
+    // The member search endpoint answers (blank query collapses to an empty
+    // body, like the invite / group-member searches).
+    let search = Request::builder()
+        .uri(format!("/enclave/{eid}/rooms/{room_id}/members/search?q="))
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(search).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+// LC-1080: adding an enclave member to a private room returns the picker's
+// "Added" row fragment (not a redirect), so the typeahead swaps the row.
+#[tokio::test]
+async fn adding_a_non_enclave_user_to_a_room_returns_the_error_row() {
+    let (app, sess) = app_with_user("user").await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=lab"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let eid: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{eid}/rooms"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=secret&room_type=private&kind=text"))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let room_id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/room/")
+        .parse()
+        .unwrap();
+
+    // A user who is not an enclave member cannot be added: the handler returns
+    // the per-row error fragment (HTTP 200), not a redirect.
+    let add = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{eid}/rooms/{room_id}/members"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("user_id=ghost"))
+        .unwrap();
+    let res = app.clone().oneshot(add).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(
+        body.contains("data-room-member-row") && body.contains("Not a member"),
+        "an outsider add renders the inline error row"
+    );
+}

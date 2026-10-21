@@ -1,0 +1,37 @@
+{# LC-1080: "Add people to this room" drawer for a PRIVATE room, in the shared
+   #thread-panel slot (like enclave/invite_panel.html). Opened from the room
+   header's add-member button. Search enclave members not already in the room;
+   each addable row posts POST /enclave/{id}/rooms/{room_id}/members. Rendered
+   only for callers who can manage (route gate: require_manage). #}
+<aside id="thread-panel" class="lc-panel flex flex-col">
+  <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+    <div class="min-w-0">
+      <div class="font-semibold leading-tight truncate">{{ "room-member-panel-title"|t }}</div>
+      <div class="text-xs text-content-muted truncate">{{ "room-member-panel-sub"|t }}</div>
+    </div>
+    <button
+      hx-delete="/thread-panel"
+      hx-target="#thread-panel"
+      hx-swap="outerHTML"
+      class="text-content-subtle hover:text-content-muted flex-none"
+      aria-label="{{ "room-thread-close"|t }}"
+    >&#10005;</button>
+  </header>
+  <div class="p-3">
+    <input
+      name="q"
+      placeholder="{{ "room-member-placeholder"|t }}"
+      aria-label="{{ "room-member-placeholder"|t }}"
+      hx-get="/enclave/{{ enclave_id }}/rooms/{{ room_id }}/members/search"
+      hx-trigger="input changed delay:200ms, keyup[key=='Enter']"
+      hx-target="#lc-room-member-results"
+      hx-swap="innerHTML"
+      autocomplete="off"
+      data-lc-search
+      data-lc-search-results="#lc-room-member-results"
+      role="combobox" aria-expanded="false" aria-controls="lc-room-member-results" aria-autocomplete="list"
+      class="input text-sm"
+      autofocus>
+    <div id="lc-room-member-results" class="mt-2 empty:hidden"></div>
+  </div>
+</aside>
