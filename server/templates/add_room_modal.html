@@ -76,7 +76,14 @@
   // The submit is a native full-page POST; no preventDefault. The page
   // navigates to post_create_room's redirect, which lands the user in the new
   // room and re-renders a fresh sidebar that includes it.
-  window.__lcOpenAddRoom = function(){
+  window.__lcOpenAddRoom = function(enclaveId){
+    // LC-1067: retarget to the enclave being viewed NOW. The modal lives in the
+    // shell and is not re-rendered on a boosted enclave switch, so its baked
+    // action goes stale; the opener (the live sidebar + button) passes the
+    // current enclave id each time. Guarded so a missing id keeps the action.
+    if (enclaveId != null && enclaveId !== '' && form) {
+      form.setAttribute('action', '/enclave/' + encodeURIComponent(enclaveId) + '/rooms');
+    }
     opener = document.activeElement;
     form.reset();
     modal.classList.remove('hidden');
