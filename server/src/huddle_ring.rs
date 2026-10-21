@@ -85,19 +85,24 @@ pub async fn ring_members(
 /// on every join and leave, not just the first, because the count changes each
 /// time.
 ///
-/// LC-1068: voice channels are covered too, so the sidebar shows which voice
-/// room is active (Discord-style). Their membership is enclave-scoped rather
-/// than in `room_members`, so the fan-out reaches every enclave member (the
-/// audience that can see the room) instead of per-room rows. A member who
+/// LC-1068: public voice channels are covered too, so the sidebar shows which
+/// voice room is active (Discord-style). Their membership is enclave-scoped
+/// rather than in `room_members`, so the fan-out reaches every enclave member
+/// (the audience that can see the room) instead of per-room rows. A member who
 /// cannot see the room has no `#incall-room-{id}` target, so the OOB swap is a
 /// harmless no-op for them. The ring itself (`ring_members`) still excludes
 /// voice; only this passive sidebar presence extends to it.
+///
+/// LC-1074: `is_voice` is orthogonal to `room_type` (a private room can be a
+/// voice room too), so the enclave-wide fan-out above only applies to public
+/// rooms; a private room's presence, voice or not, stays scoped to
+/// `room_members` or it leaks to enclave members who cannot see the room.
 pub async fn broadcast_presence(state: &AppState, room_id: i64) {
     let Ok(Some(room)) = db::chat::get_room(&state.chat, room_id).await else {
         return;
     };
     let count = state.hub.voice_room_users(room_id).len() as i64;
-    let members = if room.is_voice {
+    let members = if room.is_voice && room.room_type == "public" {
         db::chat::list_enclave_member_ids_for_room(&state.chat, room_id).await
     } else {
         db::chat::list_room_member_ids(&state.chat, room_id).await

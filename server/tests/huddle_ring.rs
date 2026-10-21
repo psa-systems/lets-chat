@@ -361,6 +361,91 @@ async fn presence_ignores_mute() {
     );
 }
 
+/// LC-1074: `is_voice` is orthogonal to `room_type` - a private room can be a
+/// voice room too, and its membership still lives in `room_members`, not the
+/// enclave roster. A private voice room with 3 of an enclave's 50 members
+/// must fan presence out to exactly those 3, not the other 47 who cannot see
+/// the room.
+#[tokio::test]
+async fn private_voice_room_presence_stays_within_room_members() {
+    use lets_chat::models::enclave::EnclaveRole;
+    let (state, _room, users) = setup().await;
+    let (alice, bob, carol) = (&users[0], &users[1], &users[2]);
+
+    let enclave = db::enclave::create_enclave(&state.chat, "Guild", None, alice)
+        .await
+        .unwrap();
+    db::enclave::add_member(&state.chat, enclave, bob, EnclaveRole::Member)
+        .await
+        .unwrap();
+    db::enclave::add_member(&state.chat, enclave, carol, EnclaveRole::Member)
+        .await
+        .unwrap();
+
+    // Pad the enclave out to 50 members, none of whom belong to the private
+    // room: the bug this regresses broadcast presence to every one of them.
+    let mut outsiders = Vec::new();
+    for i in 0..47 {
+        let id = db::auth::create_user(&state.auth, &format!("outsider{i}"), "h")
+            .await
+            .unwrap();
+        db::enclave::add_member(&state.chat, enclave, &id, EnclaveRole::Member)
+            .await
+            .unwrap();
+        outsiders.push(id);
+    }
+    assert_eq!(outsiders.len() + 3, 50, "enclave has 50 members total");
+
+    let private_voice = db::chat::create_room(
+        &state.chat,
+        "secretvoice",
+        None,
+        "private",
+        None,
+        Some(enclave),
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE rooms SET is_voice = 1 WHERE id = ?")
+        .bind(private_voice)
+        .execute(&state.chat)
+        .await
+        .unwrap();
+    for u in [alice, bob, carol] {
+        db::chat::add_room_member(&state.chat, private_voice, u)
+            .await
+            .unwrap();
+    }
+
+    let (_bc, mut bob_rx, _) = state.hub.connect(bob, "bob");
+    let (_cc, mut carol_rx, _) = state.hub.connect(carol, "carol");
+    let mut outsider_rxs: Vec<_> = outsiders
+        .iter()
+        .map(|id| state.hub.connect(id, "outsider"))
+        .collect();
+
+    let (alice_conn, _rx, _) = state.hub.connect(alice, "alice");
+    state.hub.voice_join(alice_conn, private_voice);
+    lets_chat::huddle_ring::broadcast_presence(&state, private_voice).await;
+
+    assert_eq!(
+        presence_for(&drain(&mut bob_rx), bob).len(),
+        1,
+        "a room member gets the private huddle's presence"
+    );
+    assert_eq!(
+        presence_for(&drain(&mut carol_rx), carol).len(),
+        1,
+        "a room member gets the private huddle's presence"
+    );
+    for (id, (_conn, rx, _)) in outsiders.iter().zip(outsider_rxs.iter_mut()) {
+        assert!(
+            presence_for(&drain(rx), id).is_empty(),
+            "an enclave member who is not in the private room must not see its presence"
+        );
+    }
+}
+
 /// LC-612: a persistent voice channel does not drive the huddle indicator (its
 /// membership is enclave-scoped, and it is not the ad-hoc huddle this is for).
 #[tokio::test]
