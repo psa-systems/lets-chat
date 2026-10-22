@@ -116,19 +116,28 @@ pub async fn post_report(
     )
     .await?;
     if created {
-        broadcast_reports_changed(&state);
+        broadcast_reports_changed(&state).await;
     }
     // Same confirmation whether or not a duplicate suppressed the insert: the
     // reporter should not learn that they (or others) reported it before.
     html(&ReportSubmitted)
 }
 
-/// Broadcast the report-set-changed signal to the `admin` topic. The WS send
-/// task re-queries and renders the OOB fragment per admin.
-pub(crate) fn broadcast_reports_changed(state: &AppState) {
+/// Broadcast the report-set-changed signal to the `admin` topic. LC-1082:
+/// resolves the `#admin-reports-list` + `#admin-reports-badge` OOB fragment
+/// once here (standalone-only; empty in saas, where the event is broadcast
+/// but never rendered) instead of once per admin connection.
+pub(crate) async fn broadcast_reports_changed(state: &AppState) {
+    #[cfg(feature = "standalone")]
+    let rendered: std::sync::Arc<str> = super::ws::render_admin_reports(state)
+        .await
+        .unwrap_or_default()
+        .into();
+    #[cfg(not(feature = "standalone"))]
+    let rendered: std::sync::Arc<str> = std::sync::Arc::from("");
     state
         .hub
-        .broadcast_to_topic("admin", &ChatEvent::AdminReportChanged);
+        .broadcast_to_topic("admin", &ChatEvent::AdminReportChanged { rendered });
 }
 
 /// Build the enriched open-report rows for the queue: reporter + author display

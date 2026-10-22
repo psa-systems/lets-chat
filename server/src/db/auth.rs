@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use sqlx::{Row, SqlitePool};
 
@@ -1751,6 +1751,50 @@ pub async fn list_blocked_ids_either_way(
         .into_iter()
         .map(|r| r.get::<String, _>("other_id"))
         .collect())
+}
+
+/// Batched sibling of [`list_blocked_ids_either_way`]: one query resolving
+/// the either-way blocked set for every id in `viewer_ids`, instead of one
+/// query per viewer. LC-1082: the unread-badge render used to call the
+/// per-viewer version once per background recipient of a muted-room message;
+/// the producer now resolves every room member's set here in a single round
+/// trip. Every id in `viewer_ids` is present in the result (with an empty set
+/// if they block, and are blocked by, no one).
+pub async fn list_blocked_ids_for_many(
+    pool: &SqlitePool,
+    viewer_ids: &[String],
+) -> Result<HashMap<String, HashSet<String>>, sqlx::Error> {
+    let mut result: HashMap<String, HashSet<String>> = viewer_ids
+        .iter()
+        .map(|id| (id.clone(), HashSet::new()))
+        .collect();
+    if viewer_ids.is_empty() {
+        return Ok(result);
+    }
+    let placeholders = vec!["?"; viewer_ids.len()].join(", ");
+    let sql = format!(
+        "SELECT blocker_id, blocked_id FROM user_blocks \
+         WHERE blocker_id IN ({placeholders}) OR blocked_id IN ({placeholders})"
+    );
+    let mut q = sqlx::query(&sql);
+    for id in viewer_ids {
+        q = q.bind(id);
+    }
+    for id in viewer_ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    for row in rows {
+        let blocker_id: String = row.get("blocker_id");
+        let blocked_id: String = row.get("blocked_id");
+        if let Some(set) = result.get_mut(&blocker_id) {
+            set.insert(blocked_id.clone());
+        }
+        if let Some(set) = result.get_mut(&blocked_id) {
+            set.insert(blocker_id);
+        }
+    }
+    Ok(result)
 }
 
 /// LC-698: the row that owns `email` (case-insensitive), with the flags the SSO

@@ -1044,7 +1044,7 @@ pub(crate) async fn handle_human(
     let ticket_id =
         db::support_tickets::create(&state.chat, &asker.id, Some(room.id), &room.name, &body)
             .await?;
-    super::support::broadcast_support_changed(state);
+    super::support::broadcast_support_changed(state).await;
     let confirmation = format_human_confirmation(asker_label, outcome.available, ticket_id);
     let bot = super::assistant::assistant_bot(state).await?;
     let msg_id = db::chat::insert_message(&state.chat, room.id, &bot.id, &confirmation).await?;

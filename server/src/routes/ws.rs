@@ -703,12 +703,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 // is never broadcast and falls through to
                                 // render_event (None).
                                 #[cfg(feature = "standalone")]
-                                ChatEvent::AdminReportChanged => {
-                                    render_admin_reports(&send_state).await
+                                ChatEvent::AdminReportChanged { rendered } => {
+                                    Some(rendered.to_string())
                                 }
                                 #[cfg(feature = "standalone")]
-                                ChatEvent::AdminSupportChanged => {
-                                    render_admin_support(&send_state).await
+                                ChatEvent::AdminSupportChanged { rendered } => {
+                                    Some(rendered.to_string())
                                 }
                                 // LC-859: a voice-call event was logged. Re-query
                                 // + render the log list OOB for every admin (same
@@ -717,8 +717,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 // never rendered and falls through to
                                 // render_event (None).
                                 #[cfg(feature = "standalone")]
-                                ChatEvent::AdminVoiceLogChanged => {
-                                    render_admin_voice_log(&send_state).await
+                                ChatEvent::AdminVoiceLogChanged { rendered } => {
+                                    Some(rendered.to_string())
                                 }
                                 // LC-719: support-bubble panel push. Rendered per
                                 // recipient (only the addressed user's connections
@@ -1278,6 +1278,20 @@ async fn render_unread_badge(
     let unread = db::chat::get_unread_count(&state.chat, &viewer.id, room.id, &blocked)
         .await
         .ok()?;
+    render_unread_badge_fragment(state, viewer, room, unread).await
+}
+
+/// Render the unread-badge OOB fragment given an already-resolved `unread`
+/// count. LC-1082: split out of `render_unread_badge` so a caller that
+/// already has every member's count (`NewMessageContext::unread_by_member`)
+/// can render without re-querying `list_blocked_ids_either_way` /
+/// `get_unread_count` per recipient.
+async fn render_unread_badge_fragment(
+    state: &AppState,
+    viewer: &User,
+    room: &models::Room,
+    unread: i64,
+) -> Option<String> {
     if room.room_type == "dm" {
         let peer_id = db::chat::get_dm_peer(&state.chat, room.id, &viewer.id)
             .await
@@ -1529,9 +1543,19 @@ pub async fn render_new_message_or_bump(
     // LC-179: a new unread arrived for a background recipient. Emit the sidebar
     // unread badge AND reveal the /inbox refresh bar. The bar's #lc-inbox-refresh
     // id exists only on the /inbox page, so connections elsewhere drop it.
-    let mut out = render_unread_badge(state, viewer, &ctx.room)
-        .await
-        .unwrap_or_default();
+    // LC-1082: the producer already resolved every member's unread count in
+    // `ctx.unread_by_member`, so this no longer re-runs
+    // `list_blocked_ids_either_way` / `get_unread_count` per recipient; a
+    // viewer missing from the map (should not happen for a current member)
+    // falls back to the live per-viewer query.
+    let mut out = match ctx.unread_by_member.get(&viewer.id) {
+        Some(&unread) => render_unread_badge_fragment(state, viewer, &ctx.room, unread)
+            .await
+            .unwrap_or_default(),
+        None => render_unread_badge(state, viewer, &ctx.room)
+            .await
+            .unwrap_or_default(),
+    };
     if let Ok(bar) = crate::views::ws_fragments::InboxRefreshFragment.render() {
         out.push_str(&bar);
     }
@@ -3248,9 +3272,18 @@ pub(crate) async fn record_voice_event(
         detail = detail.unwrap_or(""),
         "voice call event"
     );
+    // LC-1082: resolve the voice-log OOB fragment once here, before the
+    // per-admin send loop, instead of once per admin connection.
+    #[cfg(feature = "standalone")]
+    let rendered: Arc<str> = render_admin_voice_log(state)
+        .await
+        .unwrap_or_default()
+        .into();
+    #[cfg(not(feature = "standalone"))]
+    let rendered: Arc<str> = Arc::from("");
     state
         .hub
-        .broadcast_to_topic("admin", &ChatEvent::AdminVoiceLogChanged);
+        .broadcast_to_topic("admin", &ChatEvent::AdminVoiceLogChanged { rendered });
 }
 
 /// LC-869: per-user cap on client-observed voice diagnostics. An ICE connection
@@ -3693,7 +3726,7 @@ async fn render_admin_room_row(state: &AppState, room_id: i64, removed: bool) ->
 /// for every admin, so one render serves all recipients. Standalone-only (the
 /// admin queue is `#[cfg(standalone)]`).
 #[cfg(feature = "standalone")]
-async fn render_admin_reports(state: &AppState) -> Option<String> {
+pub(crate) async fn render_admin_reports(state: &AppState) -> Option<String> {
     let reports = super::report::build_report_views(state).await.ok()?;
     let open_count = reports.len() as i64;
     crate::views::report::AdminReportsOob {
@@ -3707,7 +3740,7 @@ async fn render_admin_reports(state: &AppState) -> Option<String> {
 /// LC-714: render the support-ticket queue OOB fragment (`#admin-support-list` +
 /// nav badge) for one admin's WS connection. Mirrors `render_admin_reports`.
 #[cfg(feature = "standalone")]
-async fn render_admin_support(state: &AppState) -> Option<String> {
+pub(crate) async fn render_admin_support(state: &AppState) -> Option<String> {
     let tickets = super::support::build_support_views(state).await.ok()?;
     let open_count = tickets.len() as i64;
     crate::views::support::AdminSupportOob {
@@ -3723,7 +3756,7 @@ async fn render_admin_support(state: &AppState) -> Option<String> {
 /// admin, so one render serves all recipients. Standalone-only (the admin page is
 /// `#[cfg(standalone)]`).
 #[cfg(feature = "standalone")]
-async fn render_admin_voice_log(state: &AppState) -> Option<String> {
+pub(crate) async fn render_admin_voice_log(state: &AppState) -> Option<String> {
     let events: Vec<crate::views::admin::VoiceLogRow> =
         db::voice_events::list_recent(&state.chat, 200)
             .await

@@ -28,12 +28,21 @@ fn label_for(rec: &crate::models::user::UserRecord) -> String {
     }
 }
 
-/// Broadcast the ticket-set-changed signal to the `admin` topic. The WS send
-/// task re-queries and renders the OOB fragment per admin.
-pub(crate) fn broadcast_support_changed(state: &AppState) {
+/// Broadcast the ticket-set-changed signal to the `admin` topic. LC-1082:
+/// resolves the `#admin-support-list` + `#admin-support-badge` OOB fragment
+/// once here (standalone-only; empty in saas, where the event is broadcast
+/// but never rendered) instead of once per admin connection.
+pub(crate) async fn broadcast_support_changed(state: &AppState) {
+    #[cfg(feature = "standalone")]
+    let rendered: std::sync::Arc<str> = super::ws::render_admin_support(state)
+        .await
+        .unwrap_or_default()
+        .into();
+    #[cfg(not(feature = "standalone"))]
+    let rendered: std::sync::Arc<str> = std::sync::Arc::from("");
     state
         .hub
-        .broadcast_to_topic("admin", &ChatEvent::AdminSupportChanged);
+        .broadcast_to_topic("admin", &ChatEvent::AdminSupportChanged { rendered });
 }
 
 /// Build the enriched open-ticket rows for the queue: the requester display

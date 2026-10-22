@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use sqlx::Row;
 
 use crate::models::{Reaction, Room, SearchResult};
@@ -1872,6 +1874,56 @@ pub async fn get_unread_count(
     }
     let row = q.fetch_one(pool).await?;
     Ok(row.get("unread"))
+}
+
+/// Batched sibling of [`get_unread_count`]: one query resolving every member's
+/// unread count for `room_id`, each with their own blocked-id exclusion set,
+/// instead of one query per member. LC-1082: the unread-badge render used to
+/// call the per-viewer version once per background recipient of a muted-room
+/// message; the producer now resolves every room member's count here in a
+/// single round trip (a `UNION ALL` of one subquery per member) and hands it
+/// to each recipient's render task via `NewMessageContext`.
+pub async fn get_unread_counts_for_members(
+    pool: &sqlx::SqlitePool,
+    room_id: i64,
+    members: &HashMap<String, HashSet<String>>,
+) -> Result<HashMap<String, i64>, sqlx::Error> {
+    if members.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let members: Vec<(&String, &HashSet<String>)> = members.iter().collect();
+    let clauses: Vec<String> = members
+        .iter()
+        .map(|(_, blocked)| {
+            let not_blocked = not_blocked_author_sql("m.user_id", blocked);
+            format!(
+                "SELECT ? AS user_id, COUNT(m.id) AS unread \
+                 FROM messages m \
+                 LEFT JOIN dm_read_state s ON s.room_id = m.room_id AND s.user_id = ? \
+                 WHERE m.room_id = ? \
+                   AND m.user_id != ? \
+                   AND m.deleted_at IS NULL AND m.quarantined = 0 \
+                   AND m.parent_id IS NULL \
+                   AND m.id > COALESCE(s.last_read_message_id, 0) \
+                   {not_blocked}"
+            )
+        })
+        .collect();
+    let sql = clauses.join(" UNION ALL ");
+    let mut q = sqlx::query(&sql);
+    for (user_id, blocked) in &members {
+        q = q.bind(user_id.as_str()).bind(user_id.as_str());
+        q = q.bind(room_id);
+        q = q.bind(user_id.as_str());
+        for id in blocked.iter() {
+            q = q.bind(id);
+        }
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get::<String, _>("user_id"), r.get::<i64, _>("unread")))
+        .collect())
 }
 
 /// Find the highest own-authored message id in a DM that the peer has read,

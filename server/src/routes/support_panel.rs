@@ -553,7 +553,7 @@ async fn post_ticket_details(
     if !updated {
         return render_thread(&state, &user).await;
     }
-    crate::routes::support::broadcast_support_changed(&state);
+    crate::routes::support::broadcast_support_changed(&state).await;
 
     let bot = crate::routes::assistant::assistant_bot(&state).await?;
     let confirmation = format_details_filed_confirmation(form.ticket_id);

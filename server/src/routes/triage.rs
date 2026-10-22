@@ -16,7 +16,6 @@
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::ws::events::ChatEvent;
 
 /// Whether AI moderation triage is enabled (operator env opt-in, off by default).
 fn triage_enabled() -> bool {
@@ -118,9 +117,7 @@ pub async fn run_triage(
     )
     .await?;
     if created {
-        state
-            .hub
-            .broadcast_to_topic("admin", &ChatEvent::AdminReportChanged);
+        super::report::broadcast_reports_changed(state).await;
     }
     Ok(Some(category))
 }

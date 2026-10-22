@@ -271,28 +271,31 @@ pub enum ChatEvent {
         removed: bool,
     },
     /// LC-334: the open message-report set changed (a report was filed, resolved,
-    /// or dismissed). Broadcast on the `admin` topic; the WS send task re-queries
-    /// and renders the `#admin-reports-list` + `#admin-reports-badge` OOB
-    /// fragment for each admin. Standalone-only on the render side (the admin
-    /// queue is `#[cfg(standalone)]`); in saas it falls through to `render_event`
-    /// (None).
-    AdminReportChanged,
+    /// or dismissed). Broadcast on the `admin` topic. LC-1082: the publisher
+    /// resolves `#admin-reports-list` + `#admin-reports-badge` once before
+    /// broadcasting (standalone-only; empty in saas, where this event is
+    /// broadcast but never rendered) and every admin connection's send task
+    /// reuses this same `Arc<str>` instead of re-querying and re-rendering.
+    AdminReportChanged {
+        rendered: Arc<str>,
+    },
     /// LC-714: the open support-ticket set changed (a ticket was filed by the AI
-    /// help desk or resolved by an admin). Broadcast on the `admin` topic; the WS
-    /// send task re-queries and renders the `#admin-support-list` +
-    /// `#admin-support-badge` OOB fragment for each admin. Standalone-only on the
-    /// render side (the queue is `#[cfg(standalone)]`); in saas it falls through
-    /// to `render_event` (None), mirroring `AdminReportChanged`.
-    AdminSupportChanged,
+    /// help desk or resolved by an admin). Broadcast on the `admin` topic.
+    /// LC-1082: carries the `#admin-support-list` + `#admin-support-badge` OOB
+    /// fragment, resolved once by the publisher and shared by every admin
+    /// connection, mirroring `AdminReportChanged`.
+    AdminSupportChanged {
+        rendered: Arc<str>,
+    },
     /// LC-859: a voice-call lifecycle event was logged (connect / reconnect /
-    /// left / dropped / mute / unmute). Broadcast on the `admin` topic; the WS
-    /// send task re-queries and renders the `#admin-voice-log-list` OOB fragment
-    /// for each admin, so an admin watching `/admin/voice-log` sees new entries
-    /// arrive live during a meeting. Carries no payload (the send task re-reads
-    /// the recent window), mirroring `AdminReportChanged`. Standalone-only on the
-    /// render side (the admin page is `#[cfg(standalone)]`); in saas it falls
-    /// through to `render_event` (None).
-    AdminVoiceLogChanged,
+    /// left / dropped / mute / unmute). Broadcast on the `admin` topic, so an
+    /// admin watching `/admin/voice-log` sees new entries arrive live during a
+    /// meeting. LC-1082: carries the `#admin-voice-log-list` OOB fragment,
+    /// resolved once by the publisher and shared by every admin connection,
+    /// mirroring `AdminReportChanged`.
+    AdminVoiceLogChanged {
+        rendered: Arc<str>,
+    },
     /// LC-719: the support-bubble panel thread for `user_id` changed (a `/support`
     /// answer landed or a `/human` confirmation posted in the user's assistant-bot
     /// DM). Broadcast via `broadcast_to_user`, so only that user's connections

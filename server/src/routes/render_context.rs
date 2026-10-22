@@ -9,6 +9,7 @@
 //! that genuinely varies by viewer: the block and moderator checks, its personal
 //! emoji, the `#channel` links its access allows, and the template render.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::db;
@@ -184,6 +185,11 @@ pub struct NewMessageContext {
     /// The room, already loaded by the producer; the seen-bar and the sidebar
     /// unread bump both need it.
     pub room: Room,
+    /// LC-1082: every room member's current unread count for `room`, resolved
+    /// once here instead of once per background recipient in
+    /// `render_unread_badge`. Keyed by user id; a viewer missing from this map
+    /// (should not happen for a current member) falls back to a live query.
+    pub unread_by_member: HashMap<String, i64>,
 }
 
 impl NewMessageContext {
@@ -201,11 +207,38 @@ impl NewMessageContext {
                 .map(|p| (p.user_id.as_str(), p.created_at.as_str())),
             (message.user_id.as_str(), message.created_at.as_str()),
         );
+        let unread_by_member = Self::load_unread_by_member(state, room).await?;
         Ok(Arc::new(Self {
             base,
             is_follow_up,
             room: room.clone(),
+            unread_by_member,
         }))
+    }
+
+    /// Every current member's unread count for `room`, in one DB round trip:
+    /// the member list mirrors `broadcast_room_message`'s recipient
+    /// resolution (public rooms fan out to the enclave, others to their own
+    /// membership), a single query resolves every member's either-way blocked
+    /// set, then a single `UNION ALL` query resolves every member's unread
+    /// count against their own blocked set.
+    async fn load_unread_by_member(
+        state: &AppState,
+        room: &Room,
+    ) -> Result<HashMap<String, i64>, AppError> {
+        let member_ids = match room.room_type.as_str() {
+            "public" => db::chat::list_enclave_member_ids_for_room(&state.chat, room.id).await?,
+            _ => db::chat::list_room_member_ids(&state.chat, room.id).await?,
+        };
+        if member_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let blocked_by_member =
+            db::auth::list_blocked_ids_for_many(&state.auth, &member_ids).await?;
+        Ok(
+            db::chat::get_unread_counts_for_members(&state.chat, room.id, &blocked_by_member)
+                .await?,
+        )
     }
 }
 

@@ -1964,7 +1964,7 @@ async fn handle_report_status(
             None,
         )
         .await?;
-        super::report::broadcast_reports_changed(state);
+        super::report::broadcast_reports_changed(state).await;
     }
     super::report::render_reports_oob(state).await
 }
@@ -2040,7 +2040,7 @@ pub async fn post_support_resolve(
             None,
         )
         .await?;
-        super::support::broadcast_support_changed(&state);
+        super::support::broadcast_support_changed(&state).await;
         if let Some(t) = ticket {
             let body = format!(
                 "_Your support request (#{id}) has been resolved by an admin. Reply here if you still need help._"
@@ -2117,7 +2117,7 @@ pub async fn post_support_claim(
     {
         tracing::warn!(error = %e, ticket = id, "failed to notify requester of claim");
     }
-    super::support::broadcast_support_changed(&state);
+    super::support::broadcast_support_changed(&state).await;
     // LC-725: send the acting admin straight into the freshly-created support
     // channel (they are a member, so it opens cleanly) instead of leaving them
     // on the queue with the ticket silently gone. Every other admin tab still
