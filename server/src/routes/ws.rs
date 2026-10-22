@@ -3251,7 +3251,7 @@ pub fn validate_reaction_emoji(raw: &str) -> Option<String> {
 /// view so it updates live during a meeting. Best-effort: a logging failure is
 /// warned and swallowed, never affecting the call. `kind` is a fixed vocabulary
 /// (connect / reconnect / left / dropped / mute / unmute / error).
-pub(crate) async fn record_voice_event(
+pub async fn record_voice_event(
     state: &AppState,
     room_id: i64,
     user_id: &str,
@@ -3726,7 +3726,7 @@ async fn render_admin_room_row(state: &AppState, room_id: i64, removed: bool) ->
 /// for every admin, so one render serves all recipients. Standalone-only (the
 /// admin queue is `#[cfg(standalone)]`).
 #[cfg(feature = "standalone")]
-pub(crate) async fn render_admin_reports(state: &AppState) -> Option<String> {
+pub async fn render_admin_reports(state: &AppState) -> Option<String> {
     let reports = super::report::build_report_views(state).await.ok()?;
     let open_count = reports.len() as i64;
     crate::views::report::AdminReportsOob {
@@ -3740,7 +3740,7 @@ pub(crate) async fn render_admin_reports(state: &AppState) -> Option<String> {
 /// LC-714: render the support-ticket queue OOB fragment (`#admin-support-list` +
 /// nav badge) for one admin's WS connection. Mirrors `render_admin_reports`.
 #[cfg(feature = "standalone")]
-pub(crate) async fn render_admin_support(state: &AppState) -> Option<String> {
+pub async fn render_admin_support(state: &AppState) -> Option<String> {
     let tickets = super::support::build_support_views(state).await.ok()?;
     let open_count = tickets.len() as i64;
     crate::views::support::AdminSupportOob {
@@ -3756,7 +3756,7 @@ pub(crate) async fn render_admin_support(state: &AppState) -> Option<String> {
 /// admin, so one render serves all recipients. Standalone-only (the admin page is
 /// `#[cfg(standalone)]`).
 #[cfg(feature = "standalone")]
-pub(crate) async fn render_admin_voice_log(state: &AppState) -> Option<String> {
+pub async fn render_admin_voice_log(state: &AppState) -> Option<String> {
     let events: Vec<crate::views::admin::VoiceLogRow> =
         db::voice_events::list_recent(&state.chat, 200)
             .await
@@ -3998,6 +3998,15 @@ pub mod test_support {
     // paths, so a test can race them against each other and assert the
     // "closes once, notifies once" guarantee without a real socket drop.
     pub use super::{end_control_on_participant_gone, end_control_sessions_for_disconnect};
+    // LC-1082: the admin-topic renderers and the broadcast helpers that now
+    // resolve their OOB fragment once before fanning out, so a test can
+    // assert the DB/render cost of an event does not scale with the number
+    // of connected admins.
+    pub use super::record_voice_event;
+    #[cfg(feature = "standalone")]
+    pub use super::{render_admin_reports, render_admin_support, render_admin_voice_log};
+    pub use crate::routes::report::broadcast_reports_changed;
+    pub use crate::routes::support::broadcast_support_changed;
 }
 
 #[cfg(test)]
