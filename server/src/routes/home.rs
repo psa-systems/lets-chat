@@ -136,6 +136,9 @@ pub async fn get_home(
     // LC-726: admin-only pending-support glance for the dashboard card. The admin
     // support queue is standalone-only, so this only runs there and only for an
     // admin; everyone else gets an empty, zero-count card that renders nothing.
+    // LC-1085: also gated on `bubble_enabled`, matching the rail tile and admin
+    // nav tab (LC-1079), so the card renders empty when the AI help desk is off
+    // instead of shipping ticket text the other two entry points are hiding.
     // `mut` is only exercised in the standalone block below; saas leaves them at
     // the zero/empty defaults, so silence the lint there.
     #[allow(unused_mut)]
@@ -143,7 +146,7 @@ pub async fn get_home(
     #[allow(unused_mut)]
     let mut support_recent: Vec<crate::views::support::SupportView> = Vec::new();
     #[cfg(feature = "standalone")]
-    if user.role == "admin" {
+    if user.role == "admin" && super::support_panel::bubble_enabled(&state, &user).await {
         support_open_count = db::support_tickets::count_open(&state.chat).await?;
         if support_open_count > 0 {
             support_recent = super::support::build_support_views(&state).await?;
