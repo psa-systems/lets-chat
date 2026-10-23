@@ -1530,12 +1530,14 @@ pub struct RoomEditForm {
     pub description: Option<String>,
 }
 
+/// Returns the room's `room_type` on success, so callers that need to gate on
+/// visibility (e.g. LC-1087's room-member-add routes) don't need a second query.
 async fn assert_room_in_enclave(
     pool: &sqlx::SqlitePool,
     enclave_id: i64,
     room_id: i64,
-) -> Result<(), AppError> {
-    let row = sqlx::query("SELECT enclave_id FROM rooms WHERE id=?")
+) -> Result<String, AppError> {
+    let row = sqlx::query("SELECT enclave_id, room_type FROM rooms WHERE id=?")
         .bind(room_id)
         .fetch_optional(pool)
         .await?;
@@ -1546,7 +1548,7 @@ async fn assert_room_in_enclave(
     if eid != Some(enclave_id) {
         return Err(AppError::NotFound);
     }
-    Ok(())
+    Ok(sqlx::Row::get(&r, "room_type"))
 }
 
 pub async fn post_edit_room(
@@ -1623,7 +1625,10 @@ pub async fn post_add_room_member(
     axum::Form(form): axum::Form<RoomMemberForm>,
 ) -> Result<Html, AppError> {
     require_manage(&state, &user, id).await?;
-    assert_room_in_enclave(&state.chat, id, room_id).await?;
+    let room_type = assert_room_in_enclave(&state.chat, id, room_id).await?;
+    if room_type != "private" {
+        return Err(AppError::BadRequest("room is not private".into()));
+    }
     let target = form.user_id.trim();
     if db::enclave::get_membership(&state.chat, id, target)
         .await?
@@ -1649,7 +1654,10 @@ pub async fn get_room_member_panel(
     Path((id, room_id)): Path<(i64, i64)>,
 ) -> Result<Html, AppError> {
     require_manage(&state, &user, id).await?;
-    assert_room_in_enclave(&state.chat, id, room_id).await?;
+    let room_type = assert_room_in_enclave(&state.chat, id, room_id).await?;
+    if room_type != "private" {
+        return Err(AppError::BadRequest("room is not private".into()));
+    }
     html(&RoomMemberPanel {
         enclave_id: id,
         room_id,
@@ -1667,7 +1675,10 @@ pub async fn get_room_member_search(
     Query(InviteSearchQuery { q }): Query<InviteSearchQuery>,
 ) -> Result<Html, AppError> {
     require_manage(&state, &user, id).await?;
-    assert_room_in_enclave(&state.chat, id, room_id).await?;
+    let room_type = assert_room_in_enclave(&state.chat, id, room_id).await?;
+    if room_type != "private" {
+        return Err(AppError::BadRequest("room is not private".into()));
+    }
     let query = q.unwrap_or_default();
     let trimmed = query.trim();
     if trimmed.is_empty() {
