@@ -1274,3 +1274,73 @@ async fn adding_a_non_enclave_user_to_a_room_returns_the_error_row() {
         "an outsider add renders the inline error row"
     );
 }
+
+// LC-1087: the room-member-add routes are a private-room feature; the client
+// only ever offers the entry point for `room_type == "private"`, and that
+// constraint must hold server-side too, not just because the client happens
+// to respect it.
+#[tokio::test]
+async fn room_member_routes_reject_a_public_room() {
+    let (app, sess) = app_with_user("user").await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=lab"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let eid: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{eid}/rooms"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=lobby&room_type=public&kind=text"))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let room_id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/room/")
+        .parse()
+        .unwrap();
+
+    let add = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{eid}/rooms/{room_id}/members"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("user_id=user"))
+        .unwrap();
+    let res = app.clone().oneshot(add).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+    let panel = Request::builder()
+        .uri(format!("/enclave/{eid}/rooms/{room_id}/members/panel"))
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(panel).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+    let search = Request::builder()
+        .uri(format!("/enclave/{eid}/rooms/{room_id}/members/search?q=u"))
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(search).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
