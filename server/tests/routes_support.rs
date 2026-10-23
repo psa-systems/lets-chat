@@ -639,6 +639,8 @@ async fn concurrent_claims_have_exactly_one_winner() {
 // admin-only rail tile (every page) and a Home dashboard card - so an admin does
 // not have to be in /admin to see the queue. A non-admin sees neither.
 // LC-785: the admin-home pending-support card is standalone-only (see above).
+// LC-1085: the Home card is also AI-gated like the rail tile and admin nav tab
+// (LC-1079), so with the AI help desk off the card renders no ticket content.
 #[cfg(feature = "standalone")]
 #[tokio::test]
 async fn pending_support_surfaces_on_home_for_admins_only() {
@@ -682,21 +684,21 @@ async fn pending_support_surfaces_on_home_for_admins_only() {
         }
     };
 
-    // Admin: rail Support tile + dashboard card with the pending request.
+    // Admin, AI help desk off (unconfigured in this test): rail tile + admin nav
+    // tab are hidden via the injected branding style (LC-1079), and the Home
+    // dashboard card now renders no ticket content either (LC-1085), matching.
     let admin_home = home(admin_session).await;
-    assert!(
-        admin_home.contains("lc-rail-support"),
-        "admin rail shows the Support tile"
-    );
-    assert!(
-        admin_home.contains("lc-home-support-card") && admin_home.contains("printer on fire"),
-        "admin dashboard shows the pending request card"
-    );
-    // LC-1079: the help desk is AI-powered and AI is unconfigured in this test,
-    // so inject_branding_css hides the support entries via the branding style.
     assert!(
         admin_home.contains(".lc-rail-support,.lc-admin-support-tab{display:none}"),
         "with the AI help desk off, the support entries are hidden via the injected style"
+    );
+    assert!(
+        admin_home.contains("lc-home-support-card"),
+        "the card's container stays in the DOM for the live OOB swap target"
+    );
+    assert!(
+        !admin_home.contains("printer on fire"),
+        "with the AI help desk off, the Home dashboard card ships no ticket content either"
     );
 
     // Non-admin: neither surface.
@@ -708,5 +710,56 @@ async fn pending_support_surfaces_on_home_for_admins_only() {
     assert!(
         !member_home.contains("printer on fire"),
         "a non-admin never sees pending support content"
+    );
+}
+
+// LC-1085: with the AI help desk on, the Home dashboard card renders exactly
+// as it did before the gate - the pending ticket is visible to the admin.
+#[cfg(feature = "standalone")]
+#[tokio::test]
+async fn pending_support_card_renders_on_home_when_ai_help_desk_is_on() {
+    let auth = common::pool("auth").await;
+    let chat = common::pool("chat").await;
+    let settings = common::pool("settings").await;
+    enable_ai(&settings).await;
+
+    let admin = db::auth::create_user(&auth, "admin", "h").await.unwrap();
+    sqlx::query("UPDATE users SET role='admin' WHERE id=?")
+        .bind(&admin)
+        .execute(&auth)
+        .await
+        .unwrap();
+    let requester = db::auth::create_user(&auth, "member", "h").await.unwrap();
+    db::enclave::backfill_general_membership(&auth, &chat)
+        .await
+        .unwrap();
+    let admin_session = db::auth::create_session(&auth, &admin).await.unwrap();
+    db::support_tickets::create(&chat, &requester, Some(1), "general", "printer on fire")
+        .await
+        .unwrap();
+
+    let app: Router =
+        routes::build_router(state_with_embeddings(auth.clone(), chat.clone(), settings));
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/?home=1")
+        .header(header::COOKIE, format!("session={admin_session}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let admin_home = String::from_utf8(bytes.to_vec()).unwrap();
+
+    assert!(
+        !admin_home.contains(".lc-rail-support,.lc-admin-support-tab{display:none}"),
+        "with the AI help desk on, the support entries are not hidden"
+    );
+    assert!(
+        admin_home.contains("lc-home-support-card") && admin_home.contains("printer on fire"),
+        "with the AI help desk on, the Home dashboard card shows the pending request"
     );
 }
