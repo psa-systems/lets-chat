@@ -55,9 +55,19 @@
   // LC-1080: retarget the search at the enclave being viewed NOW (the shell
   // modal is not re-rendered on a boosted enclave switch); the live sidebar
   // Invite button passes the current enclave id.
+  //
+  // LC-1084: same race as LC-1067/LC-1077's add-room fix (add_room_modal.html):
+  // the sidebar is swapped out-of-band over the WS, decoupled from the boosted
+  // #main navigation that lands first, so the id the sidebar's Invite button
+  // passes can still be the PREVIOUS enclave for a brief window.
+  // window.LetsChatPageContext mirrors live.js's synchronous read of #main, so
+  // it is always the enclave actually on screen; prefer it over the argument
+  // and fall back to the argument only when the module is unavailable.
   window.__lcOpenInviteModal = function(enclaveId){
-    if (enclaveId != null && enclaveId !== '' && search) {
-      search.setAttribute('hx-get', '/enclave/' + encodeURIComponent(enclaveId) + '/invite/search');
+    var current = window.LetsChatPageContext ? window.LetsChatPageContext.get() : null;
+    var targetId = current ? current.enclave_id : enclaveId;
+    if (targetId != null && targetId !== '' && search) {
+      search.setAttribute('hx-get', '/enclave/' + encodeURIComponent(targetId) + '/invite/search');
       if (window.htmx) { try { window.htmx.process(search); } catch (e) {} }
     }
     opener = document.activeElement;
