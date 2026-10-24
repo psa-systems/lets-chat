@@ -22,10 +22,12 @@ surfaces is in [configuration.md](configuration.md).
 ## Voice and video
 
 - 1:1 audio and video calls over WebRTC, with mic/camera/speaker selection
+- 1:1 calls play a ringtone on ring, show a running duration, and support floating emoji reactions during the call
 - Huddles: multi-party enclave voice channels, with a ring notification to room members who are not already viewing the room
 - Per-room stage mode: speaker roles and request-to-speak, with audio carried by a self-hosted LiveKit SFU when `LETS_CHAT_LIVEKIT_*` is configured (the mesh path caps at a handful of peers)
 - Call transcription, either in the speaker's browser (Web Speech) or server-side against a transcription endpoint you run
 - Consent-gated remote control: during a 1:1 call, request keyboard/mouse control of a peer's screen (desktop app; verified-email gated, revocable at any time). Off by default; an admin must enable it at `/admin/remote-control` before users can request control, and can review the consent history on a dedicated audit page.
+- Active voice rooms show a live in-call participant count in the sidebar
 
 ## Spaces and organization
 
@@ -33,7 +35,10 @@ surfaces is in [configuration.md](configuration.md).
 - Room wiki: a per-room markdown page, editable inline by moderators and up
 - Room and DM mute, sidebar categories, starred rooms, and user groups
 - Custom user status
+- Presence shows idle after 10 minutes of inactivity and offline on a silent background tab, Discord-style
+- New members joining an enclave post an automatic welcome message, with an optional animated wave reaction; configurable in enclave Settings > General
 - Handle picker: pick and change your own `@handle`, subject to the same validation the SSO provisioning flow uses to derive one
+- Private rooms get a dedicated member-add picker in the room header to invite existing enclave members
 
 ## Personalization
 
@@ -70,6 +75,7 @@ Every one of these is off until an operator points it at an endpoint they run, a
 ## Administration
 
 - Admin panel: user management, room management, settings
+- Feature flags: Off / Admins only / On rollout control for AI surfaces, remote control, and server-side transcription, at `/admin/feature-flags`
 - Analytics dashboard: DAU/MAU, messages, rooms, signups, retention
 - Branding: custom logo, colors, login text, and favicon
 - Anti-spam: rate limits, link filter, and honeypot
