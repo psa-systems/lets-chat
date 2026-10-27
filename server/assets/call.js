@@ -648,12 +648,14 @@
     var durEl = q('[data-lc-call-duration]');
     if (durEl && window.LetsChatSfx) durEl.textContent = window.LetsChatSfx.formatDuration(secs);
     show(panel);
+    installDialogTrap(panel);
     if (summaryTimer) clearTimeout(summaryTimer);
     summaryTimer = setTimeout(hideSummary, SUMMARY_MS);
   }
   function hideSummary() {
     if (summaryTimer) { clearTimeout(summaryTimer); summaryTimer = null; }
     hide(q('[data-lc-call-summary]'));
+    disposeDialogTrap();
   }
 
   function onAccept() {
