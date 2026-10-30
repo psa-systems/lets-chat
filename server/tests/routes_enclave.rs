@@ -1344,3 +1344,113 @@ async fn room_member_routes_reject_a_public_room() {
     let res = app.clone().oneshot(search).await.unwrap();
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 }
+
+// LC-1095: post_remove_room_member must reject a public room too, matching
+// its three sibling room-member routes above.
+#[tokio::test]
+async fn removing_a_room_member_rejects_a_public_room() {
+    let (app, sess) = app_with_user("user").await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=lab"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let eid: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{eid}/rooms"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=lobby&room_type=public&kind=text"))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let room_id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/room/")
+        .parse()
+        .unwrap();
+
+    let remove = Request::builder()
+        .method(Method::POST)
+        .uri(format!(
+            "/enclave/{eid}/rooms/{room_id}/members/user/remove"
+        ))
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(remove).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+// The private-room removal success path still works unchanged.
+#[tokio::test]
+async fn removing_a_room_member_from_a_private_room_succeeds() {
+    let (app, sess) = app_with_user("user").await;
+    let create = Request::builder()
+        .method(Method::POST)
+        .uri("/enclaves")
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=lab"))
+        .unwrap();
+    let res = app.clone().oneshot(create).await.unwrap();
+    let eid: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/enclave/")
+        .parse()
+        .unwrap();
+
+    // A PRIVATE room: the creator is added as a room member.
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/enclave/{eid}/rooms"))
+        .header("cookie", cookie(&sess))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("name=secret&room_type=private&kind=text"))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let room_id: i64 = res
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/room/")
+        .parse()
+        .unwrap();
+
+    let remove = Request::builder()
+        .method(Method::POST)
+        .uri(format!(
+            "/enclave/{eid}/rooms/{room_id}/members/user/remove"
+        ))
+        .header("cookie", cookie(&sess))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(remove).await.unwrap();
+    assert_eq!(res.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        res.headers().get("location").unwrap(),
+        &format!("/enclave/{eid}")
+    );
+}

@@ -1730,7 +1730,10 @@ pub async fn post_remove_room_member(
     Path((id, room_id, target)): Path<(i64, i64, String)>,
 ) -> Result<impl IntoResponse, AppError> {
     require_manage(&state, &user, id).await?;
-    assert_room_in_enclave(&state.chat, id, room_id).await?;
+    let room_type = assert_room_in_enclave(&state.chat, id, room_id).await?;
+    if room_type != "private" {
+        return Err(AppError::BadRequest("room is not private".into()));
+    }
     db::chat::remove_room_member(&state.chat, room_id, &target).await?;
     // LC-80: drop the removed user's star on this room so re-adding
     // them doesn't resurrect the old star.
