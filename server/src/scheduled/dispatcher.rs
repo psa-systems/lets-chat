@@ -151,16 +151,22 @@ async fn dispatch_one(state: &AppState, row: ScheduledRow) -> Result<DispatchOut
             let claimed = match db::scheduled::try_claim(&mut conn, row.id).await {
                 Ok(c) => c,
                 Err(e) => {
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                    if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                        tracing::error!(error = %rollback_err, scheduled_id = row.id, "dispatch_one rollback failed");
+                    }
                     return Err(e.into());
                 }
             };
             if !claimed {
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                    tracing::error!(error = %rollback_err, scheduled_id = row.id, "dispatch_one rollback failed");
+                }
                 return Ok(DispatchOutcome::Retry);
             }
             if let Err(e) = db::scheduled::mark_dropped(&mut conn, row.id, reason).await {
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                    tracing::error!(error = %rollback_err, scheduled_id = row.id, "dispatch_one rollback failed");
+                }
                 return Err(e.into());
             }
             sqlx::query("COMMIT").execute(&mut *conn).await?;
@@ -174,12 +180,16 @@ async fn dispatch_one(state: &AppState, row: ScheduledRow) -> Result<DispatchOut
     let claimed = match db::scheduled::try_claim(&mut conn, row.id).await {
         Ok(c) => c,
         Err(e) => {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                tracing::error!(error = %rollback_err, scheduled_id = row.id, "dispatch_one rollback failed");
+            }
             return Err(e.into());
         }
     };
     if !claimed {
-        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+        if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+            tracing::error!(error = %rollback_err, scheduled_id = row.id, "dispatch_one rollback failed");
+        }
         return Ok(DispatchOutcome::Retry);
     }
 
@@ -198,7 +208,9 @@ async fn dispatch_one(state: &AppState, row: ScheduledRow) -> Result<DispatchOut
     let new_id = match insert_result {
         Ok(r) => r.last_insert_rowid(),
         Err(e) => {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                tracing::error!(error = %rollback_err, scheduled_id = row.id, "dispatch_one rollback failed");
+            }
             return Err(e.into());
         }
     };
@@ -212,7 +224,9 @@ async fn dispatch_one(state: &AppState, row: ScheduledRow) -> Result<DispatchOut
         crate::scheduled::recurrence::next_occurrence(&row.scheduled_for, &row.repeat)
     {
         if let Err(e) = db::scheduled::enqueue_next_occurrence(&mut conn, &row, &next_for).await {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                tracing::error!(error = %rollback_err, scheduled_id = row.id, "dispatch_one rollback failed");
+            }
             return Err(e.into());
         }
     }

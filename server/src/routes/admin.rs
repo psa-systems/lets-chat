@@ -3476,7 +3476,9 @@ pub async fn post_bots(
     if let Err(e) =
         db::api_tokens::insert(&state.auth, &bot_id, "bot token", &hash, &scopes, None).await
     {
-        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        if let Err(rollback_err) = db::auth::delete_user(&state.auth, &bot_id).await {
+            tracing::error!(error = %rollback_err, bot_id, "bot_create rollback: delete_user failed");
+        }
         return Err(AppError::from(e));
     }
     db::moderation::log_mod_action(
@@ -3838,7 +3840,9 @@ pub async fn post_bridges(
     };
     // 2. Assign the narrow `bridge` role tier (chunk 5 / require_not_bridge).
     if let Err(e) = db::auth::set_user_role(&state.auth, &bot_id, db::auth::ROLE_BRIDGE).await {
-        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        if let Err(rollback_err) = db::auth::delete_user(&state.auth, &bot_id).await {
+            tracing::error!(error = %rollback_err, bot_id, "bridge_create rollback: delete_user failed");
+        }
         return Err(AppError::from(e));
     }
     // 3. Mint the API token with exactly the two bridge scopes. No
@@ -3854,7 +3858,9 @@ pub async fn post_bridges(
     if let Err(e) =
         db::api_tokens::insert(&state.auth, &bot_id, "bridge token", &hash, &scopes, None).await
     {
-        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        if let Err(rollback_err) = db::auth::delete_user(&state.auth, &bot_id).await {
+            tracing::error!(error = %rollback_err, bot_id, "bridge_create rollback: delete_user failed");
+        }
         return Err(AppError::from(e));
     }
     // 4. Seal the daemon config and insert the bridges row.
@@ -3871,8 +3877,12 @@ pub async fn post_bridges(
     {
         // Roll back the bot + its token so the admin can retry without a
         // stuck-bot ghost row.
-        let _ = db::api_tokens::revoke_all_for_user(&state.auth, &bot_id).await;
-        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        if let Err(revoke_err) = db::api_tokens::revoke_all_for_user(&state.auth, &bot_id).await {
+            tracing::error!(error = %revoke_err, bot_id, "bridge_create rollback: revoke_all_for_user failed");
+        }
+        if let Err(rollback_err) = db::auth::delete_user(&state.auth, &bot_id).await {
+            tracing::error!(error = %rollback_err, bot_id, "bridge_create rollback: delete_user failed");
+        }
         return Err(AppError::Internal(format!("bridge insert failed: {e}")));
     }
     db::moderation::log_mod_action(

@@ -253,7 +253,9 @@ async fn issue_challenge(
         // The row is inserted but the code never arrived: the user cannot
         // approve, so this must fail open. Consume the orphan row and proceed.
         tracing::warn!(target: "login_approval", user_id, error = %e, "approval email failed; failing open");
-        let _ = db::auth::consume_login_approval(&state.auth, &token).await;
+        if let Err(e) = db::auth::consume_login_approval(&state.auth, &token).await {
+            tracing::warn!(target: "login_approval", user_id, error = %e, "consume_login_approval failed while failing open");
+        }
         return None;
     }
     tracing::info!(target: "login_approval", user_id, "suspicious login challenged");
@@ -290,14 +292,20 @@ pub async fn verify(pool: &SqlitePool, token: &str, code: &str) -> VerifyOutcome
                 country: approval.country,
                 device_hash: approval.device_hash,
             },
-            _ => VerifyOutcome::Invalid,
+            Ok(_) => VerifyOutcome::Invalid,
+            Err(e) => {
+                tracing::error!(target: "login_approval", error = %e, "consume_login_approval failed on approve");
+                VerifyOutcome::Invalid
+            }
         };
     }
     // Wrong code. The attempt is already spent by the claim; burn the challenge
     // outright when this caller took the last slot, so a spent challenge cannot
     // sit around unconsumed.
     if approval.attempts >= MAX_ATTEMPTS {
-        let _ = db::auth::consume_login_approval(pool, token).await;
+        if let Err(e) = db::auth::consume_login_approval(pool, token).await {
+            tracing::warn!(target: "login_approval", error = %e, "consume_login_approval failed while burning spent challenge");
+        }
         return VerifyOutcome::Invalid;
     }
     VerifyOutcome::Wrong

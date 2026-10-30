@@ -131,7 +131,9 @@ pub async fn post_incoming(
     let pool = state.chat.clone();
     let id = hook.id;
     tokio::spawn(async move {
-        let _ = db::webhooks::touch_last_used(&pool, id).await;
+        if let Err(e) = db::webhooks::touch_last_used(&pool, id).await {
+            tracing::warn!(error = %e, webhook_id = id, "touch_last_used failed");
+        }
     });
 
     Ok(StatusCode::NO_CONTENT.into_response())

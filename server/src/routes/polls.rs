@@ -312,7 +312,9 @@ pub async fn post_vote(
         match outcome {
             Ok(()) => sqlx::query("COMMIT").execute(&mut *conn).await?,
             Err(e) => {
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                    tracing::error!(error = %rollback_err, message_id, "poll vote rollback failed");
+                }
                 return Err(e.into());
             }
         };

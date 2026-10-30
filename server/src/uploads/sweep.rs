@@ -88,7 +88,9 @@ async fn sweep_one(pool: &SqlitePool, id: i64, storage_path: &str) -> Result<boo
             Ok(file_removed)
         }
         Err(e) => {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                tracing::error!(error = %rollback_err, upload_id = id, "upload sweep rollback failed");
+            }
             Err(e)
         }
     }

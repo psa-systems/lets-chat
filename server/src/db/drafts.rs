@@ -179,7 +179,9 @@ pub async fn get_fresh_or_purge(
     let Some(row) = row else { return Ok(None) };
     let is_stale: i64 = row.get("is_stale");
     if is_stale != 0 {
-        let _ = delete(pool, user_id, room_id).await;
+        if let Err(e) = delete(pool, user_id, room_id).await {
+            tracing::warn!(error = %e, user_id, room_id, "stale draft delete failed");
+        }
         return Ok(None);
     }
     Ok(Some(row.get("body")))

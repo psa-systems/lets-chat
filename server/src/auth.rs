@@ -593,7 +593,9 @@ impl FromRequestParts<AppState> for ApiAuth {
         let pool = state.auth.clone();
         let id = row.id;
         tokio::spawn(async move {
-            let _ = db::api_tokens::touch_last_used(&pool, id).await;
+            if let Err(e) = db::api_tokens::touch_last_used(&pool, id).await {
+                tracing::warn!(error = %e, token_id = id, "touch_last_used failed");
+            }
         });
 
         let scopes = row

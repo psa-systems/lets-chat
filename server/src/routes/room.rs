@@ -3385,10 +3385,15 @@ pub async fn post_thread_reply(
     // follower of this new reply. Follows are NOT mention rows; we reuse only
     // the mention fan-out (WS toast + push + email, mute-gated). Best-effort:
     // a follow/notify hiccup must not fail the reply that already landed.
-    let _ = db::thread_followers::follow(&state.chat, &user.id, parent_id, room_id).await;
+    if let Err(e) = db::thread_followers::follow(&state.chat, &user.id, parent_id, room_id).await {
+        tracing::warn!(error = %e, user_id = %user.id, parent_id, "thread_followers::follow (replier) failed");
+    }
     if parent.user_id != user.id {
-        let _ =
-            db::thread_followers::follow(&state.chat, &parent.user_id, parent_id, room_id).await;
+        if let Err(e) =
+            db::thread_followers::follow(&state.chat, &parent.user_id, parent_id, room_id).await
+        {
+            tracing::warn!(error = %e, user_id = %parent.user_id, parent_id, "thread_followers::follow (thread author) failed");
+        }
     }
     notify_thread_followers(&state, &room, parent_id, new_id, &user, body).await;
 
@@ -3415,17 +3420,23 @@ async fn notify_thread_followers(
 ) {
     let followers = match db::thread_followers::followers(&state.chat, parent_id).await {
         Ok(f) => f,
-        Err(_) => return,
+        Err(e) => {
+            tracing::warn!(error = %e, parent_id, "thread_followers::followers failed; skipping notify");
+            return;
+        }
     };
     // LC-546: a muter of this thread is dropped from the fan-out even though
     // replying auto-followed them. Mute wins over follow. One bulk lookup; the
     // muter set is small (only members who explicitly silenced this thread).
-    let muted: std::collections::HashSet<String> =
-        db::thread_muters::muters(&state.chat, parent_id)
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
+    let muted: std::collections::HashSet<String> = match db::thread_muters::muters(&state.chat, parent_id).await {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(error = %e, parent_id, "thread_muters::muters failed; treating as no muters");
+            Vec::new()
+        }
+    }
+    .into_iter()
+    .collect();
     let snippet = build_snippet(body);
     let author_label = author_label(author);
     let mut events: Vec<(String, ChatEvent)> = Vec::new();
