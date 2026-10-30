@@ -91,13 +91,29 @@ pub async fn get_logout(
     State(state): State<AppState>,
     jar: CookieJar,
 ) -> Result<Response, AppError> {
+    let mut delete_failed = false;
     if let Some(c) = jar.get(SESSION_COOKIE) {
-        let _ = db::auth::delete_session(&state.auth, c.value()).await;
+        if let Err(e) = db::auth::delete_session(&state.auth, c.value()).await {
+            tracing::error!(error = %e, "logout: delete_session failed");
+            delete_failed = true;
+        }
     }
     let mut clear = Cookie::new(SESSION_COOKIE, "");
     clear.set_path("/");
     clear.make_removal();
     let jar = jar.remove(clear);
+    if delete_failed {
+        // The cookie is cleared for the browser regardless, but a session row
+        // that failed to delete is still valid server-side; surfacing an error
+        // here (instead of the normal redirect) is the only signal the user or
+        // an operator gets that logout did not fully take effect.
+        return Ok((
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            jar,
+            "logout failed",
+        )
+            .into_response());
+    }
     // LC-472: land on the public marketing page (LC-470) after logout, not the
     // bare SSO /login shell. The landing carries the "Sign in with Bunyip" CTA.
     Ok((jar, Redirect::to("/")).into_response())
