@@ -86,3 +86,35 @@ async fn test_set_setting_overwrites() {
         .expect("get_setting should not error");
     assert_eq!(value, Some("true".to_string()));
 }
+
+#[tokio::test]
+async fn test_max_upload_bytes_uses_configured_value() {
+    let pool = setup_pool().await;
+    lets_chat::db::settings::set_setting(&pool, "max_upload_bytes", "12345")
+        .await
+        .expect("set_setting should succeed");
+
+    let value = lets_chat::db::settings::max_upload_bytes(&pool).await;
+    assert_eq!(value, 12345);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_max_upload_bytes_logs_and_defaults_on_read_error() {
+    let pool = setup_pool().await;
+    pool.close().await;
+
+    let capture = common::CapturingSubscriber::default();
+    let events = capture.events.clone();
+    let _guard = tracing::subscriber::set_default(capture);
+
+    let value = lets_chat::db::settings::max_upload_bytes(&pool).await;
+    assert_eq!(value, lets_chat::db::settings::DEFAULT_MAX_UPLOAD_BYTES);
+
+    let logged = events.lock().unwrap();
+    assert!(
+        logged
+            .iter()
+            .any(|e| e.contains("max_upload_bytes") && e.contains("setting read failed")),
+        "expected a warning logging the read failure, got: {logged:?}"
+    );
+}

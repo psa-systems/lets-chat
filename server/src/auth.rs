@@ -373,11 +373,9 @@ pub async fn enforce_maintenance_mode(
     if !enabled {
         return next.run(req).await;
     }
-    let message = db::settings::get_setting(&state.settings, "maintenance_message")
-        .await
-        .ok()
-        .flatten()
-        .unwrap_or_default();
+    let message = resolve_maintenance_message(
+        db::settings::get_setting(&state.settings, "maintenance_message").await,
+    );
     let body = MaintenancePage {
         message: &message,
         asset_version: &state.asset_version,
@@ -403,6 +401,18 @@ fn resolve_maintenance_enabled(result: Result<Option<String>, sqlx::Error>) -> b
         Err(e) => {
             tracing::warn!(error = %e, "maintenance_mode setting read failed; treating flag as off");
             false
+        }
+    }
+}
+
+/// LC-1093: mirrors `resolve_maintenance_enabled`. A DB error reading the
+/// message must not read the same as "no message configured".
+fn resolve_maintenance_message(result: Result<Option<String>, sqlx::Error>) -> String {
+    match result {
+        Ok(v) => v.unwrap_or_default(),
+        Err(e) => {
+            tracing::warn!(error = %e, key = "maintenance_message", "setting read failed; using default");
+            String::new()
         }
     }
 }
@@ -685,6 +695,36 @@ mod tests {
             logged
                 .iter()
                 .any(|e| e.contains("maintenance_mode setting read failed")),
+            "expected a warning logging the read failure, got: {logged:?}"
+        );
+    }
+
+    #[test]
+    fn maintenance_message_absent_row_is_empty() {
+        assert_eq!(resolve_maintenance_message(Ok(None)), "");
+    }
+
+    #[test]
+    fn maintenance_message_present_row_is_used() {
+        assert_eq!(
+            resolve_maintenance_message(Ok(Some("brb".to_string()))),
+            "brb"
+        );
+    }
+
+    #[test]
+    fn maintenance_message_read_error_is_empty_and_logged() {
+        let capture = CapturingSubscriber::default();
+        let events = capture.events.clone();
+        let message = tracing::subscriber::with_default(capture, || {
+            resolve_maintenance_message(Err(sqlx::Error::RowNotFound))
+        });
+        assert_eq!(message, "");
+        let logged = events.lock().unwrap();
+        assert!(
+            logged
+                .iter()
+                .any(|e| e.contains("maintenance_message") && e.contains("setting read failed")),
             "expected a warning logging the read failure, got: {logged:?}"
         );
     }
