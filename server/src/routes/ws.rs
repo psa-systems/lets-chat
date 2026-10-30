@@ -29,6 +29,37 @@ use crate::views::ws_fragments::{
 use crate::ws::events::ChatEvent;
 use crate::ws::hub::{ConnId, RingingResult};
 
+/// LC-1093: every broadcast-render helper below returns `Option<String>` and
+/// used to fold a DB `Err` into a plain `None` via `.ok()?` / `.ok()??`,
+/// which reads identically to "nothing to render" - the failure left no
+/// trace. These two macros keep that early-return shape but log the `Err`
+/// case at `warn` with whatever id fields the call site passes, before
+/// returning `None`. `log_db!` is for `Result<T, E>`, `log_db_opt!` for
+/// `Result<Option<T>, E>` (a missing row is NOT an error and stays silent).
+macro_rules! log_db {
+    ($result:expr, $($field:tt)*) => {
+        match $result {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!(error = %e, $($field)*);
+                None
+            }
+        }
+    };
+}
+macro_rules! log_db_opt {
+    ($result:expr, $($field:tt)*) => {
+        match $result {
+            Ok(Some(v)) => Some(v),
+            Ok(None) => None,
+            Err(e) => {
+                tracing::warn!(error = %e, $($field)*);
+                None
+            }
+        }
+    };
+}
+
 #[derive(Deserialize)]
 #[serde(tag = "type")]
 enum ClientFrame {
@@ -1272,16 +1303,23 @@ async fn render_unread_badge(
     viewer: &User,
     room: &models::Room,
 ) -> Option<String> {
-    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &viewer.id)
-        .await
-        .ok()?;
-    let unread = db::chat::get_unread_count(&state.chat, &viewer.id, room.id, &blocked)
-        .await
-        .ok()?;
+    let blocked = log_db!(
+        db::auth::list_blocked_ids_either_way(&state.auth, &viewer.id).await,
+        viewer_id = %viewer.id,
+        "list_blocked_ids_either_way failed"
+    )?;
+    let unread = log_db!(
+        db::chat::get_unread_count(&state.chat, &viewer.id, room.id, &blocked).await,
+        viewer_id = %viewer.id,
+        room_id = room.id,
+        "get_unread_count failed"
+    )?;
     if room.room_type == "dm" {
-        let peer_id = db::chat::get_dm_peer(&state.chat, room.id, &viewer.id)
-            .await
-            .ok()??;
+        let peer_id = log_db_opt!(
+            db::chat::get_dm_peer(&state.chat, room.id, &viewer.id).await,
+            room_id = room.id,
+            "get_dm_peer failed"
+        )?;
         UnreadBadgeFragment {
             kind: "dm",
             id: &peer_id,
@@ -1322,7 +1360,11 @@ pub async fn render_dm_read(
     read_at: &str,
     dm_seen_msg: &Arc<Mutex<HashMap<i64, i64>>>,
 ) -> Option<String> {
-    let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
+    let room = log_db_opt!(
+        db::chat::get_room(&state.chat, room_id).await,
+        room_id,
+        "get_room failed"
+    )?;
 
     if actor_user_id == viewer.id {
         return render_unread_badge(state, viewer, &room).await;
@@ -1340,9 +1382,11 @@ pub async fn render_dm_read(
 
     // Symmetric consent: peer must have receipts enabled for the viewer to
     // see "Seen". Look up the peer's user record from auth.
-    let peer_record = db::auth::find_user_by_id(&state.auth, actor_user_id)
-        .await
-        .ok()??;
+    let peer_record = log_db_opt!(
+        db::auth::find_user_by_id(&state.auth, actor_user_id).await,
+        user_id = actor_user_id,
+        "find_user_by_id failed"
+    )?;
     if !peer_record.read_receipts_enabled {
         return None;
     }
@@ -1350,11 +1394,14 @@ pub async fn render_dm_read(
     // Find the highest own-authored, non-deleted message in this DM with id
     // <= last_read_message_id. If none, peer hasn't read any of viewer's
     // messages yet - clear any previous caption and stop.
-    let new_seen_id = db::chat::find_dm_seen_state(&state.chat, room_id, &viewer.id, actor_user_id)
-        .await
-        .ok()?
-        .map(|(id, _)| id)
-        .filter(|id| *id <= last_read_message_id);
+    let new_seen_id = log_db!(
+        db::chat::find_dm_seen_state(&state.chat, room_id, &viewer.id, actor_user_id).await,
+        room_id,
+        viewer_id = %viewer.id,
+        "find_dm_seen_state failed"
+    )?
+    .map(|(id, _)| id)
+    .filter(|id| *id <= last_read_message_id);
 
     let prev_seen_id = {
         let map = dm_seen_msg.lock().unwrap();
@@ -1581,7 +1628,11 @@ pub async fn render_reaction_bar(
     user_id: &str,
 ) -> Option<String> {
     let message_id = ctx.message.id;
-    let emojis = ctx.base.custom_emojis_for(state, user_id).await.ok()?;
+    let emojis = log_db!(
+        ctx.base.custom_emojis_for(state, user_id).await,
+        user_id,
+        "custom_emojis_for failed"
+    )?;
     let reactions = ctx.reaction_views_for(user_id, &emojis);
     // LC-595: emit BOTH surfaces unconditionally. A viewer may have the timeline
     // showing, an open thread panel showing, or both, and the server does not
@@ -3558,9 +3609,11 @@ fn relay_voice_signal(
 /// this connection (broadcast_to_user already targets the right user); the
 /// swap is a no-op on tabs not currently showing the invitations page.
 async fn render_invitations(state: &AppState, viewer: &User) -> Option<String> {
-    let cards = crate::routes::enclave::load_invitation_cards(state, &viewer.id)
-        .await
-        .ok()?;
+    let cards = log_db!(
+        crate::routes::enclave::load_invitation_cards(state, &viewer.id).await,
+        viewer_id = %viewer.id,
+        "load_invitation_cards failed"
+    )?;
     crate::views::enclave::InvitationsLiveFragment {
         invitations: &cards,
     }
@@ -3694,7 +3747,10 @@ async fn render_admin_room_row(state: &AppState, room_id: i64, removed: bool) ->
 /// admin queue is `#[cfg(standalone)]`).
 #[cfg(feature = "standalone")]
 async fn render_admin_reports(state: &AppState) -> Option<String> {
-    let reports = super::report::build_report_views(state).await.ok()?;
+    let reports = log_db!(
+        super::report::build_report_views(state).await,
+        "build_report_views failed"
+    )?;
     let open_count = reports.len() as i64;
     crate::views::report::AdminReportsOob {
         reports,
@@ -3708,7 +3764,10 @@ async fn render_admin_reports(state: &AppState) -> Option<String> {
 /// nav badge) for one admin's WS connection. Mirrors `render_admin_reports`.
 #[cfg(feature = "standalone")]
 async fn render_admin_support(state: &AppState) -> Option<String> {
-    let tickets = super::support::build_support_views(state).await.ok()?;
+    let tickets = log_db!(
+        super::support::build_support_views(state).await,
+        "build_support_views failed"
+    )?;
     let open_count = tickets.len() as i64;
     crate::views::support::AdminSupportOob {
         tickets,
@@ -3891,11 +3950,17 @@ pub async fn render_pin_event(
     use askama::Template;
     let room_id = ctx.message.room_id;
     let message_id = ctx.message.id;
-    let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
+    let room = log_db_opt!(
+        db::chat::get_room(&state.chat, room_id).await,
+        room_id,
+        "get_room failed"
+    )?;
     let pin_path = if room.room_type == "dm" {
-        let peer_id = db::chat::get_dm_peer(&state.chat, room_id, &viewer.id)
-            .await
-            .ok()??;
+        let peer_id = log_db_opt!(
+            db::chat::get_dm_peer(&state.chat, room_id, &viewer.id).await,
+            room_id,
+            "get_dm_peer failed"
+        )?;
         format!("/dm/{peer_id}/pins")
     } else {
         format!("/room/{room_id}/pins")
