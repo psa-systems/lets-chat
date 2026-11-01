@@ -77,7 +77,7 @@ async fn setup() -> Setup {
         .await
         .unwrap();
     // LC-533: both carry the profile extras so the card + privacy-gate paths
-    // can be asserted. New York is EDT (UTC-4) in July, London BST (UTC+1).
+    // can be asserted.
     sqlx::query(
         "UPDATE users SET display_name='Pub Lic', bio='hello from public bio', \
          pronouns='they/them', profile_links='https://pub.example', \
@@ -152,10 +152,9 @@ async fn public_card_shows_name_username_and_bio() {
         body.contains("https://pub.example"),
         "profile link missing: {body}"
     );
-    assert!(
-        body.contains("PM EDT") || body.contains("AM EDT"),
-        "local time (EDT) missing: {body}"
-    );
+    // DST-agnostic: asserting the literal "EDT" abbreviation makes this test
+    // fail every winter (America/New_York renders "EST" once DST ends).
+    assert!(body.contains("Local time:"), "local time missing: {body}");
     // A messageable target offers the Message link.
     assert!(
         body.contains(&format!("/dm/{}", s.public_id)),

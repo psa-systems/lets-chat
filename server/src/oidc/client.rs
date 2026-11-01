@@ -7,8 +7,7 @@
 //! The client is constructed via `initialize` at startup. A failure here
 //! (network, malformed discovery doc, JWKS without an EdDSA key) is fatal
 //! and the binary refuses to start. We never want a half-wired SSO surface
-//! where the button renders but every callback 502s. See
-//! `docs/lets-chat/sso/bunyip-only/04-lets-chat-server-additions.md` §4.2.
+//! where the button renders but every callback 502s.
 
 use std::sync::Arc;
 use std::time::Duration;
