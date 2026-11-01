@@ -32,4 +32,4 @@ Three unauthenticated diagnostic endpoints, all exempt from the maintenance-mode
 
 The Bunyip SSO OP is a hard boot dependency: `main` exits (non-zero) if discovery or JWKS is unreachable at startup, and with `restart: unless-stopped` that crash-loops the container, which presents to a reverse proxy as a gateway timeout. `/healthz` is deliberately dependency-free so that a container which HAS booted is never culled for an unrelated dependency, and so a reverse proxy always has a real upstream to route to.
 
-The runtime image runs as the unprivileged `appuser`, exposes port 8080, and keeps every SQLite database under `LETS_CHAT_DATA_DIR` (`/data`), which is the only path that needs a volume.
+The container starts as root; `gosu-entrypoint.sh` remaps `appuser` (default uid/gid 1001, or `PUID`/`PGID` if set), chowns `/data` and drops to it via `gosu` before running the server. A compose `user:` pin skips the remap and chown and runs the server directly as the pinned uid, as long as `/data` is already writable by it. The server exposes port 8080 and keeps every SQLite database under `LETS_CHAT_DATA_DIR` (`/data`), which is the only path that needs a volume.
