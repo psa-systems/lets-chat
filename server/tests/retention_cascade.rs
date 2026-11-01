@@ -9,8 +9,8 @@
 //! the referencing row is gone (CASCADE), nulled (SET NULL), or has the
 //! right side-effect (the FTS DELETE trigger from migration 0045).
 //!
-//! Tests use the drift-immune common::chat_pool() helper (the new
-//! prescribed pattern per internal/CLAUDE.md test-maintenance).
+//! Tests use the drift-immune common::chat_pool() helper: the prescribed
+//! shared-pool helper for this test suite.
 
 mod common;
 

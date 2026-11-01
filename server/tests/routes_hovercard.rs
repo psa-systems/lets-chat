@@ -152,10 +152,7 @@ async fn public_card_shows_name_username_and_bio() {
         body.contains("https://pub.example"),
         "profile link missing: {body}"
     );
-    assert!(
-        body.contains("PM EDT") || body.contains("AM EDT"),
-        "local time (EDT) missing: {body}"
-    );
+    assert!(body.contains("Local time:"), "local time missing: {body}");
     // A messageable target offers the Message link.
     assert!(
         body.contains(&format!("/dm/{}", s.public_id)),

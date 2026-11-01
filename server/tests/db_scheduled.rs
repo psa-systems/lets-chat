@@ -1,7 +1,7 @@
 //! LC-62: unit tests for `db::scheduled` CRUD + dispatcher helpers.
 //!
-//! Hand-rolled `setup_chat_pool()` per the internal/CLAUDE.md test-maintenance note;
-//! the array form keeps a new migration to a one-line append.
+//! Hand-rolled `setup_chat_pool()`: the array form keeps a new migration to a
+//! one-line append.
 
 use lets_chat::db;
 use sqlx::SqlitePool;
