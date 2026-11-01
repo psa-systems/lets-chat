@@ -35,11 +35,24 @@ RUN bun x tsc --noEmit
 # Runtime. This is the LAST stage, so a plain `docker build` (and the compose
 # overlay) produces the runtime image WITHOUT running the test stage.
 FROM oven/bun:1 AS runtime
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends gosu \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 1001 appuser \
+    && useradd --uid 1001 --gid 1001 --no-create-home appuser
 WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=deps /app/node_modules ./node_modules
-COPY package.json tsconfig.json ./
-COPY src ./src
+ENV NODE_ENV=production \
+    APP_USER=appuser \
+    DATA_DIRS=""
+COPY --from=deps --chown=appuser:appuser /app/node_modules ./node_modules
+COPY --chown=appuser:appuser package.json tsconfig.json ./
+COPY --chown=appuser:appuser src ./src
+COPY --chmod=0755 gosu-entrypoint.sh /usr/local/bin/gosu-entrypoint.sh
+
+# Starts as root; gosu-entrypoint.sh drops to appuser via gosu (DATA_DIRS is
+# empty, the agent writes nothing at runtime). A compose `user:` pin skips the
+# remap and runs directly as the pinned uid.
+ENTRYPOINT ["/usr/local/bin/gosu-entrypoint.sh"]
 # `start` is the LiveKit Agents production worker subcommand. The worker connects
 # to LIVEKIT_URL, registers under LETS_CHAT_TRANSCRIBE_AGENT_NAME, and waits for
 # lets-chat to dispatch it into a room (LC-814).

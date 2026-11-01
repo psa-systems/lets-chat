@@ -132,11 +132,13 @@ RUN --mount=type=cache,target=/app/target,id=lc-target-${BUILD_MODE},sharing=loc
 
 FROM debian:trixie-slim AS runtime
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ca-certificates curl tzdata \
+    && apt-get install --yes --no-install-recommends ca-certificates curl tzdata gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# Non-root runtime user; /data is volume-mounted and must be writable.
-RUN useradd --create-home --uid 1000 appuser \
+# Runtime user the gosu-entrypoint drops to; /data is volume-mounted and must
+# be writable by it.
+RUN groupadd --gid 1001 appuser \
+    && useradd --uid 1001 --gid 1001 --no-create-home appuser \
     && mkdir -p /app/server /data \
     && chown -R appuser:appuser /app /data
 
@@ -144,10 +146,11 @@ WORKDIR /app
 COPY --from=builder --chown=appuser:appuser /app/lets-chat /usr/local/bin/lets-chat
 COPY --from=builder --chown=appuser:appuser /app/server/assets /app/server/assets
 COPY --from=builder --chown=appuser:appuser /app/server/migrations /app/server/migrations
+COPY --chmod=0755 ci-build/gosu-entrypoint.sh /usr/local/bin/gosu-entrypoint.sh
 
-USER appuser
-
-ENV LETS_CHAT_DATA_DIR=/data \
+ENV APP_USER=appuser \
+    DATA_DIRS=/data \
+    LETS_CHAT_DATA_DIR=/data \
     BIND_ADDR=0.0.0.0:8080 \
     RUST_LOG=lets_chat=info
 
@@ -168,4 +171,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
     CMD curl --fail --silent http://localhost:8080/healthz >/dev/null || exit 1
 
-ENTRYPOINT ["lets-chat"]
+# Starts as root; gosu-entrypoint.sh remaps appuser, chowns DATA_DIRS and
+# drops to it via gosu. A compose `user:` pin skips the remap/chown and runs
+# directly as the pinned uid, as long as DATA_DIRS is already writable.
+ENTRYPOINT ["/usr/local/bin/gosu-entrypoint.sh", "/usr/local/bin/lets-chat"]
