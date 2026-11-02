@@ -152,9 +152,13 @@ async fn public_card_shows_name_username_and_bio() {
         body.contains("https://pub.example"),
         "profile link missing: {body}"
     );
+    // New York is EDT (UTC-4) under daylight saving and EST (UTC-5) otherwise,
+    // so accept either rather than fail for half the year.
     assert!(
-        body.contains("PM EDT") || body.contains("AM EDT"),
-        "local time (EDT) missing: {body}"
+        ["PM EDT", "AM EDT", "PM EST", "AM EST"]
+            .iter()
+            .any(|z| body.contains(z)),
+        "local New York time (EDT/EST) missing: {body}"
     );
     // A messageable target offers the Message link.
     assert!(
