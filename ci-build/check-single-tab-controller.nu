@@ -26,9 +26,12 @@ def main [] {
         exit 1
     }
 
+    # *.test.js files build tablist fixtures to exercise window.lcInitTabs; they
+    # ship no controller (not loaded by base.html, not precached), so they are
+    # exempt from the "no stray tablist markup" scan.
     let strays = (
         glob server/assets/**/*.js
-        | where {|f| ($f | path basename) != "tabs.js" and ($f !~ '/vendor/') }
+        | where {|f| ($f | path basename) != "tabs.js" and ($f !~ '/vendor/') and ($f !~ '\.test\.js$') }
         | sort
         | each {|file|
             open --raw $file
