@@ -106,8 +106,11 @@
   {# LC-553: the rail settings gear is a curated dropdown (prototype), not a bare
      link. A native <details> (no JS, mirrors the sidebar org menu) flies a short
      menu out to the right; each item deep-links to the settings page with that
-     tab open (settings.js reads location.hash). "All settings" opens the page as
-     before, so nothing is lost. #}
+     tab open. LC-1106: these are boosted (not a full reload) so following one
+     mid-call keeps the live call and socket; settings.js records the target tab
+     in sessionStorage on click so lcInitTabs opens it after the boosted swap,
+     independent of when htmx updates location.hash. "All settings" opens the
+     page as before, so nothing is lost. #}
   {# LC-692: data-lc-flyout opts this native <details> into the shared
      outside-click / Escape closer in live.js (a bare <details> only toggles from
      its own summary and never dismisses on an outside click). #}
@@ -119,25 +122,25 @@
       </svg>
     </summary>
     {# LC-697: quick deep-links into the ONE Settings page's tabs (settings.js
-       reads location.hash), with the same icons as the page's tab rail so the
-       flyout mirrors it. "All settings" (was a redundant second "Settings" that
+       remembers the tab on click; LC-1106), with the same icons as the page's
+       tab rail so the flyout mirrors it. "All settings" (was a redundant second "Settings" that
        duplicated the avatar menu's) opens the full page for the tabs not listed
        here (Data & Account, Custom emoji, Saved replies). The canonical
        "Settings" entry lives in the avatar menu (partials/sidebar_self.html). #}
     <div class="lc-rail-flyout" role="menu" aria-label="{{ "sidebar-link-settings"|t }}">
-      <a href="/settings#profile" hx-boost="false" role="menuitem" class="lc-menu-item">
+      <a href="/settings#profile" {% include "partials/nav_boost.html" %} role="menuitem" class="lc-menu-item">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
         <span>{{ "settings-section-profile"|t }}</span>
       </a>
-      <a href="/settings#appearance" hx-boost="false" role="menuitem" class="lc-menu-item">
+      <a href="/settings#appearance" {% include "partials/nav_boost.html" %} role="menuitem" class="lc-menu-item">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a8 8 0 100 16 1.5 1.5 0 001.06-2.56.5.5 0 01.35-.85H13a5 5 0 005-5c0-3.59-3.36-6.59-8-5.59zM5.5 11a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3-4a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm5 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"/></svg>
         <span>{{ "settings-section-appearance"|t }}</span>
       </a>
-      <a href="/settings#notifications" hx-boost="false" role="menuitem" class="lc-menu-item">
+      <a href="/settings#notifications" {% include "partials/nav_boost.html" %} role="menuitem" class="lc-menu-item">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 2a6 6 0 00-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 00.515 1.076 32.9 32.9 0 003.256.508 3.5 3.5 0 006.972 0 32.9 32.9 0 003.256-.508.75.75 0 00.515-1.076A11.45 11.45 0 0116 8a6 6 0 00-6-6zm0 14.5a2 2 0 01-1.95-1.557 33 33 0 003.9 0A2 2 0 0110 16.5z" clip-rule="evenodd"/></svg>
         <span>{{ "settings-section-notifications"|t }}</span>
       </a>
-      <a href="/settings#privacy" hx-boost="false" role="menuitem" class="lc-menu-item">
+      <a href="/settings#privacy" {% include "partials/nav_boost.html" %} role="menuitem" class="lc-menu-item">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9.661 2.237a.531.531 0 01.678 0 11.947 11.947 0 007.078 2.749.5.5 0 01.479.425c.069.43.105.86.105 1.299 0 5.628-3.808 10.36-8.97 11.749a.53.53 0 01-.276 0C4.808 17.057 1 12.325 1 6.7c0-.439.036-.87.105-1.3a.5.5 0 01.48-.425 11.947 11.947 0 007.076-2.738zM10 14a1 1 0 100-2 1 1 0 000 2zm0-7a1 1 0 00-1 1v2a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
         <span>{{ "settings-section-privacy"|t }}</span>
       </a>

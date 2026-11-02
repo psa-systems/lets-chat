@@ -146,10 +146,44 @@
     });
   }
 
+  // The sessionStorage key the settings tablist (tabs.js) remembers its tab
+  // under; must match the key init() passes to lcInitTabs.
+  var TAB_STORAGE_KEY = 'lc-settings-tab';
+
+  // LC-1106: the settings deep-links in the persistent shell (the rail gear
+  // flyout, the account menu, your own hovercard) are boosted now, so following
+  // one mid-call keeps the socket and the live call instead of reloading the
+  // whole page and tearing them down. A boosted swap pushes the new URL only
+  // after this page's scripts run, so location.hash is not reliably set when
+  // lcInitTabs reads it; record the target tab here, on click, under the same
+  // key tabs.js falls back to, so the right tab opens regardless of when htmx
+  // updates the hash. Exported for the test.
+  function rememberSettingsTab(href) {
+    if (!href) return;
+    var hash = href.indexOf('#');
+    if (hash < 0) return;
+    // Only /settings deep-links, never an unrelated same-page anchor.
+    if (href.slice(0, hash).replace(/\/+$/, '').indexOf('/settings') < 0) return;
+    var key = href.slice(hash + 1);
+    if (!key) return;
+    try { sessionStorage.setItem(TAB_STORAGE_KEY, key); } catch (e) {}
+  }
+  window.__lcSettingsRememberTab = rememberSettingsTab;
+
+  function deepLinkInit() {
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a[href]');
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      if (href.indexOf('/settings#') < 0) return;
+      rememberSettingsTab(href);
+    });
+  }
+
   function init() {
     var root = document.querySelector('[data-lc-settings]');
     if (!root) return;
-    window.lcInitTabs(root, 'lc-settings-tab');
+    window.lcInitTabs(root, TAB_STORAGE_KEY);
     avatarInit(root);
     actionsInit(root);
     dismissInit();
@@ -158,6 +192,9 @@
   // Document-level status listeners: registered once (init() can re-run).
   statusInit();
   errorNetInit();
+  // LC-1106: capture settings deep-link clicks everywhere in the shell, not
+  // only on the settings page, so the boosted navigation remembers its tab.
+  deepLinkInit();
 
   if (document.readyState !== 'loading') init();
   else document.addEventListener('DOMContentLoaded', init);

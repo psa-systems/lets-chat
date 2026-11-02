@@ -45,8 +45,10 @@
 {% endif %}
 {% if is_self %}
 {# LC-809: your own card. Link straight to the display-name control (the profile
-   section of settings) so "how do I change my name" is answered in place. #}
-<a href="/settings#profile" class="btn btn-primary mt-3 w-full">{{ "hovercard-edit-profile"|t }}</a>
+   section of settings) so "how do I change my name" is answered in place.
+   LC-1106: boosted so opening it mid-call keeps the live call alive; settings.js
+   remembers the profile tab on click so it opens after the boosted swap. #}
+<a href="/settings#profile" {% include "partials/nav_boost.html" %} class="btn btn-primary mt-3 w-full">{{ "hovercard-edit-profile"|t }}</a>
 {% else if can_message %}
 <a href="/dm/{{ user_id }}" class="btn btn-primary mt-3 w-full">{{ "hovercard-message"|t }}</a>
 {% endif %}

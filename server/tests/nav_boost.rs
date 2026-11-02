@@ -200,9 +200,14 @@ async fn nav_links_are_boosted_per_anchor_and_the_exemptions_are_real_navigation
     let (status, page) = get(&a, &format!("/room/{}", a.room_id), &[]).await;
     assert_eq!(status, StatusCode::OK);
 
-    // The room row, a DM-shape link and the account menu's plain settings link
-    // are boosted, each on its own anchor.
-    for href in [format!("/room/{}", a.room_id), "/settings".to_string()] {
+    // The room row, a DM-shape link, the account menu's plain settings link and
+    // (LC-1106) the settings deep-links are boosted, each on its own anchor, so
+    // following one keeps a live call instead of reloading the page.
+    for href in [
+        format!("/room/{}", a.room_id),
+        "/settings".to_string(),
+        "/settings#profile".to_string(),
+    ] {
         let needle = format!("href=\"{href}\" {BOOST}");
         assert!(
             page.contains(&needle),
@@ -219,15 +224,12 @@ async fn nav_links_are_boosted_per_anchor_and_the_exemptions_are_real_navigation
         "expected a boosted anchor `{needle}`, got:\n{global}"
     );
 
-    // The exemptions: logout lands on a page with no #main; the settings deep
-    // links depend on location.hash while the page's scripts run.
-    for href in ["/logout", "/settings#profile"] {
-        let needle = format!("href=\"{href}\" hx-boost=\"false\"");
-        assert!(
-            page.contains(&needle),
-            "expected a real navigation `{needle}`, got:\n{page}"
-        );
-    }
+    // The exemption: logout lands on a page with no #main, so it stays a real
+    // navigation. (LC-1106 moved the settings deep-links to boosted.)
+    assert!(
+        page.contains("href=\"/logout\" hx-boost=\"false\""),
+        "logout must stay a real navigation, got:\n{page}"
+    );
 
     // Boost is never on a container: the only hx-boost="true" on the page are
     // the per-anchor ones, and each sits on an <a>.
