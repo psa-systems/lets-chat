@@ -41,6 +41,13 @@ async fn file_pool(dir: &std::path::Path, domain: &str) -> SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(4)
         .min_connections(1)
+        // LC-1111: a busy CI runner (this step builds the saas target first,
+        // then runs every test binary) can take longer than the 30s default to
+        // open the eager min connection, failing unrelated PRs with
+        // PoolTimedOut. A generous ceiling absorbs that transient slowness; the
+        // tests normally open in well under a second, so it only bites under
+        // pathological load, where the job timeout is the real backstop.
+        .acquire_timeout(Duration::from_secs(120))
         .connect_with(opts)
         .await
         .expect("pool");
