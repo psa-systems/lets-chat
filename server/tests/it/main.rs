@@ -64,6 +64,7 @@ mod db_thread_muters;
 mod db_transcripts;
 mod db_uploads;
 mod db_vapid;
+mod db_voice_calls;
 mod email_digest_dispatch;
 mod email_ingress_attachments;
 mod email_ingress_dedup_path;

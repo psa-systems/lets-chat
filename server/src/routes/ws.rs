@@ -3235,8 +3235,22 @@ pub(crate) async fn record_voice_event(
     kind: &str,
     detail: Option<&str>,
 ) {
-    if let Err(e) =
-        db::voice_events::log_event(&state.chat, room_id, user_id, user_label, kind, detail).await
+    // LC-1113: stamp the event with the room's currently-open call so the admin
+    // view can group it. Best-effort: a lookup failure just leaves call_id NULL
+    // (the event still logs and shows in the flat view).
+    let call_id = db::voice_calls::open_id(&state.chat, room_id)
+        .await
+        .unwrap_or(None);
+    if let Err(e) = db::voice_events::log_event(
+        &state.chat,
+        room_id,
+        user_id,
+        user_label,
+        kind,
+        detail,
+        call_id,
+    )
+    .await
     {
         tracing::warn!(room_id, user = %user_id, kind, error = %e, "voice event log failed");
         return;
@@ -3338,6 +3352,13 @@ pub async fn handle_voice_join(
     // huddle. Captured before `voice_join` mutates the roster.
     let started_huddle = state.hub.voice_room_users(room_id).is_empty();
     let peers = state.hub.voice_join(conn_id, room_id);
+    // LC-1113: the first join opens a call to group this meeting's events under.
+    // Done before the connect event below so that event carries the call_id.
+    if started_huddle {
+        if let Err(e) = db::voice_calls::open(&state.chat, room_id).await {
+            tracing::warn!(room_id, error = %e, "voice call open failed");
+        }
+    }
     // LC-859: log the connect. A join within 30s of this user's own departure
     // from this room is a reconnect (the LC-764 "dropped then came back" case),
     // derived from the log itself rather than tracked in memory.
@@ -3391,6 +3412,11 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId, reason: &str) {
     // LC-859: log the departure (graceful leave vs ungraceful drop). Spawned
     // because this fn is sync; a drop is the audio-error signal an admin scans
     // for in the voice log.
+    // LC-1113: capture "was that the last participant?" now (voice_leave above
+    // already removed the conn), so the spawn can close the call AFTER recording
+    // this departure - the event still carries the call_id - then finalize the
+    // transcript (LC-393 Phase 2). Merged into one task so the ordering holds.
+    let is_last = state.hub.voice_room_users(room_id).is_empty();
     {
         let st = state.clone();
         let uid = user_id.clone();
@@ -3398,6 +3424,10 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId, reason: &str) {
         let kind = reason.to_string();
         tokio::spawn(async move {
             record_voice_event(&st, room_id, &uid, &label, &kind, None).await;
+            if is_last {
+                db::voice_calls::close(&st.chat, room_id).await.ok();
+                super::transcripts::finalize_open_for_room(&st, room_id).await;
+            }
         });
     }
     // Tell every subscriber of the room, not just remaining voice members: a
@@ -3434,15 +3464,9 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId, reason: &str) {
             end_control_on_participant_gone(&st, room_id, &uid).await;
         });
     }
-    // LC-393 Phase 2: if that was the last participant, finalize any open
-    // transcription session for the channel (save + post the notice). Spawned
-    // because this fn is sync; AppState is cheap to clone (Arc-backed).
-    if state.hub.voice_room_users(room_id).is_empty() {
-        let st = state.clone();
-        tokio::spawn(async move {
-            super::transcripts::finalize_open_for_room(&st, room_id).await;
-        });
-    }
+    // LC-393 Phase 2 (transcript finalize) + LC-1113 (call close) on the last
+    // participant leaving now run inside the departure-event spawn above, so the
+    // last event keeps its call_id and the ordering is deterministic.
 }
 
 /// LC-494: stage self-actions (the actor operates on their own membership).

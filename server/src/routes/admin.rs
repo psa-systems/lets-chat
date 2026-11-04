@@ -112,6 +112,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/modlog", get(get_modlog))
         .route("/admin/remote-control", get(get_remote_control_audit))
         .route("/admin/voice-log", get(get_voice_log))
+        .route("/admin/voice-log/call/{id}", get(get_voice_call_detail))
         // LC-334: message-report review queue.
         .route("/admin/reports", get(get_reports))
         .route("/admin/reports/badge", get(get_reports_badge))
@@ -1843,15 +1844,14 @@ pub async fn get_voice_log(
         db::voice_events::list_recent(&state.chat, 200)
             .await?
             .into_iter()
-            .map(|e| crate::views::admin::VoiceLogRow {
-                room_id: e.room_id,
-                user_id: e.user_id,
-                user_label: e.user_label,
-                kind: e.kind,
-                detail: e.detail,
-                created_at: e.created_at,
-            })
+            .map(voice_log_row)
             .collect();
+    // LC-1113: recent calls, each a link to its own timeline.
+    let calls: Vec<crate::views::admin::CallRow> = db::voice_calls::list_recent(&state.chat, 50)
+        .await?
+        .into_iter()
+        .map(call_row)
+        .collect();
     let page = crate::views::admin::VoiceLogPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -1868,6 +1868,79 @@ pub async fn get_voice_log(
         git_version: version::GIT_VERSION,
         build_date: version::BUILD_DATE,
         section: "voice_log",
+        calls: &calls,
+        events: &events,
+    };
+    html(&page)
+}
+
+fn voice_log_row(e: db::voice_events::VoiceEvent) -> crate::views::admin::VoiceLogRow {
+    crate::views::admin::VoiceLogRow {
+        room_id: e.room_id,
+        user_id: e.user_id,
+        user_label: e.user_label,
+        kind: e.kind,
+        detail: e.detail,
+        created_at: e.created_at,
+    }
+}
+
+fn call_row(c: db::voice_calls::CallSummary) -> crate::views::admin::CallRow {
+    crate::views::admin::CallRow {
+        id: c.id,
+        room_id: c.room_id,
+        started_at: c.started_at,
+        ended_at: c.ended_at,
+        participants: c.participants,
+        events: c.events,
+        errors: c.errors,
+    }
+}
+
+/// `GET /admin/voice-log/call/{id}` - LC-1113: one call's whole event timeline,
+/// oldest-first, so an admin can read why that single call misbehaved.
+pub async fn get_voice_call_detail(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+    axum::extract::Path(call_id): axum::extract::Path<i64>,
+) -> Result<Html, AppError> {
+    let Some(summary) = db::voice_calls::get(&state.chat, call_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+    let events: Vec<crate::views::admin::VoiceLogRow> =
+        db::voice_calls::list_events(&state.chat, call_id)
+            .await?
+            .into_iter()
+            .map(voice_log_row)
+            .collect();
+    let call = call_row(summary);
+    let page = crate::views::admin::VoiceCallDetailPage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "voice_log",
+        call: &call,
         events: &events,
     };
     html(&page)

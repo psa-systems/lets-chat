@@ -42,16 +42,21 @@ pub async fn log_event(
     user_label: &str,
     kind: &str,
     detail: Option<&str>,
+    // LC-1113: the room's currently-open call (voice_calls), so the admin view
+    // can group this event into its call. None before a call is open or for a
+    // stray event after it closed; such rows still show in the flat log.
+    call_id: Option<i64>,
 ) -> sqlx::Result<()> {
     sqlx::query(
-        "INSERT INTO voice_events (room_id, user_id, user_label, kind, detail)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
+        "INSERT INTO voice_events (room_id, user_id, user_label, kind, detail, call_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
     )
     .bind(room_id)
     .bind(user_id)
     .bind(user_label)
     .bind(kind)
     .bind(detail)
+    .bind(call_id)
     .execute(pool)
     .await?;
     // Bound the table to the retention window. Indexed on created_at, and at
