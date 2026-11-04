@@ -166,6 +166,7 @@ voice-transcript-panel = Transcript
 voice-transcribe-tip = Start or stop transcription
 voice-transcript-tip = Toggle transcript panel
 voice-transcript-close = Close transcript
+voice-diag-title = Diagnostics
 voice-jump-live = Jump to live
 voice-transcript-empty-title = No transcript yet
 voice-transcript-empty-sub = Spoken audio will appear here once transcription is on.

@@ -367,6 +367,17 @@ pub struct TranscriptSegmentFragment<'a> {
     pub text: &'a str,
 }
 
+/// LC-1118: one voice-event row appended live into the in-call diagnostics
+/// drawer (`#lc-call-diag-log`). Shares the admin voice-log row shape; the
+/// error/dropped kinds get the danger badge.
+#[derive(Template)]
+#[template(path = "ws/call_diag_row.html")]
+pub struct CallDiagFragment<'a> {
+    pub user_label: &'a str,
+    pub kind: &'a str,
+    pub detail: Option<&'a str>,
+}
+
 /// Render a ChatEvent as an HTML fragment with hx-swap-oob attributes for
 /// events that do not depend on the recipient. Per-recipient events
 /// (NewMessage, MessageEdited, ReactionAdded/Removed, DmRead,
@@ -493,7 +504,10 @@ pub fn render_event(event: &ChatEvent) -> Option<String> {
         | ChatEvent::UserProfileChanged { .. }
         // LC-836: rendered per recipient in the WS send task (sidebar OOB for
         // the page that one connection moved to).
-        | ChatEvent::PageChanged { .. } => None,
+        | ChatEvent::PageChanged { .. }
+        // LC-1118: in-call diagnostics row, rendered in the WS send task for the
+        // call_diag:{room} subscribers (admins); the generic path emits nothing.
+        | ChatEvent::CallDiag { .. } => None,
         ChatEvent::UserStatusChanged {
             user_id,
             status,

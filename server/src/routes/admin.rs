@@ -50,6 +50,10 @@ pub fn router() -> Router<AppState> {
             "/admin/settings/transcription",
             post(post_transcription_flag),
         )
+        .route(
+            "/admin/settings/call-diagnostics",
+            post(post_call_diagnostics_flag),
+        )
         .route("/admin/settings/help-docs", post(post_help_docs_sources))
         .route("/admin/help-docs/reindex", post(post_help_docs_reindex))
         .route(
@@ -907,7 +911,7 @@ pub async fn get_feature_flags(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    use super::feature_flags::{rollout, REMOTE_CONTROL, TRANSCRIPTION};
+    use super::feature_flags::{rollout, CALL_DIAGNOSTICS, REMOTE_CONTROL, TRANSCRIPTION};
     let (
         sidebar_categories,
         sidebar_starred_rooms,
@@ -940,6 +944,7 @@ pub async fn get_feature_flags(
         remote_control_rollout: rollout(&state, &REMOTE_CONTROL).await.as_str(),
         transcription_rollout: rollout(&state, &TRANSCRIPTION).await.as_str(),
         stt_configured: state.stt_available(),
+        call_diagnostics_rollout: rollout(&state, &CALL_DIAGNOSTICS).await.as_str(),
     };
     html(&page)
 }
@@ -1010,6 +1015,27 @@ pub async fn post_transcription_flag(
         &headers,
         &super::feature_flags::TRANSCRIPTION,
         "transcription",
+        form,
+    )
+    .await
+}
+
+/// LC-1118: set the in-call live diagnostics rollout. Surfaces the per-call
+/// voice-event log live inside a call to site admins. Admin-only regardless of
+/// audience (the render, WS subscribe and broadcast all require `role=="admin"`),
+/// so this is effectively an on/off switch. Read live, like the other flags.
+pub async fn post_call_diagnostics_flag(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    headers: HeaderMap,
+    axum::Form(form): axum::Form<RolloutForm>,
+) -> Result<Response, AppError> {
+    save_rollout(
+        &state,
+        &actor,
+        &headers,
+        &super::feature_flags::CALL_DIAGNOSTICS,
+        "call_diagnostics",
         form,
     )
     .await

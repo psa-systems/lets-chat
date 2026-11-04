@@ -582,3 +582,8 @@ admin-settings-transcription-admins-note = Con Solo administradores, un administ
 admin-settings-transcription-save = Guardar ajuste de transcripción
 admin-settings-transcription-unconfigured-title = No hay voz a texto en el servidor.
 admin-settings-transcription-unconfigured-body = Las llamadas siguen transcribiéndose en los navegadores compatibles; los mensajes de voz necesitan un motor en el servidor, configurado con
+
+admin-settings-call-diag-heading = Diagnóstico en llamada
+admin-settings-call-diag-note = Muestra un panel de diagnóstico en vivo dentro de cada llamada que solo ven los administradores. Transmite los mismos eventos de conexión que el registro de voz por llamada (entradas, caídas, errores de WebRTC) para rastrear una llamada con problemas mientras ocurre. Desactivado por defecto.
+admin-settings-call-diag-admins-note = Solo para administradores, elijas lo que elijas aquí: el panel, su feed en vivo y su historial nunca se muestran a quienes no son administradores. Activado muestra el panel a cada administrador en una llamada; Solo administradores es equivalente. Desactivado lo oculta.
+admin-settings-call-diag-save = Guardar ajuste de diagnóstico en llamada

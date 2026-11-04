@@ -262,6 +262,8 @@ pub struct FeatureFlagsPage<'a> {
     /// Whether server STT is configured (`LETS_CHAT_STT_URL`). Without it calls
     /// still transcribe in the browser, but voice messages are not transcribed.
     pub stt_configured: bool,
+    /// LC-1118: in-call live diagnostics drawer rollout (`Rollout::as_str`).
+    pub call_diagnostics_rollout: &'static str,
 }
 
 /// LC-334: site-admin report-review queue (`/admin/reports`). The open-report

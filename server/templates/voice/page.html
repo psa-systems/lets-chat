@@ -181,6 +181,39 @@
     <div data-lc-react-layer class="lc-react-layer" aria-hidden="true"></div>
   </div>
   <div data-lc-react-live class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+  {# LC-1118: admin-only live diagnostics drawer, gated on the CALL_DIAGNOSTICS
+     feature flag (show_call_diag). A native <details> panel pinned bottom-right
+     - no bespoke JS. live.js subscribes the `call_diag:{room}` topic from
+     data-lc-live-topic; each voice_event the server records OOB-appends a row
+     into #lc-call-diag-log (templates/ws/call_diag_row.html). The hub gates both
+     the subscribe and the broadcast on admin + flag, so this feed never reaches
+     a non-admin even though the markup is only presentation. Seeded with the
+     current open call's events; the full timeline with timestamps lives at
+     /admin/voice-log. #}
+  {% if show_call_diag %}
+  <details class="fixed bottom-4 right-4 z-40 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-surface-elevated shadow-lg" data-lc-live-topic="call_diag:{{ room.id }}">
+    <summary class="flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-content-muted">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd"/></svg>
+      {{ "voice-diag-title"|t }}
+    </summary>
+    <div class="max-h-64 overflow-y-auto border-t border-border px-3 py-2">
+      <div id="lc-call-diag-log" class="flex flex-col gap-0.5">
+        {% for e in call_diag_events %}
+        <div class="flex items-center gap-2 py-0.5 text-xs">
+          {% if e.kind == "dropped" || e.kind == "error" %}
+          <span class="rounded bg-danger-surface px-1.5 py-0.5 font-mono uppercase tracking-wide text-danger">{{ e.kind }}</span>
+          {% else %}
+          <span class="font-mono text-content-muted">{{ e.kind }}</span>
+          {% endif %}
+          <span class="font-medium">{{ e.user_label }}</span>
+          {% if let Some(d) = e.detail %}<span class="break-all text-content-muted">{{ d }}</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </details>
+  {% endif %}
 </div>
 {# LC-156: WS room subscription handled declaratively by live.js via the
    data-lc-live-room attribute on the voice root above. #}

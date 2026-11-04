@@ -134,12 +134,14 @@ async fn feature_flags_tab_holds_every_switch_and_settings_no_longer_does() {
         "lc-flag-ai",
         "lc-flag-remote-control",
         "lc-flag-transcription",
+        "lc-flag-call-diagnostics",
     ] {
         assert!(html.contains(id), "{id} card renders");
     }
     assert!(html.contains(r#"href="/admin/feature-flags" class="lc-set-tab" aria-current="page""#));
-    // Fresh install: both three-state flags start Off.
-    assert_eq!(html.matches(r#"value="off" checked"#).count(), 2, "{html}");
+    // Fresh install: all three three-state flags (remote control, transcription,
+    // call diagnostics) start Off.
+    assert_eq!(html.matches(r#"value="off" checked"#).count(), 3, "{html}");
 
     let (_, settings) = send(
         &f.app,
@@ -231,6 +233,53 @@ async fn saving_a_rollout_persists_both_keys_and_audits() {
         html.contains(r#"value="everyone" checked"#),
         "remote control shows Everyone"
     );
+}
+
+#[tokio::test]
+async fn saving_call_diagnostics_rollout_persists_both_keys_and_audits() {
+    // LC-1118: the in-call diagnostics flag plumbs through the shared rollout
+    // path like the others - both settings rows written, a mod-action audited.
+    let f = setup().await;
+    let (st, _) = send(
+        &f.app,
+        Method::POST,
+        &f.admin_session,
+        "/admin/settings/call-diagnostics",
+        Some("rollout=admins"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(
+        setting(&f, "call_diagnostics_enabled").await.as_deref(),
+        Some("true")
+    );
+    assert_eq!(
+        setting(&f, "call_diagnostics_audience").await.as_deref(),
+        Some("admins")
+    );
+
+    let (st, _) = send(
+        &f.app,
+        Method::POST,
+        &f.admin_session,
+        "/admin/settings/call-diagnostics",
+        Some("rollout=off"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(
+        setting(&f, "call_diagnostics_enabled").await.as_deref(),
+        Some("false")
+    );
+
+    let actions: Vec<(String,)> = sqlx::query_as(
+        "SELECT action FROM mod_actions WHERE action LIKE 'call_diagnostics_%' ORDER BY id",
+    )
+    .fetch_all(&f.chat)
+    .await
+    .unwrap();
+    let kinds: Vec<&str> = actions.iter().map(|(a,)| a.as_str()).collect();
+    assert_eq!(kinds, ["call_diagnostics_on", "call_diagnostics_off"]);
 }
 
 #[tokio::test]
