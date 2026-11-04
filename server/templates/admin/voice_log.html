@@ -3,12 +3,62 @@
 {% block title %}{{ "admin-voice-log-title"|t }} - Admin - Let's Chat{% endblock %}
 
 {% block admin_main %}
+{# LC-859 + LC-1113: a "recent calls" list (each links to its own timeline)
+   above the flat, live-updating lifecycle-event log. The page header (title) is
+   rendered by the admin shell from `section`. #}
+<p class="text-sm text-content-muted mb-3">{{ "admin-voice-log-intro"|t }}</p>
+
+<p class="text-sm font-semibold mb-2">{{ "admin-voice-log-calls-title"|t }}</p>
+{% if calls.is_empty() %}
+<p class="text-sm text-content-muted mb-6">{{ "admin-voice-log-calls-empty"|t }}</p>
+{% else %}
+<div class="card lc-table-wrap mb-6">
+  <table class="lc-table">
+    <thead>
+      <tr>
+        <th>{{ "admin-voice-log-th-started"|t }}</th>
+        <th>{{ "admin-voice-log-th-room"|t }}</th>
+        <th>{{ "admin-voice-log-th-status"|t }}</th>
+        <th>{{ "admin-voice-log-th-participants"|t }}</th>
+        <th>{{ "admin-voice-log-th-events"|t }}</th>
+        <th>{{ "admin-voice-log-th-errors"|t }}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in calls %}
+      <tr>
+        <td class="text-xs text-content-muted whitespace-nowrap"><time datetime="{{ c.started_at|iso }}" title="{{ c.started_at }}">{{ c.started_at }}</time></td>
+        <td class="font-mono text-xs">#{{ c.room_id }}</td>
+        <td>
+          {% if let Some(ended) = c.ended_at.as_ref() %}
+          <span class="text-content-muted text-xs whitespace-nowrap"><time datetime="{{ ended|iso }}">{{ ended }}</time></span>
+          {% else %}
+          <span class="rounded bg-success-surface text-success text-xs px-1.5 py-0.5 uppercase tracking-wide font-mono">{{ "admin-voice-log-live"|t }}</span>
+          {% endif %}
+        </td>
+        <td class="font-mono text-xs">{{ c.participants }}</td>
+        <td class="font-mono text-xs">{{ c.events }}</td>
+        <td>
+          {% if c.errors > 0 %}
+          <span class="rounded bg-danger-surface text-danger text-xs px-1.5 py-0.5 font-mono">{{ c.errors }}</span>
+          {% else %}
+          <span class="font-mono text-xs text-content-muted">0</span>
+          {% endif %}
+        </td>
+        <td><a class="text-accent hover:underline text-xs whitespace-nowrap" href="/admin/voice-log/call/{{ c.id }}">{{ "admin-voice-log-view"|t }}</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
 {# LC-859: id-keyed live region. The AdminVoiceLogOob fragment swaps this
    innerHTML on the `admin` topic as call events are logged, so an admin watching
    this page sees connect / drop / rejoin / mute entries arrive during a live
-   meeting without reloading. The page header (title) is rendered by the admin
-   shell from `section`. #}
-<p class="text-sm text-content-muted mb-3">{{ "admin-voice-log-intro"|t }}</p>
+   meeting without reloading. #}
+<p class="text-sm font-semibold mb-2">{{ "admin-voice-log-events-title"|t }}</p>
 <div id="admin-voice-log-list">
   {% include "admin/voice_log_items.html" %}
 </div>

@@ -235,6 +235,20 @@ admin-voice-log-th-event = Evento
 admin-voice-log-th-room = Sala
 admin-voice-log-th-participant = Participante
 admin-voice-log-th-detail = Detalle
+admin-voice-log-calls-title = Llamadas recientes
+admin-voice-log-calls-empty = Aún no se han registrado llamadas.
+admin-voice-log-events-title = Todos los eventos
+admin-voice-log-th-started = Inicio
+admin-voice-log-th-status = Fin
+admin-voice-log-th-participants = Personas
+admin-voice-log-th-events = Eventos
+admin-voice-log-th-errors = Errores
+admin-voice-log-live = En vivo
+admin-voice-log-view = Ver
+admin-voice-log-back = Volver al registro de voz
+admin-voice-log-call = Llamada
+admin-voice-log-participants-label = personas
+admin-voice-log-errors-label = errores
 
 ## Webhook deliveries
 admin-deliveries-title = Entregas de webhook
