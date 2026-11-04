@@ -19,6 +19,7 @@ Everything else is in [`docs/`](docs/README.md), indexed there in full:
 - [features.md](docs/features.md) - what the product does, surface by surface
 - [operations.md](docs/operations.md) - health probes and boot dependencies
 - [architecture.md](docs/architecture.md) - the stack, the build modes, the repository layout
+- [specification.md](docs/specification.md) - the full application specification: requirements, interfaces, data model and configuration
 - [api.md](docs/api.md) - the JSON HTTP API v1, scopes, and webhooks
 
 Upgrading a deployment starts with [`CHANGELOG.md`](CHANGELOG.md), which calls out behavior changes, security fixes, and new variables you may need to set first.

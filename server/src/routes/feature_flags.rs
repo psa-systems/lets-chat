@@ -41,6 +41,15 @@ pub const TRANSCRIPTION: Flag = Flag {
     audience_key: "transcription_audience",
 };
 
+/// LC-1118: the in-call live diagnostics drawer. The feature is admin-only
+/// regardless of audience (the render, subscribe and broadcast all additionally
+/// require `role == "admin"`), so the flag is effectively an on/off switch for
+/// surfacing the per-call log live inside the call. Default off.
+pub const CALL_DIAGNOSTICS: Flag = Flag {
+    enabled_key: "call_diagnostics_enabled",
+    audience_key: "call_diagnostics_audience",
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rollout {
     Off,

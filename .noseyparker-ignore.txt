@@ -25,8 +25,8 @@
 # Test fixtures: a short placeholder string assigned to the IMAP password field
 # in a #[sqlx::test], and the same fixture shape in the inboxes route test.
 # Neither reaches a real mailbox.
-server/tests/db_imap_config_dead_letter.rs
-server/tests/routes_email_inboxes.rs
+server/tests/it/db_imap_config_dead_letter.rs
+server/tests/it/routes_email_inboxes.rs
 
 # Identifier and doc-comment text, not a value: the LiveKit API secret struct
 # field and the env-var names the module documents. The value itself is read

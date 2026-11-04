@@ -18,7 +18,7 @@ def parse_ls_tree [line: string]: nothing -> string {
 
 def parse_pin [lines: list<string>]: nothing -> string {
     $lines
-    | where {|l| $l | str contains "uses: psa-systems/common/" }
+    | where {|l| $l | str contains "uses: https://dev.a8n.run/psa-systems/common/" }
     | first
     | split row "@"
     | last
@@ -29,7 +29,7 @@ def parse_pin [lines: list<string>]: nothing -> string {
 if (parse_ls_tree "160000 commit 690a469ec3d4194a9e9b7ebfba03df936ac6c517\tcommon") != "690a469ec3d4194a9e9b7ebfba03df936ac6c517" {
     error make {msg: "check-release-pin self-test failed: parse_ls_tree"}
 }
-if (parse_pin ["    uses: psa-systems/common/.forgejo/workflows/create-release.yml@deadbeef"]) != "deadbeef" {
+if (parse_pin ["    uses: https://dev.a8n.run/psa-systems/common/.forgejo/workflows/create-release.yml@deadbeef"]) != "deadbeef" {
     error make {msg: "check-release-pin self-test failed: parse_pin"}
 }
 

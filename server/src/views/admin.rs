@@ -262,6 +262,8 @@ pub struct FeatureFlagsPage<'a> {
     /// Whether server STT is configured (`LETS_CHAT_STT_URL`). Without it calls
     /// still transcribe in the browser, but voice messages are not transcribed.
     pub stt_configured: bool,
+    /// LC-1118: in-call live diagnostics drawer rollout (`Rollout::as_str`).
+    pub call_diagnostics_rollout: &'static str,
 }
 
 /// LC-334: site-admin report-review queue (`/admin/reports`). The open-report
@@ -300,10 +302,24 @@ pub struct VoiceLogRow {
     pub created_at: String,
 }
 
-/// LC-859: the admin voice-call observability page (`/admin/voice-log`): a live,
-/// read-only listing of recent call lifecycle events. The page and the live OOB
-/// fragment share `admin/voice_log_items.html` (both expose `events`) so a fresh
-/// load and a live update render identically.
+/// LC-1113: one row of the "recent calls" list - a call span plus the counts an
+/// admin scans to spot a bad call. Links to the per-call drill-down.
+pub struct CallRow {
+    pub id: i64,
+    pub room_id: i64,
+    pub started_at: String,
+    /// None while the call is still live.
+    pub ended_at: Option<String>,
+    pub participants: i64,
+    pub events: i64,
+    pub errors: i64,
+}
+
+/// LC-859 + LC-1113: the admin voice-call observability page (`/admin/voice-log`):
+/// a live, read-only "recent calls" list (each links to its timeline) above the
+/// flat lifecycle-event log. The page and the live OOB fragment share
+/// `admin/voice_log_items.html` (both expose `events`) so a fresh load and a live
+/// update render identically.
 #[derive(Template)]
 #[template(path = "admin/voice_log.html")]
 pub struct VoiceLogPage<'a> {
@@ -322,6 +338,32 @@ pub struct VoiceLogPage<'a> {
     pub git_version: &'a str,
     pub build_date: &'a str,
     pub section: &'static str,
+    pub calls: &'a [CallRow],
+    pub events: &'a [VoiceLogRow],
+}
+
+/// LC-1113: the per-call drill-down (`/admin/voice-log/call/{id}`): one call's
+/// header plus its whole event timeline (oldest-first), reusing
+/// `admin/voice_log_items.html` for the rows.
+#[derive(Template)]
+#[template(path = "admin/voice_call_detail.html")]
+pub struct VoiceCallDetailPage<'a> {
+    pub user: &'a User,
+    pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
+    pub sidebar_starred_rooms: &'a [SidebarRoom],
+    pub sidebar_starred_peers: &'a [SidebarPeer],
+    pub can_manage_sidebar_categories: bool,
+    pub sidebar_current_enclave: Option<i64>,
+    pub sidebar_rooms: &'a [SidebarRoom],
+    pub sidebar_peers: &'a [SidebarPeer],
+    pub switcher: &'a [SwitcherEntry],
+    pub asset_version: &'a str,
+    pub app_version: &'a str,
+    pub git_hash: &'a str,
+    pub git_version: &'a str,
+    pub build_date: &'a str,
+    pub section: &'static str,
+    pub call: &'a CallRow,
     pub events: &'a [VoiceLogRow],
 }
 

@@ -97,5 +97,23 @@
     </form>
   </div>
 
+  {# --- LC-1118: in-call live diagnostics drawer (admin-only) --- #}
+  <div class="card lc-set-card" id="lc-flag-call-diagnostics">
+    <div class="lc-set-card-head">
+      <h3 class="lc-set-card-title">{{ "admin-settings-call-diag-heading"|t }}</h3>
+    </div>
+    <p class="lc-set-card-desc text-sm text-content-muted mb-3">{{ "admin-settings-call-diag-note"|t }}</p>
+    <form class="lc-set-form" method="post" action="/admin/settings/call-diagnostics"
+          hx-post="/admin/settings/call-diagnostics" hx-target="#st-call-diag" hx-swap="innerHTML" hx-disabled-elt="this">
+      {% let rollout = call_diagnostics_rollout %}
+      {% include "partials/rollout_radio.html" %}
+      <p class="lc-set-help">{{ "admin-settings-call-diag-admins-note"|t }}</p>
+      <div class="lc-set-actions">
+        <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-settings-call-diag-save"|t }}</span></button>
+        <span id="st-call-diag" class="lc-set-status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </div>
+
 </div>
 {% endblock %}

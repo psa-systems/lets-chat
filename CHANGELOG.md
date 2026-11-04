@@ -8,6 +8,26 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.9.0] - 2026-11-03
+
+Minor release on top of v0.8.2. Headline: an admin per-call diagnostic log to trace why a call misbehaved. Plus call-UI fixes and one operator-facing container-startup change.
+
+### Added
+
+- **Per-call admin diagnostic log (LC-1113, LC-1114).** `/admin/voice-log` now groups the voice-event stream into calls: a "recent calls" list (room, duration, people, event + error counts, a Live badge) drills into one call's whole timeline at `/admin/voice-log/call/{id}`. The browser also reports WebRTC diagnostics into that log on the mesh path: the selected ICE route (host / srflx / **relay**, where `relay` means a TURN server carried it) on connect, and screen-share (`getDisplayMedia`) failures. Admin-only; technical events only, no call content; kept 24 hours. Lets an admin trace a blank screen-share or a failed join from the panel instead of needing a user's browser console.
+
+### Changed
+
+- **Runtime images start as root, then drop privileges via gosu (LC-1081).** The web and transcription-agent containers now start as root and drop to the unprivileged runtime user through a shared `gosu-entrypoint.sh`, so a bind-mounted data directory's ownership is fixed at startup. No action needed unless you pinned the container to run as a fixed non-root UID.
+
+### Fixed
+
+- **A popped-out call stays alive when you open Settings (LC-1106).** The settings deep-links in the rail, account menu, and your own hovercard were full-page reloads that tore down the live call; they are boosted navigations now, so the pop-out call and socket survive, while the right settings tab still opens.
+- **The in-call tile grid fits the stage and screen-share re-binds (LC-1109, LC-1110).** Participant tiles scale to fit instead of overflowing into a scrolling single column with clashing names; a peer's screen-share now re-binds on the screen signal (a track that arrived on a drained renegotiation no longer leaves a blank tile), and a pop-out with a shared screen keeps a filmstrip row so names do not crowd one tile.
+- **The live transcript is cleared per call (PMS-1632).** The caption panel is a persistent element that was never cleared, so a new call (even the next day) stacked its captions under the previous call's. It now clears when a different call's session starts and when a call ends, while a reconnect to the same call keeps its captions.
+- **The post-call summary dialog traps focus (LC-1090).** Keyboard focus stays within the dialog, as expected for a modal.
+- **The invite modal targets the enclave you are viewing (LC-1084).** A follow-up to the stale-enclave race: the invite search now reads the current enclave synchronously from the page context.
+
 ## [v0.8.2] - 2026-10-21
 
 Patch release on top of v0.8.1: five UI and call-history fixes, no operator action.

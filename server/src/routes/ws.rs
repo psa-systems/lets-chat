@@ -141,7 +141,16 @@ enum ClientFrame {
     /// lands in the same /admin/voice-log an admin reads during a call. Gated
     /// to a current participant of the room; `detail` is length-bounded.
     #[serde(rename = "voice_diag")]
-    VoiceDiag { room_id: i64, detail: String },
+    VoiceDiag {
+        room_id: i64,
+        detail: String,
+        /// LC-1114: `"diag"` for an informational signal (e.g. the selected ICE
+        /// route host/srflx/relay), anything else - including absent - for a
+        /// failure. Decides the voice_events `kind` so the admin view does not
+        /// badge a normal route as an error. Old clients omit it (=> error).
+        #[serde(default)]
+        level: Option<String>,
+    },
     /// LC-494: stage control plane. Join/leave as a listener, request or
     /// withdraw the floor, step down from speaking, and (host-only) grant or
     /// revoke another participant's floor. Each mutates the ephemeral hub
@@ -251,6 +260,22 @@ pub async fn topic_subscribe_allowed(state: &AppState, user: &User, topic: &str)
             Err(_) => false,
         },
         Some(("user", id)) => id == user.id,
+        // LC-1118: the in-call live diagnostics feed for a voice room. Admin
+        // only, only when the call-diagnostics flag is on, and only for a room
+        // the admin can access - so a non-admin or a flag-off workspace never
+        // joins the fan-out and never receives a call's diagnostics.
+        Some(("call_diag", id)) => match id.parse::<i64>() {
+            Ok(room_id) => {
+                user.role == "admin"
+                    && super::feature_flags::rollout(state, &super::feature_flags::CALL_DIAGNOSTICS)
+                        .await
+                        .is_on()
+                    && db::chat::is_room_accessible(&state.chat, room_id, &user.id, true)
+                        .await
+                        .unwrap_or(false)
+            }
+            Err(_) => false,
+        },
         _ => false,
     }
 }
@@ -952,6 +977,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_transcript_segment(&e)
                                 }
+                                // LC-1118: in-call diagnostics row. Only admins
+                                // subscribed to call_diag:{room} receive it, so no
+                                // per-recipient guard is needed here.
+                                ChatEvent::CallDiag { .. } => render_call_diag(&e),
                                 _ => render_event(&e),
                             };
                             if let Some(html) = rendered {
@@ -1230,9 +1259,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 }
                             }
                         }
-                        ClientFrame::VoiceDiag { room_id, detail } => {
-                            handle_voice_diag(&state, &user, &username, conn_id, room_id, detail)
-                                .await;
+                        ClientFrame::VoiceDiag {
+                            room_id,
+                            detail,
+                            level,
+                        } => {
+                            handle_voice_diag(
+                                &state, &user, &username, conn_id, room_id, detail, level,
+                            )
+                            .await;
                         }
                         // LC-494: stage control plane. Self-actions require room
                         // access + stage mode; promote/demote additionally
@@ -2167,6 +2202,26 @@ fn render_transcript_segment(event: &ChatEvent) -> Option<String> {
     TranscriptSegmentFragment { speaker_name, text }
         .render()
         .ok()
+}
+
+/// LC-1118: render one in-call diagnostics row for the live drawer.
+fn render_call_diag(event: &ChatEvent) -> Option<String> {
+    let ChatEvent::CallDiag {
+        user_label,
+        kind,
+        detail,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    crate::views::ws_fragments::CallDiagFragment {
+        user_label,
+        kind,
+        detail: detail.as_deref(),
+    }
+    .render()
+    .ok()
 }
 
 /// Validate and relay one WebRTC call signal to the other member of a DM
@@ -3286,8 +3341,22 @@ pub(crate) async fn record_voice_event(
     kind: &str,
     detail: Option<&str>,
 ) {
-    if let Err(e) =
-        db::voice_events::log_event(&state.chat, room_id, user_id, user_label, kind, detail).await
+    // LC-1113: stamp the event with the room's currently-open call so the admin
+    // view can group it. Best-effort: a lookup failure just leaves call_id NULL
+    // (the event still logs and shows in the flat view).
+    let call_id = db::voice_calls::open_id(&state.chat, room_id)
+        .await
+        .unwrap_or(None);
+    if let Err(e) = db::voice_events::log_event(
+        &state.chat,
+        room_id,
+        user_id,
+        user_label,
+        kind,
+        detail,
+        call_id,
+    )
+    .await
     {
         tracing::warn!(room_id, user = %user_id, kind, error = %e, "voice event log failed");
         return;
@@ -3302,6 +3371,25 @@ pub(crate) async fn record_voice_event(
     state
         .hub
         .broadcast_to_topic("admin", &ChatEvent::AdminVoiceLogChanged);
+    // LC-1118: also push the row live to the in-call diagnostics drawer. Only
+    // when the flag is on, and only to call_diag:{room} subscribers, which
+    // topic_subscribe_allowed restricts to admins - so no other participant
+    // receives it. The flag read is the same uncached settings lookup the other
+    // feature flags use.
+    if super::feature_flags::rollout(state, &super::feature_flags::CALL_DIAGNOSTICS)
+        .await
+        .is_on()
+    {
+        state.hub.broadcast_to_topic(
+            &format!("call_diag:{room_id}"),
+            &ChatEvent::CallDiag {
+                room_id,
+                user_label: user_label.to_string(),
+                kind: kind.to_string(),
+                detail: detail.map(|d| d.to_string()),
+            },
+        );
+    }
 }
 
 /// LC-869: per-user cap on client-observed voice diagnostics. An ICE connection
@@ -3330,6 +3418,10 @@ pub async fn handle_voice_diag(
     conn_id: ConnId,
     room_id: i64,
     detail: String,
+    // LC-1114: "diag" (informational, e.g. the ICE route) vs a failure (anything
+    // else, incl. absent). Validated to a tiny set so a client cannot invent a
+    // kind the admin view does not know how to badge.
+    level: Option<String>,
 ) {
     // Only a current participant of the channel may report on it.
     if !state.hub.is_in_voice_room(conn_id, room_id) {
@@ -3358,7 +3450,12 @@ pub async fn handle_voice_diag(
     if detail.is_empty() {
         return;
     }
-    record_voice_event(state, room_id, &user.id, username, "error", Some(detail)).await;
+    // LC-1114: an explicit "diag" is informational; everything else is a fault.
+    let kind = match level.as_deref() {
+        Some("diag") => "diag",
+        _ => "error",
+    };
+    record_voice_event(state, room_id, &user.id, username, kind, Some(detail)).await;
 }
 
 /// Handle a `voice_join` frame: validate the room is an accessible voice
@@ -3389,6 +3486,13 @@ pub async fn handle_voice_join(
     // huddle. Captured before `voice_join` mutates the roster.
     let started_huddle = state.hub.voice_room_users(room_id).is_empty();
     let peers = state.hub.voice_join(conn_id, room_id);
+    // LC-1113: the first join opens a call to group this meeting's events under.
+    // Done before the connect event below so that event carries the call_id.
+    if started_huddle {
+        if let Err(e) = db::voice_calls::open(&state.chat, room_id).await {
+            tracing::warn!(room_id, error = %e, "voice call open failed");
+        }
+    }
     // LC-859: log the connect. A join within 30s of this user's own departure
     // from this room is a reconnect (the LC-764 "dropped then came back" case),
     // derived from the log itself rather than tracked in memory.
@@ -3442,6 +3546,11 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId, reason: &str) {
     // LC-859: log the departure (graceful leave vs ungraceful drop). Spawned
     // because this fn is sync; a drop is the audio-error signal an admin scans
     // for in the voice log.
+    // LC-1113: capture "was that the last participant?" now (voice_leave above
+    // already removed the conn), so the spawn can close the call AFTER recording
+    // this departure - the event still carries the call_id - then finalize the
+    // transcript (LC-393 Phase 2). Merged into one task so the ordering holds.
+    let is_last = state.hub.voice_room_users(room_id).is_empty();
     {
         let st = state.clone();
         let uid = user_id.clone();
@@ -3449,6 +3558,10 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId, reason: &str) {
         let kind = reason.to_string();
         tokio::spawn(async move {
             record_voice_event(&st, room_id, &uid, &label, &kind, None).await;
+            if is_last {
+                db::voice_calls::close(&st.chat, room_id).await.ok();
+                super::transcripts::finalize_open_for_room(&st, room_id).await;
+            }
         });
     }
     // Tell every subscriber of the room, not just remaining voice members: a
@@ -3485,15 +3598,9 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId, reason: &str) {
             end_control_on_participant_gone(&st, room_id, &uid).await;
         });
     }
-    // LC-393 Phase 2: if that was the last participant, finalize any open
-    // transcription session for the channel (save + post the notice). Spawned
-    // because this fn is sync; AppState is cheap to clone (Arc-backed).
-    if state.hub.voice_room_users(room_id).is_empty() {
-        let st = state.clone();
-        tokio::spawn(async move {
-            super::transcripts::finalize_open_for_room(&st, room_id).await;
-        });
-    }
+    // LC-393 Phase 2 (transcript finalize) + LC-1113 (call close) on the last
+    // participant leaving now run inside the departure-event spawn above, so the
+    // last event keeps its call_id and the ordering is deterministic.
 }
 
 /// LC-494: stage self-actions (the actor operates on their own membership).

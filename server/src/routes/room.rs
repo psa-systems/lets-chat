@@ -237,6 +237,22 @@ async fn get_voice_room(
             .map(|m| m.role);
         crate::perms::room_can_manage_overrides(enclave_role, &user.role)
     };
+    // LC-1118: the in-call live diagnostics drawer - site admin only, and only
+    // while the CALL_DIAGNOSTICS flag is on. Seed it with the current open
+    // call's events; live rows append from the `call_diag:{room}` WS feed,
+    // which the hub gates on the same two conditions.
+    let show_call_diag = user.role == "admin"
+        && super::feature_flags::rollout(state, &super::feature_flags::CALL_DIAGNOSTICS)
+            .await
+            .is_on();
+    let call_diag_events = if show_call_diag {
+        match db::voice_calls::open_id(&state.chat, room.id).await? {
+            Some(call_id) => db::voice_calls::list_events(&state.chat, call_id).await?,
+            None => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
     let page = crate::views::voice::VoicePage {
         user,
         room,
@@ -254,6 +270,8 @@ async fn get_voice_room(
         ice_servers: &state.ice_servers,
         participants: &participants,
         remote_control_enabled,
+        show_call_diag,
+        call_diag_events: &call_diag_events,
     };
     Ok(html(&page)?.into_response())
 }
