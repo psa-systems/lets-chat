@@ -110,7 +110,16 @@ enum ClientFrame {
     /// lands in the same /admin/voice-log an admin reads during a call. Gated
     /// to a current participant of the room; `detail` is length-bounded.
     #[serde(rename = "voice_diag")]
-    VoiceDiag { room_id: i64, detail: String },
+    VoiceDiag {
+        room_id: i64,
+        detail: String,
+        /// LC-1114: `"diag"` for an informational signal (e.g. the selected ICE
+        /// route host/srflx/relay), anything else - including absent - for a
+        /// failure. Decides the voice_events `kind` so the admin view does not
+        /// badge a normal route as an error. Old clients omit it (=> error).
+        #[serde(default)]
+        level: Option<String>,
+    },
     /// LC-494: stage control plane. Join/leave as a listener, request or
     /// withdraw the floor, step down from speaking, and (host-only) grant or
     /// revoke another participant's floor. Each mutates the ephemeral hub
@@ -1199,9 +1208,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 }
                             }
                         }
-                        ClientFrame::VoiceDiag { room_id, detail } => {
-                            handle_voice_diag(&state, &user, &username, conn_id, room_id, detail)
-                                .await;
+                        ClientFrame::VoiceDiag {
+                            room_id,
+                            detail,
+                            level,
+                        } => {
+                            handle_voice_diag(
+                                &state, &user, &username, conn_id, room_id, detail, level,
+                            )
+                            .await;
                         }
                         // LC-494: stage control plane. Self-actions require room
                         // access + stage mode; promote/demote additionally
@@ -3293,6 +3308,10 @@ pub async fn handle_voice_diag(
     conn_id: ConnId,
     room_id: i64,
     detail: String,
+    // LC-1114: "diag" (informational, e.g. the ICE route) vs a failure (anything
+    // else, incl. absent). Validated to a tiny set so a client cannot invent a
+    // kind the admin view does not know how to badge.
+    level: Option<String>,
 ) {
     // Only a current participant of the channel may report on it.
     if !state.hub.is_in_voice_room(conn_id, room_id) {
@@ -3321,7 +3340,12 @@ pub async fn handle_voice_diag(
     if detail.is_empty() {
         return;
     }
-    record_voice_event(state, room_id, &user.id, username, "error", Some(detail)).await;
+    // LC-1114: an explicit "diag" is informational; everything else is a fault.
+    let kind = match level.as_deref() {
+        Some("diag") => "diag",
+        _ => "error",
+    };
+    record_voice_event(state, room_id, &user.id, username, kind, Some(detail)).await;
 }
 
 /// Handle a `voice_join` frame: validate the room is an accessible voice
