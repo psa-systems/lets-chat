@@ -46,4 +46,13 @@ pub struct VoicePage<'a> {
     /// affordance + consent UI include; the server refuses signals
     /// independently, so this is presentation, not enforcement.
     pub remote_control_enabled: bool,
+    /// LC-1118: show the admin-only live diagnostics drawer. True only for a
+    /// site admin while the CALL_DIAGNOSTICS flag is on. The WS layer gates the
+    /// `call_diag:{room}` subscribe and broadcast on the same two conditions,
+    /// so a non-admin never receives the live feed even if this were wrong.
+    pub show_call_diag: bool,
+    /// LC-1118: the current open call's events, oldest first, seeding the
+    /// drawer; live rows append from the WS feed after render. Empty unless
+    /// `show_call_diag`.
+    pub call_diag_events: &'a [crate::db::voice_events::VoiceEvent],
 }

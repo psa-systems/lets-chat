@@ -320,8 +320,10 @@ maintenance mode and similar settings are stored in the `settings` database and 
 ## 9. Deployment and operations
 
 - Image: `ci-build/Dockerfile.web`, built in `standalone` (default) or `saas` mode. The runtime stage is
-  `debian:trixie-slim` with the binary, `server/assets` and `server/migrations`, running as user `appuser` (uid 1000).
-  The working directory is `/app` because assets are served from the relative path `server/assets`.
+  `debian:trixie-slim` with the binary, `server/assets` and `server/migrations`. The container starts as root and the
+  shared `gosu-entrypoint.sh` remaps `appuser` (default uid/gid 1001, or `PUID`/`PGID` if set), chowns `/data` and
+  drops to it via `gosu` before running the server. The working directory is `/app` because assets are served from
+  the relative path `server/assets`.
 - Port 8080 exposed; `LETS_CHAT_DATA_DIR=/data` volume; image health check polls `GET /healthz` every 30 seconds.
 - `compose.yml` builds the image, publishes `127.0.0.1:8080`, mounts a named volume at `/data`, and expects an env file
   for SSO and optional features. Additional compose files provide development stacks (local, mock SSO, desktop).

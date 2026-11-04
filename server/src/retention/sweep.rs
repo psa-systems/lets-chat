@@ -165,7 +165,9 @@ pub async fn sweep_once_at(pool: &SqlitePool, base: &str) -> Result<SweepStats, 
             Ok(stats)
         }
         Err(e) => {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                tracing::error!(error = %rollback_err, "retention sweep rollback failed");
+            }
             Err(e)
         }
     }
@@ -227,7 +229,9 @@ pub async fn sweep_expired_ephemeral(pool: &SqlitePool) -> Result<SweepStats, sq
             Ok(stats)
         }
         Err(e) => {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            if let Err(rollback_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                tracing::error!(error = %rollback_err, "retention sweep rollback failed");
+            }
             Err(e)
         }
     }

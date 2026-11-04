@@ -1,0 +1,35 @@
+{% extends "admin_layout.html" %}
+
+{% block title %}{{ "admin-voice-log-title"|t }} - Admin - Let's Chat{% endblock %}
+
+{% block admin_main %}
+{# LC-1113: one call's whole lifecycle, oldest-first, so an admin can read why a
+   single call misbehaved. Reuses admin/voice_log_items.html for the rows. #}
+<p class="mb-3"><a class="text-accent hover:underline text-sm" href="/admin/voice-log">{{ "admin-voice-log-back"|t }}</a></p>
+
+<div class="card p-4 mb-4">
+  <p class="text-sm">
+    <span class="font-semibold">{{ "admin-voice-log-call"|t }} #{{ call.id }}</span>
+    <span class="text-content-muted font-mono text-xs ml-2">{{ "admin-voice-log-th-room"|t }} #{{ call.room_id }}</span>
+  </p>
+  <p class="text-xs text-content-muted mt-1">
+    <time datetime="{{ call.started_at|iso }}">{{ call.started_at }}</time>
+    {% if let Some(ended) = call.ended_at.as_ref() %}
+    &rarr; <time datetime="{{ ended|iso }}">{{ ended }}</time>
+    {% else %}
+    <span class="rounded bg-success-surface text-success px-1.5 py-0.5 uppercase tracking-wide font-mono ml-1">{{ "admin-voice-log-live"|t }}</span>
+    {% endif %}
+    <span class="ml-2">{{ call.participants }} {{ "admin-voice-log-participants-label"|t }}</span>
+    {% if call.errors > 0 %}
+    <span class="text-danger ml-2">{{ call.errors }} {{ "admin-voice-log-errors-label"|t }}</span>
+    {% endif %}
+  </p>
+</div>
+
+{# Not #admin-voice-log-list: that id is the main page's live OOB target. This is
+   a static snapshot of one (usually ended) call, so it must not be swapped by a
+   live AdminVoiceLogChanged event. #}
+<div id="admin-voice-call-events">
+  {% include "admin/voice_log_items.html" %}
+</div>
+{% endblock %}

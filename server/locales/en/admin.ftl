@@ -237,6 +237,20 @@ admin-voice-log-th-event = Event
 admin-voice-log-th-room = Room
 admin-voice-log-th-participant = Participant
 admin-voice-log-th-detail = Detail
+admin-voice-log-calls-title = Recent calls
+admin-voice-log-calls-empty = No calls recorded yet.
+admin-voice-log-events-title = All events
+admin-voice-log-th-started = Started
+admin-voice-log-th-status = Ended
+admin-voice-log-th-participants = People
+admin-voice-log-th-events = Events
+admin-voice-log-th-errors = Errors
+admin-voice-log-live = Live
+admin-voice-log-view = View
+admin-voice-log-back = Back to voice log
+admin-voice-log-call = Call
+admin-voice-log-participants-label = people
+admin-voice-log-errors-label = errors
 
 ## Webhook deliveries
 admin-deliveries-title = Webhook deliveries
@@ -572,3 +586,8 @@ admin-settings-transcription-admins-note = With Admins only, an admin can start 
 admin-settings-transcription-save = Save transcription setting
 admin-settings-transcription-unconfigured-title = No server speech-to-text configured.
 admin-settings-transcription-unconfigured-body = Calls still transcribe in browsers that support it; voice messages need a server engine, set via
+
+admin-settings-call-diag-heading = In-call diagnostics
+admin-settings-call-diag-note = Shows a live diagnostics panel inside each call that only admins can see. It streams the same connection events as the per-call voice log (joins, drops, WebRTC errors) so you can trace a bad call while it is happening. Off by default.
+admin-settings-call-diag-admins-note = Admin-only whatever is chosen here: the panel, its live feed and its history are never shown to non-admins. On surfaces the panel to every admin in a call; Admins only is equivalent. Off hides it.
+admin-settings-call-diag-save = Save in-call diagnostics setting

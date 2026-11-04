@@ -97,13 +97,7 @@ async fn main() {
             kp.clone(),
             push_contact,
         )),
-        None => std::sync::Arc::new(lets_chat::push::ReqwestPushClient::new(
-            std::sync::Arc::new(lets_chat::db::vapid::VapidKeypair {
-                public_key_b64url: String::new(),
-                private_key_bytes: vec![0u8; 32],
-            }),
-            push_contact,
-        )),
+        None => std::sync::Arc::new(lets_chat::push::DisabledPushClient),
     };
 
     let mailer = lets_chat::mail::Mailer::from_env();

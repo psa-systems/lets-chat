@@ -246,15 +246,19 @@ jobs:
       # now mirrors `just check` (server only) and never links desktop. The
       # desktop crate is validated by build-desktop-linux.yml on push to main /
       # release (see the header comment for why it cannot run here).
+      # LC-1111: `--test-threads 4` caps the libtest harness so the many SQLite
+      # pools each integration test opens do not storm a high-core runner and
+      # time out (PoolTimedOut, seen on unrelated PRs). This is runtime test
+      # concurrency, separate from CARGO_BUILD_JOBS (build/link parallelism).
       - name: Tests (server, standalone)
-        run: cargo test -p lets-chat-server
+        run: cargo test -p lets-chat-server -- --test-threads 4
 
       # LC-785: the saas build ships (BUILD_MODE=saas) but CI only compiled it
       # (Clippy/Build steps above) and never ran its tests, so `just test-saas`
       # rotted red on main - two admin-surface tests assumed the standalone-only
       # /admin routes. Run the saas suite here so it cannot silently break again.
       - name: Tests (server, saas)
-        run: cargo test -p lets-chat-server --no-default-features --features saas
+        run: cargo test -p lets-chat-server --no-default-features --features saas -- --test-threads 4
 
       - name: Report job metrics
         if: always()
@@ -263,7 +267,7 @@ jobs:
   secrets:
     # LC-977: kingfisher, trufflehog and noseyparker from the shared workflow, so
     # the contexts read `Check / ...` and match branch protection.
-    uses: psa-systems/common/.forgejo/workflows/check-secrets.yml@main
+    uses: https://dev.a8n.run/psa-systems/common/.forgejo/workflows/check-secrets.yml@main
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_MEDIUM }}
     with:
       # Brand favicons wrap a base64-encoded PNG; a substring of that blob trips

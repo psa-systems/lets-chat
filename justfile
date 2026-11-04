@@ -24,6 +24,12 @@ pre_commit_compile := "false"
 # statically linked test binaries); --jobs is passed only when it is set.
 cargo_jobs_arg := if env("CARGO_BUILD_JOBS", "") == "" { "" } else { "--jobs " + env("CARGO_BUILD_JOBS") }
 test_args := "-p lets-chat-server " + cargo_jobs_arg
+# LC-1111: cap test-runtime concurrency so the many SQLite pools each integration
+# test opens do not storm a busy host and time out (PoolTimedOut). This is the
+# libtest harness thread count, separate from the build/link parallelism above;
+# override with LC_TEST_THREADS when a host can take more.
+test_threads := env("LC_TEST_THREADS", "4")
+test_threads_arg := "-- --test-threads " + test_threads
 
 # `check` also reads templates, browser assets, migrations and the CI guard
 # scripts, none of which the scope guard's Rust-relevant set (*.rs, Cargo.*,
@@ -428,12 +434,12 @@ dev-desktop-down:
 [group('test')]
 test:
     # A memory-constrained host sets CARGO_BUILD_JOBS to cap parallel linking.
-    ./dev/cargo test -p lets-chat-server {{ cargo_jobs_arg }}
+    ./dev/cargo test -p lets-chat-server {{ cargo_jobs_arg }} {{ test_threads_arg }}
 
 # Run tests (server, saas)
 [group('test')]
 test-saas:
-    ./dev/cargo test -p lets-chat-server --no-default-features --features saas
+    ./dev/cargo test -p lets-chat-server --no-default-features --features saas {{ test_threads_arg }}
 
 # Run the browser-asset unit tests (LC-628: media-constraints shape).
 [group('test')]

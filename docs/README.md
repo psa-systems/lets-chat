@@ -21,6 +21,7 @@ Everything that is not the one-page introduction in the repository
 
 - [api.md](api.md) - the JSON HTTP API v1, scopes, and webhooks
 - [architecture.md](architecture.md) - the stack, the build modes, the repository layout
+- [specification.md](specification.md) - the full application specification: requirements, interfaces, data model and configuration
 - [ui-conventions.md](ui-conventions.md) - typography, color tokens, live updates, and the guards that enforce them
 - [i18n.md](i18n.md) - Fluent catalogs, key naming, and adding a locale
 

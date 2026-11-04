@@ -50,6 +50,10 @@ pub fn router() -> Router<AppState> {
             "/admin/settings/transcription",
             post(post_transcription_flag),
         )
+        .route(
+            "/admin/settings/call-diagnostics",
+            post(post_call_diagnostics_flag),
+        )
         .route("/admin/settings/help-docs", post(post_help_docs_sources))
         .route("/admin/help-docs/reindex", post(post_help_docs_reindex))
         .route(
@@ -112,6 +116,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/modlog", get(get_modlog))
         .route("/admin/remote-control", get(get_remote_control_audit))
         .route("/admin/voice-log", get(get_voice_log))
+        .route("/admin/voice-log/call/{id}", get(get_voice_call_detail))
         // LC-334: message-report review queue.
         .route("/admin/reports", get(get_reports))
         .route("/admin/reports/badge", get(get_reports_badge))
@@ -906,7 +911,7 @@ pub async fn get_feature_flags(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    use super::feature_flags::{rollout, REMOTE_CONTROL, TRANSCRIPTION};
+    use super::feature_flags::{rollout, CALL_DIAGNOSTICS, REMOTE_CONTROL, TRANSCRIPTION};
     let (
         sidebar_categories,
         sidebar_starred_rooms,
@@ -939,6 +944,7 @@ pub async fn get_feature_flags(
         remote_control_rollout: rollout(&state, &REMOTE_CONTROL).await.as_str(),
         transcription_rollout: rollout(&state, &TRANSCRIPTION).await.as_str(),
         stt_configured: state.stt_available(),
+        call_diagnostics_rollout: rollout(&state, &CALL_DIAGNOSTICS).await.as_str(),
     };
     html(&page)
 }
@@ -1009,6 +1015,27 @@ pub async fn post_transcription_flag(
         &headers,
         &super::feature_flags::TRANSCRIPTION,
         "transcription",
+        form,
+    )
+    .await
+}
+
+/// LC-1118: set the in-call live diagnostics rollout. Surfaces the per-call
+/// voice-event log live inside a call to site admins. Admin-only regardless of
+/// audience (the render, WS subscribe and broadcast all require `role=="admin"`),
+/// so this is effectively an on/off switch. Read live, like the other flags.
+pub async fn post_call_diagnostics_flag(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    headers: HeaderMap,
+    axum::Form(form): axum::Form<RolloutForm>,
+) -> Result<Response, AppError> {
+    save_rollout(
+        &state,
+        &actor,
+        &headers,
+        &super::feature_flags::CALL_DIAGNOSTICS,
+        "call_diagnostics",
         form,
     )
     .await
@@ -1843,15 +1870,14 @@ pub async fn get_voice_log(
         db::voice_events::list_recent(&state.chat, 200)
             .await?
             .into_iter()
-            .map(|e| crate::views::admin::VoiceLogRow {
-                room_id: e.room_id,
-                user_id: e.user_id,
-                user_label: e.user_label,
-                kind: e.kind,
-                detail: e.detail,
-                created_at: e.created_at,
-            })
+            .map(voice_log_row)
             .collect();
+    // LC-1113: recent calls, each a link to its own timeline.
+    let calls: Vec<crate::views::admin::CallRow> = db::voice_calls::list_recent(&state.chat, 50)
+        .await?
+        .into_iter()
+        .map(call_row)
+        .collect();
     let page = crate::views::admin::VoiceLogPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -1868,6 +1894,79 @@ pub async fn get_voice_log(
         git_version: version::GIT_VERSION,
         build_date: version::BUILD_DATE,
         section: "voice_log",
+        calls: &calls,
+        events: &events,
+    };
+    html(&page)
+}
+
+fn voice_log_row(e: db::voice_events::VoiceEvent) -> crate::views::admin::VoiceLogRow {
+    crate::views::admin::VoiceLogRow {
+        room_id: e.room_id,
+        user_id: e.user_id,
+        user_label: e.user_label,
+        kind: e.kind,
+        detail: e.detail,
+        created_at: e.created_at,
+    }
+}
+
+fn call_row(c: db::voice_calls::CallSummary) -> crate::views::admin::CallRow {
+    crate::views::admin::CallRow {
+        id: c.id,
+        room_id: c.room_id,
+        started_at: c.started_at,
+        ended_at: c.ended_at,
+        participants: c.participants,
+        events: c.events,
+        errors: c.errors,
+    }
+}
+
+/// `GET /admin/voice-log/call/{id}` - LC-1113: one call's whole event timeline,
+/// oldest-first, so an admin can read why that single call misbehaved.
+pub async fn get_voice_call_detail(
+    State(state): State<AppState>,
+    AdminUser(user): AdminUser,
+    axum::extract::Path(call_id): axum::extract::Path<i64>,
+) -> Result<Html, AppError> {
+    let Some(summary) = db::voice_calls::get(&state.chat, call_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    let (
+        sidebar_categories,
+        sidebar_starred_rooms,
+        sidebar_starred_peers,
+        sidebar_rooms,
+        sidebar_peers,
+        switcher,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+    ) = super::load_chrome(&state, &user, None).await?;
+    let events: Vec<crate::views::admin::VoiceLogRow> =
+        db::voice_calls::list_events(&state.chat, call_id)
+            .await?
+            .into_iter()
+            .map(voice_log_row)
+            .collect();
+    let call = call_row(summary);
+    let page = crate::views::admin::VoiceCallDetailPage {
+        user: &user,
+        sidebar_categories: &sidebar_categories,
+        sidebar_starred_rooms: &sidebar_starred_rooms,
+        sidebar_starred_peers: &sidebar_starred_peers,
+        can_manage_sidebar_categories,
+        sidebar_current_enclave,
+        sidebar_rooms: &sidebar_rooms,
+        sidebar_peers: &sidebar_peers,
+        switcher: &switcher,
+        asset_version: &state.asset_version,
+        app_version: version::VERSION,
+        git_hash: version::GIT_HASH,
+        git_version: version::GIT_VERSION,
+        build_date: version::BUILD_DATE,
+        section: "voice_log",
+        call: &call,
         events: &events,
     };
     html(&page)
@@ -3476,7 +3575,9 @@ pub async fn post_bots(
     if let Err(e) =
         db::api_tokens::insert(&state.auth, &bot_id, "bot token", &hash, &scopes, None).await
     {
-        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        if let Err(rollback_err) = db::auth::delete_user(&state.auth, &bot_id).await {
+            tracing::error!(error = %rollback_err, bot_id, "bot_create rollback: delete_user failed");
+        }
         return Err(AppError::from(e));
     }
     db::moderation::log_mod_action(
@@ -3838,7 +3939,9 @@ pub async fn post_bridges(
     };
     // 2. Assign the narrow `bridge` role tier (chunk 5 / require_not_bridge).
     if let Err(e) = db::auth::set_user_role(&state.auth, &bot_id, db::auth::ROLE_BRIDGE).await {
-        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        if let Err(rollback_err) = db::auth::delete_user(&state.auth, &bot_id).await {
+            tracing::error!(error = %rollback_err, bot_id, "bridge_create rollback: delete_user failed");
+        }
         return Err(AppError::from(e));
     }
     // 3. Mint the API token with exactly the two bridge scopes. No
@@ -3854,7 +3957,9 @@ pub async fn post_bridges(
     if let Err(e) =
         db::api_tokens::insert(&state.auth, &bot_id, "bridge token", &hash, &scopes, None).await
     {
-        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        if let Err(rollback_err) = db::auth::delete_user(&state.auth, &bot_id).await {
+            tracing::error!(error = %rollback_err, bot_id, "bridge_create rollback: delete_user failed");
+        }
         return Err(AppError::from(e));
     }
     // 4. Seal the daemon config and insert the bridges row.
@@ -3871,8 +3976,12 @@ pub async fn post_bridges(
     {
         // Roll back the bot + its token so the admin can retry without a
         // stuck-bot ghost row.
-        let _ = db::api_tokens::revoke_all_for_user(&state.auth, &bot_id).await;
-        let _ = db::auth::delete_user(&state.auth, &bot_id).await;
+        if let Err(revoke_err) = db::api_tokens::revoke_all_for_user(&state.auth, &bot_id).await {
+            tracing::error!(error = %revoke_err, bot_id, "bridge_create rollback: revoke_all_for_user failed");
+        }
+        if let Err(rollback_err) = db::auth::delete_user(&state.auth, &bot_id).await {
+            tracing::error!(error = %rollback_err, bot_id, "bridge_create rollback: delete_user failed");
+        }
         return Err(AppError::Internal(format!("bridge insert failed: {e}")));
     }
     db::moderation::log_mod_action(
