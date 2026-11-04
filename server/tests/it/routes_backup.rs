@@ -36,17 +36,21 @@ async fn file_pool(dir: &std::path::Path, domain: &str) -> SqlitePool {
         .unwrap()
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal)
-        .synchronous(SqliteSynchronous::Normal)
+        // LC-1111 / CLAUDE-528 technique: this is a throwaway test DB, so it has
+        // no reason to pay commit fsync latency. `synchronous = OFF` drops the
+        // fsyncs that make the pool-open + migration slow on a disk-saturated
+        // runner (the PoolTimedOut that failed unrelated PRs during an LVM
+        // resync). It only sacrifices durability across a crash, which a
+        // single-run test never needs; writes stay visible to reads in-process.
+        .synchronous(SqliteSynchronous::Off)
         .busy_timeout(Duration::from_secs(5));
     let pool = SqlitePoolOptions::new()
         .max_connections(4)
         .min_connections(1)
-        // LC-1111: a busy CI runner (this step builds the saas target first,
-        // then runs every test binary) can take longer than the 30s default to
-        // open the eager min connection, failing unrelated PRs with
-        // PoolTimedOut. A generous ceiling absorbs that transient slowness; the
-        // tests normally open in well under a second, so it only bites under
-        // pathological load, where the job timeout is the real backstop.
+        // Secondary insurance behind `synchronous = OFF` above: a generous
+        // acquire ceiling so a transiently slow open still succeeds rather than
+        // timing out at the 30s default. The tests normally open in well under a
+        // second; the job timeout remains the backstop for a true hang.
         .acquire_timeout(Duration::from_secs(120))
         .connect_with(opts)
         .await
