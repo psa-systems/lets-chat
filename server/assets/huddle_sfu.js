@@ -49,12 +49,54 @@
   // it lands in voice_events (/admin/voice-log) alongside the mesh path. The
   // server gates on room participation and length-bounds the detail; a missing
   // socket is a silent no-op (we are tearing down anyway).
-  function sfuDiag(roomId, detail) {
+  // LC-1114/LC-1117: `level` is 'diag' for an informational signal (the ICE
+  // route), or omitted for a failure (the server defaults absent to kind error).
+  function sfuDiag(roomId, detail, level) {
     var ws = window.__lcWS;
     if (!ws || !roomId || !detail) return;
+    var msg = { type: 'voice_diag', room_id: roomId, detail: String(detail).slice(0, 200) };
+    if (level) msg.level = level;
     try {
-      ws.send(JSON.stringify({ type: 'voice_diag', room_id: roomId, detail: String(detail).slice(0, 200) }));
+      ws.send(JSON.stringify(msg));
     } catch (e) { /* socket reconnecting */ }
+  }
+
+  // LC-1117: report the selected ICE route (host / srflx / relay) once a LiveKit
+  // connection is up, the SFU counterpart to the mesh route diag (LC-1114).
+  // `relay` means TURN carried it; its absence on a failing SFU call is the
+  // no-TURN signal. There is no public getStats on the Room, so reach the
+  // subscriber RTCPeerConnection through LiveKit internals defensively (the
+  // property names survive minification) and skip silently if the shape changes.
+  var sfuRouteReported = false;
+  function sfuSubscriberPc(room) {
+    try {
+      var e = room && room.engine;
+      if (!e) return null;
+      var sub = (e.pcManager && e.pcManager.subscriber) || e.subscriber;
+      if (!sub) return null;
+      var pc = sub._pc || sub.pc;
+      return pc && typeof pc.getStats === 'function' ? pc : null;
+    } catch (x) { return null; }
+  }
+  function reportSfuRoute(room) {
+    if (sfuRouteReported) return;
+    var pc = sfuSubscriberPc(room);
+    if (!pc) return;
+    pc.getStats().then(function (stats) {
+      var localId = null;
+      var localType = {};
+      stats.forEach(function (r) {
+        if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || r.selected)) {
+          localId = r.localCandidateId;
+        }
+        if (r.type === 'local-candidate') localType[r.id] = r.candidateType;
+      });
+      var t = localId && localType[localId];
+      if (t && !sfuRouteReported) {
+        sfuRouteReported = true;
+        sfuDiag(cfg.roomId, 'sfu ice ok: via ' + t, 'diag');
+      }
+    }).catch(function () {});
   }
 
   // Read the published microphone track's real state for diagnostics. Defensive
@@ -164,6 +206,7 @@
     }
 
     var room = new LK.Room({ adaptiveStream: true, dynacast: true });
+    sfuRouteReported = false; // LC-1117: a fresh session reports its route again
     session = { roomId: cfg.roomId, room: room, hooks: hooks, sharing: false };
 
     // LC-840: the SFU ended the session under us (server shutdown or restart,
@@ -186,7 +229,12 @@
     // could not be (re)established). Report it to the voice log; the separate
     // Disconnected handler above already tells voice.js to tear the dock down.
     room.on(LK.RoomEvent.ConnectionStateChanged, function (st) {
-      if (st === LK.ConnectionState.Failed) sfuDiag(cfg.roomId, 'sfu ice failed');
+      if (st === LK.ConnectionState.Failed) {
+        sfuDiag(cfg.roomId, 'sfu ice failed');
+        sfuRouteReported = false; // a recovery should re-report its route
+      } else if (st === LK.ConnectionState.Connected) {
+        reportSfuRoute(room); // LC-1117: report host/srflx/relay once up
+      }
     });
     // LC-869: a getUserMedia/device error surfaced by LiveKit outside our own
     // setMicrophoneEnabled call (e.g. the mic vanished mid-call).
