@@ -36,6 +36,23 @@
   function q(sel) { return document.querySelector(sel); }
 
   var transcriptId = null; // active session id, set from the TranscriptStarted bus event
+  // PMS-1632: the id whose caption lines are currently in #lc-caption-log. The
+  // log is a persistent shell element (layout.html), appended to by OOB swaps
+  // and otherwise never cleared, so without this a second call - even the next
+  // day - stacked its captions under the previous call's. Clear the log only
+  // when a DIFFERENT session's lines would mix in (a new call), never on a
+  // reconnect to the same still-open session.
+  var loggedSessionId = null;
+  function clearCaptionLog() {
+    var log = document.getElementById('lc-caption-log');
+    if (log) log.replaceChildren();
+  }
+  // Call right after transcriptId is set for a session this client is in.
+  function noteLogSession(id) {
+    if (id == null || id === loggedSessionId) return;
+    clearCaptionLog();
+    loggedSessionId = id;
+  }
   // LC-597: room id when the active session was started from a stage panel,
   // else null. A stage grants and revokes the floor at runtime, so the capture
   // has to be reconciled against the panel rather than run until a click.
@@ -474,6 +491,7 @@
     }).then(function (j) {
       if (j && j.transcript_id != null) {
         transcriptId = parseInt(j.transcript_id, 10);
+        noteLogSession(transcriptId);
         showBanner(true);
         setToggle(true);
         startLocalCapture();
@@ -525,6 +543,7 @@
       n.remove();
       if (kind === 'started') {
         transcriptId = id ? parseInt(id, 10) : null;
+        noteLogSession(transcriptId);
         // LC-859: a fresh session has no confirmed agent yet; the 'agent' event
         // follows only if dispatch succeeds. Clear any stale flag first so this
         // session's capture is not wrongly suppressed by the last one's agent.
@@ -544,6 +563,11 @@
         stopLocalCapture();
         showBanner(false);
         setToggle(false);
+        // PMS-1632: the call ended, so close its live transcript. The saved
+        // transcript is persisted server-side and linked separately; the next
+        // call (a different session id) starts from an empty panel.
+        clearCaptionLog();
+        loggedSessionId = null;
       }
     }
   }
@@ -674,6 +698,7 @@
       .then(function (j) {
         if (!j || j.transcript_id == null || transcriptId != null) return;
         transcriptId = parseInt(j.transcript_id, 10);
+        noteLogSession(transcriptId);
         // LC-859: adopt the agent-active state too, so a late joiner never opens
         // its own clip capture for a session the agent already covers.
         agentActive = !!j.agent_active;
