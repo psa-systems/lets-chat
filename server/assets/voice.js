@@ -1357,16 +1357,28 @@
     }
     if (kind === 'screen') { // LC-408: a peer started/stopped screen-sharing
       applyScreen(userId, payload === '1');
-      // Nudge the camera-vs-avatar swap: on stop the peer often drops their
-      // video track, and re-evaluating here reverts the frozen last frame even
-      // if the track's own onmute/onremovetrack was missed.
+      // LC-1110: re-DERIVE the peer's bound stream here, not just toggle the
+      // camera-vs-avatar display. On start, the screen track can arrive via a
+      // renegotiation whose ontrack we already drained, so the tile never picks
+      // it up and stays blank (bug C); on stop, the peer drops the screen track
+      // and re-deriving reverts the frozen frame even if the track's own
+      // onmute/onremovetrack was missed (bug D). bindRemoteVideo is idempotent
+      // (LC-818) and ends in updateTileMedia, so it is strictly more thorough
+      // than the previous updateTileMedia-only call and cannot re-bind in the
+      // steady state.
       // LC-610: never do this for our OWN echo. The self tile's video is owned
       // by the local media path (on SFU by huddle_sfu setHasVideo, with a null
       // localStream), so recomputing here reads that null stream and hides a
-      // live screen share (the black-out bug). updateTileMedia has an
-      // `sfu && self` guard for this, but the `sfu` flag is unreliable in the
-      // bus instance that drains this echo, so gate on identity here directly.
-      if (!(cfg && userId === cfg.selfId)) updateTileMedia(userId);
+      // live screen share (the black-out bug); gate on identity directly since
+      // the `sfu` flag is unreliable in this bus echo.
+      if (!(cfg && userId === cfg.selfId)) {
+        // LC-1110: re-derive the mesh peer's bound stream so the screen track
+        // shows on start (bug C). bindRemoteVideo is a no-op without a peers[]
+        // entry (an SFU tile has none), so always run updateTileMedia too - it
+        // reverts a frozen last frame on stop (bug D) and covers SFU tiles.
+        bindRemoteVideo(userId);
+        updateTileMedia(userId);
+      }
       return;
     }
     if (!joined) return;
