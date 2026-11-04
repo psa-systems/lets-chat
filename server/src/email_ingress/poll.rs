@@ -260,7 +260,9 @@ pub async fn poll_once(
                 // visibility. The helper logs INFO on failure and
                 // returns; \Seen still marks below.
                 dead_letter_uid(&mut session, *uid, dead_letter_folder, "fetch_failed").await;
-                let _ = mark_seen(&mut session, *uid).await;
+                if let Err(e) = mark_seen(&mut session, *uid).await {
+                    tracing::warn!(target: "email_ingress", uid = *uid, error = %e, "mark_seen failed after fetch_failed");
+                }
                 continue;
             }
         };
@@ -286,7 +288,9 @@ pub async fn poll_once(
             )
             .await;
             dead_letter_uid(&mut session, *uid, dead_letter_folder, "oversize").await;
-            let _ = mark_seen(&mut session, *uid).await;
+            if let Err(e) = mark_seen(&mut session, *uid).await {
+                tracing::warn!(target: "email_ingress", uid = *uid, error = %e, "mark_seen failed after oversize");
+            }
             continue;
         }
         match process_polled_message(state, secret_key, ingress_domain, &raw).await {
