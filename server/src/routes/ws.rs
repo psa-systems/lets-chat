@@ -229,6 +229,22 @@ pub async fn topic_subscribe_allowed(state: &AppState, user: &User, topic: &str)
             Err(_) => false,
         },
         Some(("user", id)) => id == user.id,
+        // LC-1118: the in-call live diagnostics feed for a voice room. Admin
+        // only, only when the call-diagnostics flag is on, and only for a room
+        // the admin can access - so a non-admin or a flag-off workspace never
+        // joins the fan-out and never receives a call's diagnostics.
+        Some(("call_diag", id)) => match id.parse::<i64>() {
+            Ok(room_id) => {
+                user.role == "admin"
+                    && super::feature_flags::rollout(state, &super::feature_flags::CALL_DIAGNOSTICS)
+                        .await
+                        .is_on()
+                    && db::chat::is_room_accessible(&state.chat, room_id, &user.id, true)
+                        .await
+                        .unwrap_or(false)
+            }
+            Err(_) => false,
+        },
         _ => false,
     }
 }
@@ -930,6 +946,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_transcript_segment(&e)
                                 }
+                                // LC-1118: in-call diagnostics row. Only admins
+                                // subscribed to call_diag:{room} receive it, so no
+                                // per-recipient guard is needed here.
+                                ChatEvent::CallDiag { .. } => render_call_diag(&e),
                                 _ => render_event(&e),
                             };
                             if let Some(html) = rendered {
@@ -2133,6 +2153,26 @@ fn render_transcript_segment(event: &ChatEvent) -> Option<String> {
         .ok()
 }
 
+/// LC-1118: render one in-call diagnostics row for the live drawer.
+fn render_call_diag(event: &ChatEvent) -> Option<String> {
+    let ChatEvent::CallDiag {
+        user_label,
+        kind,
+        detail,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    crate::views::ws_fragments::CallDiagFragment {
+        user_label,
+        kind,
+        detail: detail.as_deref(),
+    }
+    .render()
+    .ok()
+}
+
 /// Validate and relay one WebRTC call signal to the other member of a DM
 /// room. The server is a dumb relay: it confirms the sender belongs to a
 /// `dm` room, that the two parties have not blocked each other, and that
@@ -3280,6 +3320,25 @@ pub(crate) async fn record_voice_event(
     state
         .hub
         .broadcast_to_topic("admin", &ChatEvent::AdminVoiceLogChanged);
+    // LC-1118: also push the row live to the in-call diagnostics drawer. Only
+    // when the flag is on, and only to call_diag:{room} subscribers, which
+    // topic_subscribe_allowed restricts to admins - so no other participant
+    // receives it. The flag read is the same uncached settings lookup the other
+    // feature flags use.
+    if super::feature_flags::rollout(state, &super::feature_flags::CALL_DIAGNOSTICS)
+        .await
+        .is_on()
+    {
+        state.hub.broadcast_to_topic(
+            &format!("call_diag:{room_id}"),
+            &ChatEvent::CallDiag {
+                room_id,
+                user_label: user_label.to_string(),
+                kind: kind.to_string(),
+                detail: detail.map(|d| d.to_string()),
+            },
+        );
+    }
 }
 
 /// LC-869: per-user cap on client-observed voice diagnostics. An ICE connection

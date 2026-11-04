@@ -1,0 +1,16 @@
+{# LC-1118: one in-call diagnostics row, OOB-appended into the drawer's
+   #lc-call-diag-log for admins subscribed to call_diag:{room}. Mirrors the admin
+   voice-log row: error/dropped get the danger badge, the rest are quiet. The row
+   appearing is itself the "now" - the full timeline with timestamps lives at
+   /admin/voice-log/call/{id}. #}
+<div id="lc-call-diag-log" hx-swap-oob="beforeend">
+  <div class="flex items-center gap-2 py-0.5 text-xs">
+    {% if kind == "dropped" || kind == "error" %}
+    <span class="rounded bg-danger-surface text-danger px-1.5 py-0.5 font-mono uppercase tracking-wide">{{ kind }}</span>
+    {% else %}
+    <span class="font-mono text-content-muted">{{ kind }}</span>
+    {% endif %}
+    <span class="font-medium">{{ user_label }}</span>
+    {% if let Some(d) = detail %}<span class="text-content-muted break-all">{{ d }}</span>{% endif %}
+  </div>
+</div>
