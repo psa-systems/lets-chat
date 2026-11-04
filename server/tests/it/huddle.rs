@@ -313,6 +313,7 @@ async fn client_diag_logs_an_error_row_only_for_a_participant() {
         c1,
         s.room,
         "ice failed: peer ab12cd".to_string(),
+        None,
     )
     .await;
 
@@ -333,7 +334,16 @@ async fn client_diag_logs_an_error_row_only_for_a_participant() {
     // current participant may write to the call's log.
     let bob = user_row(&s.state, &s.bob_id).await;
     let (c2, _r2, _) = s.hub.connect(&s.bob_id, "bob");
-    handle_voice_diag(&s.state, &bob, "bob", c2, s.room, "ice failed".to_string()).await;
+    handle_voice_diag(
+        &s.state,
+        &bob,
+        "bob",
+        c2,
+        s.room,
+        "ice failed".to_string(),
+        None,
+    )
+    .await;
     assert_eq!(
         db::voice_events::list_recent(&s.state.chat, 200)
             .await
@@ -347,6 +357,63 @@ async fn client_diag_logs_an_error_row_only_for_a_participant() {
 }
 
 #[tokio::test]
+async fn client_diag_level_diag_logs_informational_not_error() {
+    // LC-1114: a report with level="diag" (e.g. the selected ICE route
+    // host/srflx/relay) logs as kind "diag", not "error", so the admin view does
+    // not badge a normal route as a fault. An unknown level falls back to error.
+    let s = setup().await;
+    let (c1, _r1, _) = s.hub.connect(&s.alice_id, "alice");
+    handle_voice_join(&s.state, &s.alice, "alice", c1, s.room).await;
+
+    handle_voice_diag(
+        &s.state,
+        &s.alice,
+        "alice",
+        c1,
+        s.room,
+        "ice ok: peer ab12cd via relay".to_string(),
+        Some("diag".to_string()),
+    )
+    .await;
+    let rows = db::voice_events::list_recent(&s.state.chat, 200)
+        .await
+        .unwrap();
+    assert_eq!(
+        rows.iter().filter(|e| e.kind == "diag").count(),
+        1,
+        "the diag-level report logs as kind=diag"
+    );
+    assert_eq!(
+        rows.iter().filter(|e| e.kind == "error").count(),
+        0,
+        "a diag is not an error"
+    );
+
+    // A level the server does not recognize is treated as a fault, so a client
+    // cannot invent a kind the admin view would not badge.
+    handle_voice_diag(
+        &s.state,
+        &s.alice,
+        "alice",
+        c1,
+        s.room,
+        "weird".to_string(),
+        Some("bogus".to_string()),
+    )
+    .await;
+    assert_eq!(
+        db::voice_events::list_recent(&s.state.chat, 200)
+            .await
+            .unwrap()
+            .iter()
+            .filter(|e| e.kind == "error")
+            .count(),
+        1,
+        "an unknown level falls back to error"
+    );
+}
+
+#[tokio::test]
 async fn client_diag_sanitizes_and_bounds_the_detail() {
     // LC-869: the detail is client-supplied, so control characters collapse to
     // spaces (one readable log line), it is length-bounded, and an empty detail
@@ -356,7 +423,7 @@ async fn client_diag_sanitizes_and_bounds_the_detail() {
     handle_voice_join(&s.state, &s.alice, "alice", c1, s.room).await;
 
     let noisy = format!("ice\nfailed\t{}", "x".repeat(500));
-    handle_voice_diag(&s.state, &s.alice, "alice", c1, s.room, noisy).await;
+    handle_voice_diag(&s.state, &s.alice, "alice", c1, s.room, noisy, None).await;
     let d = db::voice_events::list_recent(&s.state.chat, 200)
         .await
         .unwrap()
@@ -379,7 +446,16 @@ async fn client_diag_sanitizes_and_bounds_the_detail() {
     );
 
     // A whitespace-only detail is dropped (no second error row).
-    handle_voice_diag(&s.state, &s.alice, "alice", c1, s.room, "   ".to_string()).await;
+    handle_voice_diag(
+        &s.state,
+        &s.alice,
+        "alice",
+        c1,
+        s.room,
+        "   ".to_string(),
+        None,
+    )
+    .await;
     assert_eq!(
         db::voice_events::list_recent(&s.state.chat, 200)
             .await

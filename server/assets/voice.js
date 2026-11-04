@@ -80,9 +80,37 @@
   // same voice_events log (/admin/voice-log) an admin reads during the call.
   // Only sent while actually in a call; the server further gates on room
   // participation and length-bounds the detail. Fire-and-forget.
-  function voiceDiag(detail) {
+  // LC-1114: `level` is 'diag' for an informational signal (the ICE route), or
+  // omitted for a failure (the server defaults an absent level to kind 'error').
+  function voiceDiag(detail, level) {
     if (!cfg || !joined || !detail) return;
-    wsSend({ type: 'voice_diag', room_id: cfg.roomId, detail: String(detail).slice(0, 200) });
+    var msg = { type: 'voice_diag', room_id: cfg.roomId, detail: String(detail).slice(0, 200) };
+    if (level) msg.level = level;
+    wsSend(msg);
+  }
+
+  // LC-1114: once a peer connection reaches 'connected', report which ICE route
+  // carried it (host / srflx / relay) as an informational diag. `relay` means
+  // TURN relayed it; its ABSENCE on a call that later fails is the signal that
+  // there was no TURN (LC-1107). Reported once per connection.
+  function reportIceRoute(userId) {
+    var p = peers[userId];
+    if (!p || !p.pc || !p.pc.getStats || p.diagRoute) return;
+    p.pc.getStats().then(function (stats) {
+      var localId = null;
+      var localType = {};
+      stats.forEach(function (r) {
+        if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || r.selected)) {
+          localId = r.localCandidateId;
+        }
+        if (r.type === 'local-candidate') localType[r.id] = r.candidateType;
+      });
+      var t = localId && localType[localId];
+      if (t && peers[userId] && !peers[userId].diagRoute) {
+        peers[userId].diagRoute = true;
+        voiceDiag('ice ok: peer ' + String(userId).slice(0, 8) + ' via ' + t, 'diag');
+      }
+    }).catch(function () {});
   }
 
   // LC-764: opt-in call diagnostics for the mesh path (the SFU path logs from
@@ -669,8 +697,10 @@
           p.diagFailed = true;
           voiceDiag('ice failed: peer ' + String(userId).slice(0, 8));
         }
+        p.diagRoute = false; // a recovery should re-report its route
       } else if (pc.connectionState === 'connected') {
         p.diagFailed = false;
+        reportIceRoute(userId); // LC-1114: report the host/srflx/relay route
       }
     };
     return pc;
@@ -1227,8 +1257,13 @@
         updateTileMedia(cfg.selfId);
       });
     }).catch(function (e) {
-      // User-cancel from the picker lands here too; nothing to undo.
-      if (e && e.name !== 'NotAllowedError') console.warn('voice: getDisplayMedia failed', e);
+      // User-cancel from the picker lands here too; nothing to undo. Only a real
+      // failure (not the user dismissing the picker) is a fault worth logging.
+      var name = e && e.name ? e.name : 'error';
+      if (name !== 'NotAllowedError' && name !== 'AbortError') {
+        console.warn('voice: getDisplayMedia failed', e);
+        voiceDiag('getDisplayMedia failed: ' + name); // LC-1114
+      }
     });
   }
 
