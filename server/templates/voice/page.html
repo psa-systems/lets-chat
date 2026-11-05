@@ -108,6 +108,16 @@
         <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.75A2.75 2.75 0 014.75 2h10.5A2.75 2.75 0 0118 4.75v7.5A2.75 2.75 0 0115.25 15H8.06l-3.03 2.78A.75.75 0 013.75 17.2V15A2.75 2.75 0 011 12.25v-7.5A.75.75 0 002 4.75zm3.5 2.5a.75.75 0 000 1.5h7a.75.75 0 000-1.5h-7zm0 3a.75.75 0 000 1.5h4a.75.75 0 000-1.5h-4z" clip-rule="evenodd"/></svg></span>
         <span class="lc-cbtn-label">{{ "voice-transcript-panel"|t }}</span>
       </button>
+      {# LC-1123: in-call text chat toggle. Not hidden-until-joined (unlike the
+         media/transcribe controls voice.js reveals on join) - chat is usable
+         before, during, and after the audio call. Opens the #lc-call-chat
+         drawer below. #}
+      <button type="button" data-lc-chat-toggle aria-pressed="false" aria-controls="lc-call-chat"
+              data-lc-tip="{{ "voice-chat-tip"|t }}" data-lc-tip-pos="bottom" aria-label="{{ "voice-chat-tip"|t }}"
+              class="lc-cbtn">
+        <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2c-4.418 0-8 3.134-8 7 0 1.76.743 3.37 1.97 4.6a6.6 6.6 0 01-1.07 2.26.75.75 0 00.75 1.17 8.5 8.5 0 003.08-.92A9.6 9.6 0 0010 16c4.418 0 8-3.134 8-7s-3.582-7-8-7zm-3 7a1 1 0 11-2 0 1 1 0 012 0zm4 0a1 1 0 11-2 0 1 1 0 012 0zm3 1a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg></span>
+        <span class="lc-cbtn-label">{{ "voice-chat-label"|t }}</span>
+      </button>
       {# LC-825/LC-880: floating reactions (partials/react_tray.html). #}
       {% let tip_pos = "bottom" %}
       {% include "partials/react_tray.html" %}
@@ -214,6 +224,83 @@
     </div>
   </details>
   {% endif %}
+
+  {# LC-1123: in-call text chat drawer. A voice room is a real room, so the
+     send form just POSTs /room/{id}/messages (body-only MessageForm, no voice
+     gate) and the existing NewMessage WS pipeline OOB-appends each live message
+     - including the author's own echo - into #messages. Live-only: #messages
+     starts empty (messages = &[]), filling as messages arrive during the call.
+     Available to everyone in the call, no feature flag. Built from existing
+     Tailwind + design-token utilities (no bespoke lc-chat-* CSS), mirroring the
+     LC-1118 diagnostics drawer above. #}
+  <aside id="lc-call-chat" data-lc-call-chat hidden aria-label="{{ "voice-chat-label"|t }}"
+         class="fixed bottom-4 right-4 z-40 flex w-80 max-w-[calc(100vw-2rem)] flex-col rounded-lg border border-border bg-surface-elevated shadow-lg" style="max-height: 70vh;">
+    <header class="flex items-center justify-between border-b border-border px-3 py-2">
+      <span class="text-sm font-semibold">{{ "voice-chat-label"|t }}</span>
+      <button type="button" data-lc-chat-close class="lc-header-action" aria-label="{{ "voice-chat-close"|t }}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
+      </button>
+    </header>
+    {% include "room/messages.html" %}
+    {% include "partials/auto_scroll.html" %}
+    <form data-lc-call-chat-form hx-post="/room/{{ room.id }}/messages" hx-swap="none"
+          hx-on::after-request="if (event.detail.successful) this.reset()"
+          class="flex items-end gap-2 border-t border-border p-2">
+      <textarea name="body" rows="1" required aria-required="true" aria-label="{{ "voice-chat-input-label"|t }}"
+                placeholder="{{ "voice-chat-placeholder"|t }}"
+                class="min-h-[2.25rem] flex-1 resize-none rounded border border-border bg-surface px-2 py-1 text-sm"></textarea>
+      <button type="submit" class="btn btn-primary btn-sm">{{ "voice-chat-send"|t }}</button>
+    </form>
+  </aside>
+  <script data-lc-guard="flag">
+  // LC-1123: in-call chat drawer controls. Delegated document listeners (the
+  // controls are in the DOM at load), wired once via a window flag.
+  (function(){
+    if (window.__lcCallChatWired) return;
+    window.__lcCallChatWired = true;
+    function panel(){ return document.getElementById('lc-call-chat'); }
+    function toggleBtn(){ return document.querySelector('[data-lc-chat-toggle]'); }
+    function body(){ var p = panel(); return p ? p.querySelector('textarea[name="body"]') : null; }
+    function isOpen(){ var p = panel(); return p && !p.hasAttribute('hidden'); }
+    function setMessagesBottom(){
+      var m = document.getElementById('messages');
+      if (m) m.scrollTop = m.scrollHeight;
+    }
+    function open(){
+      var p = panel(); if (!p) return;
+      p.removeAttribute('hidden');
+      var b = toggleBtn(); if (b) b.setAttribute('aria-pressed', 'true');
+      var t = body(); if (t) t.focus();
+      setMessagesBottom();
+    }
+    function close(){
+      var p = panel(); if (!p) return;
+      p.setAttribute('hidden', '');
+      var b = toggleBtn(); if (b) b.setAttribute('aria-pressed', 'false');
+    }
+    document.addEventListener('click', function(e){
+      if (e.target.closest && e.target.closest('[data-lc-chat-toggle]')) {
+        if (isOpen()) close(); else open();
+        return;
+      }
+      if (e.target.closest && e.target.closest('[data-lc-chat-close]')) { close(); return; }
+    });
+    // Enter submits, Shift+Enter inserts a newline, on the chat body textarea.
+    document.addEventListener('keydown', function(e){
+      if (e.key !== 'Enter' || e.shiftKey) return;
+      var t = e.target;
+      if (!t || t.name !== 'body') return;
+      var form = t.closest('[data-lc-call-chat-form]');
+      if (!form) return;
+      e.preventDefault();
+      form.requestSubmit();
+    });
+    // Keep #messages pinned to the newest message while the chat is open.
+    document.addEventListener('htmx:wsAfterMessage', function(){
+      if (isOpen()) setMessagesBottom();
+    });
+  })();
+  </script>
 </div>
 {# LC-156: WS room subscription handled declaratively by live.js via the
    data-lc-live-room attribute on the voice root above. #}

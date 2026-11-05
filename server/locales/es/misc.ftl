@@ -166,6 +166,13 @@ voice-transcript-tip = Mostrar u ocultar el panel de transcripción
 voice-transcript-close = Cerrar transcripción
 voice-diag-title = Diagnóstico
 voice-jump-live = Ir a lo último
+# LC-1123: chat de texto dentro de la llamada.
+voice-chat-label = Chat
+voice-chat-tip = Abrir chat
+voice-chat-close = Cerrar chat
+voice-chat-send = Enviar
+voice-chat-placeholder = Escribe a la llamada
+voice-chat-input-label = Mensaje de chat
 voice-transcript-empty-title = Aún no hay transcripción
 voice-transcript-empty-sub = El audio hablado aparecerá aquí cuando la transcripción esté activa.
 # LC-590: shown in the drawer when a clip fails server-side transcription.

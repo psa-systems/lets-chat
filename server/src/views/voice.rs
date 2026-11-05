@@ -55,4 +55,10 @@ pub struct VoicePage<'a> {
     /// drawer; live rows append from the WS feed after render. Empty unless
     /// `show_call_diag`.
     pub call_diag_events: &'a [crate::db::voice_events::VoiceEvent],
+    /// LC-1123: in-call text chat. Always empty on the initial render (the
+    /// panel is live-only, with no history seeding); live arrivals append into
+    /// `#messages` via the existing NewMessage WS pipeline (the voice root
+    /// carries `data-lc-live-room`), so no per-message server render is needed
+    /// here.
+    pub messages: &'a [crate::views::room::MessageView],
 }
