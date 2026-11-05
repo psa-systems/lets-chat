@@ -26,7 +26,7 @@ fn ensure_tempdir() -> &'static str {
         .as_str()
 }
 
-use crate::common;
+mod common;
 
 struct TestApp {
     app: Router,
