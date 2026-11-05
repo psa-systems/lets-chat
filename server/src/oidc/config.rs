@@ -2,8 +2,7 @@
 //!
 //! Pure-RP cutover: the four `LETS_CHAT_BUNYIP_SSO_*` vars are mandatory at
 //! startup. There is no `_ENABLED` flag; lets-chat refuses to start without
-//! a working Bunyip OP per
-//! `docs/lets-chat/sso/bunyip-only/00-overview.md` §what ships.
+//! a working Bunyip OP.
 
 use url::Url;
 

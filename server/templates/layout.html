@@ -1423,8 +1423,10 @@ if (window.__lcSyncSidebarToggles) {
   var escalateTimer = null;   // 5min "still trying" escalation
   var graceTimer = null;      // LC-318: delay before the banner is shown
   var abnormalClose = false;  // LC-318: last close was a real drop, not a nav
+  var probeTimer = null;      // LC-1119: dead-session probe while failed-long
   var WATCHDOG_MS = 60 * 1000;
   var ESCALATE_MS = 5 * 60 * 1000;
+  var PROBE_MS = 30 * 1000;   // LC-1119: how often to re-check the session
   // LC-318: a full page load tears the socket down and rebuilds it, and that
   // used to flash "Connection lost. Reconnecting..." for ~1s on every page
   // move. Wait this long before painting the banner; a reconnect within the
@@ -1460,6 +1462,28 @@ if (window.__lcSyncSidebarToggles) {
     }, WATCHDOG_MS);
   }
 
+  // LC-1119: a reconnect that never succeeds is often a dead auth session (an
+  // expired cookie), not a network outage: the WS upgrade is rejected, so
+  // enterConnected never runs and the soft-refresh that would redirect never
+  // fires, leaving the page stuck on "Reconnecting..." with a stale call /
+  // transcript shell. Probe the current (authenticated) page with a cheap htmx
+  // GET that swaps nothing: on a dead session the server answers an htmx request
+  // with HX-Redirect and htmx navigates the whole page to /login; on a live
+  // session it is a harmless no-op; offline it just fails. Runs only while
+  // failed-long and stops on reconnect.
+  function probeSession() {
+    if (!window.htmx || document.hidden) return;
+    try { htmx.ajax('GET', location.pathname + location.search, { swap: 'none' }); } catch (e) {}
+  }
+  function startSessionProbe() {
+    if (probeTimer) return;
+    probeSession();
+    probeTimer = setInterval(probeSession, PROBE_MS);
+  }
+  function stopSessionProbe() {
+    if (probeTimer) { clearInterval(probeTimer); probeTimer = null; }
+  }
+
   function enterReconnecting() {
     if (state === 'reconnecting' || state === 'failed-long') return;
     state = 'reconnecting';
@@ -1478,6 +1502,7 @@ if (window.__lcSyncSidebarToggles) {
         if (state === 'reconnecting') {
           state = 'failed-long';
           setBanner('failed-long', 'Still trying to reconnect. Check your internet connection.');
+          startSessionProbe();
         }
       }, ESCALATE_MS);
     }, GRACE_MS);
@@ -1487,6 +1512,7 @@ if (window.__lcSyncSidebarToggles) {
     var prev = state;
     state = 'connected';
     clearTimeout(escalateTimer);
+    stopSessionProbe(); // LC-1119
     // LC-318: the "Reconnecting" banner was painted only if the grace
     // period elapsed (graceTimer fired and nulled itself) while in the
     // reconnecting state, or we had already escalated to failed-long.

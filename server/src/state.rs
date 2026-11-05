@@ -85,8 +85,6 @@ pub struct AppState {
     /// `AppState` by hand and do not exercise the SSO callback, so `None`
     /// keeps them building without standing up a mock OP. Route handlers
     /// `.expect("bunyip_sso required")` because production guarantees it.
-    /// See `docs/lets-chat/sso/bunyip-only/04-lets-chat-server-cutover.md`
-    /// §4.2.
     pub bunyip_sso: Option<Arc<BunyipSsoClient>>,
     /// LC-393 Phase 3: server-side STT for call transcription. `Some` when
     /// `LETS_CHAT_STT_URL` is set; the browser then captures audio clips and
