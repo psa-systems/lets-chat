@@ -3596,7 +3596,9 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId, reason: &str) {
                 .unwrap_or(None);
             record_voice_event(&st, room_id, &uid, &label, &kind, None, call_id).await;
             if is_last {
-                db::voice_calls::close(&st.chat, room_id).await.ok();
+                db::voice_calls::close(&st.chat, room_id, call_id)
+                    .await
+                    .ok();
                 super::transcripts::finalize_open_for_room(&st, room_id).await;
             }
         });

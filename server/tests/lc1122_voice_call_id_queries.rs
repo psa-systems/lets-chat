@@ -169,9 +169,10 @@ async fn one_join_one_diag_pair_and_one_leave_cost_at_most_three_open_id_lookups
         "a second such event costs exactly one lookup too, not zero or two"
     );
 
-    // Leave: resolves the call id once and reuses it for the departure event;
-    // alice is the only participant, so this also closes the call, but that
-    // close is keyed by room_id and costs no extra voice_calls lookup.
+    // Leave: resolves the call id once and reuses it for both the departure
+    // event and the subsequent close (alice is the only participant, so this
+    // also closes the call); neither the event nor the close looks the id up
+    // again.
     handle_voice_leave(&state, conn, "left");
     // handle_voice_leave's DB work runs on a spawned task; wait for the event
     // to land before counting.

@@ -65,15 +65,31 @@ pub async fn open_id(pool: &SqlitePool, room_id: i64) -> sqlx::Result<Option<i64
     Ok(row.map(|r| r.get("id")))
 }
 
-/// Close `room_id`'s open call (the last participant left). Idempotent: a no-op
-/// when nothing is open.
-pub async fn close(pool: &SqlitePool, room_id: i64) -> sqlx::Result<()> {
-    sqlx::query(
-        "UPDATE voice_calls SET ended_at = datetime('now') WHERE room_id = ?1 AND ended_at IS NULL",
-    )
-    .bind(room_id)
-    .execute(pool)
-    .await?;
+/// Close `room_id`'s open call (the last participant left). `call_id`, when
+/// the caller already resolved it (LC-1122), scopes the close to that exact
+/// row instead of re-deriving it by `room_id`; pass `None` only when no id was
+/// resolved at the call site, which falls back to the room-scoped close.
+/// Idempotent: a no-op when nothing matches.
+pub async fn close(pool: &SqlitePool, room_id: i64, call_id: Option<i64>) -> sqlx::Result<()> {
+    match call_id {
+        Some(id) => {
+            sqlx::query(
+                "UPDATE voice_calls SET ended_at = datetime('now') WHERE id = ?1 AND room_id = ?2 AND ended_at IS NULL",
+            )
+            .bind(id)
+            .bind(room_id)
+            .execute(pool)
+            .await?;
+        }
+        None => {
+            sqlx::query(
+                "UPDATE voice_calls SET ended_at = datetime('now') WHERE room_id = ?1 AND ended_at IS NULL",
+            )
+            .bind(room_id)
+            .execute(pool)
+            .await?;
+        }
+    }
     Ok(())
 }
 
