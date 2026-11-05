@@ -168,6 +168,13 @@ voice-transcript-tip = Toggle transcript panel
 voice-transcript-close = Close transcript
 voice-diag-title = Diagnostics
 voice-jump-live = Jump to live
+# LC-1123: in-call text chat.
+voice-chat-label = Chat
+voice-chat-tip = Open chat
+voice-chat-close = Close chat
+voice-chat-send = Send
+voice-chat-placeholder = Message the call
+voice-chat-input-label = Chat message
 voice-transcript-empty-title = No transcript yet
 voice-transcript-empty-sub = Spoken audio will appear here once transcription is on.
 # LC-590: shown in the drawer when a clip fails server-side transcription.

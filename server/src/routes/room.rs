@@ -272,6 +272,9 @@ async fn get_voice_room(
         remote_control_enabled,
         show_call_diag,
         call_diag_events: &call_diag_events,
+        // LC-1123: in-call chat is live-only - the panel starts empty and fills
+        // from the NewMessage WS pipeline as messages arrive during the call.
+        messages: &[],
     };
     Ok(html(&page)?.into_response())
 }
