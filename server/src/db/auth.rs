@@ -28,8 +28,8 @@ pub async fn create_user(
     // accounts, so stamp the handle as confirmed. Leaving it NULL would trip the
     // first-entry handle gate on every fixture user.
     sqlx::query(
-        "INSERT INTO users (id, username, password_hash, bunyip_sub, last_active_at, username_confirmed_at) \
-         VALUES (?, ?, '', ?, datetime('now'), datetime('now'))",
+        "INSERT INTO users (id, username, password_hash, bunyip_sub, last_active_at, username_confirmed_at, notify_sound_enabled) \
+         VALUES (?, ?, '', ?, datetime('now'), datetime('now'), 1)",
     )
     .bind(&id)
     .bind(username)
@@ -2140,8 +2140,8 @@ pub async fn create_user_from_bunyip(
 ) -> Result<String, sqlx::Error> {
     let id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO users (id, username, password_hash, bunyip_sub, display_name, email, last_active_at) \
-         VALUES (?, ?, '', ?, ?, ?, datetime('now'))",
+        "INSERT INTO users (id, username, password_hash, bunyip_sub, display_name, email, last_active_at, notify_sound_enabled) \
+         VALUES (?, ?, '', ?, ?, ?, datetime('now'), 1)",
     )
     .bind(&id)
     .bind(username)
@@ -2177,8 +2177,8 @@ pub async fn create_default_admin(
     let id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO users (id, username, password_hash, bunyip_sub, role, email, \
-         email_verified_at, username_confirmed_at, last_active_at) \
-         VALUES (?, ?, '', '', 'admin', ?, datetime('now'), datetime('now'), datetime('now'))",
+         email_verified_at, username_confirmed_at, last_active_at, notify_sound_enabled) \
+         VALUES (?, ?, '', '', 'admin', ?, datetime('now'), datetime('now'), datetime('now'), 1)",
     )
     .bind(&id)
     .bind(username)

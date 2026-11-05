@@ -29,6 +29,37 @@ use crate::views::ws_fragments::{
 use crate::ws::events::ChatEvent;
 use crate::ws::hub::{ConnId, RingingResult};
 
+/// LC-1093: every broadcast-render helper below returns `Option<String>` and
+/// used to fold a DB `Err` into a plain `None` via `.ok()?` / `.ok()??`,
+/// which reads identically to "nothing to render" - the failure left no
+/// trace. These two macros keep that early-return shape but log the `Err`
+/// case at `warn` with whatever id fields the call site passes, before
+/// returning `None`. `log_db!` is for `Result<T, E>`, `log_db_opt!` for
+/// `Result<Option<T>, E>` (a missing row is NOT an error and stays silent).
+macro_rules! log_db {
+    ($result:expr, $($field:tt)*) => {
+        match $result {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!(error = %e, $($field)*);
+                None
+            }
+        }
+    };
+}
+macro_rules! log_db_opt {
+    ($result:expr, $($field:tt)*) => {
+        match $result {
+            Ok(Some(v)) => Some(v),
+            Ok(None) => None,
+            Err(e) => {
+                tracing::warn!(error = %e, $($field)*);
+                None
+            }
+        }
+    };
+}
+
 #[derive(Deserialize)]
 #[serde(tag = "type")]
 enum ClientFrame {
@@ -110,7 +141,16 @@ enum ClientFrame {
     /// lands in the same /admin/voice-log an admin reads during a call. Gated
     /// to a current participant of the room; `detail` is length-bounded.
     #[serde(rename = "voice_diag")]
-    VoiceDiag { room_id: i64, detail: String },
+    VoiceDiag {
+        room_id: i64,
+        detail: String,
+        /// LC-1114: `"diag"` for an informational signal (e.g. the selected ICE
+        /// route host/srflx/relay), anything else - including absent - for a
+        /// failure. Decides the voice_events `kind` so the admin view does not
+        /// badge a normal route as an error. Old clients omit it (=> error).
+        #[serde(default)]
+        level: Option<String>,
+    },
     /// LC-494: stage control plane. Join/leave as a listener, request or
     /// withdraw the floor, step down from speaking, and (host-only) grant or
     /// revoke another participant's floor. Each mutates the ephemeral hub
@@ -220,6 +260,22 @@ pub async fn topic_subscribe_allowed(state: &AppState, user: &User, topic: &str)
             Err(_) => false,
         },
         Some(("user", id)) => id == user.id,
+        // LC-1118: the in-call live diagnostics feed for a voice room. Admin
+        // only, only when the call-diagnostics flag is on, and only for a room
+        // the admin can access - so a non-admin or a flag-off workspace never
+        // joins the fan-out and never receives a call's diagnostics.
+        Some(("call_diag", id)) => match id.parse::<i64>() {
+            Ok(room_id) => {
+                user.role == "admin"
+                    && super::feature_flags::rollout(state, &super::feature_flags::CALL_DIAGNOSTICS)
+                        .await
+                        .is_on()
+                    && db::chat::is_room_accessible(&state.chat, room_id, &user.id, true)
+                        .await
+                        .unwrap_or(false)
+            }
+            Err(_) => false,
+        },
         _ => false,
     }
 }
@@ -921,6 +977,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_transcript_segment(&e)
                                 }
+                                // LC-1118: in-call diagnostics row. Only admins
+                                // subscribed to call_diag:{room} receive it, so no
+                                // per-recipient guard is needed here.
+                                ChatEvent::CallDiag { .. } => render_call_diag(&e),
                                 _ => render_event(&e),
                             };
                             if let Some(html) = rendered {
@@ -1199,9 +1259,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 }
                             }
                         }
-                        ClientFrame::VoiceDiag { room_id, detail } => {
-                            handle_voice_diag(&state, &user, &username, conn_id, room_id, detail)
-                                .await;
+                        ClientFrame::VoiceDiag {
+                            room_id,
+                            detail,
+                            level,
+                        } => {
+                            handle_voice_diag(
+                                &state, &user, &username, conn_id, room_id, detail, level,
+                            )
+                            .await;
                         }
                         // LC-494: stage control plane. Self-actions require room
                         // access + stage mode; promote/demote additionally
@@ -1272,16 +1338,23 @@ async fn render_unread_badge(
     viewer: &User,
     room: &models::Room,
 ) -> Option<String> {
-    let blocked = db::auth::list_blocked_ids_either_way(&state.auth, &viewer.id)
-        .await
-        .ok()?;
-    let unread = db::chat::get_unread_count(&state.chat, &viewer.id, room.id, &blocked)
-        .await
-        .ok()?;
+    let blocked = log_db!(
+        db::auth::list_blocked_ids_either_way(&state.auth, &viewer.id).await,
+        viewer_id = %viewer.id,
+        "list_blocked_ids_either_way failed"
+    )?;
+    let unread = log_db!(
+        db::chat::get_unread_count(&state.chat, &viewer.id, room.id, &blocked).await,
+        viewer_id = %viewer.id,
+        room_id = room.id,
+        "get_unread_count failed"
+    )?;
     if room.room_type == "dm" {
-        let peer_id = db::chat::get_dm_peer(&state.chat, room.id, &viewer.id)
-            .await
-            .ok()??;
+        let peer_id = log_db_opt!(
+            db::chat::get_dm_peer(&state.chat, room.id, &viewer.id).await,
+            room_id = room.id,
+            "get_dm_peer failed"
+        )?;
         UnreadBadgeFragment {
             kind: "dm",
             id: &peer_id,
@@ -1322,7 +1395,11 @@ pub async fn render_dm_read(
     read_at: &str,
     dm_seen_msg: &Arc<Mutex<HashMap<i64, i64>>>,
 ) -> Option<String> {
-    let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
+    let room = log_db_opt!(
+        db::chat::get_room(&state.chat, room_id).await,
+        room_id,
+        "get_room failed"
+    )?;
 
     if actor_user_id == viewer.id {
         return render_unread_badge(state, viewer, &room).await;
@@ -1340,9 +1417,11 @@ pub async fn render_dm_read(
 
     // Symmetric consent: peer must have receipts enabled for the viewer to
     // see "Seen". Look up the peer's user record from auth.
-    let peer_record = db::auth::find_user_by_id(&state.auth, actor_user_id)
-        .await
-        .ok()??;
+    let peer_record = log_db_opt!(
+        db::auth::find_user_by_id(&state.auth, actor_user_id).await,
+        user_id = actor_user_id,
+        "find_user_by_id failed"
+    )?;
     if !peer_record.read_receipts_enabled {
         return None;
     }
@@ -1350,11 +1429,14 @@ pub async fn render_dm_read(
     // Find the highest own-authored, non-deleted message in this DM with id
     // <= last_read_message_id. If none, peer hasn't read any of viewer's
     // messages yet - clear any previous caption and stop.
-    let new_seen_id = db::chat::find_dm_seen_state(&state.chat, room_id, &viewer.id, actor_user_id)
-        .await
-        .ok()?
-        .map(|(id, _)| id)
-        .filter(|id| *id <= last_read_message_id);
+    let new_seen_id = log_db!(
+        db::chat::find_dm_seen_state(&state.chat, room_id, &viewer.id, actor_user_id).await,
+        room_id,
+        viewer_id = %viewer.id,
+        "find_dm_seen_state failed"
+    )?
+    .map(|(id, _)| id)
+    .filter(|id| *id <= last_read_message_id);
 
     let prev_seen_id = {
         let map = dm_seen_msg.lock().unwrap();
@@ -1581,7 +1663,11 @@ pub async fn render_reaction_bar(
     user_id: &str,
 ) -> Option<String> {
     let message_id = ctx.message.id;
-    let emojis = ctx.base.custom_emojis_for(state, user_id).await.ok()?;
+    let emojis = log_db!(
+        ctx.base.custom_emojis_for(state, user_id).await,
+        user_id,
+        "custom_emojis_for failed"
+    )?;
     let reactions = ctx.reaction_views_for(user_id, &emojis);
     // LC-595: emit BOTH surfaces unconditionally. A viewer may have the timeline
     // showing, an open thread panel showing, or both, and the server does not
@@ -2116,6 +2202,26 @@ fn render_transcript_segment(event: &ChatEvent) -> Option<String> {
     TranscriptSegmentFragment { speaker_name, text }
         .render()
         .ok()
+}
+
+/// LC-1118: render one in-call diagnostics row for the live drawer.
+fn render_call_diag(event: &ChatEvent) -> Option<String> {
+    let ChatEvent::CallDiag {
+        user_label,
+        kind,
+        detail,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    crate::views::ws_fragments::CallDiagFragment {
+        user_label,
+        kind,
+        detail: detail.as_deref(),
+    }
+    .render()
+    .ok()
 }
 
 /// Validate and relay one WebRTC call signal to the other member of a DM
@@ -3235,8 +3341,22 @@ pub(crate) async fn record_voice_event(
     kind: &str,
     detail: Option<&str>,
 ) {
-    if let Err(e) =
-        db::voice_events::log_event(&state.chat, room_id, user_id, user_label, kind, detail).await
+    // LC-1113: stamp the event with the room's currently-open call so the admin
+    // view can group it. Best-effort: a lookup failure just leaves call_id NULL
+    // (the event still logs and shows in the flat view).
+    let call_id = db::voice_calls::open_id(&state.chat, room_id)
+        .await
+        .unwrap_or(None);
+    if let Err(e) = db::voice_events::log_event(
+        &state.chat,
+        room_id,
+        user_id,
+        user_label,
+        kind,
+        detail,
+        call_id,
+    )
+    .await
     {
         tracing::warn!(room_id, user = %user_id, kind, error = %e, "voice event log failed");
         return;
@@ -3251,6 +3371,25 @@ pub(crate) async fn record_voice_event(
     state
         .hub
         .broadcast_to_topic("admin", &ChatEvent::AdminVoiceLogChanged);
+    // LC-1118: also push the row live to the in-call diagnostics drawer. Only
+    // when the flag is on, and only to call_diag:{room} subscribers, which
+    // topic_subscribe_allowed restricts to admins - so no other participant
+    // receives it. The flag read is the same uncached settings lookup the other
+    // feature flags use.
+    if super::feature_flags::rollout(state, &super::feature_flags::CALL_DIAGNOSTICS)
+        .await
+        .is_on()
+    {
+        state.hub.broadcast_to_topic(
+            &format!("call_diag:{room_id}"),
+            &ChatEvent::CallDiag {
+                room_id,
+                user_label: user_label.to_string(),
+                kind: kind.to_string(),
+                detail: detail.map(|d| d.to_string()),
+            },
+        );
+    }
 }
 
 /// LC-869: per-user cap on client-observed voice diagnostics. An ICE connection
@@ -3279,6 +3418,10 @@ pub async fn handle_voice_diag(
     conn_id: ConnId,
     room_id: i64,
     detail: String,
+    // LC-1114: "diag" (informational, e.g. the ICE route) vs a failure (anything
+    // else, incl. absent). Validated to a tiny set so a client cannot invent a
+    // kind the admin view does not know how to badge.
+    level: Option<String>,
 ) {
     // Only a current participant of the channel may report on it.
     if !state.hub.is_in_voice_room(conn_id, room_id) {
@@ -3307,7 +3450,12 @@ pub async fn handle_voice_diag(
     if detail.is_empty() {
         return;
     }
-    record_voice_event(state, room_id, &user.id, username, "error", Some(detail)).await;
+    // LC-1114: an explicit "diag" is informational; everything else is a fault.
+    let kind = match level.as_deref() {
+        Some("diag") => "diag",
+        _ => "error",
+    };
+    record_voice_event(state, room_id, &user.id, username, kind, Some(detail)).await;
 }
 
 /// Handle a `voice_join` frame: validate the room is an accessible voice
@@ -3338,6 +3486,13 @@ pub async fn handle_voice_join(
     // huddle. Captured before `voice_join` mutates the roster.
     let started_huddle = state.hub.voice_room_users(room_id).is_empty();
     let peers = state.hub.voice_join(conn_id, room_id);
+    // LC-1113: the first join opens a call to group this meeting's events under.
+    // Done before the connect event below so that event carries the call_id.
+    if started_huddle {
+        if let Err(e) = db::voice_calls::open(&state.chat, room_id).await {
+            tracing::warn!(room_id, error = %e, "voice call open failed");
+        }
+    }
     // LC-859: log the connect. A join within 30s of this user's own departure
     // from this room is a reconnect (the LC-764 "dropped then came back" case),
     // derived from the log itself rather than tracked in memory.
@@ -3391,6 +3546,11 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId, reason: &str) {
     // LC-859: log the departure (graceful leave vs ungraceful drop). Spawned
     // because this fn is sync; a drop is the audio-error signal an admin scans
     // for in the voice log.
+    // LC-1113: capture "was that the last participant?" now (voice_leave above
+    // already removed the conn), so the spawn can close the call AFTER recording
+    // this departure - the event still carries the call_id - then finalize the
+    // transcript (LC-393 Phase 2). Merged into one task so the ordering holds.
+    let is_last = state.hub.voice_room_users(room_id).is_empty();
     {
         let st = state.clone();
         let uid = user_id.clone();
@@ -3398,6 +3558,10 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId, reason: &str) {
         let kind = reason.to_string();
         tokio::spawn(async move {
             record_voice_event(&st, room_id, &uid, &label, &kind, None).await;
+            if is_last {
+                db::voice_calls::close(&st.chat, room_id).await.ok();
+                super::transcripts::finalize_open_for_room(&st, room_id).await;
+            }
         });
     }
     // Tell every subscriber of the room, not just remaining voice members: a
@@ -3434,15 +3598,9 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId, reason: &str) {
             end_control_on_participant_gone(&st, room_id, &uid).await;
         });
     }
-    // LC-393 Phase 2: if that was the last participant, finalize any open
-    // transcription session for the channel (save + post the notice). Spawned
-    // because this fn is sync; AppState is cheap to clone (Arc-backed).
-    if state.hub.voice_room_users(room_id).is_empty() {
-        let st = state.clone();
-        tokio::spawn(async move {
-            super::transcripts::finalize_open_for_room(&st, room_id).await;
-        });
-    }
+    // LC-393 Phase 2 (transcript finalize) + LC-1113 (call close) on the last
+    // participant leaving now run inside the departure-event spawn above, so the
+    // last event keeps its call_id and the ordering is deterministic.
 }
 
 /// LC-494: stage self-actions (the actor operates on their own membership).
@@ -3558,9 +3716,11 @@ fn relay_voice_signal(
 /// this connection (broadcast_to_user already targets the right user); the
 /// swap is a no-op on tabs not currently showing the invitations page.
 async fn render_invitations(state: &AppState, viewer: &User) -> Option<String> {
-    let cards = crate::routes::enclave::load_invitation_cards(state, &viewer.id)
-        .await
-        .ok()?;
+    let cards = log_db!(
+        crate::routes::enclave::load_invitation_cards(state, &viewer.id).await,
+        viewer_id = %viewer.id,
+        "load_invitation_cards failed"
+    )?;
     crate::views::enclave::InvitationsLiveFragment {
         invitations: &cards,
     }
@@ -3694,7 +3854,10 @@ async fn render_admin_room_row(state: &AppState, room_id: i64, removed: bool) ->
 /// admin queue is `#[cfg(standalone)]`).
 #[cfg(feature = "standalone")]
 async fn render_admin_reports(state: &AppState) -> Option<String> {
-    let reports = super::report::build_report_views(state).await.ok()?;
+    let reports = log_db!(
+        super::report::build_report_views(state).await,
+        "build_report_views failed"
+    )?;
     let open_count = reports.len() as i64;
     crate::views::report::AdminReportsOob {
         reports,
@@ -3708,7 +3871,10 @@ async fn render_admin_reports(state: &AppState) -> Option<String> {
 /// nav badge) for one admin's WS connection. Mirrors `render_admin_reports`.
 #[cfg(feature = "standalone")]
 async fn render_admin_support(state: &AppState) -> Option<String> {
-    let tickets = super::support::build_support_views(state).await.ok()?;
+    let tickets = log_db!(
+        super::support::build_support_views(state).await,
+        "build_support_views failed"
+    )?;
     let open_count = tickets.len() as i64;
     crate::views::support::AdminSupportOob {
         tickets,
@@ -3891,11 +4057,17 @@ pub async fn render_pin_event(
     use askama::Template;
     let room_id = ctx.message.room_id;
     let message_id = ctx.message.id;
-    let room = db::chat::get_room(&state.chat, room_id).await.ok()??;
+    let room = log_db_opt!(
+        db::chat::get_room(&state.chat, room_id).await,
+        room_id,
+        "get_room failed"
+    )?;
     let pin_path = if room.room_type == "dm" {
-        let peer_id = db::chat::get_dm_peer(&state.chat, room_id, &viewer.id)
-            .await
-            .ok()??;
+        let peer_id = log_db_opt!(
+            db::chat::get_dm_peer(&state.chat, room_id, &viewer.id).await,
+            room_id,
+            "get_dm_peer failed"
+        )?;
         format!("/dm/{peer_id}/pins")
     } else {
         format!("/room/{room_id}/pins")

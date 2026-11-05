@@ -18,6 +18,14 @@ required-features = ["saas"]
 name = "lets_chat"
 path = "src/lib.rs"
 
+# LC-1112: the integration tests are one binary (tests/it/main.rs) instead of one
+# per tests/*.rs, so a src change relinks and writes 1 binary, not ~230. Cargo
+# still auto-discovers the few tests/*.rs that keep their own process (env
+# mutation / a global subscriber), which is why they stay at tests/ root.
+[[test]]
+name = "it"
+path = "tests/it/main.rs"
+
 [features]
 default = ["standalone"]
 standalone = []

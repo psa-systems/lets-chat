@@ -638,7 +638,8 @@ mod theme_tests {
             last_active_at: String::new(),
             is_profile_public: false,
             notify_browser_enabled: false,
-            notify_sound_enabled: false,
+            // LC-1120: sound cues (incoming-call ring, join/leave) default on.
+            notify_sound_enabled: true,
             notify_push_enabled: false,
             notify_email_digest_enabled: false,
             notify_login_alerts_enabled: false,

@@ -61,6 +61,7 @@ pub mod translations;
 pub mod uploads;
 pub mod user_groups;
 pub mod vapid;
+pub mod voice_calls;
 pub mod voice_events;
 pub mod webhooks;
 

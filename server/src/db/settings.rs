@@ -8,10 +8,14 @@ pub const DEFAULT_MAX_UPLOAD_BYTES: i64 = 10 * 1024 * 1024;
 /// LC-500: shared so the composer can surface the same cap to client-side
 /// validation that the upload route enforces server-side.
 pub async fn max_upload_bytes(pool: &SqlitePool) -> i64 {
-    get_setting(pool, "max_upload_bytes")
-        .await
-        .ok()
-        .flatten()
+    let value = match get_setting(pool, "max_upload_bytes").await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, key = "max_upload_bytes", "setting read failed; using default");
+            None
+        }
+    };
+    value
         .and_then(|v| v.parse::<i64>().ok())
         .filter(|v| *v > 0)
         .unwrap_or(DEFAULT_MAX_UPLOAD_BYTES)

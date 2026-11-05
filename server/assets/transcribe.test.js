@@ -111,7 +111,7 @@ function loadRich(opts) {
           if (p === 'hasAttribute') return () => false;
           if (p === 'closest') return () => null;
           if (['setAttribute', 'removeAttribute', 'appendChild', 'removeChild', 'remove',
-            'addEventListener', 'removeEventListener', 'focus', 'scrollIntoView', 'insertBefore'].includes(p)) {
+            'replaceChildren', 'addEventListener', 'removeEventListener', 'focus', 'scrollIntoView', 'insertBefore'].includes(p)) {
             return () => {};
           }
           if (p === 'parentNode') return null;
@@ -140,12 +140,16 @@ function loadRich(opts) {
     __lcNotify: (kind, msg) => { toasts.push([kind, msg]); },
     __lcS: (_k, fb) => fb,
   };
+  // PMS-1632: track clears of the caption log so a test can assert a new call
+  // starts fresh. querySelectorAll is here because the decoration setup reaches
+  // for it (guarded by MutationObserver, absent in this sandbox).
+  const captionLog = { clears: 0, replaceChildren() { this.clears += 1; }, querySelectorAll: () => [] };
   const document = {
     body: stubEl(),
     addEventListener(type, fn) { (docListeners[type] = docListeners[type] || []).push(fn); },
     querySelector: () => stubEl(),
     querySelectorAll: () => [],
-    getElementById: () => stubEl(),
+    getElementById: (id) => (id === 'lc-caption-log' ? captionLog : stubEl()),
   };
   const fetch = (url) => {
     if (url.indexOf('/call/config') === 0) {
@@ -193,7 +197,7 @@ function loadRich(opts) {
   vm.runInNewContext(src, sandbox);
   const flush = async () => { for (let i = 0; i < 30; i += 1) await Promise.resolve(); };
   const fireDoc = (type, detail) => (docListeners[type] || []).forEach((fn) => fn({ type, detail }));
-  return { fireDoc, flush, gum, toasts, runTimers };
+  return { fireDoc, flush, gum, toasts, runTimers, captionLog };
 }
 
 test('LC-859: a late joiner adopting an agent-covered session does not open its own capture', async () => {
@@ -212,6 +216,23 @@ test('LC-859: without an agent, adopting an open session still opens per-client 
   await t.flush();
 
   assert.ok(t.gum.n >= 1, 'no agent -> the client captures its own clips as before');
+});
+
+test('PMS-1632: adopting a call session clears the stale caption log; re-adopting the same one does not', async () => {
+  const t = loadRich({ agentActive: false });
+  await t.flush();
+  assert.equal(t.captionLog.clears, 0, 'nothing cleared before a session is active');
+
+  t.fireDoc('lc:rtc-session-started', { room: 7 });
+  await t.flush();
+  assert.equal(t.captionLog.clears, 1, 'adopting a session clears the previous call\'s lines so the new call starts fresh');
+
+  // A second start event for the already-adopted session must NOT re-clear -
+  // that is what keeps a reconnect to the same open call from wiping its own
+  // captions.
+  t.fireDoc('lc:rtc-session-started', { room: 7 });
+  await t.flush();
+  assert.equal(t.captionLog.clears, 1, 'the same active session does not re-clear');
 });
 
 test('LC-866: a mic acquire that fails right after the switch is retried, not swallowed', async () => {

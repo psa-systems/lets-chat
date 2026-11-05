@@ -1313,7 +1313,13 @@ pub(crate) async fn current_enclave_for_sidebar(
         "enclave" => segs.next()?.parse::<i64>().ok(),
         "room" => {
             let room_id = segs.next()?.parse::<i64>().ok()?;
-            enclave_for_room(state, room_id).await.ok().flatten()
+            match enclave_for_room(state, room_id).await {
+                Ok(eid) => eid,
+                Err(e) => {
+                    tracing::warn!(error = %e, room_id, "enclave_for_room lookup failed");
+                    None
+                }
+            }
         }
         _ => None,
     }
