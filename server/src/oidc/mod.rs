@@ -12,9 +12,9 @@
 //! - Verify the `id_token` EdDSA signature + iss + aud + exp + nonce
 //!
 //! The discovery + JWKS fetches at startup MUST succeed; the binary refuses
-//! to start with the SSO flag on but bunyip-api unreachable. This is the
-//! all-or-nothing posture documented in
-//! `docs/lets-chat/sso/bunyip-only/04-lets-chat-server-additions.md` §4.2.
+//! to start with the SSO flag on but bunyip-api unreachable. This is an
+//! all-or-nothing posture: there is no degraded mode where SSO silently
+//! falls back to a "not configured" state once the process is up.
 
 mod client;
 mod config;
