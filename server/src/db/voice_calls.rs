@@ -3,7 +3,8 @@
 //! A call is one span a voice room is non-empty. The WS voice handlers call
 //! [`open`] when the room goes 0 -> 1 participant and [`close`] when it goes
 //! 1 -> 0; [`crate::routes::ws::record_voice_event`] stamps each event with the
-//! room's currently-open call via [`open_id`]. The admin `/admin/voice-log`
+//! room's currently-open call, which each call site supplies (via [`open_id`]
+//! when it has no cheaper way to get it; LC-1122). The admin `/admin/voice-log`
 //! view reads [`list_recent`] (one row per call with counts) and drills into one
 //! call with [`list_events`]. Like [`crate::db::voice_events`] this is a
 //! traceability record, bounded by age, never a content log.
