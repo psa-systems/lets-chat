@@ -3,7 +3,8 @@
 //! A call is one span a voice room is non-empty. The WS voice handlers call
 //! [`open`] when the room goes 0 -> 1 participant and [`close`] when it goes
 //! 1 -> 0; [`crate::routes::ws::record_voice_event`] stamps each event with the
-//! room's currently-open call via [`open_id`]. The admin `/admin/voice-log`
+//! room's currently-open call, which each call site supplies (via [`open_id`]
+//! when it has no cheaper way to get it; LC-1122). The admin `/admin/voice-log`
 //! view reads [`list_recent`] (one row per call with counts) and drills into one
 //! call with [`list_events`]. Like [`crate::db::voice_events`] this is a
 //! traceability record, bounded by age, never a content log.
@@ -64,15 +65,31 @@ pub async fn open_id(pool: &SqlitePool, room_id: i64) -> sqlx::Result<Option<i64
     Ok(row.map(|r| r.get("id")))
 }
 
-/// Close `room_id`'s open call (the last participant left). Idempotent: a no-op
-/// when nothing is open.
-pub async fn close(pool: &SqlitePool, room_id: i64) -> sqlx::Result<()> {
-    sqlx::query(
-        "UPDATE voice_calls SET ended_at = datetime('now') WHERE room_id = ?1 AND ended_at IS NULL",
-    )
-    .bind(room_id)
-    .execute(pool)
-    .await?;
+/// Close `room_id`'s open call (the last participant left). `call_id`, when
+/// the caller already resolved it (LC-1122), scopes the close to that exact
+/// row instead of re-deriving it by `room_id`; pass `None` only when no id was
+/// resolved at the call site, which falls back to the room-scoped close.
+/// Idempotent: a no-op when nothing matches.
+pub async fn close(pool: &SqlitePool, room_id: i64, call_id: Option<i64>) -> sqlx::Result<()> {
+    match call_id {
+        Some(id) => {
+            sqlx::query(
+                "UPDATE voice_calls SET ended_at = datetime('now') WHERE id = ?1 AND room_id = ?2 AND ended_at IS NULL",
+            )
+            .bind(id)
+            .bind(room_id)
+            .execute(pool)
+            .await?;
+        }
+        None => {
+            sqlx::query(
+                "UPDATE voice_calls SET ended_at = datetime('now') WHERE room_id = ?1 AND ended_at IS NULL",
+            )
+            .bind(room_id)
+            .execute(pool)
+            .await?;
+        }
+    }
     Ok(())
 }
 

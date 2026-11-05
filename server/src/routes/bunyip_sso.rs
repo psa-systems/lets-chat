@@ -9,8 +9,11 @@
 //!   verify the id_token, resolve-or-provision the local user, issue the
 //!   lets-chat session cookie via the SAME helpers a password login used to.
 //!
-//! See `docs/lets-chat/sso/bunyip-only/01-architecture.md` (single flow) and
-//! `03-account-provisioning.md` (the decision tree the callback applies).
+//! There is a single flow (no legacy/local-password branch to fall back to),
+//! and the callback's resolve-or-provision step applies a decision tree that
+//! adopts an existing row only when the email is verified, unlinked, and not
+//! banned/bot; anything else is either refused as an identity conflict or
+//! provisions a fresh account (see `resolve_or_provision_user` below).
 
 use axum::extract::{Form, Query, State};
 use axum::http::HeaderMap;
@@ -65,8 +68,7 @@ pub async fn get_start(State(state): State<AppState>) -> Response {
 
 /// `GET /auth/bunyip/callback` - complete the SSO dance.
 ///
-/// Order of operations mirrors the spec in
-/// `docs/lets-chat/sso/bunyip-only/01-architecture.md` step 6:
+/// Order of operations:
 /// 1. Consume the `oidc_pending` row.
 /// 2. Exchange the code for tokens.
 /// 3. Verify the id_token (signature + iss + aud + exp + nonce).
@@ -339,8 +341,13 @@ fn is_email_unique_violation(e: &sqlx::Error) -> bool {
     matches!(e, sqlx::Error::Database(d) if d.is_unique_violation() && d.message().contains("users.email"))
 }
 
-/// `users` resolver for a verified Bunyip identity. See
-/// `docs/lets-chat/sso/bunyip-only/03-account-provisioning.md` §3.1.
+/// `users` resolver for a verified Bunyip identity. Decision tree: a row
+/// already linked to this `bunyip_sub` is reused outright (subject to the
+/// banned/bot checks above); otherwise a row that owns the same VERIFIED
+/// email is adopted only if it is unlinked, non-bot and non-banned (an
+/// unverified-email row is released instead of adopted, and a row linked to
+/// a different or rotated `bunyip_sub` is refused as a conflict); failing
+/// both, a fresh account is provisioned.
 async fn resolve_or_provision_user(
     state: &AppState,
     sub: &str,

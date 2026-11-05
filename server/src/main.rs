@@ -122,8 +122,7 @@ async fn main() {
     // startup. The four `LETS_CHAT_BUNYIP_SSO_*` env vars are mandatory;
     // bunyip-api must be reachable for discovery + JWKS. Missing env or
     // unreachable OP is a hard startup failure - there is no "off" state and
-    // no fallback path. See
-    // `docs/lets-chat/sso/bunyip-only/04-lets-chat-server-cutover.md` §4.2.
+    // no fallback path.
     //
     // LC-826: the ONE exception is `LETS_CHAT_DEV_NO_SSO=1`, a development-only
     // opt-out for the local smoke (`just verify` / `dev/server-up`), which has

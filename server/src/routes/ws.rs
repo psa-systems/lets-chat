@@ -1192,6 +1192,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 );
                                 // LC-859: log the mute broadcast so LC-764-style
                                 // mute divergence is visible in the record.
+                                // LC-1122: no just-opened call id in hand here, so
+                                // this is the one query site needs to stamp the
+                                // event with its call.
+                                let call_id = db::voice_calls::open_id(&state.chat, room_id)
+                                    .await
+                                    .unwrap_or(None);
                                 record_voice_event(
                                     &state,
                                     room_id,
@@ -1199,6 +1205,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     &username,
                                     if muted { "mute" } else { "unmute" },
                                     None,
+                                    call_id,
                                 )
                                 .await;
                             }
@@ -3333,6 +3340,11 @@ pub fn validate_reaction_emoji(raw: &str) -> Option<String> {
 /// view so it updates live during a meeting. Best-effort: a logging failure is
 /// warned and swallowed, never affecting the call. `kind` is a fixed vocabulary
 /// (connect / reconnect / left / dropped / mute / unmute / error).
+///
+/// LC-1122: `call_id` (the room's currently-open call, for the admin view to
+/// group by) is supplied by the caller rather than looked up here, since every
+/// caller already has it or can derive it more cheaply than a fresh query run
+/// on every single event.
 pub(crate) async fn record_voice_event(
     state: &AppState,
     room_id: i64,
@@ -3340,13 +3352,8 @@ pub(crate) async fn record_voice_event(
     user_label: &str,
     kind: &str,
     detail: Option<&str>,
+    call_id: Option<i64>,
 ) {
-    // LC-1113: stamp the event with the room's currently-open call so the admin
-    // view can group it. Best-effort: a lookup failure just leaves call_id NULL
-    // (the event still logs and shows in the flat view).
-    let call_id = db::voice_calls::open_id(&state.chat, room_id)
-        .await
-        .unwrap_or(None);
     if let Err(e) = db::voice_events::log_event(
         &state.chat,
         room_id,
@@ -3455,7 +3462,21 @@ pub async fn handle_voice_diag(
         Some("diag") => "diag",
         _ => "error",
     };
-    record_voice_event(state, room_id, &user.id, username, kind, Some(detail)).await;
+    // LC-1122: no just-opened call id in hand here, so this is the one query
+    // site needs to stamp the event with its call.
+    let call_id = db::voice_calls::open_id(&state.chat, room_id)
+        .await
+        .unwrap_or(None);
+    record_voice_event(
+        state,
+        room_id,
+        &user.id,
+        username,
+        kind,
+        Some(detail),
+        call_id,
+    )
+    .await;
 }
 
 /// Handle a `voice_join` frame: validate the room is an accessible voice
@@ -3488,11 +3509,22 @@ pub async fn handle_voice_join(
     let peers = state.hub.voice_join(conn_id, room_id);
     // LC-1113: the first join opens a call to group this meeting's events under.
     // Done before the connect event below so that event carries the call_id.
-    if started_huddle {
-        if let Err(e) = db::voice_calls::open(&state.chat, room_id).await {
-            tracing::warn!(room_id, error = %e, "voice call open failed");
+    // LC-1122: `open` already returns the id of the row it just inserted, so the
+    // started_huddle branch carries it straight into `record_voice_event` below
+    // with no further query; only the non-started-huddle case needs a lookup.
+    let call_id = if started_huddle {
+        match db::voice_calls::open(&state.chat, room_id).await {
+            Ok(id) => Some(id),
+            Err(e) => {
+                tracing::warn!(room_id, error = %e, "voice call open failed");
+                None
+            }
         }
-    }
+    } else {
+        db::voice_calls::open_id(&state.chat, room_id)
+            .await
+            .unwrap_or(None)
+    };
     // LC-859: log the connect. A join within 30s of this user's own departure
     // from this room is a reconnect (the LC-764 "dropped then came back" case),
     // derived from the log itself rather than tracked in memory.
@@ -3504,7 +3536,7 @@ pub async fn handle_voice_join(
     } else {
         "connect"
     };
-    record_voice_event(state, room_id, &user.id, username, kind, None).await;
+    record_voice_event(state, room_id, &user.id, username, kind, None, call_id).await;
     // The joiner gets the roster so it can open a peer connection to each.
     state.hub.broadcast_to_user(
         &user.id,
@@ -3557,9 +3589,16 @@ pub fn handle_voice_leave(state: &AppState, conn_id: ConnId, reason: &str) {
         let label = name.clone();
         let kind = reason.to_string();
         tokio::spawn(async move {
-            record_voice_event(&st, room_id, &uid, &label, &kind, None).await;
+            // LC-1122: resolve the call id once and reuse it for the event
+            // below rather than letting it be looked up again internally.
+            let call_id = db::voice_calls::open_id(&st.chat, room_id)
+                .await
+                .unwrap_or(None);
+            record_voice_event(&st, room_id, &uid, &label, &kind, None, call_id).await;
             if is_last {
-                db::voice_calls::close(&st.chat, room_id).await.ok();
+                db::voice_calls::close(&st.chat, room_id, call_id)
+                    .await
+                    .ok();
                 super::transcripts::finalize_open_for_room(&st, room_id).await;
             }
         });
