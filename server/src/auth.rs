@@ -329,7 +329,14 @@ impl<S: Send + Sync> FromRequestParts<S> for AuthUser {
         if let Some(u) = parts.extensions.get::<User>().cloned() {
             Ok(AuthUser(u))
         } else {
-            Err(Redirect::to("/login").into_response())
+            // LC-1119: an htmx request (notably the LC-318 reconnect soft-refresh
+            // on a live page) must get `HX-Redirect` so the browser navigates to
+            // /login as a full load. A transparent 303 is instead followed by
+            // htmx's own fetch, and the logged-out page is swapped into the live
+            // DOM - leaving a stale call roster + transcript drawer behind a
+            // sign-in panel and a "Reconnecting..." banner that never resolves. A
+            // no-JS full-page request keeps the plain 303.
+            Err(crate::routes::redirect_or_hx(&parts.headers, "/login"))
         }
     }
 }
