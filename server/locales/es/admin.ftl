@@ -235,6 +235,20 @@ admin-voice-log-th-event = Evento
 admin-voice-log-th-room = Sala
 admin-voice-log-th-participant = Participante
 admin-voice-log-th-detail = Detalle
+admin-voice-log-calls-title = Llamadas recientes
+admin-voice-log-calls-empty = Aún no se han registrado llamadas.
+admin-voice-log-events-title = Todos los eventos
+admin-voice-log-th-started = Inicio
+admin-voice-log-th-status = Fin
+admin-voice-log-th-participants = Personas
+admin-voice-log-th-events = Eventos
+admin-voice-log-th-errors = Errores
+admin-voice-log-live = En vivo
+admin-voice-log-view = Ver
+admin-voice-log-back = Volver al registro de voz
+admin-voice-log-call = Llamada
+admin-voice-log-participants-label = personas
+admin-voice-log-errors-label = errores
 
 ## Webhook deliveries
 admin-deliveries-title = Entregas de webhook
@@ -568,3 +582,8 @@ admin-settings-transcription-admins-note = Con Solo administradores, un administ
 admin-settings-transcription-save = Guardar ajuste de transcripción
 admin-settings-transcription-unconfigured-title = No hay voz a texto en el servidor.
 admin-settings-transcription-unconfigured-body = Las llamadas siguen transcribiéndose en los navegadores compatibles; los mensajes de voz necesitan un motor en el servidor, configurado con
+
+admin-settings-call-diag-heading = Diagnóstico en llamada
+admin-settings-call-diag-note = Muestra un panel de diagnóstico en vivo dentro de cada llamada que solo ven los administradores. Transmite los mismos eventos de conexión que el registro de voz por llamada (entradas, caídas, errores de WebRTC) para rastrear una llamada con problemas mientras ocurre. Desactivado por defecto.
+admin-settings-call-diag-admins-note = Solo para administradores, elijas lo que elijas aquí: el panel, su feed en vivo y su historial nunca se muestran a quienes no son administradores. Activado muestra el panel a cada administrador en una llamada; Solo administradores es equivalente. Desactivado lo oculta.
+admin-settings-call-diag-save = Guardar ajuste de diagnóstico en llamada

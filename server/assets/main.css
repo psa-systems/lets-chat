@@ -4261,6 +4261,19 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     grid-template-columns: minmax(0, 480px);
     justify-content: center;
 }
+/* LC-1109: the full voice page lays its tiles out as a gallery that fits the
+   stage instead of a fixed-track grid that collapses to a scrolling single
+   column on a narrow stage (transcript drawer open, a small window), where the
+   centered avatar and the bottom-left name read as two separate tiles ("name
+   not reflected correct", "not same location"). A lower column floor keeps at
+   least two columns on a narrow stage so the tiles scale down to fit the box
+   rather than overflow, and centering the rows keeps every name beside its own
+   avatar. The dock, pop-out and screen-share variants keep their own sizing;
+   the later :has([data-screen]) stage rule still wins while presenting. */
+.lc-voice-grid--page {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+    align-content: center;
+}
 .lc-voice-tile {
     position: relative;
     overflow: hidden;
@@ -4270,6 +4283,9 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     aspect-ratio: 16 / 9;
     min-height: 140px;
 }
+/* On the page gallery a tile scales with its column, so the 140px floor (which
+   forces the narrow single column to overflow) does not apply. */
+.lc-voice-grid--page .lc-voice-tile { min-height: 0; }
 /* active-speaker highlight (voice.js toggles data-speaking via an analyser) */
 .lc-voice-tile[data-speaking="true"] {
     border-color: var(--success);
@@ -4698,6 +4714,16 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-huddle.lc-huddle--popout [data-lc-voice-grid]:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen],
 .lc-huddle.lc-huddle--float [data-lc-voice-grid]:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
     max-height: calc(100cqh - 4.5rem);
+}
+/* LC-1110: when a pop-out/float also has non-screen participants, cap the shared
+   screen so a filmstrip row stays on-screen below it. Without this the screen
+   claims the whole height and the filmstrip tiles spill past the panel, so a
+   participant's name pill ends up crowding the presenter's (the "two names
+   under one title" pop-out report). Scoped to the case that actually has a
+   filmstrip (`:has(:not([data-screen]))`), so a solo share still fills. */
+.lc-huddle.lc-huddle--popout [data-lc-voice-grid]:has(.lc-voice-tile[data-screen]):has(.lc-voice-tile:not([data-screen])) .lc-voice-tile[data-screen],
+.lc-huddle.lc-huddle--float [data-lc-voice-grid]:has(.lc-voice-tile[data-screen]):has(.lc-voice-tile:not([data-screen])) .lc-voice-tile[data-screen] {
+    max-height: calc(100cqh - 4.5rem - 8rem);
 }
 /* Nothing to collapse or drag-resize while popped out: the host is the size. */
 .lc-huddle--popout .lc-huddle-collapse,

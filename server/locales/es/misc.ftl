@@ -164,6 +164,7 @@ voice-transcript-panel = Transcripción
 voice-transcribe-tip = Iniciar o detener la transcripción
 voice-transcript-tip = Mostrar u ocultar el panel de transcripción
 voice-transcript-close = Cerrar transcripción
+voice-diag-title = Diagnóstico
 voice-jump-live = Ir a lo último
 voice-transcript-empty-title = Aún no hay transcripción
 voice-transcript-empty-sub = El audio hablado aparecerá aquí cuando la transcripción esté activa.

@@ -237,6 +237,22 @@ async fn get_voice_room(
             .map(|m| m.role);
         crate::perms::room_can_manage_overrides(enclave_role, &user.role)
     };
+    // LC-1118: the in-call live diagnostics drawer - site admin only, and only
+    // while the CALL_DIAGNOSTICS flag is on. Seed it with the current open
+    // call's events; live rows append from the `call_diag:{room}` WS feed,
+    // which the hub gates on the same two conditions.
+    let show_call_diag = user.role == "admin"
+        && super::feature_flags::rollout(state, &super::feature_flags::CALL_DIAGNOSTICS)
+            .await
+            .is_on();
+    let call_diag_events = if show_call_diag {
+        match db::voice_calls::open_id(&state.chat, room.id).await? {
+            Some(call_id) => db::voice_calls::list_events(&state.chat, call_id).await?,
+            None => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
     let page = crate::views::voice::VoicePage {
         user,
         room,
@@ -254,6 +270,8 @@ async fn get_voice_room(
         ice_servers: &state.ice_servers,
         participants: &participants,
         remote_control_enabled,
+        show_call_diag,
+        call_diag_events: &call_diag_events,
     };
     Ok(html(&page)?.into_response())
 }
@@ -3385,10 +3403,15 @@ pub async fn post_thread_reply(
     // follower of this new reply. Follows are NOT mention rows; we reuse only
     // the mention fan-out (WS toast + push + email, mute-gated). Best-effort:
     // a follow/notify hiccup must not fail the reply that already landed.
-    let _ = db::thread_followers::follow(&state.chat, &user.id, parent_id, room_id).await;
+    if let Err(e) = db::thread_followers::follow(&state.chat, &user.id, parent_id, room_id).await {
+        tracing::warn!(error = %e, user_id = %user.id, parent_id, "thread_followers::follow (replier) failed");
+    }
     if parent.user_id != user.id {
-        let _ =
-            db::thread_followers::follow(&state.chat, &parent.user_id, parent_id, room_id).await;
+        if let Err(e) =
+            db::thread_followers::follow(&state.chat, &parent.user_id, parent_id, room_id).await
+        {
+            tracing::warn!(error = %e, user_id = %parent.user_id, parent_id, "thread_followers::follow (thread author) failed");
+        }
     }
     notify_thread_followers(&state, &room, parent_id, new_id, &user, body).await;
 
@@ -3415,17 +3438,23 @@ async fn notify_thread_followers(
 ) {
     let followers = match db::thread_followers::followers(&state.chat, parent_id).await {
         Ok(f) => f,
-        Err(_) => return,
+        Err(e) => {
+            tracing::warn!(error = %e, parent_id, "thread_followers::followers failed; skipping notify");
+            return;
+        }
     };
     // LC-546: a muter of this thread is dropped from the fan-out even though
     // replying auto-followed them. Mute wins over follow. One bulk lookup; the
     // muter set is small (only members who explicitly silenced this thread).
-    let muted: std::collections::HashSet<String> =
-        db::thread_muters::muters(&state.chat, parent_id)
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
+    let muted: std::collections::HashSet<String> = match db::thread_muters::muters(&state.chat, parent_id).await {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(error = %e, parent_id, "thread_muters::muters failed; treating as no muters");
+            Vec::new()
+        }
+    }
+    .into_iter()
+    .collect();
     let snippet = build_snippet(body);
     let author_label = author_label(author);
     let mut events: Vec<(String, ChatEvent)> = Vec::new();

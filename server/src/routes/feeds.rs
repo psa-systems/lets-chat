@@ -94,7 +94,9 @@ async fn serve_feed(
     let pool = state.chat.clone();
     let id = feed.id;
     tokio::spawn(async move {
-        let _ = db::room_feeds::touch_last_fetched(&pool, id).await;
+        if let Err(e) = db::room_feeds::touch_last_fetched(&pool, id).await {
+            tracing::warn!(error = %e, feed_id = id, "touch_last_fetched failed");
+        }
     });
 
     let (body, content_type, etag) = if kind == "rss" {

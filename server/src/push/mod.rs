@@ -34,6 +34,8 @@ pub enum PushError {
     Transport(String),
     #[error("encrypt: {0}")]
     Encrypt(String),
+    #[error("push disabled: no VAPID keypair configured")]
+    Disabled,
 }
 
 #[async_trait]
@@ -135,6 +137,22 @@ impl PushClient for ReqwestPushClient {
             return Err(PushError::EndpointGone(sub.endpoint.clone()));
         }
         Err(PushError::Transport(format!("http {}", status.as_u16())))
+    }
+}
+
+/// Stand-in `PushClient` used when no VAPID keypair is configured (no secret
+/// key set, or the keypair load/generate failed). Every caller in
+/// `push::dispatch` already guards on `state.vapid.is_none()` before
+/// reaching a `PushClient`, so `send` here is normally unreachable; it exists
+/// so that an unguarded call fails loudly with `PushError::Disabled` instead
+/// of silently signing a request with a zero-filled private key.
+#[derive(Default)]
+pub struct DisabledPushClient;
+
+#[async_trait]
+impl PushClient for DisabledPushClient {
+    async fn send(&self, _sub: &PushSubscription, _payload: Bytes) -> Result<(), PushError> {
+        Err(PushError::Disabled)
     }
 }
 
@@ -483,5 +501,24 @@ async fn fan_out_fcm(state: &AppState, recipient_user_id: &str, payload: &Bytes)
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn disabled_push_client_errors_instead_of_signing_with_zero_key() {
+        let sub = PushSubscription {
+            id: 1,
+            user_id: "u1".to_string(),
+            endpoint: "https://push.example/ep".to_string(),
+            p256dh_key: "key".to_string(),
+            auth_key: "auth".to_string(),
+            user_agent: None,
+        };
+        let result = DisabledPushClient.send(&sub, Bytes::new()).await;
+        assert!(matches!(result, Err(PushError::Disabled)));
     }
 }

@@ -81,6 +81,39 @@
   }
   function stopRing() { if (ringTimer) { clearInterval(ringTimer); ringTimer = null; } }
 
+  // LC-1120: prime the shared context on the first real user gesture. Every cue
+  // above (incoming-call ring, a peer join/leave) fires from a WS event with no
+  // user gesture in the call stack, so a context first created there starts
+  // 'suspended' and resume() loses the race against the immediate beep
+  // scheduling - the tones are scheduled on a not-yet-running context and never
+  // sound. Creating + resuming it here, inside a genuine gesture, and nudging it
+  // with a zero-gain tick leaves it 'running' well before any cue, so the ring
+  // and join cue are audible. One-shot: the listeners remove themselves on the
+  // first gesture whether or not sound is enabled.
+  function primeAudio() {
+    removePrime();
+    if (!soundEnabled()) return;
+    var ctx = ac();
+    if (!ctx) return;
+    try {
+      var o = ctx.createOscillator();
+      var g = ctx.createGain();
+      g.gain.value = 0;
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start();
+      o.stop(ctx.currentTime + 0.01);
+    } catch (e) {}
+  }
+  function removePrime() {
+    ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+      document.removeEventListener(ev, primeAudio, true);
+    });
+  }
+  ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+    document.addEventListener(ev, primeAudio, true);
+  });
+
   window.LetsChatSfx = {
     formatDuration: formatDuration,
     soundEnabled: soundEnabled,

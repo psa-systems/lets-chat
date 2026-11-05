@@ -293,6 +293,16 @@ pub enum ChatEvent {
     /// render side (the admin page is `#[cfg(standalone)]`); in saas it falls
     /// through to `render_event` (None).
     AdminVoiceLogChanged,
+    /// LC-1118: one voice-event row pushed live to the in-call diagnostics
+    /// drawer. Broadcast to `call_diag:{room}` - only admins with the
+    /// call-diagnostics flag on subscribe - so the send task appends it to
+    /// `#lc-call-diag-log` for those admins only, never for other participants.
+    CallDiag {
+        room_id: i64,
+        user_label: String,
+        kind: String,
+        detail: Option<String>,
+    },
     /// LC-719: the support-bubble panel thread for `user_id` changed (a `/support`
     /// answer landed or a `/human` confirmation posted in the user's assistant-bot
     /// DM). Broadcast via `broadcast_to_user`, so only that user's connections
