@@ -49,14 +49,16 @@
     if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
     return ctx;
   }
-  // One short sine tone: freq Hz, starting `offset` s from now, lasting `dur`
-  // s, ramped up to `peak` and back down so it never clicks.
-  function beep(freq, offset, dur, peak) {
+  // One short tone: freq Hz, starting `offset` s from now, lasting `dur` s,
+  // ramped up to `peak` and back down so it never clicks. `type` picks the
+  // oscillator waveform ('sine' by default; 'triangle' is brighter and carries
+  // better over call audio, so the cheerful cues use it).
+  function beep(freq, offset, dur, peak, type) {
     if (!ctx) return;
     var t = ctx.currentTime + offset;
     var osc = ctx.createOscillator();
     var g = ctx.createGain();
-    osc.type = 'sine';
+    osc.type = type || 'sine';
     osc.frequency.value = freq;
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(peak || 0.12, t + 0.015);
@@ -67,13 +69,28 @@
     osc.stop(t + dur + 0.02);
   }
 
-  // Someone else joined (rising two-note) / left (falling two-note) the room.
-  function playJoin() { if (soundEnabled() && ac()) { beep(523, 0, 0.18, 0.1); beep(784, 0.12, 0.22, 0.1); } }
-  function playLeave() { if (soundEnabled() && ac()) { beep(587, 0, 0.18, 0.1); beep(392, 0.12, 0.26, 0.1); } }
+  // LC-1120: someone else joined - a bright, cheerful rising major triad
+  // (C5-E5-G5) on a triangle wave, louder than the old two-note cue so it is
+  // easy to notice over call audio. Leaving is a softer falling two-note so it
+  // reads as quieter/less celebratory but is still audible.
+  function playJoin() {
+    if (soundEnabled() && ac()) {
+      beep(523.25, 0, 0.16, 0.26, 'triangle');
+      beep(659.25, 0.1, 0.16, 0.28, 'triangle');
+      beep(783.99, 0.2, 0.32, 0.34, 'triangle');
+    }
+  }
+  function playLeave() {
+    if (soundEnabled() && ac()) {
+      beep(659.25, 0, 0.16, 0.2, 'triangle');
+      beep(440.0, 0.12, 0.28, 0.2, 'triangle');
+    }
+  }
 
   // Incoming-call ringtone: a classic double-ring that repeats until stopRing.
+  // Louder than the cues so an incoming call is unmistakable.
   var ringTimer = null;
-  function ringOnce() { if (ctx) { beep(480, 0, 0.4, 0.16); beep(620, 0.45, 0.4, 0.16); } }
+  function ringOnce() { if (ctx) { beep(523.25, 0, 0.4, 0.24, 'triangle'); beep(659.25, 0.45, 0.4, 0.24, 'triangle'); } }
   function startRing() {
     if (ringTimer || !soundEnabled() || !ac()) return;
     ringOnce();
