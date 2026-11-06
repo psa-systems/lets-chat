@@ -371,6 +371,7 @@
     toggle(q('[data-lc-transcribe-toggle]'), on); // LC-393 Phase 2
     toggle(q('[data-lc-voice-sep]'), on);              // LC-402 control grouping
     toggle(q('[data-lc-transcript-panel-toggle]'), on); // LC-402 transcript drawer
+    toggle(q('[data-lc-chat-toggle]'), on);             // LC-1124 in-call chat
     updateCount();
     updateWaiting();
     applyHuddleVisibility(); // LC-493

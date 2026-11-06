@@ -99,7 +99,6 @@ mod lc742_page_header_shape;
 mod lc747_settings_toggle_shape;
 mod lc778_dm_read_fanout;
 mod lc77_webhook_render_fixture;
-mod lc782_batched_row_lookups;
 mod lc917_prune_orphaned_pages;
 mod lc927_reindex_single_flight;
 mod lc932_scheduled_modal_quote_id;
