@@ -54,6 +54,12 @@
   var selfMuted = false;  // LC-402: our own mic state, broadcast to the channel
   var selfSharing = false; // LC-408: our own screen-share state, broadcast too
   var sfuCamOn = false;   // LC-610: our SFU camera state (localStream is null there)
+  // LC-1129: per-REMOTE-peer screen-receive diagnostics. Keyed by user id, with
+  // { recv, blackoutTimer, blackoutFired } per active share. The SFU path has no
+  // peers[] entry, so this is its own map (not stored on peers). See
+  // screenStarted / clearScreenRx / checkScreenBlackout below.
+  var screenRx = {};
+  var SCREEN_BLACKOUT_MS = 4000;
 
   // Keep a handle on the chat socket wrapper regardless of page type.
   document.body.addEventListener('htmx:wsOpen', function (e) {
@@ -334,6 +340,7 @@
     updateTileMedia(userId);
   }
   function removeTile(userId) {
+    clearScreenRx(userId); // LC-1129: a leaving peer cancels its blackout check
     var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
     if (t) t.remove();
     updateWaiting();
@@ -957,6 +964,9 @@
 
   function leave() {
     if (!joined) return;
+    // LC-1129: no screen blackout timer outlives the call (the SFU branch below
+    // does not iterate removeTile over remote peers, so clear them all here).
+    Object.keys(screenRx).forEach(clearScreenRx);
     // LC-610: SFU media is owned by huddle_sfu.js; tear it down, then run the
     // shared presence/UI cleanup (the mesh-specific steps below are skipped).
     if (sfu) {
@@ -1063,6 +1073,44 @@
     if (t) t.setAttribute('data-muted', muted ? 'true' : 'false');
   }
 
+  // LC-1129: a REMOTE peer's screen became active. Log that we are receiving it
+  // (once per share), then arm a one-shot blackout check: a few seconds on, if
+  // this viewer is decoding no frames, that is the per-viewer black-out fault.
+  function screenBlackoutMs() {
+    return (window.__lcScreenBlackoutMs != null) ? window.__lcScreenBlackoutMs : SCREEN_BLACKOUT_MS;
+  }
+  function screenStarted(userId) {
+    if (!cfg || userId === cfg.selfId) return;
+    var s = screenRx[userId];
+    if (s && s.recv) return; // already tracking this share - do not repeat
+    s = screenRx[userId] = { recv: true, blackoutTimer: 0, blackoutFired: false };
+    voiceDiag('screen: receiving from peer ' + String(userId).slice(0, 8), 'diag');
+    s.blackoutTimer = setTimeout(function () { checkScreenBlackout(userId); }, screenBlackoutMs());
+  }
+  function checkScreenBlackout(userId) {
+    var s = screenRx[userId];
+    if (!s || s.blackoutFired) return;
+    s.blackoutTimer = 0;
+    var v = tileVideo(userId);
+    if (!v) return;
+    var noDecode = (v.videoWidth === 0 || v.videoHeight === 0);
+    var stream = v.srcObject;
+    var vids = (stream && stream.getVideoTracks) ? stream.getVideoTracks() : [];
+    var trackBad = vids.length === 0 || vids.some(function (tr) {
+      return tr.muted || tr.readyState !== 'live';
+    });
+    if (noDecode || trackBad) {
+      s.blackoutFired = true;
+      voiceDiag('screen blackout: peer ' + String(userId).slice(0, 8) + ' (no frames)', 'error');
+    }
+  }
+  function clearScreenRx(userId) {
+    var s = screenRx[userId];
+    if (!s) return;
+    if (s.blackoutTimer) { clearTimeout(s.blackoutTimer); s.blackoutTimer = 0; }
+    delete screenRx[userId];
+  }
+
   // LC-408: pin/unpin a participant's tile as the screen-share stage (the CSS
   // `:has([data-screen])` grid rule reshapes the layout when any tile is set).
   function applyScreen(userId, sharing) {
@@ -1071,12 +1119,21 @@
     if (!t) return;
     if (sharing) t.setAttribute('data-screen', 'true');
     else t.removeAttribute('data-screen');
+    // LC-1129: receiver diagnostics, only for a REMOTE peer's share.
+    if (cfg && userId !== cfg.selfId) {
+      if (sharing) screenStarted(userId);
+      else clearScreenRx(userId); // share stopped: drop the armed blackout check
+    }
   }
   // Mark our own tile and tell the channel so peers pin our share too.
   function announceScreen(sharing) {
+    var was = selfSharing;
     selfSharing = !!sharing;
     applyScreen(cfg.selfId, selfSharing);
     wsSend({ type: 'voice_screen', room_id: cfg.roomId, sharing: selfSharing });
+    // LC-1129: one line per transition, as the sharer.
+    if (selfSharing && !was) voiceDiag('screen: started sharing', 'diag');
+    else if (!selfSharing && was) voiceDiag('screen: stopped sharing', 'diag');
   }
 
   function setCameraBtn() {
