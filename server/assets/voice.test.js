@@ -176,6 +176,7 @@ function load() {
     sfuCalls,
     tracks,
     fire,
+    win: window,
     voice: window.LetsChatVoice,
     popout: window.LetsChatHuddlePopout,
     join: () => controls['[data-lc-voice-join]'](),
@@ -467,4 +468,56 @@ test('LC-610: the screen echo still nudges a REMOTE peer tile (the self skip is 
   h.event({ 'data-room-id': 7, 'data-kind': 'screen', 'data-user-id': 'u2', 'data-payload': '0' });
 
   assert.equal(tile.getAttribute('data-media'), 'audio', 'the remote peer nudge still fires');
+});
+
+// LC-1129: a REMOTE peer's share logs that we are receiving it, once, over the
+// voice_diag socket frame the admin voice log renders. A healthy tile (frames
+// decoding, track live) produces no blackout error.
+test('LC-1129: a remote peer screen share sends a "receiving" diag and no blackout when healthy', async () => {
+  const h = joined();
+  h.win.__lcScreenBlackoutMs = 5; // keep the one-shot check short so no real 4s timer lingers
+  const grid = h.dock.querySelector('[data-lc-voice-grid]');
+  h.sfuHooks().addTile('u2', 'Bob');
+  const tile = grid.querySelector('[data-lc-voice-tile="u2"]');
+  const video = tile.querySelector('[data-lc-voice-video]');
+  video.videoWidth = 640;
+  video.videoHeight = 480;
+  video.srcObject = { getVideoTracks: () => [{ muted: false, readyState: 'live' }] };
+
+  h.event({ 'data-room-id': 7, 'data-kind': 'screen', 'data-user-id': 'u2', 'data-payload': '1' });
+
+  const diag = h.sent.filter((f) => f.type === 'voice_diag');
+  assert.ok(diag.some((f) => f.detail === 'screen: receiving from peer u2' && f.level === 'diag'),
+    'the receiving line is logged as an informational diag');
+
+  await new Promise((r) => setTimeout(r, 30)); // let the blackout check run
+  assert.equal(h.sent.filter((f) => f.detail === 'screen blackout: peer u2 (no frames)').length, 0,
+    'a healthy tile does not log a blackout');
+});
+
+// LC-1129: the per-viewer black-out signal. A few seconds after a remote share
+// goes active, a tile that decoded no frames logs one error, as kind error.
+test('LC-1129: a remote screen that renders no frames logs a blackout error once', async () => {
+  const h = joined();
+  h.win.__lcScreenBlackoutMs = 5;
+  const grid = h.dock.querySelector('[data-lc-voice-grid]');
+  h.sfuHooks().addTile('u2', 'Bob');
+  const tile = grid.querySelector('[data-lc-voice-tile="u2"]');
+  const video = tile.querySelector('[data-lc-voice-video]');
+
+  h.event({ 'data-room-id': 7, 'data-kind': 'screen', 'data-user-id': 'u2', 'data-payload': '1' });
+  // This viewer decodes nothing (videoWidth/Height stay 0).
+  video.videoWidth = 0;
+  video.videoHeight = 0;
+
+  await new Promise((r) => setTimeout(r, 30));
+  const black = h.sent.filter((f) => f.detail === 'screen blackout: peer u2 (no frames)');
+  assert.equal(black.length, 1, 'exactly one blackout error for the share');
+  assert.equal(black[0].level, 'error', 'logged as an error, not a diag');
+
+  // The share stopping clears the record so a later re-check cannot double-log.
+  h.event({ 'data-room-id': 7, 'data-kind': 'screen', 'data-user-id': 'u2', 'data-payload': '0' });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(h.sent.filter((f) => f.detail === 'screen blackout: peer u2 (no frames)').length, 1,
+    'no second blackout after the share stopped');
 });

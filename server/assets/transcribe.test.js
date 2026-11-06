@@ -123,6 +123,16 @@ function loadRich(opts) {
     );
   }
   const toasts = [];
+  // LC-1129: diagnostics ride window.__lcWS (the shared chat socket); collect the
+  // frames so a test can assert the voice_diag the admin voice log would render.
+  const frames = [];
+  // LC-1129: an optional Web Speech recognizer. When opts.withSR is set, SR is
+  // present so chooseEngine picks the browser engine, and each instance is
+  // captured so a test can fire its onresult / onerror the way the browser does.
+  const recogInstances = [];
+  function FakeSR() { recogInstances.push(this); }
+  FakeSR.prototype.start = function () {};
+  FakeSR.prototype.stop = function () {};
   // A MediaRecorder that records nothing but honours start/stop, so the success
   // path (getUserMedia resolves -> recordClip) runs without a real recorder.
   function FakeMR() {}
@@ -130,12 +140,15 @@ function loadRich(opts) {
   FakeMR.prototype.stop = function () {};
   FakeMR.isTypeSupported = () => false;
   const window = {
-    // No SpeechRecognition: with a server engine configured, chooseEngine picks
-    // 'server' (the path that reaches getUserMedia), so the suppression is what
-    // the assertion turns on rather than an engine-choice accident.
+    // No SpeechRecognition by default: with a server engine configured,
+    // chooseEngine picks 'server' (the path that reaches getUserMedia), so the
+    // suppression is what the assertion turns on rather than an engine-choice
+    // accident. opts.withSR flips this to exercise the browser-engine paths.
+    SpeechRecognition: opts.withSR ? FakeSR : undefined,
     MediaRecorder: FakeMR,
     LetsChatMedia: { audio: () => ({}) },
     __lcSessionRoom: 7,
+    __lcWS: { send: (s) => frames.push(JSON.parse(s)) },
     __lcToast: (kind, msg) => { toasts.push([kind, msg]); },
     __lcNotify: (kind, msg) => { toasts.push([kind, msg]); },
     __lcS: (_k, fb) => fb,
@@ -197,7 +210,7 @@ function loadRich(opts) {
   vm.runInNewContext(src, sandbox);
   const flush = async () => { for (let i = 0; i < 30; i += 1) await Promise.resolve(); };
   const fireDoc = (type, detail) => (docListeners[type] || []).forEach((fn) => fn({ type, detail }));
-  return { fireDoc, flush, gum, toasts, runTimers, captionLog };
+  return { fireDoc, flush, gum, toasts, runTimers, captionLog, frames, recogInstances };
 }
 
 test('LC-859: a late joiner adopting an agent-covered session does not open its own capture', async () => {
@@ -263,4 +276,51 @@ test('LC-866: a mic that stays busy surfaces a toast instead of stopping silentl
   assert.equal(t.toasts.length, 1, 'the failure is surfaced, not swallowed');
   assert.equal(t.toasts[0][0], 'err');
   assert.match(t.toasts[0][1], /transcription/i);
+});
+
+// LC-1129: a browser-engine speech error (the recognizer's cloud is unreachable
+// or the mic is blocked) is logged to the voice_events log as an error frame, in
+// addition to the unchanged server-engine fallback.
+test('LC-1129: a browser speech error sends an error diag', async () => {
+  const t = loadRich({ agentActive: false, withSR: true });
+  await t.flush(); // loadConfig -> sttServer=true
+  t.fireDoc('lc:rtc-session-started', { room: 7 });
+  await t.flush(); // adopt -> browser engine -> recog captured
+  assert.ok(t.recogInstances.length >= 1, 'the browser recognizer started');
+
+  t.recogInstances[0].onerror({ error: 'network' });
+
+  const errs = t.frames.filter((f) => f.type === 'voice_diag' && f.detail === 'transcribe: speech error network');
+  assert.equal(errs.length, 1, 'the speech error is logged once');
+  assert.equal(errs[0].level, 'error', 'logged as an error, not a diag');
+});
+
+// LC-1129: the "talking but not picked up" watchdog. With the browser engine
+// capturing and the mic live, a window with no caption logs exactly one error,
+// and does not re-arm until the next caption arrives.
+test('LC-1129: the silence watchdog fires once while the mic is live, then waits for a caption', async () => {
+  const t = loadRich({ agentActive: false, withSR: true });
+  await t.flush();
+  t.fireDoc('lc:rtc-session-started', { room: 7 });
+  await t.flush(); // browser capture + the silence watchdog armed
+
+  t.runTimers(); // the no-caption window elapses
+  await t.flush();
+  const silence = t.frames.filter((f) => f.detail === 'transcribe: no captions in 60s (mic live)');
+  assert.equal(silence.length, 1, 'one silence error');
+  assert.equal(silence[0].level, 'error');
+
+  // No caption yet, so it must NOT re-arm: another elapse logs nothing more.
+  t.runTimers();
+  await t.flush();
+  assert.equal(t.frames.filter((f) => f.detail === 'transcribe: no captions in 60s (mic live)').length, 1,
+    'a continuously-silent room logs at most one, not a stream');
+
+  // A caption re-arms the watchdog; a later silent window trips it again.
+  t.recogInstances[0].onresult({ resultIndex: 0, results: [] });
+  await t.flush();
+  t.runTimers();
+  await t.flush();
+  assert.equal(t.frames.filter((f) => f.detail === 'transcribe: no captions in 60s (mic live)').length, 2,
+    'after a caption, the next silent window trips it again');
 });
