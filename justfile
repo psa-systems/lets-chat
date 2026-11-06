@@ -18,6 +18,13 @@ dev_image := "ghcr.io/niceguyit/rust-builder-glibc:v1.2.0-rust1.98.1-trixie"
 # does not redundantly cold-recompile them; the container is left to run fmt plus
 # the standalone server test suite (the one step `check` does not cover).
 pre_commit_prepare := "check"
+# LC-1126: the pre-commit hook is the fmt-only leg (common's default
+# hook_layout "pre-push"), and common runs `pre_commit_prepare_fmt` before it,
+# which defaults to "inherit", i.e. the whole `check` above on every commit.
+# Nothing the fmt leg needs is prepared here, so it runs nothing: a commit costs
+# check-tree-ownership plus `cargo fmt --check`, and the full matrix runs once,
+# from `just pre-push`.
+pre_commit_prepare_fmt := ""
 pre_commit_clippy := "false"
 pre_commit_compile := "false"
 # A memory-constrained host sets CARGO_BUILD_JOBS to cap parallel linking (~50
