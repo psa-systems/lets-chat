@@ -235,8 +235,13 @@
      Available to everyone in the call, no feature flag. Built from existing
      Tailwind + design-token utilities (no bespoke lc-chat-* CSS), mirroring the
      LC-1118 diagnostics drawer above. #}
-  <aside id="lc-call-chat" data-lc-call-chat hidden aria-label="{{ "voice-chat-label"|t }}"
-         class="fixed bottom-4 right-4 z-40 flex w-80 max-w-[calc(100vw-2rem)] flex-col rounded-lg border border-border bg-surface-elevated shadow-lg" style="max-height: 70vh;">
+  {# LC-1136: hide via the `hidden` CLASS, not the `hidden` attribute: the aside
+     is `flex`, and the author `.flex { display: flex }` beats the user-agent
+     `[hidden] { display: none }`, so the attribute never hid it (panel showed
+     pre-call and would not close). The `hidden` class is what the rest of the app
+     uses for flex/grid containers. #}
+  <aside id="lc-call-chat" data-lc-call-chat aria-label="{{ "voice-chat-label"|t }}"
+         class="hidden fixed bottom-4 right-4 z-40 flex w-80 max-w-[calc(100vw-2rem)] flex-col rounded-lg border border-border bg-surface-elevated shadow-lg" style="max-height: 70vh;">
     <header data-lc-chat-drag class="flex cursor-move select-none items-center justify-between border-b border-border px-3 py-2">
       <span class="text-sm font-semibold">{{ "voice-chat-label"|t }}</span>
       <button type="button" data-lc-chat-close class="lc-header-action" aria-label="{{ "voice-chat-close"|t }}">
