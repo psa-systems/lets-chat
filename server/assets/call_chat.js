@@ -19,7 +19,10 @@
   function panel() { return document.getElementById('lc-call-chat'); }
   function toggleBtn() { return document.querySelector('[data-lc-chat-toggle]'); }
   function bodyEl() { var p = panel(); return p ? p.querySelector('textarea[name="body"]') : null; }
-  function isOpen() { var p = panel(); return !!p && !p.hasAttribute('hidden'); }
+  // LC-1136: the panel is a `flex` element, so the author `.flex` rule beats the
+  // UA `[hidden]` rule and the `hidden` attribute never hides it. Use the Tailwind
+  // `hidden` CLASS for visibility instead (what the rest of the app uses).
+  function isOpen() { var p = panel(); return !!p && !p.classList.contains('hidden'); }
   function messagesEl() { return document.getElementById('messages'); }
   function setMessagesBottom() { var m = messagesEl(); if (m) m.scrollTop = m.scrollHeight; }
 
@@ -48,7 +51,7 @@
 
   function open() {
     var p = panel(); if (!p) return;
-    p.removeAttribute('hidden');
+    p.classList.remove('hidden');
     restorePos();
     var b = toggleBtn(); if (b) b.setAttribute('aria-pressed', 'true');
     var t = bodyEl(); if (t) t.focus();
@@ -56,7 +59,7 @@
   }
   function close() {
     var p = panel(); if (!p) return;
-    p.setAttribute('hidden', '');
+    p.classList.add('hidden');
     var b = toggleBtn(); if (b) b.setAttribute('aria-pressed', 'false');
   }
 
@@ -84,7 +87,7 @@
     if (!e.target || !e.target.closest) return;
     var handle = e.target.closest('[data-lc-chat-drag]');
     var p = panel();
-    if (!handle || !p || p.hasAttribute('hidden')) return;
+    if (!handle || !p || p.classList.contains('hidden')) return;
     if (e.target.closest('[data-lc-chat-close]')) return; // the close button is not a drag handle
     var r = p.getBoundingClientRect();
     dragging = true; offX = e.clientX - r.left; offY = e.clientY - r.top;
