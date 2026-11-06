@@ -8,6 +8,26 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.10.0] - 2026-11-05
+
+Minor release on top of v0.9.0. Headline: in-call text chat for voice rooms, plus a default-on change for call sound. Read the Changed entry before upgrading.
+
+### Added
+
+- **In-call text chat in voice rooms (LC-1123, LC-1124).** A Chat control in the voice call bar (shown once you join) opens a panel where anyone in the call can send and read messages live during the call, like Google Meet or Zoom. Messages post to the voice room's own message channel and arrive live over the WebSocket; the panel is live-only (it fills with messages sent during the call). The panel is draggable (its position is remembered per browser) and does not clutter the pre-join lobby.
+- **In-call live admin diagnostics drawer (LC-1118).** A feature-flagged, admin-only panel inside a call that streams the per-call voice events (joins, drops, WebRTC errors) live, so an admin can trace a bad call without leaving it for `/admin/voice-log`. Off by default; turn it on under Admin > Feature flags.
+- **ICE route diagnostic on the SFU/LiveKit path (LC-1117).** The selected ICE route (host / srflx / relay) is now reported into the per-call diagnostic log on the SFU path too, not only on the mesh path, so a TURN-carried SFU call is visible to admins.
+
+### Changed
+
+- **Call sound now defaults on (LC-1120).** New accounts default to notification sound on, and a migration flips existing accounts on, so the call sound cues (incoming-call ring, someone-joined cue) are audible by default. If you relied on sound being off by default, note this change; each user can still turn it off in Settings.
+
+### Fixed
+
+- **Call sound cues actually play, and are louder (LC-1120).** The incoming-call ring and the join cue were synthesized on a WebAudio context created inside a WebSocket event with no user gesture, so the browser autoplay policy silently dropped them. The shared audio context is now primed on the first user interaction, and the cues are brighter and louder, so a ring or a peer joining is noticeable.
+- **An expired session on a live call page redirects to sign-in (LC-1119).** When a session expired while a call page was open, the page froze on "Connection lost. Reconnecting..." with a stale roster and transcript and a sign-in panel swapped into it. The server now answers an expired htmx request with a full redirect, and the reconnect loop detects a dead session and navigates to sign-in.
+- **Room-member removal is gated to private rooms (LC-1095).** Removing a member from a room is restricted to private rooms, matching the intended room-type permissions.
+
 ## [v0.9.0] - 2026-11-03
 
 Minor release on top of v0.8.2. Headline: an admin per-call diagnostic log to trace why a call misbehaved. Plus call-UI fixes and one operator-facing container-startup change.
