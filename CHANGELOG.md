@@ -14,9 +14,10 @@ Minor release on top of v0.9.0. Headline: in-call text chat for voice rooms, plu
 
 ### Added
 
-- **In-call text chat in voice rooms (LC-1123, LC-1124).** A Chat control in the voice call bar (shown once you join) opens a panel where anyone in the call can send and read messages live during the call, like Google Meet or Zoom. Messages post to the voice room's own message channel and arrive live over the WebSocket; the panel is live-only (it fills with messages sent during the call). The panel is draggable (its position is remembered per browser) and does not clutter the pre-join lobby.
+- **In-call text chat in voice rooms (LC-1123, LC-1124, LC-1127, LC-1136).** A Chat control in the voice call bar (shown once you join) opens a panel where anyone in the call can send and read messages live during the call, like Google Meet or Zoom. Messages post to the voice room's own message channel and arrive live over the WebSocket; the panel is live-only (it fills with messages sent during the call). The panel is draggable (its position is remembered per browser), hidden by default, and does not clutter the pre-join lobby.
 - **In-call live admin diagnostics drawer (LC-1118).** A feature-flagged, admin-only panel inside a call that streams the per-call voice events (joins, drops, WebRTC errors) live, so an admin can trace a bad call without leaving it for `/admin/voice-log`. Off by default; turn it on under Admin > Feature flags.
 - **ICE route diagnostic on the SFU/LiveKit path (LC-1117).** The selected ICE route (host / srflx / relay) is now reported into the per-call diagnostic log on the SFU path too, not only on the mesh path, so a TURN-carried SFU call is visible to admins.
+- **Transcription and screen-share faults in the voice log (LC-1129).** The per-call diagnostic log (`/admin/voice-log`) now records transcription events (start/stop, speech-recognition errors, segment-upload failures, and a "no captions while the mic is live" signal) and screen-share events, including a per-viewer blackout entry when a shared screen renders black for some participants but not others. Lets an admin trace why transcription did not pick someone up, or why one viewer saw a black screen while others saw it fine.
 
 ### Changed
 
