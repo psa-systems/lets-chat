@@ -2022,6 +2022,9 @@ if (window.__lcSyncSidebarToggles) {
   <script src="/assets/call_sfx.js?v={{ asset_version }}" defer></script>
   <script src="/assets/call.js?v={{ asset_version }}" defer></script>
   <script src="/assets/voice.js?v={{ asset_version }}" defer></script>
+  {# LC-1127: in-call chat drawer controls (voice/page.html markup). External so
+     its delegated listeners survive htmx boosted navigation. #}
+  <script src="/assets/call_chat.js?v={{ asset_version }}" defer></script>
   <script src="/assets/huddle_control.js?v={{ asset_version }}" defer></script>
   <script src="/assets/huddle_popout.js?v={{ asset_version }}" defer></script>
   <script src="/assets/call_reactions.js?v={{ asset_version }}" defer></script>
