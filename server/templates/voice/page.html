@@ -254,104 +254,10 @@
       <button type="submit" class="btn btn-primary btn-sm">{{ "voice-chat-send"|t }}</button>
     </form>
   </aside>
-  <script data-lc-guard="flag">
-  // LC-1123: in-call chat drawer controls. Delegated document listeners (the
-  // controls are in the DOM at load), wired once via a window flag.
-  (function(){
-    if (window.__lcCallChatWired) return;
-    window.__lcCallChatWired = true;
-    function panel(){ return document.getElementById('lc-call-chat'); }
-    function toggleBtn(){ return document.querySelector('[data-lc-chat-toggle]'); }
-    function body(){ var p = panel(); return p ? p.querySelector('textarea[name="body"]') : null; }
-    function isOpen(){ var p = panel(); return p && !p.hasAttribute('hidden'); }
-    function setMessagesBottom(){
-      var m = document.getElementById('messages');
-      if (m) m.scrollTop = m.scrollHeight;
-    }
-    // LC-1124: drag the panel by its header, clamped to the viewport, with the
-    // position remembered per browser. Dragging switches off the Tailwind
-    // bottom/right anchor and drives left/top directly.
-    var POS_KEY = 'lc-call-chat-pos';
-    function clamp(v, lo, hi){ return Math.max(lo, Math.min(v, hi)); }
-    function applyPos(x, y){
-      var p = panel(); if (!p) return;
-      var r = p.getBoundingClientRect();
-      x = clamp(x, 4, Math.max(4, window.innerWidth - r.width - 4));
-      y = clamp(y, 4, Math.max(4, window.innerHeight - r.height - 4));
-      p.style.right = 'auto'; p.style.bottom = 'auto';
-      p.style.left = x + 'px'; p.style.top = y + 'px';
-    }
-    function restorePos(){
-      try {
-        var raw = localStorage.getItem(POS_KEY);
-        if (!raw) return;
-        var pos = JSON.parse(raw);
-        if (pos && isFinite(pos.x) && isFinite(pos.y)) applyPos(pos.x, pos.y);
-      } catch (e) { /* storage blocked / malformed: keep the default anchor */ }
-    }
-    function savePos(x, y){ try { localStorage.setItem(POS_KEY, JSON.stringify({ x: x, y: y })); } catch (e) {} }
-    function open(){
-      var p = panel(); if (!p) return;
-      p.removeAttribute('hidden');
-      restorePos();
-      var b = toggleBtn(); if (b) b.setAttribute('aria-pressed', 'true');
-      var t = body(); if (t) t.focus();
-      setMessagesBottom();
-    }
-    function close(){
-      var p = panel(); if (!p) return;
-      p.setAttribute('hidden', '');
-      var b = toggleBtn(); if (b) b.setAttribute('aria-pressed', 'false');
-    }
-    (function wireDrag(){
-      var dragging = false, offX = 0, offY = 0;
-      document.addEventListener('pointerdown', function(e){
-        var handle = e.target.closest && e.target.closest('[data-lc-chat-drag]');
-        var p = panel();
-        if (!handle || !p || p.hasAttribute('hidden')) return;
-        if (e.target.closest('[data-lc-chat-close]')) return; // the close button is not a drag handle
-        var r = p.getBoundingClientRect();
-        dragging = true; offX = e.clientX - r.left; offY = e.clientY - r.top;
-        try { handle.setPointerCapture(e.pointerId); } catch (err) {}
-        e.preventDefault();
-      });
-      document.addEventListener('pointermove', function(e){
-        if (dragging) applyPos(e.clientX - offX, e.clientY - offY);
-      });
-      document.addEventListener('pointerup', function(){
-        if (!dragging) return;
-        dragging = false;
-        var p = panel(); if (!p) return;
-        var r = p.getBoundingClientRect();
-        savePos(r.left, r.top);
-      });
-    })();
-    // LC-1124: leaving the call hides the toggle (voice.js), so close the drawer
-    // too rather than leaving it stranded in the lobby.
-    document.addEventListener('lc:rtc-session-ended', function(){ close(); });
-    document.addEventListener('click', function(e){
-      if (e.target.closest && e.target.closest('[data-lc-chat-toggle]')) {
-        if (isOpen()) close(); else open();
-        return;
-      }
-      if (e.target.closest && e.target.closest('[data-lc-chat-close]')) { close(); return; }
-    });
-    // Enter submits, Shift+Enter inserts a newline, on the chat body textarea.
-    document.addEventListener('keydown', function(e){
-      if (e.key !== 'Enter' || e.shiftKey) return;
-      var t = e.target;
-      if (!t || t.name !== 'body') return;
-      var form = t.closest('[data-lc-call-chat-form]');
-      if (!form) return;
-      e.preventDefault();
-      form.requestSubmit();
-    });
-    // Keep #messages pinned to the newest message while the chat is open.
-    document.addEventListener('htmx:wsAfterMessage', function(){
-      if (isOpen()) setMessagesBottom();
-    });
-  })();
-  </script>
+  {# LC-1127: the chat drawer controls (toggle, close, drag, Enter-to-send) live
+     in server/assets/call_chat.js now, not an inline script. The inline version
+     did not survive htmx boosted navigation into the voice room, so the Chat
+     button, close, and dragging went dead. #}
 </div>
 {# LC-156: WS room subscription handled declaratively by live.js via the
    data-lc-live-room attribute on the voice root above. #}
