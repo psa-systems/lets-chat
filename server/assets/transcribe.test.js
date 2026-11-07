@@ -324,3 +324,24 @@ test('LC-1129: the silence watchdog fires once while the mic is live, then waits
   assert.equal(t.frames.filter((f) => f.detail === 'transcribe: no captions in 60s (mic live)').length, 2,
     'after a caption, the next silent window trips it again');
 });
+
+// LC-1131: the pure bleed-through gate. A browser Web Speech caption is dropped
+// (not mis-attributed) when the local-mic VAD is active but our own echo-
+// cancelled mic has not shown speech within the window - that caption came from
+// another participant bleeding into the raw mic the Web Speech engine taps
+// (e.g. a Firefox user whose own browser cannot transcribe). Fails open when the
+// VAD is inactive so a surface with no working VAD never silences real speech.
+test('LC-1131: bleedGateDrops matrix', () => {
+  const drops = load().window.LetsChatTranscribe.bleedGateDrops;
+  const now = 100000;
+  // VAD inactive: never drop, whatever the timestamp (fail open).
+  assert.equal(drops(false, 0, now, 3000), false, 'no VAD -> keep');
+  assert.equal(drops(false, now - 999999, now, 3000), false);
+  // VAD active + recent local speech: keep (it is plausibly ours).
+  assert.equal(drops(true, now, now, 3000), false, 'spoke just now -> keep');
+  assert.equal(drops(true, now - 2999, now, 3000), false, 'within window -> keep');
+  assert.equal(drops(true, now - 3000, now, 3000), false, 'edge of window -> keep');
+  // VAD active + stale (or never any) local speech: drop as bleed-through.
+  assert.equal(drops(true, now - 3001, now, 3000), true, 'just past window -> drop');
+  assert.equal(drops(true, 0, now, 3000), true, 'never spoke this session -> drop');
+});
