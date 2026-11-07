@@ -2565,7 +2565,17 @@ pub async fn relay_control_signal(
         refuse("rate_limited");
         return;
     }
-    if !remote_control_allowed(&state.auth, &user.id, &peer_id).await {
+    // LC-953: the pairwise eligibility gate (both verified, neither blocked)
+    // applies ONLY to establishing control - `request`/`grant`. `deny`/`revoke`
+    // must always go through, so an in-flight session can be torn down and its
+    // audit row closed even after the pair's eligibility changes mid-session (a
+    // block lands, or an admin unverifies an email); otherwise a revoke returned
+    // here before the audit-close/relay below, leaving the session open until the
+    // disconnect backstop and the peer never told. Mirrors the huddle path's
+    // guard (relay_huddle_control_signal).
+    if matches!(kind, "request" | "grant")
+        && !remote_control_allowed(&state.auth, &user.id, &peer_id).await
+    {
         // Only a `request` has a waiting requester UI to notify.
         if kind == "request" {
             refuse("not_allowed");

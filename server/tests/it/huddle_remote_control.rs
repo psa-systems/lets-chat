@@ -625,3 +625,64 @@ async fn admins_only_rollout_admits_only_an_admin_controller() {
     );
     assert_eq!(open_session_count(&s.chat, s.room).await, 1);
 }
+
+// LC-953: the 1:1 (DM) relay path. The pairwise eligibility gate (both verified,
+// neither blocked) must apply ONLY to request/grant. A revoke has to close the
+// session and reach the peer even after the pair becomes ineligible mid-session,
+// instead of returning early and leaving the audit row open for the disconnect
+// backstop. Before the fix, relay_control_signal ran remote_control_allowed for
+// every kind, so a revoke here returned before the audit-close/relay.
+#[tokio::test]
+async fn dm_revoke_closes_session_even_after_pair_becomes_ineligible() {
+    let s = setup().await;
+    enable(&s).await;
+
+    // A DM room with alice + bob: the LC-183 1:1 path, not the huddle machine.
+    let dm = db::chat::create_room(&s.chat, "ab-dm", None, "dm", None, None)
+        .await
+        .unwrap();
+    db::chat::add_room_member(&s.chat, dm, &s.alice.id)
+        .await
+        .unwrap();
+    db::chat::add_room_member(&s.chat, dm, &s.bob.id)
+        .await
+        .unwrap();
+
+    let (_ac, mut alice_rx, _) = s.hub.connect(&s.alice.id, &s.alice.username);
+    let (_bc, mut bob_rx, _) = s.hub.connect(&s.bob.id, &s.bob.username);
+
+    // Establish a session: bob requests, alice grants (controller = bob).
+    relay_control_signal(&s.state, &s.bob, "Bob", dm, "request").await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut alice_rx).await, &s.alice.id),
+        vec!["request"]
+    );
+    relay_control_signal(&s.state, &s.alice, "Alice", dm, "grant").await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut bob_rx).await, &s.bob.id),
+        vec!["grant"]
+    );
+    assert_eq!(open_session_count(&s.chat, dm).await, 1);
+
+    // The pair becomes ineligible mid-session: alice's email is unverified.
+    sqlx::query("UPDATE users SET email_verified_at = NULL WHERE id = ?")
+        .bind(&s.alice.id)
+        .execute(&s.state.auth)
+        .await
+        .unwrap();
+
+    // The revoke must STILL reach the peer AND close the session (the LC-953 fix).
+    // (Precondition: alice is now unverified, so the pairwise eligibility gate
+    // that guards request/grant would reject this pair - a revoke must bypass it.)
+    relay_control_signal(&s.state, &s.alice, "Alice", dm, "revoke").await;
+    assert_eq!(
+        control_kinds_to(&drain(&mut bob_rx).await, &s.bob.id),
+        vec!["revoke"],
+        "the peer is told about the revoke even though the pair is now ineligible"
+    );
+    assert_eq!(
+        open_session_count(&s.chat, dm).await,
+        0,
+        "the audit row is closed now, not left open for the disconnect backstop"
+    );
+}
