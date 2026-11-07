@@ -217,6 +217,58 @@ async fn author_gets_echo_even_when_not_subscribed() {
 }
 
 #[tokio::test]
+async fn admin_non_member_gets_own_echo() {
+    // LC-1137: a site admin can post in a room they reach via god-mode but never
+    // joined (dropping into a call late). `broadcast_room_message` fans a
+    // NewMessage out to the room's MEMBERS; the admin is not a member, so their
+    // own connection was skipped and their echo never arrived. Most visible in
+    // the in-call chat, whose composer renders no optimistic placeholder
+    // (hx-swap="none"), so the author saw nothing while every member saw the
+    // message. The author must always receive their own echo.
+    let t = setup().await;
+
+    // david owns a private enclave + private room; alice (the site admin from
+    // `setup`) is a member of NEITHER, so she reaches the room purely through
+    // god-mode.
+    let david_id = db::auth::create_user(&t.state.auth, "david", "h")
+        .await
+        .unwrap();
+    let enclave_id = db::enclave::create_enclave(&t.state.chat, "davids-place", None, &david_id)
+        .await
+        .unwrap();
+    let room_id = db::chat::create_room(
+        &t.state.chat,
+        "secret-voice",
+        None,
+        "private",
+        None,
+        Some(enclave_id),
+    )
+    .await
+    .unwrap();
+    db::chat::add_room_member(&t.state.chat, room_id, &david_id)
+        .await
+        .unwrap();
+
+    let (_alice_conn, mut alice_rx, _) = t.state.hub.connect(&t.alice_id, "alice");
+    let (_david_conn, mut david_rx, _) = t.state.hub.connect(&david_id, "david");
+
+    let status = post_form(&t.app, &t.alice_session, room_id, "body=late+hello").await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // david (a member) receives it - the "my boss can see it immediately" half.
+    let (david_body, _) = next_new_message(&mut david_rx).await;
+    assert_eq!(david_body, "late hello");
+
+    // alice (the author, not a member) must ALSO receive her own echo.
+    let (alice_body, _) = next_new_message(&mut alice_rx).await;
+    assert_eq!(
+        alice_body, "late hello",
+        "the author must receive their own NewMessage echo even when not a room member"
+    );
+}
+
+#[tokio::test]
 async fn post_with_client_id_echoes_it_on_the_broadcast() {
     let t = setup().await;
     let (_conn, mut rx, _) = t.state.hub.connect(&t.alice_id, "alice");
