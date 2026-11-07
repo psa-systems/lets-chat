@@ -87,6 +87,56 @@
   // engine, so we don't keep retrying the dead browser engine. Reset on stop.
   var serverFallback = false;
 
+  // LC-1129: client transcription diagnostics onto the same voice_events log the
+  // per-call voice log renders (/admin/voice-log). transcribe.js POSTs segments
+  // over fetch, but a diag rides the shared chat socket (window.__lcWS) like
+  // voice.js's voiceDiag - fire-and-forget, length-bounded, emitted once per
+  // event (the server rate-limits per minute). `level` is 'diag' for an
+  // informational line, or 'error' (the server also defaults an absent level to
+  // error). The room is the active session room; no room or no socket -> no-op.
+  function callDiag(detail, level, roomOverride) {
+    var ws = window.__lcWS;
+    if (!ws || !detail) return;
+    var room = (roomOverride != null) ? roomOverride : window.__lcSessionRoom;
+    if (room == null) return;
+    try {
+      var msg = { type: 'voice_diag', room_id: Number(room), detail: String(detail).slice(0, 200) };
+      if (level) msg.level = level;
+      ws.send(JSON.stringify(msg));
+    } catch (e) { /* socket reconnecting */ }
+  }
+
+  // LC-1129: "talking but not picked up" watchdog for the browser (Web Speech)
+  // engine. While capturing with a LIVE mic, if no caption (recog.onresult) has
+  // arrived for the window, emit ONE error; re-arm only once the next caption
+  // lands, so a continuously-silent room logs a single line, not a stream. The
+  // server engine does not use this (its captions come back as server-rendered
+  // OOB swaps, and its clip path has its own upload-failure signals).
+  var SILENCE_MS = 60000;
+  var silenceTimer = null;
+  var silenceFired = false;
+  function silenceMs() {
+    return (window.__lcSilenceMs != null) ? window.__lcSilenceMs : SILENCE_MS;
+  }
+  function clearSilenceWatchdog() {
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+  }
+  function armSilenceWatchdog() {
+    clearSilenceWatchdog();
+    if (!capturing || micMuted) return;
+    silenceTimer = setTimeout(function () {
+      silenceTimer = null;
+      if (!capturing || micMuted || silenceFired) return;
+      silenceFired = true;
+      callDiag('transcribe: no captions in 60s (mic live)', 'error');
+    }, silenceMs());
+  }
+  // A caption arrived: clear any fired latch and re-arm for the next gap.
+  function noteCaption() {
+    silenceFired = false;
+    armSilenceWatchdog();
+  }
+
   // LC-843: per-browser engine preference. 'fast' = browser engine, 'accurate' =
   // server engine, null = automatic (today's behavior: fast when SR exists).
   // localStorage rather than a server-side setting because availability is
@@ -264,6 +314,7 @@
       // A dropped segment POST loses that piece of the transcript; log it so
       // the gap is explainable rather than silent.
       try { console.warn('lets-chat: transcript segment POST failed', e); } catch (e2) {}
+      callDiag('transcribe: segment upload failed', 'error'); // LC-1129
     });
   }
 
@@ -293,10 +344,13 @@
     if (micMuted) return;
     var server = useServerEngine();
     dbg('startLocalCapture: acquiring mic', server ? 'server-engine' : 'browser-engine');
+    callDiag('transcribe: started (' + (server ? 'server' : 'browser') + ')', 'diag'); // LC-1129
     if (server) startServerCapture(); else startBrowserCapture();
   }
   function stopLocalCapture() {
     dbg('stopLocalCapture: releasing mic', useServerEngine() ? 'server-engine' : 'browser-engine');
+    clearSilenceWatchdog();  // LC-1129: no watchdog outlives the capture
+    silenceFired = false;
     stopBrowserCapture();
     stopServerCapture();
     capturing = false;
@@ -313,6 +367,7 @@
     recog.interimResults = false;
     recog.lang = navigator.language || 'en-US';
     recog.onresult = function (ev) {
+      noteCaption(); // LC-1129: captions are flowing - reset the silence watchdog
       for (var i = ev.resultIndex; i < ev.results.length; i++) {
         var r = ev.results[i];
         if (r.isFinal) {
@@ -328,6 +383,13 @@
     // server engine when the operator has one, rather than capture nothing.
     recog.onerror = function (ev) {
       var err = ev && ev.error;
+      // LC-1129: surface the speech errors that explain missing captions (the
+      // recognizer's cloud is unreachable/disabled, or the mic is blocked). This
+      // is in addition to - and does not change - the server-engine fallback.
+      if (err === 'network' || err === 'service-not-allowed' ||
+          err === 'not-allowed' || err === 'audio-capture') {
+        callDiag('transcribe: speech error ' + err, 'error');
+      }
       if ((err === 'network' || err === 'service-not-allowed') && sttServer && MR && !serverFallback) {
         serverFallback = true;
         dbg('browser engine error (' + err + '); falling back to server engine');
@@ -340,6 +402,11 @@
     };
     capturing = true;
     try { recog.start(); } catch (e) { capturing = false; }
+    // LC-1129: arm the "talking but not picked up" watchdog for this capture. A
+    // recognizer restart (onend) deliberately does NOT reset it - only a real
+    // caption does - so a silent restart loop still trips once.
+    silenceFired = false;
+    armSilenceWatchdog();
   }
   function stopBrowserCapture() {
     if (recog) {
@@ -469,6 +536,9 @@
       var msg = (toggleEl && toggleEl.getAttribute('data-lc-unsupported')) ||
         window.__lcS('sttUnsupported', 'Live transcription is not supported in this browser.');
       window.__lcNotify('err', msg);
+      // LC-1129: record why this client produced no captions at all. `room` is
+      // resolved above, so this lands even when __lcSessionRoom is not yet set.
+      callDiag('transcribe: unsupported (no browser STT, no server)', 'error', room);
       return;
     }
     // LC-396: drive OUR OWN UI directly from the response (it returns
