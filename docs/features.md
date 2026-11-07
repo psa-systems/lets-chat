@@ -27,6 +27,8 @@ surfaces is in [configuration.md](configuration.md).
 - Per-room stage mode: speaker roles and request-to-speak, with audio carried by a self-hosted LiveKit SFU when `LETS_CHAT_LIVEKIT_*` is configured (the mesh path caps at a handful of peers)
 - Call transcription, either in the speaker's browser (Web Speech) or server-side against a transcription endpoint you run
 - Consent-gated remote control: during a 1:1 call, request keyboard/mouse control of a peer's screen (desktop app; verified-email gated, revocable at any time). Off by default; an admin must enable it at `/admin/remote-control` before users can request control, and can review the consent history on a dedicated audit page.
+- In-call text chat: a Chat control in the voice call bar opens a draggable panel where anyone in the call can send and read messages live during the call, posted to the voice room's own message channel
+- Screen-share alongside the audio/video stream
 - Active voice rooms show a live in-call participant count in the sidebar
 
 ## Spaces and organization
@@ -75,7 +77,7 @@ Every one of these is off until an operator points it at an endpoint they run, a
 ## Administration
 
 - Admin panel: user management, room management, settings
-- Feature flags: Off / Admins only / On rollout control for AI surfaces, remote control, and server-side transcription, at `/admin/feature-flags`
+- Feature flags: Off / Admins only / On rollout control for AI surfaces, remote control, server-side transcription, and in-call diagnostics (admin-only), at `/admin/feature-flags`
 - Analytics dashboard: DAU/MAU, messages, rooms, signups, retention
 - Branding: custom logo, colors, login text, and favicon
 - Anti-spam: rate limits, link filter, and honeypot
