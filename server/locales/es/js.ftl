@@ -31,6 +31,9 @@ js-call-no-mic = No se pudo acceder al micrófono.
 # LC-764: se muestra cuando un cambio de silencio no logra cambiar la pista del microfono.
 js-call-mic-toggle-failed = No se pudo cambiar tu micrófono. Intenta silenciar y activar de nuevo.
 js-call-no-screenshare = Tu navegador no admite compartir pantalla.
+# LC-1138: se muestra cuando una pantalla compartida sigue en negro para este
+# espectador incluso tras los intentos de recuperacion automaticos.
+js-call-screen-blackout = Una pantalla compartida aparece en negro para ti. Sal y vuelve a entrar a la llamada para solucionarlo.
 js-call-a-contact = Un contacto
 js-call-request-control = Solicitar control
 js-call-requesting = Solicitando...
