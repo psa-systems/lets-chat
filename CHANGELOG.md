@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Changed
+
+- **Speaking participants now show a live mic-level ring instead of a canned equalizer (LC-1134).** Each call tile pulses a green ring around the avatar (and the tile border) that grows and brightens with the speaker's actual microphone level, and sits flat when they are muted or silent, so you can see who is talking, how loud, and that your own mic works. This replaces the old three-bar equalizer in the name pill, which looked identical to the connection-quality signal glyph next to it. Honors `prefers-reduced-motion` (a steady ring, no pulsing).
+
 ### Fixed
 
 - **In-call chat shows the author's own message when they are not a room member (LC-1137).** A site admin can open and post in a call via god-mode in a room they never joined (e.g. dropping into a call late). The in-call chat delivered their message to every room member but not back to the author, so the sender saw nothing from their own end while everyone else saw it immediately. The author now always receives their own message, member or not.
