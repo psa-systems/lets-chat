@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Fixed
+
+- **Late-join screen blackouts now self-heal instead of needing a page reload (LC-1138).** When you join a call where someone is already sharing their screen and the share renders black for you (frames never arrive), the client now automatically recovers the affected peer connection: first an ICE restart, then a scoped rebuild of just that one connection, before falling back to a prompt to rejoin. The per-call voice log (`/admin/voice-log`) also records why a blackout happened (decoded/received frame counts and the ICE route: host/srflx/relay) and logs when a screen recovers, so the blackout entry is diagnostic rather than just a flag. Mesh path only; the SFU path keeps its own media handling.
+
 ## [v0.10.0] - 2026-11-05
 
 Minor release on top of v0.9.0. Headline: in-call text chat for voice rooms, plus a default-on change for call sound. Read the Changed entry before upgrading.

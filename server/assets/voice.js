@@ -60,6 +60,10 @@
   // screenStarted / clearScreenRx / checkScreenBlackout below.
   var screenRx = {};
   var SCREEN_BLACKOUT_MS = 4000;
+  // LC-1138: after a recovery attempt, wait a little longer before re-checking -
+  // an ICE restart re-gathers candidates and a peer-connection rebuild has to
+  // re-offer/answer, so frames take a few seconds to resume.
+  var SCREEN_RECOVER_WAIT_MS = 6000;
 
   // Keep a handle on the chat socket wrapper regardless of page type.
   document.body.addEventListener('htmx:wsOpen', function (e) {
@@ -769,6 +773,43 @@
     removeTile(userId);
   }
 
+  // LC-1138: tear down and rebuild one peer's RTCPeerConnection WITHOUT removing
+  // its tile or peer record (unlike removePeer). Used by the screen-blackout
+  // stage-2 recovery to reconnect a single pair with fresh ICE, the scoped
+  // equivalent of a page reload. `iAmOfferer` picks who re-initiates: the side
+  // that asked to renegotiate offers, the other answers lazily from that offer.
+  function resetPeerConnection(userId, iAmOfferer) {
+    var p = peers[userId];
+    if (!p) return;
+    if (p.pc) {
+      p.pc.onicecandidate = p.pc.ontrack = p.pc.onnegotiationneeded = p.pc.onconnectionstatechange = null;
+      try { p.pc.close(); } catch (e) {}
+      p.pc = null;
+    }
+    p.makingOffer = false;
+    p.ignoreOffer = false;
+    p.polite = !iAmOfferer;
+    p.pending = [];
+    p.diagRoute = false;
+    p.diagFailed = false;
+    if (iAmOfferer) {
+      makePc(userId);
+      addLocalTracks(p.pc); // -> negotiationneeded -> offer
+    }
+    // else: the pc is rebuilt lazily from the incoming offer in onOffer.
+  }
+
+  // LC-1138: a peer whose screen we see as black asked us to rebuild our shared
+  // connection. Reset our side as the ANSWERER (they offer) and keep the tile;
+  // our addLocalTracks on their fresh offer re-publishes the screen track if we
+  // are still sharing.
+  function onRenegotiate(userId, name) {
+    var p = peers[userId];
+    if (!p) return; // not connected to this peer: nothing to rebuild
+    if (name && !p.name) p.name = name;
+    resetPeerConnection(userId, false);
+  }
+
   function onOffer(userId, name, sdp) {
     var p = peers[userId];
     if (!p) { addPeer(userId, name, false); p = peers[userId]; }
@@ -1083,26 +1124,129 @@
     if (!cfg || userId === cfg.selfId) return;
     var s = screenRx[userId];
     if (s && s.recv) return; // already tracking this share - do not repeat
-    s = screenRx[userId] = { recv: true, blackoutTimer: 0, blackoutFired: false };
+    // LC-1138: `stage` drives the auto-heal ladder (0 = none yet, 1 = ICE
+    // restart tried, 2 = peer-connection rebuild tried); `done` stops the
+    // one-shot checks once the share is healthy, recovered, or given up on.
+    s = screenRx[userId] = { recv: true, blackoutTimer: 0, stage: 0, done: false };
     voiceDiag('screen: receiving from peer ' + String(userId).slice(0, 8), 'diag');
     s.blackoutTimer = setTimeout(function () { checkScreenBlackout(userId); }, screenBlackoutMs());
   }
+  // LC-1138: is this peer's screen tile currently rendering no frames? Mirrors
+  // the original LC-1129 test: zero decoded dimensions, or no live/unmuted
+  // video track backing the tile.
+  function screenTileBlack(userId) {
+    var v = tileVideo(userId);
+    if (!v) return false; // tile gone (peer left / share stopped): not a fault
+    // Decoding real frames (non-zero dimensions) is the ground truth for "not
+    // black"; a wedged media path leaves videoWidth/Height at 0.
+    return !(v.videoWidth > 0 && v.videoHeight > 0);
+  }
+  // LC-1138: inbound-video frame counters + selected ICE route for a peer, so a
+  // blackout row says WHY (e.g. "frames 0/0 via host"), not just "no frames".
+  // Resolves to null if stats are unavailable.
+  function screenRxStats(userId) {
+    var p = peers[userId];
+    if (!p || !p.pc || !p.pc.getStats) return Promise.resolve(null);
+    return p.pc.getStats().then(function (stats) {
+      var decoded = null, received = null, localId = null, localType = {};
+      stats.forEach(function (r) {
+        if (r.type === 'inbound-rtp' && r.kind === 'video') {
+          if (typeof r.framesDecoded === 'number') decoded = r.framesDecoded;
+          if (typeof r.framesReceived === 'number') received = r.framesReceived;
+        }
+        if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || r.selected)) {
+          localId = r.localCandidateId;
+        }
+        if (r.type === 'local-candidate') localType[r.id] = r.candidateType;
+      });
+      return { decoded: decoded, received: received, route: (localId && localType[localId]) || null };
+    }).catch(function () { return null; });
+  }
+  function screenStatsLabel(st) {
+    if (!st) return 'no stats';
+    var d = st.decoded == null ? '?' : st.decoded;
+    var r = st.received == null ? '?' : st.received;
+    return 'frames ' + d + '/' + r + (st.route ? ' via ' + st.route : '');
+  }
   function checkScreenBlackout(userId) {
     var s = screenRx[userId];
-    if (!s || s.blackoutFired) return;
+    if (!s || s.done) return;
     s.blackoutTimer = 0;
-    var v = tileVideo(userId);
-    if (!v) return;
-    var noDecode = (v.videoWidth === 0 || v.videoHeight === 0);
-    var stream = v.srcObject;
-    var vids = (stream && stream.getVideoTracks) ? stream.getVideoTracks() : [];
-    var trackBad = vids.length === 0 || vids.some(function (tr) {
-      return tr.muted || tr.readyState !== 'live';
-    });
-    if (noDecode || trackBad) {
-      s.blackoutFired = true;
-      voiceDiag('screen blackout: peer ' + String(userId).slice(0, 8) + ' (no frames)', 'error');
+    if (!tileVideo(userId)) { s.done = true; return; } // tile gone
+    if (!screenTileBlack(userId)) {
+      // Frames are flowing. If this followed a recovery attempt, say so.
+      if (s.stage > 0) {
+        voiceDiag('screen recovered: peer ' + String(userId).slice(0, 8) + ' after recovery', 'diag');
+      }
+      s.done = true;
+      return;
     }
+    // Still black. Capture why, then climb the recovery ladder.
+    screenRxStats(userId).then(function (st) {
+      if (!s || s.done || !screenRx[userId]) return;
+      var why = screenStatsLabel(st);
+      var short = String(userId).slice(0, 8);
+      // The auto-heal ladder is mesh-only: it acts on a peer RTCPeerConnection.
+      // The SFU path (no peers[] entry) owns its own media in huddle_sfu.js, so
+      // there we keep the original LC-1129 behavior - one enriched blackout row,
+      // no recovery.
+      var canRecover = !sfu && peers[userId] && peers[userId].pc;
+      if (!canRecover) {
+        voiceDiag('screen blackout: peer ' + short + ' (no frames; ' + why + ')', 'error');
+        s.done = true;
+        return;
+      }
+      if (s.stage === 0) {
+        s.stage = 1;
+        voiceDiag('screen blackout: peer ' + short + ' (no frames; ' + why + ') - recovering via ICE restart', 'error');
+        recoverScreenIceRestart(userId);
+        s.blackoutTimer = setTimeout(function () { checkScreenBlackout(userId); }, SCREEN_RECOVER_WAIT_MS);
+      } else if (s.stage === 1) {
+        s.stage = 2;
+        voiceDiag('screen blackout: peer ' + short + ' (still black; ' + why + ') - rebuilding peer connection', 'error');
+        recoverScreenRebuild(userId);
+        s.blackoutTimer = setTimeout(function () { checkScreenBlackout(userId); }, SCREEN_RECOVER_WAIT_MS);
+      } else {
+        voiceDiag('screen blackout: peer ' + short + ' persists after recovery (' + why + ')', 'error');
+        s.done = true;
+        window.__lcNotify('err', window.__lcS('callScreenBlackout',
+          "A shared screen is black for you. Leave and rejoin the call to fix it."));
+      }
+    });
+  }
+  // LC-1138: stage 1 - restart ICE on the viewer<->sharer connection. Re-gathers
+  // candidates and renegotiates through the existing offer/answer relay (no new
+  // signal), which clears a wedged media path (e.g. a dead host-candidate pair).
+  function recoverScreenIceRestart(userId) {
+    var p = peers[userId];
+    if (!p || !p.pc) return;
+    p.diagRoute = false; // let the recovered route re-report
+    try {
+      if (typeof p.pc.restartIce === 'function') {
+        p.pc.restartIce(); // -> onnegotiationneeded -> fresh offer
+        return;
+      }
+    } catch (e) { /* fall through to the explicit offer */ }
+    // Older engines without restartIce(): force an ICE-restart offer directly.
+    try {
+      p.makingOffer = true;
+      p.pc.createOffer({ iceRestart: true })
+        .then(function (o) { return p.pc.setLocalDescription(o); })
+        .then(function () { voiceSend('offer', userId, JSON.stringify(p.pc.localDescription)); })
+        .catch(function (e) { console.warn('voice: screen ICE restart failed', e); })
+        .finally(function () { p.makingOffer = false; });
+    } catch (e) { console.warn('voice: screen ICE restart threw', e); }
+  }
+  // LC-1138: stage 2 - rebuild just this one peer connection (the scoped
+  // equivalent of a page reload for this pair). We tell the sharer to reset the
+  // same peer via a `renegotiate` signal, then both sides tear down and rebuild
+  // their RTCPeerConnection with deterministic roles (the viewer offers), while
+  // KEEPING the tile. The sharer re-adds its screen track on the fresh offer, so
+  // the media path starts over with new ICE.
+  function recoverScreenRebuild(userId) {
+    if (!peers[userId]) return;
+    voiceSend('renegotiate', userId, null);
+    resetPeerConnection(userId, true); // viewer initiates -> offerer
   }
   function clearScreenRx(userId) {
     var s = screenRx[userId];
@@ -1485,6 +1629,7 @@
     if (kind === 'offer') onOffer(userId, username, payload);
     else if (kind === 'answer') onAnswer(userId, payload);
     else if (kind === 'ice') onIce(userId, payload);
+    else if (kind === 'renegotiate') onRenegotiate(userId, username); // LC-1138
   }
 
   // LC-616: the drain loop is shared with call.js (rtc_common.js).
