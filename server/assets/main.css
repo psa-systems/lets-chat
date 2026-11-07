@@ -4272,7 +4272,12 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
    the later :has([data-screen]) stage rule still wins while presenting. */
 .lc-voice-grid--page {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
-    align-content: center;
+    /* LC-1132: `safe center` keeps the rows centered while they fit, but falls
+       back to top-anchored once the tiles are taller than the stage (a short or
+       narrow window, few large tiles). Plain `center` centered the overflow, so
+       the first row's top was clipped behind the control bar and could not be
+       scrolled to - it read as the tiles overlapping the controls. */
+    align-content: safe center;
 }
 .lc-voice-tile {
     position: relative;
