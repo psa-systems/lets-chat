@@ -217,7 +217,12 @@ const CALL_SIGNAL_KINDS: &[&str] = &[
 ];
 
 /// Recognized `kind` discriminators for a voice-channel mesh signal.
-const VOICE_SIGNAL_KINDS: &[&str] = &["offer", "answer", "ice"];
+/// LC-1138: `renegotiate` is an ephemeral, payload-less request from a viewer
+/// whose screen-share tile is black to the sharer, asking it to tear down and
+/// rebuild just that peer connection (the scoped screen-blackout recovery). It
+/// is relayed to the target like the SDP signals and is never recorded as a
+/// voice_event (it carries no diagnostic of its own).
+const VOICE_SIGNAL_KINDS: &[&str] = &["offer", "answer", "ice", "renegotiate"];
 
 /// LC-183: recognized `kind`s for the remote-control consent handshake.
 const REMOTE_CONTROL_KINDS: &[&str] = &["request", "grant", "deny", "revoke"];

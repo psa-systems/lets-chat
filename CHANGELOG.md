@@ -11,6 +11,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 ### Fixed
 
 - **In-call chat shows the author's own message when they are not a room member (LC-1137).** A site admin can open and post in a call via god-mode in a room they never joined (e.g. dropping into a call late). The in-call chat delivered their message to every room member but not back to the author, so the sender saw nothing from their own end while everyone else saw it immediately. The author now always receives their own message, member or not.
+- **Late-join screen blackouts now self-heal instead of needing a page reload (LC-1138).** When you join a call where someone is already sharing their screen and the share renders black for you (frames never arrive), the client now automatically recovers the affected peer connection: first an ICE restart, then a scoped rebuild of just that one connection, before falling back to a prompt to rejoin. The per-call voice log (`/admin/voice-log`) also records why a blackout happened (decoded/received frame counts and the ICE route: host/srflx/relay) and logs when a screen recovers, so the blackout entry is diagnostic rather than just a flag. Mesh path only; the SFU path keeps its own media handling.
 
 ## [v0.10.0] - 2026-11-05
 
