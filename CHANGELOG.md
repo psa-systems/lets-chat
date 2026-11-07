@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Fixed
+
+- **In-call chat shows the author's own message when they are not a room member (LC-1137).** A site admin can open and post in a call via god-mode in a room they never joined (e.g. dropping into a call late). The in-call chat delivered their message to every room member but not back to the author, so the sender saw nothing from their own end while everyone else saw it immediately. The author now always receives their own message, member or not.
+
 ## [v0.10.0] - 2026-11-05
 
 Minor release on top of v0.9.0. Headline: in-call text chat for voice rooms, plus a default-on change for call sound. Read the Changed entry before upgrading.
