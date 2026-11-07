@@ -8,10 +8,17 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Changed
+
+- **Speaking participants now show a live mic-level ring instead of a canned equalizer (LC-1134).** Each call tile pulses a green ring around the avatar (and the tile border) that grows and brightens with the speaker's actual microphone level, and sits flat when they are muted or silent, so you can see who is talking, how loud, and that your own mic works. This replaces the old three-bar equalizer in the name pill, which looked identical to the connection-quality signal glyph next to it. Honors `prefers-reduced-motion` (a steady ring, no pulsing).
+
 ### Fixed
 
 - **In-call chat shows the author's own message when they are not a room member (LC-1137).** A site admin can open and post in a call via god-mode in a room they never joined (e.g. dropping into a call late). The in-call chat delivered their message to every room member but not back to the author, so the sender saw nothing from their own end while everyone else saw it immediately. The author now always receives their own message, member or not.
 - **Late-join screen blackouts now self-heal instead of needing a page reload (LC-1138).** When you join a call where someone is already sharing their screen and the share renders black for you (frames never arrive), the client now automatically recovers the affected peer connection: first an ICE restart, then a scoped rebuild of just that one connection, before falling back to a prompt to rejoin. The per-call voice log (`/admin/voice-log`) also records why a blackout happened (decoded/received frame counts and the ICE route: host/srflx/relay) and logs when a screen recovers, so the blackout entry is diagnostic rather than just a flag. Mesh path only; the SFU path keeps its own media handling.
+- **Call captions are no longer mis-attributed to the wrong speaker from mic bleed (LC-1131).** The browser speech-to-text engine listens to a raw microphone that also picks up other participants through your speakers, so another person's words (especially a Firefox/Safari user, whose browser cannot transcribe their own voice) could be transcribed and attributed to you. A caption is now dropped when your own echo-cancelled microphone showed no speech while it was produced, so bleed-through no longer lands under the wrong name. This does not transcribe a non-Chrome participant's own voice (that needs server-side STT); it stops the wrong-speaker lines.
+- **A 1:1 screen-control session can always be revoked, even after eligibility changes (LC-953).** In a direct-message call, if the two people became ineligible to share control mid-session (one blocked the other, or an admin unverified an email), a Revoke was silently dropped: the session stayed open and the other person was never told, until the connection-drop backstop eventually cleaned it up. Revoke and deny now always go through; only starting control (request/grant) is gated by eligibility.
+- **Call tiles no longer hide behind the controls in a short or narrow window (LC-1132).** On the full voice page the participant tiles were centered in the stage, so when the tiles were taller than the available space (a short window, or a couple of large tiles) the top row was pushed up under the control bar and could not be scrolled back into view. The grid now anchors to the top once the tiles overflow (while still centering them when they fit), so every tile stays reachable at any window size down to phone width.
 
 ## [v0.10.0] - 2026-11-05
 

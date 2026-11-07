@@ -4272,7 +4272,12 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
    the later :has([data-screen]) stage rule still wins while presenting. */
 .lc-voice-grid--page {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
-    align-content: center;
+    /* LC-1132: `safe center` keeps the rows centered while they fit, but falls
+       back to top-anchored once the tiles are taller than the stage (a short or
+       narrow window, few large tiles). Plain `center` centered the overflow, so
+       the first row's top was clipped behind the control bar and could not be
+       scrolled to - it read as the tiles overlapping the controls. */
+    align-content: safe center;
 }
 .lc-voice-tile {
     position: relative;
@@ -4282,37 +4287,24 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     border: 2px solid transparent;
     aspect-ratio: 16 / 9;
     min-height: 140px;
+    /* LC-1134: live mic level for this tile (0..1), set by voice.js pollSpeaking.
+       Drives the speaking glow + avatar ring; 0 when muted or silent. */
+    --lc-level: 0;
 }
 /* On the page gallery a tile scales with its column, so the 140px floor (which
    forces the narrow single column to overflow) does not apply. */
 .lc-voice-grid--page .lc-voice-tile { min-height: 0; }
-/* active-speaker highlight (voice.js toggles data-speaking via an analyser) */
+/* active-speaker highlight (voice.js toggles data-speaking via an analyser).
+   LC-1134: the ring now PULSES with the live mic level (--lc-level): a speaking
+   tile keeps the solid green border, and its outer glow grows with volume, so
+   the tile visibly reacts to how loud the speaker is and sits flat when silent.
+   This replaces the old name-pill equalizer, which looked identical to the
+   connection-quality signal glyph beside it. */
 .lc-voice-tile[data-speaking="true"] {
     border-color: var(--success);
-    box-shadow: 0 0 0 3px var(--success-surface);
+    box-shadow: 0 0 0 calc(3px + var(--lc-level) * 5px) var(--success-surface);
+    transition: box-shadow 120ms linear;
 }
-/* LC-416: animated equalizer in the name pill, the same active-speaker cue on
-   every tile (the lone bars from the reference, made consistent). Shown only
-   while the tile is speaking; the three bars bob out of phase. */
-.lc-voice-speaking {
-    display: none;
-    align-items: flex-end;
-    gap: 2px;
-    height: 0.8125rem;
-    flex: none;
-}
-.lc-voice-tile[data-speaking="true"] .lc-voice-speaking { display: inline-flex; }
-.lc-voice-speaking i {
-    display: block;
-    width: 3px;
-    height: 40%;
-    border-radius: 1px;
-    background: var(--success);
-    animation: lc-eq 0.9s ease-in-out infinite;
-}
-.lc-voice-speaking i:nth-child(2) { animation-delay: 0.15s; }
-.lc-voice-speaking i:nth-child(3) { animation-delay: 0.3s; }
-@keyframes lc-eq { 0%, 100% { height: 30%; } 50% { height: 100%; } }
 .lc-voice-tile video {
     position: absolute;
     inset: 0;
@@ -4355,6 +4347,13 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     width: 5rem;
     border-radius: 9999px;
     object-fit: cover;
+    /* LC-1134: live mic-level ring. --lc-level (0..1 from voice.js, inherited
+       from the tile, 0 by default) scales the ring radius + opacity, so it grows
+       with volume and vanishes when silent/muted. */
+    box-shadow:
+        0 0 0 calc(var(--lc-level, 0) * 6px) color-mix(in srgb, var(--success) calc(var(--lc-level, 0) * 90%), transparent),
+        0 0 calc(var(--lc-level, 0) * 18px) calc(var(--lc-level, 0) * 5px) color-mix(in srgb, var(--success) calc(var(--lc-level, 0) * 70%), transparent);
+    transition: box-shadow 120ms linear;
 }
 .lc-voice-name {
     position: absolute;
@@ -5252,9 +5251,16 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
     50% { opacity: 0.3; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .lc-rec-core, .lc-transcript-rec, .lc-voice-speaking i,
+    .lc-rec-core, .lc-transcript-rec,
     .lc-voice-tile[data-quality="reconnecting"] .lc-voice-quality { animation: none; }
     .lc-transcript, #main { transition: none; }
+    /* LC-1134: no live pulsing for reduced-motion; a speaking tile shows a plain
+       steady green ring and the avatar glow is dropped. */
+    .lc-voice-tile[data-speaking="true"] {
+        box-shadow: 0 0 0 3px var(--success-surface);
+        transition: none;
+    }
+    .lc-voice-avatar { box-shadow: none; transition: none; }
 }
 
 /* ---- LC-409: mobile / responsive call pass ----------------------------- */

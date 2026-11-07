@@ -199,12 +199,10 @@
     quality.setAttribute('data-lc-voice-quality', '');
     quality.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="2" y="12" width="3" height="6" rx="1"/><rect x="8.5" y="8" width="3" height="10" rx="1"/><rect x="15" y="3" width="3" height="15" rx="1"/></svg>';
     name.appendChild(quality);
-    // LC-416: animated active-speaker equalizer (CSS shows it on data-speaking).
-    var speaking = document.createElement('span');
-    speaking.className = 'lc-voice-speaking';
-    speaking.setAttribute('aria-hidden', 'true');
-    speaking.innerHTML = '<i></i><i></i><i></i>';
-    name.appendChild(speaking);
+    // LC-1134: the active-speaker cue is a live mic-level ring on the tile +
+    // avatar (voice.js drives --lc-level from the analyser), not an equalizer in
+    // the name pill - the old three-bar equalizer looked identical to the
+    // connection-quality signal glyph beside it. See pollSpeaking + main.css.
     var nameText = document.createElement('span');
     nameText.className = 'lc-voice-name-text';
     nameText.textContent = label;
@@ -527,18 +525,40 @@
       var isSelf = cfg && tile.getAttribute('data-lc-voice-tile') === cfg.selfId;
       var v = tile.querySelector('[data-lc-voice-video]');
       var stream = isSelf ? localStream : (v && v.srcObject);
-      var speaking = false;
-      if (stream && tile.getAttribute('data-muted') !== 'true') speaking = levelOf(stream) > 18;
+      // LC-1134: drive a live mic-level ring. levelOf is a 0..255 average
+      // magnitude; map it to a 0..1 intensity (`--lc-level`) with a small floor
+      // so room noise stays flat and normal speech fills the ring well below max.
+      // Muted or silent => 0 => the ring/glow collapses flat.
+      var lvl = 0;
+      if (stream && tile.getAttribute('data-muted') !== 'true') lvl = levelOf(stream);
+      var speaking = lvl > 18;
+      var norm = Math.max(0, Math.min(1, (lvl - 12) / 60));
+      tile.style.setProperty('--lc-level', speaking ? norm.toFixed(3) : '0');
       tile.setAttribute('data-speaking', speaking ? 'true' : 'false');
+      // LC-1131: stamp the last time OUR OWN (echo-cancelled) mic showed speech.
+      // transcribe.js gates a browser Web Speech caption on this: the Web Speech
+      // engine taps a raw mic that also hears other participants through the
+      // speakers, so a caption produced while this value is stale came from that
+      // bleed-through (e.g. a Firefox user whose own browser cannot transcribe)
+      // and would otherwise be mis-attributed to us. localStream carries the
+      // echoCancellation constraint, so its level reflects us, not the bleed.
+      if (isSelf && speaking) window.__lcLastLocalSpeechAt = Date.now();
     }
   }
   function startSpeaking() {
     var ctx = ensureAudioCtx();
     if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+    // LC-1131: tell transcribe.js the local-speech gate is usable only when the
+    // VAD actually works (a real AudioContext). Without one, levelOf() is always
+    // 0 and would wrongly drop every caption, so the gate fails open instead.
+    window.__lcLocalVadActive = !!ctx;
     if (speakLoop) return;
-    speakLoop = setInterval(pollSpeaking, 250);
+    // LC-1134: 120ms (was 250) so the live mic-level ring tracks speech smoothly;
+    // a CSS transition eases between samples.
+    speakLoop = setInterval(pollSpeaking, 120);
   }
   function stopSpeaking() {
+    window.__lcLocalVadActive = false; // LC-1131: gate off once we stop monitoring
     if (speakLoop) { clearInterval(speakLoop); speakLoop = 0; }
     Object.keys(analysers).forEach(function (id) {
       try { analysers[id].src.disconnect(); } catch (e) {}
