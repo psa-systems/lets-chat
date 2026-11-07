@@ -134,14 +134,14 @@ hex = { version = "0.4" }
 # bunyip-api's JWKS, and (when the `saas` feature is on) by `saas_auth.rs` for
 # its existing JWT path. Non-feature-gated so the standalone build that runs
 # SSO has access without re-shuffling features.
-jsonwebtoken = "9"
+jsonwebtoken = "10"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 # Pinned to v2 deliberately. v3+ reshuffled the SimpleFileOptions /
 # ZipWriter API and our backup module is intentionally feature-light
 # (deflate only, no encryption). Revisit if/when LC-95 grows into
 # encrypted archives or schedule-with-rotation, neither of which is
 # in scope today.
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 # LC-629: name async_trait in an integration test to implement a correcting
