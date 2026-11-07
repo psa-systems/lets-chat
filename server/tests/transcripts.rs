@@ -113,6 +113,9 @@ struct Setup {
     hub: Arc<Hub>,
     a_session: String,
     b_session: String,
+    /// LC-1130: alice's user id, for connecting her hub receiver + voice-joining
+    /// her in the shared-transcript convergence test.
+    a_id: String,
     b_id: String,
     outsider_session: String,
     /// LC-813: carol's user id, for asserting the agent-clip route rejects a
@@ -251,6 +254,7 @@ async fn setup_with_clients(
         hub,
         a_session,
         b_session,
+        a_id: a,
         b_id: b,
         outsider_session,
         outsider_id: outsider,
@@ -738,6 +742,151 @@ async fn huddle_without_room_members_broadcasts_captions_to_participants() {
         got,
         "a huddle participant should receive their own live caption even when the room has no room_members rows"
     );
+}
+
+/// LC-1130: a call produces ONE shared transcript that every participant sees
+/// identically, saved once, with each line attributed to its speaker. This is
+/// the convergence guarantee the shared-session work (LC-914) + the attributed
+/// live broadcast provide; this test pins both "Done when" criteria against a
+/// regression.
+///
+/// Two participants join one voice channel. One starts the session; the other
+/// adopts the SAME session via `.../transcript/active` (not a fork). Each posts
+/// one caption (each browser transcribes its own mic). Then:
+///   1. Both participants receive BOTH captions over the hub, in the same order,
+///      each attributed to the speaker who posted it.
+///   2. Exactly one `call_transcripts` row exists for the room (one saved doc).
+///   3. The saved transcript page shows both lines to both participants.
+#[tokio::test]
+async fn one_shared_transcript_per_call_seen_identically_by_all() {
+    let s = setup().await;
+
+    // A voice channel inside the General enclave (room 1 = General from the
+    // backfill), so BOTH alice and bob are enclave members and can read the
+    // saved transcript afterwards (`require_access` -> `is_room_accessible`,
+    // which requires enclave membership for a public channel). The shared
+    // `s.voice_room` has no enclave, so a non-admin participant could join and
+    // post but not open the saved record.
+    let room = db::chat::create_room(&s.chat, "lc1130voice", None, "public", None, Some(1))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE rooms SET is_voice = 1 WHERE id = ?")
+        .bind(room)
+        .execute(&s.chat)
+        .await
+        .unwrap();
+
+    // Both join the one voice channel's mesh (what require_participant admits).
+    let (a_conn, mut a_rx, _) = s.hub.connect(&s.a_id, "alice");
+    s.hub.voice_join(a_conn, room);
+    let (b_conn, mut b_rx, _) = s.hub.connect(&s.b_id, "bob");
+    s.hub.voice_join(b_conn, room);
+
+    // Alice opens the session; Bob adopts the SAME one (no fork).
+    let (st, body) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/{room}/transcript/start"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "alice starts: {body}");
+    let tid = parse_id(&body);
+
+    let (st, body) = get(
+        &s.app,
+        &s.b_session,
+        &format!("/call/{room}/transcript/active"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let v: serde_json::Value = serde_json::from_str(&body).expect("json");
+    assert_eq!(
+        v["transcript_id"].as_i64(),
+        Some(tid),
+        "bob adopts the one open session rather than forking: {body}"
+    );
+
+    // Each transcribes their own mic. Distinct, >= ECHO_MIN_WORDS, non-echoing
+    // phrases so neither is dropped as bleed-through. Sequential awaits fix the
+    // order: alice's line is stored and broadcast before bob posts.
+    let (st, _) = post(
+        &s.app,
+        &s.a_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=alpha+one+two"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let (st, _) = post(
+        &s.app,
+        &s.b_session,
+        &format!("/call/transcript/{tid}/segment"),
+        Some("text=bravo+three+four"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    // Collect the attributed captions each participant received, in order.
+    fn drain_for(
+        rx: &mut tokio::sync::broadcast::Receiver<lets_chat::ws::events::ChatEvent>,
+        me: &str,
+        want_tid: i64,
+    ) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        while let Ok(ev) = rx.try_recv() {
+            if let lets_chat::ws::events::ChatEvent::TranscriptSegment {
+                to_user_id,
+                transcript_id,
+                speaker_id,
+                text,
+                ..
+            } = ev
+            {
+                if to_user_id == me && transcript_id == want_tid {
+                    out.push((speaker_id, text));
+                }
+            }
+        }
+        out
+    }
+    let seen_by_alice = drain_for(&mut a_rx, &s.a_id, tid);
+    let seen_by_bob = drain_for(&mut b_rx, &s.b_id, tid);
+
+    // (1) Both see the SAME ordered, speaker-attributed lines.
+    let expected = vec![
+        (s.a_id.clone(), "alpha one two".to_string()),
+        (s.b_id.clone(), "bravo three four".to_string()),
+    ];
+    assert_eq!(
+        seen_by_alice, expected,
+        "alice sees both lines, in order, attributed to their speakers"
+    );
+    assert_eq!(
+        seen_by_bob, expected,
+        "bob sees the identical ordered, attributed lines alice does"
+    );
+
+    // (2) Exactly one saved transcript for the whole call.
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM call_transcripts WHERE room_id = ?")
+            .bind(room)
+            .fetch_one(&s.chat)
+            .await
+            .unwrap();
+    assert_eq!(count, 1, "one shared transcript per call, not one per participant");
+    let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
+    assert_eq!(segs.len(), 2);
+    assert_eq!((segs[0].user_id.as_str(), segs[0].text.as_str()), (s.a_id.as_str(), "alpha one two"));
+    assert_eq!((segs[1].user_id.as_str(), segs[1].text.as_str()), (s.b_id.as_str(), "bravo three four"));
+
+    // (3) The one saved page shows both lines to both participants.
+    for sess in [&s.a_session, &s.b_session] {
+        let (st, page) = get(&s.app, sess, &format!("/transcripts/{tid}")).await;
+        assert_eq!(st, StatusCode::OK);
+        assert!(page.contains("alpha one two"), "saved page shows alice's line: {page}");
+        assert!(page.contains("bravo three four"), "saved page shows bob's line");
+    }
 }
 
 #[tokio::test]
