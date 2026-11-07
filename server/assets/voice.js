@@ -1192,7 +1192,7 @@
       // no recovery.
       var canRecover = !sfu && peers[userId] && peers[userId].pc;
       if (!canRecover) {
-        voiceDiag('screen blackout: peer ' + short + ' (no frames; ' + why + ')', 'error');
+        voiceDiag('screen blackout: peer ' + short + ' (no frames)', 'error');
         s.done = true;
         return;
       }
