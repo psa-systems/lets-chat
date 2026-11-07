@@ -4342,13 +4342,9 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     width: 5rem;
     border-radius: 9999px;
     object-fit: cover;
-    /* LC-1134: live mic-level ring around the avatar. --lc-level (0..1, from
-       voice.js) scales both the ring radius and its opacity, so the ring grows
-       and brightens with the speaker's volume and disappears when silent or
-       muted. Reads instantly as "who is talking + how loud", and is a different
-       shape/place from the connection-quality signal glyph (no more duplication).
-       The tile inherits --lc-level, defaulting to 0 so a non-speaking avatar has
-       no ring. */
+    /* LC-1134: live mic-level ring. --lc-level (0..1 from voice.js, inherited
+       from the tile, 0 by default) scales the ring radius + opacity, so it grows
+       with volume and vanishes when silent/muted. */
     box-shadow:
         0 0 0 calc(var(--lc-level, 0) * 6px) color-mix(in srgb, var(--success) calc(var(--lc-level, 0) * 90%), transparent),
         0 0 calc(var(--lc-level, 0) * 18px) calc(var(--lc-level, 0) * 5px) color-mix(in srgb, var(--success) calc(var(--lc-level, 0) * 70%), transparent);
