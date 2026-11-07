@@ -100,7 +100,12 @@ async fn asset_is_gzipped_and_much_smaller() {
     let body = bytes(resp).await;
     assert!(body.len() * 3 < raw.len(), "compressed size {}", body.len());
     let br = bytes(get(&app, "/assets/main.css", Some("br")).await).await;
-    assert!(br.len() < 60_000, "brotli size {}", br.len());
+    // LC-1132: a bloat ceiling, not a tight budget. main.css had grown to within
+    // ~150 bytes of the old 60 KB cap, so any small CSS addition tripped it;
+    // raised with real headroom (raw is ~260 KB, so this still asserts a ~4x
+    // brotli win). Bump again if a feature legitimately needs more, do not shave
+    // comments to squeeze under it.
+    assert!(br.len() < 66_000, "brotli size {}", br.len());
     let mut plain = Vec::new();
     flate2::read::GzDecoder::new(&body[..])
         .read_to_end(&mut plain)
