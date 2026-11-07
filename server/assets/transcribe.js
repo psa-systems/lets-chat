@@ -303,6 +303,20 @@
     // can still fire onresult after micMuted is set. Gate the submission itself
     // so muted speech never reaches the transcript, whatever the capture timing.
     if (micMuted) return;
+    // LC-1131: drop a bleed-through caption instead of mis-attributing it. The
+    // browser Web Speech engine taps a raw mic that also hears other participants
+    // through the speakers, so a caption produced while OUR OWN echo-cancelled
+    // mic was silent came from that bleed (e.g. a Firefox user whose browser
+    // cannot transcribe their own voice) and is not ours to claim. voice.js
+    // stamps `__lcLastLocalSpeechAt` from the AEC'd local mic's VAD and sets
+    // `__lcLocalVadActive` only when that VAD genuinely works; when it does not
+    // (no AudioContext, or a surface without voice.js) we fail OPEN so a real
+    // caption is never silenced on a guess.
+    var speechWin = (window.__lcLocalSpeechWindowMs != null) ? window.__lcLocalSpeechWindowMs : 3000;
+    if (bleedGateDrops(window.__lcLocalVadActive, window.__lcLastLocalSpeechAt || 0, Date.now(), speechWin)) {
+      dbg('dropping caption with no recent local speech (bleed-through): ' + text);
+      return;
+    }
     var body = new URLSearchParams();
     body.set('text', text);
     fetch('/call/transcript/' + transcriptId + '/segment', {
@@ -839,8 +853,24 @@
   }
   document.body.addEventListener('htmx:afterSettle', reconcileStage);
 
-  // LC-843: the pure engine decision, exported for transcribe.test.js.
-  window.LetsChatTranscribe = { chooseEngine: chooseEngine, nearBottom: nearBottom };
+  // LC-1131: pure decision for the bleed-through gate (exported for the test).
+  // Drop a browser Web Speech caption only when the local-mic VAD is active AND
+  // our own echo-cancelled mic has not shown speech within `windowMs` - that
+  // caption came from another participant's audio bleeding into our raw mic (the
+  // Web Speech engine taps a non-echo-cancelled mic). Fails OPEN (never drops)
+  // when the VAD is inactive, so a surface with no working VAD keeps every
+  // caption rather than silencing real speech on a guess.
+  function bleedGateDrops(vadActive, lastSpeechAt, now, windowMs) {
+    if (!vadActive) return false;
+    return now - (lastSpeechAt || 0) > windowMs;
+  }
+
+  // LC-843/LC-1131: the pure decisions, exported for transcribe.test.js.
+  window.LetsChatTranscribe = {
+    chooseEngine: chooseEngine,
+    nearBottom: nearBottom,
+    bleedGateDrops: bleedGateDrops,
+  };
 
   // Learn the engine (browser vs server STT) up front, then keep toggles in step.
   loadConfig();

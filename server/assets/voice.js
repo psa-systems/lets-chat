@@ -530,15 +530,28 @@
       var speaking = false;
       if (stream && tile.getAttribute('data-muted') !== 'true') speaking = levelOf(stream) > 18;
       tile.setAttribute('data-speaking', speaking ? 'true' : 'false');
+      // LC-1131: stamp the last time OUR OWN (echo-cancelled) mic showed speech.
+      // transcribe.js gates a browser Web Speech caption on this: the Web Speech
+      // engine taps a raw mic that also hears other participants through the
+      // speakers, so a caption produced while this value is stale came from that
+      // bleed-through (e.g. a Firefox user whose own browser cannot transcribe)
+      // and would otherwise be mis-attributed to us. localStream carries the
+      // echoCancellation constraint, so its level reflects us, not the bleed.
+      if (isSelf && speaking) window.__lcLastLocalSpeechAt = Date.now();
     }
   }
   function startSpeaking() {
     var ctx = ensureAudioCtx();
     if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+    // LC-1131: tell transcribe.js the local-speech gate is usable only when the
+    // VAD actually works (a real AudioContext). Without one, levelOf() is always
+    // 0 and would wrongly drop every caption, so the gate fails open instead.
+    window.__lcLocalVadActive = !!ctx;
     if (speakLoop) return;
     speakLoop = setInterval(pollSpeaking, 250);
   }
   function stopSpeaking() {
+    window.__lcLocalVadActive = false; // LC-1131: gate off once we stop monitoring
     if (speakLoop) { clearInterval(speakLoop); speakLoop = 0; }
     Object.keys(analysers).forEach(function (id) {
       try { analysers[id].src.disconnect(); } catch (e) {}
