@@ -14,6 +14,9 @@ use crate::i18n::filters;
 #[template(path = "auth/welcome_handle.html")]
 pub struct WelcomeHandlePage<'a> {
     pub asset_version: &'a str,
+    /// LC-1011: the handle-length cap (`MAX_USERNAME_CHARS`), driving the field's
+    /// `maxlength` so the client hint matches the server rule.
+    pub max_handle_len: usize,
     /// The current (derived) handle, pre-filled into the field.
     pub handle: &'a str,
     /// A validation message from a rejected submit, or None on first render.
