@@ -27,8 +27,8 @@ use crate::error::AppError;
 use crate::models::{Room, User};
 use crate::state::AppState;
 use crate::views::transcripts::{
-    ToastOob, TranscriptIndexPage, TranscriptIndexRow, TranscriptLine, TranscriptListBody,
-    TranscriptPage,
+    IssueProposalsFragment, ProposalView, ToastOob, TranscriptIndexPage, TranscriptIndexRow,
+    TranscriptLine, TranscriptListBody, TranscriptPage,
 };
 use crate::views::{html, Html};
 use crate::ws::events::ChatEvent;
@@ -1271,6 +1271,19 @@ pub async fn show(
     let ai_llm = ai_flag_on
         && state.llm_available()
         && super::ai_gate::allowed_in_room(&state, room.id, &user).await?;
+    // LC-1135: the "Proposed issues" panel. Review is scoped by the AI gate (it
+    // uses the LLM); filing additionally needs the staff set.
+    let youtrack_can_review = crate::youtrack::can_review(&state, room.id, &user).await?;
+    let youtrack_can_file = crate::youtrack::can_file(&state, room.id, &user).await?;
+    let youtrack_proposals = if youtrack_can_review {
+        let base = crate::youtrack::load_config(&state).await.map(|c| c.base_url);
+        build_proposal_views(
+            db::transcript_proposals::list_for_transcript(&state.chat, transcript_id).await?,
+            base.as_deref(),
+        )
+    } else {
+        Vec::new()
+    };
     html(&TranscriptPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -1291,7 +1304,194 @@ pub async fn show(
         llm_teaser: !state.llm_available() && user.role == "admin",
         summary_html,
         has_action_items,
+        youtrack_can_review,
+        youtrack_can_file,
+        youtrack_proposals,
     })
+}
+
+/// LC-1135: map stored proposal rows to the review-panel view. `dismissed` rows
+/// are hidden; `filed` rows carry their issue link when the base URL is known.
+fn build_proposal_views(
+    rows: Vec<db::transcript_proposals::IssueProposal>,
+    base_url: Option<&str>,
+) -> Vec<ProposalView> {
+    rows.into_iter()
+        .filter(|r| r.status != "dismissed")
+        .map(|r| {
+            let filed = r.status == "filed";
+            let issue_url = match (r.youtrack_issue_id.as_deref(), base_url) {
+                (Some(key), Some(base)) => Some(crate::youtrack::issue_url(base, key)),
+                _ => None,
+            };
+            ProposalView {
+                id: r.id,
+                summary: r.summary,
+                assignee_name: r.assignee_name,
+                source_lines: r.source_lines,
+                filed,
+                youtrack_issue_id: r.youtrack_issue_id,
+                issue_url,
+                error: None,
+            }
+        })
+        .collect()
+}
+
+/// POST /transcripts/{id}/propose-issues
+/// LC-1135: ask the LLM for issue proposals (summary, assignee, source lines)
+/// from the transcript and store them. Gated like the summary (room member +
+/// AI gate) plus the YouTrack-issues flag. Returns the review-panel fragment.
+pub async fn propose_issues(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(transcript_id): Path<i64>,
+) -> Result<Html, AppError> {
+    let session = db::transcripts::get(&state.chat, transcript_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    require_access(&state, &user, &room).await?;
+    if !crate::youtrack::flag_on(&state).await {
+        return Err(AppError::Forbidden);
+    }
+    // Review uses the LLM, so it is scoped by the AI gate (flag + room toggle +
+    // audience). 403 for an out-of-audience member or an AI-off room.
+    super::ai_gate::require_llm_in_room(&state, room.id, &user).await?;
+    let Some(llm) = state.llm_client.clone() else {
+        return Err(AppError::BadRequest(
+            "transcript summarization is not configured".into(),
+        ));
+    };
+    let text = build_transcript_prompt_text(&state, transcript_id).await?;
+    if text.trim().is_empty() {
+        return Err(AppError::BadRequest("transcript is empty".into()));
+    }
+    let raw = match llm
+        .complete_guarded(crate::youtrack::PROPOSE_SYSTEM, &text)
+        .await
+    {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "transcript issue proposal failed");
+            return Err(AppError::BadRequest("issue proposal failed".into()));
+        }
+    };
+    let proposals = crate::youtrack::parse_proposals(&raw);
+    db::transcript_proposals::replace_unfiled(&state.chat, transcript_id, &proposals).await?;
+
+    let base = crate::youtrack::load_config(&state).await.map(|c| c.base_url);
+    let rows = db::transcript_proposals::list_for_transcript(&state.chat, transcript_id).await?;
+    let can_file = crate::youtrack::can_file(&state, room.id, &user).await?;
+    html(&IssueProposalsFragment {
+        transcript_id,
+        proposals: build_proposal_views(rows, base.as_deref()),
+        can_file,
+    })
+}
+
+/// POST /transcripts/{id}/file-issues
+/// LC-1135: create YouTrack issues for the accepted proposals in one step.
+/// Gated by the flag AND the staff set (403 otherwise). Per-row: an API failure
+/// leaves that row `proposed` with its error shown; a row already filed is
+/// skipped (idempotent). The form carries `accept_{id}` checkboxes plus the
+/// edited `summary_{id}` / `assignee_{id}` for each.
+pub async fn file_issues(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Path(transcript_id): Path<i64>,
+    Form(fields): Form<HashMap<String, String>>,
+) -> Result<Html, AppError> {
+    let session = db::transcripts::get(&state.chat, transcript_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let room = fetch_call_room(&state, session.room_id).await?;
+    require_access(&state, &user, &room).await?;
+    if !crate::youtrack::flag_on(&state).await {
+        return Err(AppError::Forbidden);
+    }
+    crate::youtrack::require_file(&state, room.id, &user).await?;
+    let Some(cfg) = crate::youtrack::load_config(&state).await else {
+        return Err(AppError::BadRequest("YouTrack is not configured".into()));
+    };
+
+    let accepted_ids: Vec<i64> = fields
+        .keys()
+        .filter_map(|k| k.strip_prefix("accept_"))
+        .filter_map(|id| id.parse::<i64>().ok())
+        .collect();
+
+    let mut errors: HashMap<i64, String> = HashMap::new();
+    for id in accepted_ids {
+        let Some(row) = db::transcript_proposals::get(&state.chat, id).await? else {
+            continue;
+        };
+        // Only this transcript's still-proposed rows are fileable.
+        if row.transcript_id != transcript_id || row.status != "proposed" {
+            continue;
+        }
+        let summary = fields
+            .get(&format!("summary_{id}"))
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(row.summary.as_str())
+            .to_string();
+        let assignee_login = fields
+            .get(&format!("assignee_{id}"))
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let description = build_issue_description(&row, transcript_id);
+        let issue = crate::youtrack::NewIssue {
+            summary: &summary,
+            description: &description,
+            assignee_login: assignee_login.as_deref(),
+        };
+        match crate::youtrack::create_issue(&cfg, &issue).await {
+            Ok(key) => {
+                db::transcript_proposals::mark_filed(&state.chat, id, &key, &user.id).await?;
+                db::moderation::log_mod_action(
+                    &state.chat,
+                    "youtrack_issue_filed",
+                    "",
+                    &user.id,
+                    Some(&format!("transcript={transcript_id} issue={key}")),
+                    None,
+                    None,
+                )
+                .await?;
+            }
+            Err(e) => {
+                // Display is token-safe by construction.
+                tracing::warn!(error = %e, proposal_id = id, "youtrack issue filing failed");
+                errors.insert(id, e.to_string());
+            }
+        }
+    }
+
+    let rows = db::transcript_proposals::list_for_transcript(&state.chat, transcript_id).await?;
+    let mut proposals = build_proposal_views(rows, Some(&cfg.base_url));
+    for p in proposals.iter_mut() {
+        if let Some(err) = errors.get(&p.id) {
+            p.error = Some(err.clone());
+        }
+    }
+    let can_file = crate::youtrack::can_file(&state, room.id, &user).await?;
+    html(&IssueProposalsFragment {
+        transcript_id,
+        proposals,
+        can_file,
+    })
+}
+
+/// The YouTrack issue description for a filed proposal: the source lines, the
+/// proposed (plain-text) assignee, and a pointer back to the transcript.
+fn build_issue_description(row: &db::transcript_proposals::IssueProposal, transcript_id: i64) -> String {
+    let assignee = row.assignee_name.as_deref().unwrap_or("(unspecified)");
+    format!(
+        "Filed from a Let's Chat call transcript.\n\nProposed assignee: {assignee}\n\nSource lines:\n{}\n\nTranscript: /transcripts/{transcript_id}",
+        row.source_lines
+    )
 }
 
 /// LC-396: assemble the `Speaker: text` transcript prompt for the model, bounded

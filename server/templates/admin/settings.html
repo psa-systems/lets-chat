@@ -216,6 +216,56 @@
     </form>
   </div>
 
+  {# --- YouTrack connection --- LC-1135 #}
+  <div class="card lc-set-card">
+    <div class="lc-set-card-head">
+      <h3 class="lc-set-card-title">{{ "admin-settings-youtrack-heading"|t }}</h3>
+      <p class="lc-set-card-desc">{{ "admin-settings-youtrack-intro"|t }}</p>
+    </div>
+    {% if youtrack_saved %}
+    <div class="mb-3 alert alert-success">{{ "admin-settings-youtrack-saved"|t }}</div>
+    {% endif %}
+    {% if !youtrack_secret_key_present %}
+    <div class="mb-3 alert alert-warning">{{ "admin-settings-youtrack-no-secret-key"|t }} <code>LETS_CHAT_SECRET_KEY</code>.</div>
+    {% endif %}
+    {% if youtrack_token_configured %}
+    <p class="lc-set-help">{{ "admin-settings-youtrack-state-configured"|t }}</p>
+    {% else %}
+    <p class="lc-set-help">{{ "admin-settings-youtrack-state-off"|t }}</p>
+    {% endif %}
+    <form class="lc-set-form" method="post" action="/admin/settings/youtrack"
+          hx-post="/admin/settings/youtrack" hx-target="#st-youtrack" hx-swap="innerHTML" hx-disabled-elt="this">
+      <div class="lc-set-field">
+        <label class="lc-set-label" for="youtrack_base_url">{{ "admin-settings-youtrack-base-url"|t }}</label>
+        <input id="youtrack_base_url" name="youtrack_base_url" type="url" value="{{ youtrack_base_url }}"
+               placeholder="https://example.youtrack.cloud" class="input">
+      </div>
+      <div class="lc-set-field lc-set-field--narrow">
+        <label class="lc-set-label" for="youtrack_default_project">{{ "admin-settings-youtrack-project"|t }}</label>
+        <input id="youtrack_default_project" name="youtrack_default_project" type="text" value="{{ youtrack_default_project }}"
+               placeholder="{{ "admin-settings-youtrack-project-placeholder"|t }}" class="input">
+      </div>
+      <div class="lc-set-field lc-set-field--narrow">
+        <label class="lc-set-label" for="youtrack_token">{{ "admin-settings-youtrack-token"|t }}</label>
+        <input id="youtrack_token" name="youtrack_token" type="password" value="" autocomplete="off"
+               placeholder="{% if youtrack_token_configured %}{{ "admin-settings-youtrack-token-keep"|t }}{% else %}{{ "admin-settings-youtrack-token-unset"|t }}{% endif %}"
+               {% if !youtrack_secret_key_present %}disabled{% endif %} class="input">
+      </div>
+      {% if youtrack_token_configured %}
+      {% let name = "youtrack_clear_token" %}
+      {% let checked = false %}
+      {% let disabled = false %}
+      {% let title = "admin-settings-youtrack-clear"|t %}
+      {% let desc = "admin-settings-youtrack-clear-note"|t %}
+      {% include "partials/toggle_row.html" %}
+      {% endif %}
+      <div class="lc-set-actions">
+        <button type="submit" class="btn btn-primary"{% if !youtrack_secret_key_present %} disabled{% endif %}><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-settings-youtrack-save"|t }}</span></button>
+        <span id="st-youtrack" class="lc-set-status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </div>
+
   {# --- Email ingress health (read-only) --- #}
   {# LC-207-OBSERVABILITY (#278): poll-loop health + recent drops, so an operator can answer "is ingress alive / why didn't my email post?" without container logs. #}
   <div class="card lc-set-card">

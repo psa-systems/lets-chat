@@ -133,6 +133,56 @@ pub async fn token_configured(state: &AppState) -> bool {
     )
 }
 
+// --- gates ----------------------------------------------------------------
+
+/// True when the YouTrack-issues feature flag is not Off (the kill switch).
+pub async fn flag_on(state: &AppState) -> bool {
+    crate::routes::feature_flags::rollout(state, &crate::routes::feature_flags::YOUTRACK_ISSUES)
+        .await
+        .is_on()
+}
+
+/// May `user` review proposed issues for a transcript in `room_id`? The surface
+/// uses the LLM, so review is scoped by the AI gate (room AI toggle + audience);
+/// the flag must also be on. (LC-1135 ruling: one audience concept, the AI gate.)
+pub async fn can_review(
+    state: &AppState,
+    room_id: i64,
+    user: &crate::models::User,
+) -> Result<bool, crate::error::AppError> {
+    Ok(flag_on(state).await && crate::routes::ai_gate::allowed_in_room(state, room_id, user).await?)
+}
+
+/// May `user` FILE issues to YouTrack from a transcript in `room_id`? Filing is
+/// a trusted action, so it needs the flag on AND the LC-679 staff set (site
+/// admin / enclave Owner|Admin / room moderator).
+pub async fn can_file(
+    state: &AppState,
+    room_id: i64,
+    user: &crate::models::User,
+) -> Result<bool, crate::error::AppError> {
+    Ok(flag_on(state).await
+        && crate::routes::ai_gate::privileged_in_room(state, room_id, user).await?)
+}
+
+/// 403 unless [`can_file`].
+pub async fn require_file(
+    state: &AppState,
+    room_id: i64,
+    user: &crate::models::User,
+) -> Result<(), crate::error::AppError> {
+    if can_file(state, room_id, user).await? {
+        Ok(())
+    } else {
+        Err(crate::error::AppError::Forbidden)
+    }
+}
+
+/// Build the public issue URL for a filed proposal's readable key.
+pub fn issue_url(base_url: &str, key: &str) -> String {
+    format!("{}/issue/{}", base_url.trim_end_matches('/'), key)
+}
+
 // --- issue creation -------------------------------------------------------
 
 #[derive(Debug)]

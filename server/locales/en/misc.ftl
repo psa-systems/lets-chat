@@ -132,6 +132,19 @@ transcript-brief-generate = Catch me up
 transcript-brief-regenerate = Regenerate
 transcript-brief-reading = Reading the transcript...
 transcript-brief-disclaimer = AI-generated and personalized to you. May be incomplete.
+# LC-1135: turn transcript action items into YouTrack issues.
+youtrack-heading = Issues from this call
+youtrack-scope = Proposed from the transcript; review before filing
+youtrack-empty = No proposed issues yet. Generate them from the transcript, then review before filing.
+youtrack-propose-button = Propose issues
+youtrack-regenerate-button = Regenerate proposals
+youtrack-file-button = File accepted
+youtrack-accept-label = File this issue
+youtrack-summary-label = Issue summary
+youtrack-assignee-label = Assignee
+youtrack-assignee-placeholder = YouTrack login (optional)
+youtrack-source-label = Source lines
+youtrack-disclaimer = AI-proposed from this transcript. Review each issue before filing; nothing is filed without your approval.
 
 ## Activity page
 activity-page-title = Activity

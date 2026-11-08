@@ -130,6 +130,19 @@ transcript-brief-generate = Ponerme al día
 transcript-brief-regenerate = Regenerar
 transcript-brief-reading = Leyendo la transcripción...
 transcript-brief-disclaimer = Generado por IA y personalizado para ti. Puede estar incompleto.
+# LC-1135: convertir los puntos de acción de la transcripción en incidencias de YouTrack.
+youtrack-heading = Incidencias de esta llamada
+youtrack-scope = Propuestas desde la transcripción; revisa antes de crear
+youtrack-empty = Aún no hay incidencias propuestas. Genéralas desde la transcripción y revísalas antes de crearlas.
+youtrack-propose-button = Proponer incidencias
+youtrack-regenerate-button = Regenerar propuestas
+youtrack-file-button = Crear aceptadas
+youtrack-accept-label = Crear esta incidencia
+youtrack-summary-label = Resumen de la incidencia
+youtrack-assignee-label = Responsable
+youtrack-assignee-placeholder = Usuario de YouTrack (opcional)
+youtrack-source-label = Líneas de origen
+youtrack-disclaimer = Propuestas por IA a partir de esta transcripción. Revisa cada incidencia antes de crearla; no se crea nada sin tu aprobación.
 
 ## Activity page
 activity-page-title = Actividad

@@ -264,6 +264,11 @@ pub struct FeatureFlagsPage<'a> {
     pub stt_configured: bool,
     /// LC-1118: in-call live diagnostics drawer rollout (`Rollout::as_str`).
     pub call_diagnostics_rollout: &'static str,
+    /// LC-1135: transcript -> YouTrack issues rollout (`Rollout::as_str`). Used
+    /// as a kill switch (Off vs on); review audience comes from the AI gate.
+    pub youtrack_issues_rollout: &'static str,
+    /// LC-1135: whether the YouTrack connection is fully configured in settings.
+    pub youtrack_configured: bool,
 }
 
 /// LC-334: site-admin report-review queue (`/admin/reports`). The open-report
@@ -491,6 +496,15 @@ pub struct SettingsPage<'a> {
     pub giphy_secret_key_present: bool,
     pub giphy_error: Option<String>,
     pub giphy_saved: bool,
+    /// LC-1135: org-wide YouTrack connection. `youtrack_token_configured` is true
+    /// when a non-empty sealed token is stored (never the plaintext).
+    /// `youtrack_secret_key_present` gates the token input, mirroring IMAP/Giphy.
+    pub youtrack_base_url: String,
+    pub youtrack_default_project: String,
+    pub youtrack_token_configured: bool,
+    pub youtrack_secret_key_present: bool,
+    pub youtrack_error: Option<String>,
+    pub youtrack_saved: bool,
 }
 
 /// LC-207-OBSERVABILITY (#278): admin-page view of the IMAP poll-loop health.
