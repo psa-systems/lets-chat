@@ -647,6 +647,19 @@ mod tests {
                 validate_handle(&out).is_ok(),
                 "sanitize_handle({input:?}) = {out:?} was rejected by validate_handle"
             );
+            // LC-1012: on a collision, pick_username / pick_handle append `_{n}`
+            // to this output. The separator was `-{n}` before LC-1050, which
+            // `handle_char_allowed` rejects, so the account held a handle its own
+            // settings form refused. The suffix is appended AFTER sanitize_handle
+            // returns, so the bare assertion above missed it; assert the suffixed
+            // form validates too, closing the drift that let the separator diverge.
+            for n in 2..=5u32 {
+                let suffixed = super::collision_candidate(&out, n);
+                assert!(
+                    validate_handle(&suffixed).is_ok(),
+                    "collision_candidate({out:?}, {n}) = {suffixed:?} was rejected by validate_handle"
+                );
+            }
         }
     }
 
