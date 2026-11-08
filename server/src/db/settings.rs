@@ -8,7 +8,15 @@ pub const DEFAULT_MAX_UPLOAD_BYTES: i64 = 10 * 1024 * 1024;
 /// LC-500: shared so the composer can surface the same cap to client-side
 /// validation that the upload route enforces server-side.
 pub async fn max_upload_bytes(pool: &SqlitePool) -> i64 {
-    let value = match get_setting(pool, "max_upload_bytes").await {
+    narrow_max_upload_bytes(get_setting(pool, "max_upload_bytes").await)
+}
+
+/// LC-1026: the pure narrowing of a `max_upload_bytes` read to a byte cap, split
+/// out so a test can force the `Err` branch. A read error logs a WARN and falls
+/// back to the default (the same silent-misread class LC-919/LC-1018 removed
+/// elsewhere); a missing / unparseable / non-positive value falls back silently.
+fn narrow_max_upload_bytes(result: Result<Option<String>, sqlx::Error>) -> i64 {
+    let value = match result {
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, key = "max_upload_bytes", "setting read failed; using default");
@@ -79,4 +87,39 @@ pub async fn release_reindex_lock(pool: &SqlitePool) -> Result<(), sqlx::Error> 
         .execute(pool)
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn narrow_max_upload_bytes_covers_value_cases_and_falls_back_on_err() {
+        // LC-1026: value cases unchanged; a read Err falls back to the default
+        // (with a WARN - a code guarantee, like the LC-1018 readers; asserting log
+        // output needs a global tracing subscriber, the LC-782 cross-test flake).
+        assert_eq!(
+            narrow_max_upload_bytes(Ok(Some("1048576".into()))),
+            1_048_576
+        );
+        // Missing / unparseable / non-positive -> the default, silently.
+        assert_eq!(narrow_max_upload_bytes(Ok(None)), DEFAULT_MAX_UPLOAD_BYTES);
+        assert_eq!(
+            narrow_max_upload_bytes(Ok(Some("nope".into()))),
+            DEFAULT_MAX_UPLOAD_BYTES
+        );
+        assert_eq!(
+            narrow_max_upload_bytes(Ok(Some("0".into()))),
+            DEFAULT_MAX_UPLOAD_BYTES
+        );
+        assert_eq!(
+            narrow_max_upload_bytes(Ok(Some("-5".into()))),
+            DEFAULT_MAX_UPLOAD_BYTES
+        );
+        // The new branch: a read error falls back to the default.
+        assert_eq!(
+            narrow_max_upload_bytes(Err(sqlx::Error::RowNotFound)),
+            DEFAULT_MAX_UPLOAD_BYTES
+        );
+    }
 }
