@@ -868,24 +868,38 @@ async fn one_shared_transcript_per_call_seen_identically_by_all() {
     );
 
     // (2) Exactly one saved transcript for the whole call.
-    let count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM call_transcripts WHERE room_id = ?")
-            .bind(room)
-            .fetch_one(&s.chat)
-            .await
-            .unwrap();
-    assert_eq!(count, 1, "one shared transcript per call, not one per participant");
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM call_transcripts WHERE room_id = ?")
+        .bind(room)
+        .fetch_one(&s.chat)
+        .await
+        .unwrap();
+    assert_eq!(
+        count, 1,
+        "one shared transcript per call, not one per participant"
+    );
     let segs = db::transcripts::list_segments(&s.chat, tid).await.unwrap();
     assert_eq!(segs.len(), 2);
-    assert_eq!((segs[0].user_id.as_str(), segs[0].text.as_str()), (s.a_id.as_str(), "alpha one two"));
-    assert_eq!((segs[1].user_id.as_str(), segs[1].text.as_str()), (s.b_id.as_str(), "bravo three four"));
+    assert_eq!(
+        (segs[0].user_id.as_str(), segs[0].text.as_str()),
+        (s.a_id.as_str(), "alpha one two")
+    );
+    assert_eq!(
+        (segs[1].user_id.as_str(), segs[1].text.as_str()),
+        (s.b_id.as_str(), "bravo three four")
+    );
 
     // (3) The one saved page shows both lines to both participants.
     for sess in [&s.a_session, &s.b_session] {
         let (st, page) = get(&s.app, sess, &format!("/transcripts/{tid}")).await;
         assert_eq!(st, StatusCode::OK);
-        assert!(page.contains("alpha one two"), "saved page shows alice's line: {page}");
-        assert!(page.contains("bravo three four"), "saved page shows bob's line");
+        assert!(
+            page.contains("alpha one two"),
+            "saved page shows alice's line: {page}"
+        );
+        assert!(
+            page.contains("bravo three four"),
+            "saved page shows bob's line"
+        );
     }
 }
 
