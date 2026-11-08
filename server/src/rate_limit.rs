@@ -194,15 +194,32 @@ pub async fn client_ip_for_rate_limit(
     crate::auth::extract_session_origin(headers, true).1
 }
 
-/// Read a `settings.db` KV value as `u32`. Missing keys and blank
-/// values collapse to `0` (rate limiting disabled) silently; a
-/// non-numeric value logs a WARN before falling back so a typo in the
-/// admin UI does not invisibly disable the cap.
+/// Read a `settings.db` KV value as `u32`. Missing keys and blank values
+/// collapse to `0` (rate limiting disabled) silently; a non-numeric value logs a
+/// WARN before falling back so a typo in the admin UI does not invisibly disable
+/// the cap. LC-1025: a settings-read `Err` likewise logs a WARN (it disabled the
+/// cap just as invisibly before) and falls back to `0` - failing closed would
+/// turn a transient local-SQLite hiccup into a server-wide send outage.
 pub async fn read_u32_setting(pool: &sqlx::SqlitePool, key: &str) -> u32 {
-    let raw = crate::db::settings::get_setting(pool, key)
-        .await
-        .ok()
-        .flatten();
+    narrow_u32_setting(key, crate::db::settings::get_setting(pool, key).await)
+}
+
+/// LC-1025: the pure narrowing of a `get_setting` result to a rate-limit cap,
+/// split out (like the LC-1018 boolean readers) so a test can force the `Err`
+/// branch. `Err` logs and returns `0`; `Ok` keeps the missing/blank-silent,
+/// non-numeric-warns behaviour.
+fn narrow_u32_setting(key: &str, result: Result<Option<String>, sqlx::Error>) -> u32 {
+    let raw = match result {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(
+                key,
+                error = %e,
+                "rate-limit setting read failed; treating as disabled"
+            );
+            return 0;
+        }
+    };
     let Some(v) = raw else { return 0 };
     let trimmed = v.trim();
     if trimmed.is_empty() {
@@ -333,6 +350,28 @@ impl RateLimits {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn narrow_u32_setting_covers_the_value_cases_and_fails_open_on_err() {
+        // LC-1025: a read Err returns 0 (disabled) rather than failing closed on a
+        // transient local-SQLite hiccup, and logs a WARN naming the key. Mirrors the
+        // LC-1018 boolean readers' tests: the return value is asserted here; the
+        // warn is a code-level guarantee (asserting log output needs a global
+        // tracing subscriber, the LC-782 cross-test flake we avoid).
+        assert_eq!(narrow_u32_setting("rate_limit_messages", Ok(Some("5".into()))), 5);
+        assert_eq!(narrow_u32_setting("rate_limit_messages", Ok(Some("  7 ".into()))), 7);
+        // Missing and blank: 0, silently.
+        assert_eq!(narrow_u32_setting("rate_limit_messages", Ok(None)), 0);
+        assert_eq!(narrow_u32_setting("rate_limit_messages", Ok(Some("   ".into()))), 0);
+        // Non-numeric and negative: 0 (with the existing warn).
+        assert_eq!(narrow_u32_setting("rate_limit_messages", Ok(Some("lots".into()))), 0);
+        assert_eq!(narrow_u32_setting("rate_limit_messages", Ok(Some("-3".into()))), 0);
+        // The new branch: a read error disables the cap and returns 0.
+        assert_eq!(
+            narrow_u32_setting("rate_limit_messages", Err(sqlx::Error::RowNotFound)),
+            0
+        );
+    }
 
     #[test]
     fn zero_limit_is_disabled() {
