@@ -98,7 +98,10 @@ mod tests {
         // LC-1026: value cases unchanged; a read Err falls back to the default
         // (with a WARN - a code guarantee, like the LC-1018 readers; asserting log
         // output needs a global tracing subscriber, the LC-782 cross-test flake).
-        assert_eq!(narrow_max_upload_bytes(Ok(Some("1048576".into()))), 1_048_576);
+        assert_eq!(
+            narrow_max_upload_bytes(Ok(Some("1048576".into()))),
+            1_048_576
+        );
         // Missing / unparseable / non-positive -> the default, silently.
         assert_eq!(narrow_max_upload_bytes(Ok(None)), DEFAULT_MAX_UPLOAD_BYTES);
         assert_eq!(
