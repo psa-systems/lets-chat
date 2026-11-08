@@ -1661,6 +1661,19 @@ pub async fn post_invite_to_room(
     Path(room_id): Path<i64>,
     axum::Form(form): axum::Form<InviteToRoomForm>,
 ) -> Result<Html, AppError> {
+    // LC-1096: the admin invite is private-rooms-only, matching the enclave
+    // member routes (LC-1087/LC-1095). Before this, a hand-crafted POST naming a
+    // public room inserted a room_members row that grants nothing (public access
+    // comes from enclave membership), and a missing room fell through to the
+    // insert instead of a 404. Gate before the user lookup, insert, mod-log row
+    // and WS broadcast. 400 "room is not private" for parity with the enclave
+    // handlers, not 404.
+    let room = db::chat::get_room(&state.chat, room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if room.room_type != "private" {
+        return Err(AppError::BadRequest("room is not private".into()));
+    }
     let username = form.username.trim();
     let target = db::auth::find_user_by_username(&state.auth, username)
         .await?
@@ -3457,6 +3470,7 @@ async fn render_bots_page(
     .filter(|s| !s.is_empty());
     let page = BotsPage {
         user,
+        max_handle_len: crate::models::user::MAX_USERNAME_CHARS,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
         sidebar_starred_peers: &sidebar_starred_peers,
@@ -3507,18 +3521,20 @@ pub async fn post_bots(
         .await?
         .into_response());
     };
-    let username = form.username.trim();
-    if username.is_empty() {
-        return Ok(render_bots_page(
-            &state,
-            &actor,
-            None,
-            None,
-            Some("Bot username is required.".into()),
-        )
-        .await?
-        .into_response());
-    }
+    // LC-1010: a bot handle is written to users.username like any other handle,
+    // so it must pass the same validation (non-empty, <= MAX_USERNAME_CHARS,
+    // allowed charset) - previously this path only rejected an empty string, so
+    // an admin POST could store an over-length or illegal handle the cap is
+    // meant to forbid. LC-1011: this is what makes the 18-char cap hold on EVERY
+    // write path, not just the settings + SSO paths.
+    let username = match crate::models::user::validate_handle(&form.username) {
+        Ok(h) => h,
+        Err(e) => {
+            return Ok(render_bots_page(&state, &actor, None, None, Some(e))
+                .await?
+                .into_response());
+        }
+    };
     let mut scopes: Vec<&str> = Vec::new();
     if form.s_messages_read.is_some() {
         scopes.push(super::api::SCOPE_MESSAGES_READ);
@@ -3542,7 +3558,7 @@ pub async fn post_bots(
     }
     let scopes = scopes.join(" ");
 
-    let bot_id = match db::auth::create_bot(&state.auth, username).await {
+    let bot_id = match db::auth::create_bot(&state.auth, &username).await {
         Ok(id) => id,
         Err(db::auth::CreateBotError::Reserved) => {
             return Ok(render_bots_page(
@@ -3585,7 +3601,7 @@ pub async fn post_bots(
         "bot_create",
         &bot_id,
         &actor.id,
-        Some(username),
+        Some(username.as_str()),
         None,
         Some(&scopes),
     )

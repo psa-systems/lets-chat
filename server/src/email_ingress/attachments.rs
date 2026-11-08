@@ -33,10 +33,18 @@ const DEFAULT_MAX_UPLOAD_BYTES: i64 = 10 * 1024 * 1024;
 /// Read `settings.max_upload_bytes`, falling back to the default. Same
 /// resolver shape as the web upload path.
 async fn max_upload_bytes(state: &AppState) -> i64 {
-    db::settings::get_setting(&state.settings, "max_upload_bytes")
-        .await
-        .ok()
-        .flatten()
+    // LC-1026: log a settings-read error before falling back to the default,
+    // rather than silently sizing email attachments against the wrong cap. Kept
+    // separate from the web upload + db::settings resolvers on purpose (see the
+    // doc comment above).
+    let value = match db::settings::get_setting(&state.settings, "max_upload_bytes").await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, key = "max_upload_bytes", "setting read failed; using default");
+            None
+        }
+    };
+    value
         .and_then(|v| v.parse::<i64>().ok())
         .filter(|v| *v > 0)
         .unwrap_or(DEFAULT_MAX_UPLOAD_BYTES)
