@@ -11,6 +11,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 ### Security
 
 - **Bot creation now validates the bot's handle (LC-1010).** The admin "create bot" form wrote `users.username` with no validation beyond non-empty, so an admin POST could store an over-length or illegal handle that no other path would accept. Bot handles now go through the same validator as every other handle (length cap, allowed charset), closing the last unvalidated handle write path.
+- **Admin "invite to room" is now gated to private rooms on the server (LC-1096).** The admin invite form was only hidden for non-private rooms in the template; a hand-crafted POST naming a public room still inserted a `room_members` row (which grants nothing, since public-room access comes from enclave membership), and a missing room fell through to the insert instead of a 404. The route now refuses a non-private room with 400 and a missing room with 404, matching the enclave member routes.
 
 ### Changed
 
