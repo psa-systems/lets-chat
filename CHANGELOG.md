@@ -10,10 +10,12 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ### Security
 
+- **Bot creation now validates the bot's handle (LC-1010).** The admin "create bot" form wrote `users.username` with no validation beyond non-empty, so an admin POST could store an over-length or illegal handle that no other path would accept. Bot handles now go through the same validator as every other handle (length cap, allowed charset), closing the last unvalidated handle write path.
 - **Admin "invite to room" is now gated to private rooms on the server (LC-1096).** The admin invite form was only hidden for non-private rooms in the template; a hand-crafted POST naming a public room still inserted a `room_members` row (which grants nothing, since public-room access comes from enclave membership), and a missing room fell through to the insert instead of a 404. The route now refuses a non-private room with 400 and a missing room with 404, matching the enclave member routes.
 
 ### Changed
 
+- **Chat handles are now capped at 18 characters (LC-1011).** A newly chosen or newly changed handle must be at most 18 characters (letters, numbers and `_`), enforced on every write path (settings, SSO provisioning, and admin bot creation). Existing handles longer than 18 are grandfathered: they keep working, stay mentionable, and are only constrained when their owner next changes them. The settings, welcome and bot-creation fields and their help text now state the real limit (they previously said 64 while the server rejected at 33).
 - **Speaking participants now show a live mic-level ring instead of a canned equalizer (LC-1134).** Each call tile pulses a green ring around the avatar (and the tile border) that grows and brightens with the speaker's actual microphone level, and sits flat when they are muted or silent, so you can see who is talking, how loud, and that your own mic works. This replaces the old three-bar equalizer in the name pill, which looked identical to the connection-quality signal glyph next to it. Honors `prefers-reduced-motion` (a steady ring, no pulsing).
 
 ### Fixed

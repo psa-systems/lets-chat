@@ -7,6 +7,13 @@ use std::collections::{HashMap, HashSet};
 /// `users.username`. The leading `(?:^|\s)` boundary keeps email addresses
 /// (`foo@bar.com`) from matching: `bar` is not preceded by start-of-string
 /// or whitespace.
+///
+/// LC-1011: the `{1,32}` bound stays WIDER than `MAX_USERNAME_CHARS` (18) on
+/// purpose. New handles are capped at 18, but the cap is enforced only on write,
+/// so handles created before it remain up to 32 chars; a tighter `{1,18}` here
+/// would make those grandfathered users unmentionable. The over-match is
+/// harmless: resolution is an exact lookup, so a 19-to-32-char token that
+/// matches no row simply resolves to nothing.
 const TOKEN_PATTERN: &str = r"(?:^|\s)@([A-Za-z0-9_-]{1,32})";
 
 pub fn parse_mention_tokens(body: &str) -> Vec<String> {

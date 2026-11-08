@@ -490,14 +490,10 @@ async fn pick_username(
     if db::auth::handle_available_for(&state.auth, &base, "").await? {
         return Ok(base);
     }
-    // LC-1050: `_` not `-`, so the suffixed handle passes `validate_handle`
-    // (the LC-766 invariant); trim `base` so `_N` still fits the length cap.
-    let stem: String = base
-        .chars()
-        .take(crate::models::user::MAX_USERNAME_CHARS - 2)
-        .collect();
+    // LC-1050/LC-1011: `_` not `-` so the suffixed handle passes `validate_handle`,
+    // and `collision_candidate` trims `base` so `_N` still fits the length cap.
     for n in 2..=5u32 {
-        let candidate = format!("{stem}_{n}");
+        let candidate = crate::models::user::collision_candidate(&base, n);
         if db::auth::handle_available_for(&state.auth, &candidate, "").await? {
             return Ok(candidate);
         }

@@ -824,6 +824,9 @@ pub struct BridgesPage<'a> {
 #[template(path = "admin/bots.html")]
 pub struct BotsPage<'a> {
     pub user: &'a crate::models::User,
+    /// LC-1011: the handle-length cap (`MAX_USERNAME_CHARS`), driving the bot
+    /// username field's `maxlength` so the client hint matches the server rule.
+    pub max_handle_len: usize,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],
