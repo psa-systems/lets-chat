@@ -345,3 +345,35 @@ test('LC-1131: bleedGateDrops matrix', () => {
   assert.equal(drops(true, now - 3001, now, 3000), true, 'just past window -> drop');
   assert.equal(drops(true, 0, now, 3000), true, 'never spoke this session -> drop');
 });
+
+// LC-1133: the live transcript search helpers. capLineMatches decides which
+// lines survive the filter; highlightHtml renders a line with the matched text
+// wrapped in <mark>, escaping everything so a caption can never inject markup.
+test('LC-1133: capLineMatches is a case-insensitive contains, empty = all', () => {
+  const m = load().window.LetsChatTranscribe.capLineMatches;
+  assert.equal(m('the Budget review', 'budget'), true, 'case-insensitive');
+  assert.equal(m('the Budget review', 'BUDG'), true);
+  assert.equal(m('hello world', 'xyz'), false);
+  assert.equal(m('anything', ''), true, 'empty query matches every line');
+});
+
+test('LC-1133: highlightHtml wraps matches and escapes all text', () => {
+  const h = load().window.LetsChatTranscribe.highlightHtml;
+  // Empty query: escaped text, no marks.
+  assert.equal(h('a < b & c', ''), 'a &lt; b &amp; c');
+  // Match wrapped, surrounding text escaped, original case preserved.
+  assert.equal(
+    h('cut the Budget now', 'budget'),
+    'cut the <mark class="lc-cap-hit">Budget</mark> now',
+  );
+  // Every occurrence; the matched span itself is escaped.
+  assert.equal(
+    h('<x> and <x>', '<x>'),
+    '<mark class="lc-cap-hit">&lt;x&gt;</mark> and <mark class="lc-cap-hit">&lt;x&gt;</mark>',
+  );
+  // A caption that is pure markup cannot inject: no raw < reaches the output
+  // outside an escaped entity.
+  const out = h('<img src=x onerror=alert(1)>', 'zzz');
+  assert.equal(out.indexOf('<img'), -1, 'no live tag');
+  assert.ok(out.indexOf('&lt;img') === 0, 'escaped instead');
+});

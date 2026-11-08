@@ -18,6 +18,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 - **Chat handles are now capped at 18 characters (LC-1011).** A newly chosen or newly changed handle must be at most 18 characters (letters, numbers and `_`), enforced on every write path (settings, SSO provisioning, and admin bot creation). Existing handles longer than 18 are grandfathered: they keep working, stay mentionable, and are only constrained when their owner next changes them. The settings, welcome and bot-creation fields and their help text now state the real limit (they previously said 64 while the server rejected at 33).
 - **Speaking participants now show a live mic-level ring instead of a canned equalizer (LC-1134).** Each call tile pulses a green ring around the avatar (and the tile border) that grows and brightens with the speaker's actual microphone level, and sits flat when they are muted or silent, so you can see who is talking, how loud, and that your own mic works. This replaces the old three-bar equalizer in the name pill, which looked identical to the connection-quality signal glyph next to it. Honors `prefers-reduced-motion` (a steady ring, no pulsing).
 
+### Added
+
+- **Search the live transcript during a call (LC-1133).** The in-call transcript drawer now has a search box: typing filters the caption list to the lines that match and highlights the matched text, with a live match count, and new lines that arrive are filtered in step (a match appears, a non-match stays hidden). Clearing the box restores the full transcript. Entirely client-side over the captions already in the drawer.
+
 ### Fixed
 
 - **In-call chat shows the author's own message when they are not a room member (LC-1137).** A site admin can open and post in a call via god-mode in a room they never joined (e.g. dropping into a call late). The in-call chat delivered their message to every room member but not back to the author, so the sender saw nothing from their own end while everyone else saw it immediately. The author now always receives their own message, member or not.
