@@ -136,11 +136,11 @@ async fn admin_creates_bot_then_token_authenticates() {
         &t.app,
         &t.admin_session,
         "/admin/bots",
-        "username=helper-bot&s_messages_write=on&s_rooms_read=on",
+        "username=helper_bot&s_messages_write=on&s_rooms_read=on",
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("helper-bot"));
+    assert!(body.contains("helper_bot"));
     let token = extract_token(&body);
     // The minted token authenticates the API.
     assert_eq!(api_get(&t.app, &token, "/api/v1/me").await, StatusCode::OK);
@@ -206,13 +206,13 @@ async fn disabling_bot_revokes_its_tokens() {
         &t.app,
         &t.admin_session,
         "/admin/bots",
-        "username=tmp-bot&s_messages_write=on",
+        "username=tmp_bot&s_messages_write=on",
     )
     .await;
     let token = extract_token(&body);
     assert_eq!(api_get(&t.app, &token, "/api/v1/me").await, StatusCode::OK);
 
-    let bot_id: String = sqlx::query_scalar("SELECT id FROM users WHERE username='tmp-bot'")
+    let bot_id: String = sqlx::query_scalar("SELECT id FROM users WHERE username='tmp_bot'")
         .fetch_one(&t.auth)
         .await
         .unwrap();
@@ -238,11 +238,11 @@ async fn bot_message_renders_with_badge() {
         &t.app,
         &t.admin_session,
         "/admin/bots",
-        "username=poster-bot&s_messages_write=on",
+        "username=poster_bot&s_messages_write=on",
     )
     .await;
     let token = extract_token(&body);
-    let bot_id: String = sqlx::query_scalar("SELECT id FROM users WHERE username='poster-bot'")
+    let bot_id: String = sqlx::query_scalar("SELECT id FROM users WHERE username='poster_bot'")
         .fetch_one(&t.auth)
         .await
         .unwrap();

@@ -327,5 +327,6 @@ async fn settings_handle_help_explains_bunyip_independence() {
     let s = setup().await;
     let body = settings_body(&s).await;
     assert!(body.contains("separate from your Bunyip username"));
-    assert!(body.contains("Letters, numbers, and _ only."));
+    // LC-1011: the help text now states the 18-char cap + the real charset.
+    assert!(body.contains("18 characters: letters, numbers, and _ only."));
 }

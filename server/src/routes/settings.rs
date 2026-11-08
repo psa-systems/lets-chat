@@ -257,6 +257,7 @@ pub async fn get_settings(
 
     let page = UserSettingsPage {
         user: &user,
+        max_handle_len: crate::models::user::MAX_USERNAME_CHARS,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
         sidebar_starred_peers: &sidebar_starred_peers,
@@ -1198,6 +1199,7 @@ async fn render_welcome_handle(
     let branding = db::branding::resolve(&state.chat, db::branding::Scope::Global).await?;
     let page = WelcomeHandlePage {
         asset_version: &state.asset_version,
+        max_handle_len: crate::models::user::MAX_USERNAME_CHARS,
         handle,
         error,
         brand_logo: branding.logo_upload_id.is_some(),

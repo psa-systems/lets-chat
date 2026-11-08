@@ -33,7 +33,7 @@
   <form method="post" action="/admin/bots" class="lc-set-form">
     <div class="lc-set-field lc-set-field--narrow">
       <label class="lc-set-label" for="bot_username">{{ "admin-bots-username"|t }}{% include "partials/required_mark.html" %}</label>
-      <input id="bot_username" name="username" type="text" required aria-required="true" maxlength="32" placeholder="standup-bot" class="input">
+      <input id="bot_username" name="username" type="text" required aria-required="true" maxlength="{{ max_handle_len }}" placeholder="standup_bot" class="input">
     </div>
     <fieldset class="text-sm">
       <legend class="lc-set-label mb-1">{{ "admin-bots-token-scopes"|t }}</legend>
