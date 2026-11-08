@@ -358,14 +358,29 @@ mod tests {
         // LC-1018 boolean readers' tests: the return value is asserted here; the
         // warn is a code-level guarantee (asserting log output needs a global
         // tracing subscriber, the LC-782 cross-test flake we avoid).
-        assert_eq!(narrow_u32_setting("rate_limit_messages", Ok(Some("5".into()))), 5);
-        assert_eq!(narrow_u32_setting("rate_limit_messages", Ok(Some("  7 ".into()))), 7);
+        assert_eq!(
+            narrow_u32_setting("rate_limit_messages", Ok(Some("5".into()))),
+            5
+        );
+        assert_eq!(
+            narrow_u32_setting("rate_limit_messages", Ok(Some("  7 ".into()))),
+            7
+        );
         // Missing and blank: 0, silently.
         assert_eq!(narrow_u32_setting("rate_limit_messages", Ok(None)), 0);
-        assert_eq!(narrow_u32_setting("rate_limit_messages", Ok(Some("   ".into()))), 0);
+        assert_eq!(
+            narrow_u32_setting("rate_limit_messages", Ok(Some("   ".into()))),
+            0
+        );
         // Non-numeric and negative: 0 (with the existing warn).
-        assert_eq!(narrow_u32_setting("rate_limit_messages", Ok(Some("lots".into()))), 0);
-        assert_eq!(narrow_u32_setting("rate_limit_messages", Ok(Some("-3".into()))), 0);
+        assert_eq!(
+            narrow_u32_setting("rate_limit_messages", Ok(Some("lots".into()))),
+            0
+        );
+        assert_eq!(
+            narrow_u32_setting("rate_limit_messages", Ok(Some("-3".into()))),
+            0
+        );
         // The new branch: a read error disables the cap and returns 0.
         assert_eq!(
             narrow_u32_setting("rate_limit_messages", Err(sqlx::Error::RowNotFound)),
