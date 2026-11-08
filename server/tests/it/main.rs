@@ -123,6 +123,7 @@ mod routes_admin_feature_flags;
 mod routes_admin_imap_settings;
 mod routes_admin_last_admin;
 mod routes_admin_observability;
+mod routes_admin_room_invite;
 mod routes_admin_unlink_sso;
 mod routes_ai_gate;
 mod routes_alt_text;

@@ -1661,6 +1661,19 @@ pub async fn post_invite_to_room(
     Path(room_id): Path<i64>,
     axum::Form(form): axum::Form<InviteToRoomForm>,
 ) -> Result<Html, AppError> {
+    // LC-1096: the admin invite is private-rooms-only, matching the enclave
+    // member routes (LC-1087/LC-1095). Before this, a hand-crafted POST naming a
+    // public room inserted a room_members row that grants nothing (public access
+    // comes from enclave membership), and a missing room fell through to the
+    // insert instead of a 404. Gate before the user lookup, insert, mod-log row
+    // and WS broadcast. 400 "room is not private" for parity with the enclave
+    // handlers, not 404.
+    let room = db::chat::get_room(&state.chat, room_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if room.room_type != "private" {
+        return Err(AppError::BadRequest("room is not private".into()));
+    }
     let username = form.username.trim();
     let target = db::auth::find_user_by_username(&state.auth, username)
         .await?
