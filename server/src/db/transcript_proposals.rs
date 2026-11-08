@@ -107,10 +107,26 @@ pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<IssueProposa
     Ok(row.as_ref().map(row_to_proposal))
 }
 
-/// Mark a proposal `filed` with the created issue key and filer. Updates ONLY
-/// when the row is still `proposed`, so a concurrent or repeated file cannot
-/// flip it twice; returns true iff a row changed.
-pub async fn mark_filed(
+/// Atomically claim a `proposed` row for filing: flip it to the in-flight
+/// `filing` status. Returns true iff THIS call won the claim (`rows_affected ==
+/// 1`). The caller must create the YouTrack issue only after a winning claim,
+/// so two concurrent filers of the same proposal cannot both POST to YouTrack
+/// (LC-1135 review #1: duplicate-on-race). On a lost claim, skip the row; on a
+/// create failure, [`release_claim`] it back to `proposed`.
+pub async fn claim_for_filing(pool: &SqlitePool, id: i64) -> sqlx::Result<bool> {
+    let res = sqlx::query(
+        "UPDATE transcript_issue_proposals SET status = 'filing' \
+         WHERE id = ? AND status = 'proposed'",
+    )
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() == 1)
+}
+
+/// Finalize a claimed (`filing`) row as `filed` with the created issue key and
+/// filer. Returns true iff a `filing` row changed.
+pub async fn finalize_filed(
     pool: &SqlitePool,
     id: i64,
     youtrack_issue_id: &str,
@@ -119,10 +135,23 @@ pub async fn mark_filed(
     let res = sqlx::query(
         "UPDATE transcript_issue_proposals \
          SET status = 'filed', youtrack_issue_id = ?, filed_by = ?, filed_at = datetime('now') \
-         WHERE id = ? AND status = 'proposed'",
+         WHERE id = ? AND status = 'filing'",
     )
     .bind(youtrack_issue_id)
     .bind(filed_by)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() == 1)
+}
+
+/// Release a claim (`filing` -> `proposed`) after a failed create, so the row
+/// can be retried. Returns true iff a `filing` row changed.
+pub async fn release_claim(pool: &SqlitePool, id: i64) -> sqlx::Result<bool> {
+    let res = sqlx::query(
+        "UPDATE transcript_issue_proposals SET status = 'proposed' \
+         WHERE id = ? AND status = 'filing'",
+    )
     .bind(id)
     .execute(pool)
     .await?;
@@ -178,7 +207,8 @@ mod tests {
             .await
             .unwrap();
         let id = list_for_transcript(&pool, 7).await.unwrap()[0].id;
-        assert!(mark_filed(&pool, id, "LC-1", "u1").await.unwrap());
+        assert!(claim_for_filing(&pool, id).await.unwrap());
+        assert!(finalize_filed(&pool, id, "LC-1", "u1").await.unwrap());
         // Regenerate: a fresh proposal set replaces only the proposed rows.
         replace_unfiled(&pool, 7, &[np("New proposal", None, "")])
             .await
@@ -191,19 +221,39 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn mark_filed_sets_fields_and_is_idempotent() {
+    async fn claim_then_finalize_sets_fields_and_is_idempotent() {
         let pool = chat_pool().await;
         replace_unfiled(&pool, 7, &[np("Once", None, "")])
             .await
             .unwrap();
         let id = list_for_transcript(&pool, 7).await.unwrap()[0].id;
-        assert!(mark_filed(&pool, id, "LC-42", "alice").await.unwrap());
-        // Second file attempt on the same row is a no-op.
-        assert!(!mark_filed(&pool, id, "LC-99", "bob").await.unwrap());
+        assert!(claim_for_filing(&pool, id).await.unwrap());
+        assert!(finalize_filed(&pool, id, "LC-42", "alice").await.unwrap());
+        // Already filed: a new claim and finalize are both no-ops.
+        assert!(!claim_for_filing(&pool, id).await.unwrap());
+        assert!(!finalize_filed(&pool, id, "LC-99", "bob").await.unwrap());
         let row = get(&pool, id).await.unwrap().unwrap();
         assert_eq!(row.status, "filed");
         assert_eq!(row.youtrack_issue_id.as_deref(), Some("LC-42"));
         assert_eq!(row.filed_by.as_deref(), Some("alice"));
         assert!(row.filed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn only_one_claim_wins_the_race_and_release_allows_retry() {
+        let pool = chat_pool().await;
+        replace_unfiled(&pool, 7, &[np("Contended", None, "")])
+            .await
+            .unwrap();
+        let id = list_for_transcript(&pool, 7).await.unwrap()[0].id;
+        // Two filers claim the same proposal: exactly one wins.
+        assert!(claim_for_filing(&pool, id).await.unwrap());
+        assert!(!claim_for_filing(&pool, id).await.unwrap());
+        // The winner's create failed -> release back to proposed, retry works.
+        assert!(release_claim(&pool, id).await.unwrap());
+        assert_eq!(get(&pool, id).await.unwrap().unwrap().status, "proposed");
+        assert!(claim_for_filing(&pool, id).await.unwrap());
+        assert!(finalize_filed(&pool, id, "LC-7", "u1").await.unwrap());
+        assert_eq!(get(&pool, id).await.unwrap().unwrap().status, "filed");
     }
 }

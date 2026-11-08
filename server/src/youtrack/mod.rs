@@ -46,19 +46,28 @@ pub async fn store_token(
     state: &AppState,
     token: &str,
 ) -> Result<(), crate::error::AppError> {
+    put_token(&state.settings, state.secret_key.as_deref(), token).await
+}
+
+/// [`store_token`] against a raw settings pool + key (so tests can seed a token
+/// without an `AppState`). An empty token clears the row; a non-empty one
+/// requires a secret key.
+pub async fn put_token(
+    settings: &sqlx::SqlitePool,
+    secret_key: Option<&[u8; 32]>,
+    token: &str,
+) -> Result<(), crate::error::AppError> {
     if token.is_empty() {
-        db::settings::set_setting(&state.settings, TOKEN_KEY, "").await?;
+        db::settings::set_setting(settings, TOKEN_KEY, "").await?;
         return Ok(());
     }
-    let key = state
-        .secret_key
-        .as_ref()
+    let key = secret_key
         .ok_or_else(|| crate::error::AppError::BadRequest("secret key not configured".into()))?;
     let (ciphertext, nonce) = crate::crypto::seal(key, token.as_bytes())
         .map_err(|_| crate::error::AppError::Internal("token seal failed".into()))?;
     let b64 = base64::engine::general_purpose::STANDARD;
     let sealed = format!("v1:{}:{}", b64.encode(nonce), b64.encode(ciphertext));
-    db::settings::set_setting(&state.settings, TOKEN_KEY, &sealed).await?;
+    db::settings::set_setting(settings, TOKEN_KEY, &sealed).await?;
     Ok(())
 }
 
@@ -271,7 +280,10 @@ async fn resolve_project_id(cfg: &YoutrackConfig) -> Result<String, YoutrackErro
         "{}/api/admin/projects?fields=id,shortName&query={}",
         cfg.base_url, encoded_query
     );
-    let resp = crate::http_client::outbound_get(&url)
+    // Trusted GET: the base URL is operator config and may be an internal/
+    // loopback host, the same posture as the create POST below. The public-IP
+    // SSRF filter would reject a self-hosted YouTrack (LC-1135 review #2).
+    let resp = crate::http_client::outbound_trusted_get(&url)
         .await
         .map_err(|e| YoutrackError::Transport(e.to_string()))?
         .bearer_auth(&cfg.token)

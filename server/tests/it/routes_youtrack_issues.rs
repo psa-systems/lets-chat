@@ -217,6 +217,144 @@ async fn file_issues_is_forbidden_for_a_non_staff_member() {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
+/// A loopback YouTrack stub: POST /api/issues returns `status` with
+/// `{"idReadable":"LC-7"}` on 2xx, counting hits. Project is configured as an
+/// internal id so no projects GET is made.
+async fn youtrack_stub(status: u16) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+    use axum::routing::post;
+    let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let h = hits.clone();
+    let app = Router::new().route(
+        "/api/issues",
+        post(move || {
+            let h = h.clone();
+            async move {
+                h.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                (
+                    StatusCode::from_u16(status).unwrap(),
+                    [(header::CONTENT_TYPE, "application/json")],
+                    r#"{"idReadable":"LC-7"}"#,
+                )
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    (format!("http://{addr}"), hits)
+}
+
+async fn configure_youtrack(t: &TestApp, base_url: &str) {
+    db::settings::set_setting(&t.settings, "youtrack_base_url", base_url)
+        .await
+        .unwrap();
+    db::settings::set_setting(&t.settings, "youtrack_default_project", "0-28")
+        .await
+        .unwrap();
+    db::settings::set_setting(&t.settings, "youtrack_issues_enabled", "true")
+        .await
+        .unwrap();
+    lets_chat::youtrack::put_token(&t.settings, Some(&[0u8; 32]), "test-token")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn file_issues_creates_marks_and_audits_then_skips_double_submit() {
+    let (base, hits) = youtrack_stub(200).await;
+    let t = app(None).await;
+    let tid = seed_transcript(&t).await;
+    configure_youtrack(&t, &base).await;
+    db::transcript_proposals::replace_unfiled(
+        &t.chat,
+        tid,
+        &[db::transcript_proposals::NewProposal {
+            summary: "Ship it".into(),
+            assignee_name: None,
+            source_lines: "owner: ship it".into(),
+        }],
+    )
+    .await
+    .unwrap();
+    let id = db::transcript_proposals::list_for_transcript(&t.chat, tid)
+        .await
+        .unwrap()[0]
+        .id;
+
+    let (status, body) = post(
+        &t.app,
+        &t.owner_session,
+        &format!("/transcripts/{tid}/file-issues"),
+        &format!("accept_{id}=on"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    let row = db::transcript_proposals::get(&t.chat, id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(row.status, "filed");
+    assert_eq!(row.youtrack_issue_id.as_deref(), Some("LC-7"));
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // Second submit of the same (now filed) proposal makes no YouTrack call.
+    let (status, _) = post(
+        &t.app,
+        &t.owner_session,
+        &format!("/transcripts/{tid}/file-issues"),
+        &format!("accept_{id}=on"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        hits.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "already-filed proposal is not re-filed"
+    );
+}
+
+#[tokio::test]
+async fn file_issues_row_error_leaves_the_row_proposed() {
+    let (base, hits) = youtrack_stub(500).await;
+    let t = app(None).await;
+    let tid = seed_transcript(&t).await;
+    configure_youtrack(&t, &base).await;
+    db::transcript_proposals::replace_unfiled(
+        &t.chat,
+        tid,
+        &[db::transcript_proposals::NewProposal {
+            summary: "Ship it".into(),
+            assignee_name: None,
+            source_lines: String::new(),
+        }],
+    )
+    .await
+    .unwrap();
+    let id = db::transcript_proposals::list_for_transcript(&t.chat, tid)
+        .await
+        .unwrap()[0]
+        .id;
+
+    let (status, body) = post(
+        &t.app,
+        &t.owner_session,
+        &format!("/transcripts/{tid}/file-issues"),
+        &format!("accept_{id}=on"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "the panel still renders: {body}");
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+    let row = db::transcript_proposals::get(&t.chat, id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(row.status, "proposed", "a failed create leaves the row fileable");
+    assert!(row.youtrack_issue_id.is_none());
+    assert!(body.contains("status 500"), "per-row error is shown: {body}");
+}
+
 #[tokio::test]
 async fn file_issues_passes_the_staff_gate_then_400s_when_unconfigured() {
     let t = app(None).await;

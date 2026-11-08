@@ -1430,18 +1430,28 @@ pub async fn file_issues(
         if row.transcript_id != transcript_id || row.status != "proposed" {
             continue;
         }
-        let summary = fields
+        // Claim the row BEFORE the external POST so two concurrent filers of the
+        // same proposal cannot both create an issue (review #1). A lost claim
+        // means another request is already filing it; skip.
+        if !db::transcript_proposals::claim_for_filing(&state.chat, id).await? {
+            continue;
+        }
+        // Cap the edited summary like the generated one so an over-long override
+        // cannot be filed verbatim (review #4).
+        let summary: String = fields
             .get(&format!("summary_{id}"))
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
             .unwrap_or(row.summary.as_str())
-            .to_string();
+            .chars()
+            .take(500)
+            .collect();
         let assignee_login = fields
             .get(&format!("assignee_{id}"))
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
-        let description = build_issue_description(&row, transcript_id);
+        let description = build_issue_description(&row, &state.base_url, transcript_id);
         let issue = crate::youtrack::NewIssue {
             summary: &summary,
             description: &description,
@@ -1449,20 +1459,22 @@ pub async fn file_issues(
         };
         match crate::youtrack::create_issue(&cfg, &issue).await {
             Ok(key) => {
-                db::transcript_proposals::mark_filed(&state.chat, id, &key, &user.id).await?;
+                db::transcript_proposals::finalize_filed(&state.chat, id, &key, &user.id).await?;
                 db::moderation::log_mod_action(
                     &state.chat,
                     "youtrack_issue_filed",
                     "",
                     &user.id,
                     Some(&format!("transcript={transcript_id} issue={key}")),
-                    None,
+                    Some(room.id),
                     None,
                 )
                 .await?;
             }
             Err(e) => {
-                // Display is token-safe by construction.
+                // Release the claim so the row can be retried; Display is
+                // token-safe by construction.
+                db::transcript_proposals::release_claim(&state.chat, id).await?;
                 tracing::warn!(error = %e, proposal_id = id, "youtrack issue filing failed");
                 errors.insert(id, e.to_string());
             }
@@ -1486,10 +1498,18 @@ pub async fn file_issues(
 
 /// The YouTrack issue description for a filed proposal: the source lines, the
 /// proposed (plain-text) assignee, and a pointer back to the transcript.
-fn build_issue_description(row: &db::transcript_proposals::IssueProposal, transcript_id: i64) -> String {
+fn build_issue_description(
+    row: &db::transcript_proposals::IssueProposal,
+    base_url: &str,
+    transcript_id: i64,
+) -> String {
     let assignee = row.assignee_name.as_deref().unwrap_or("(unspecified)");
+    let link = format!(
+        "{}/transcripts/{transcript_id}",
+        base_url.trim_end_matches('/')
+    );
     format!(
-        "Filed from a Let's Chat call transcript.\n\nProposed assignee: {assignee}\n\nSource lines:\n{}\n\nTranscript: /transcripts/{transcript_id}",
+        "Filed from a Let's Chat call transcript.\n\nProposed assignee: {assignee}\n\nSource lines:\n{}\n\nTranscript: {link}",
         row.source_lines
     )
 }
