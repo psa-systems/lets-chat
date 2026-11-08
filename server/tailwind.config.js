@@ -22,6 +22,14 @@ module.exports = {
           elevated: "var(--surface-elevated)",
           sunken: "var(--surface-sunken)",
         },
+        // LC-1013: the sidebar's own state-fill token. `bg-sidebar-hover` is the
+        // row / control hover fill inside `.lc-sidebar`, held at >= 3:1 against
+        // `--sidebar-surface` in every palette (WCAG SC 1.4.11) so hover is
+        // visible. Kept separate from `--sidebar-elevated` (panel elevation,
+        // also the count pill + category flyout), which carries no contrast floor.
+        sidebar: {
+          hover: "var(--sidebar-hover)",
+        },
         content: {
           DEFAULT: "var(--content)",
           muted: "var(--content-muted)",
