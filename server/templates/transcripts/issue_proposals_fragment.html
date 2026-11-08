@@ -61,8 +61,7 @@
       {% if proposals.is_empty() %}{{ "youtrack-propose-button"|t }}{% else %}{{ "youtrack-regenerate-button"|t }}{% endif %}
     </button>
     {% if can_file && !proposals.is_empty() %}
-    <button type="submit"
-            class="rounded-md border border-accent bg-accent px-2 py-1 text-xs text-accent-content hover:bg-accent-hover disabled:opacity-50">{{ "youtrack-file-button"|t }}</button>
+    <button type="submit" class="btn btn-primary btn-sm">{{ "youtrack-file-button"|t }}</button>
     {% endif %}
   </div>
   <p class="mt-2 text-[11px] leading-tight text-content-subtle">{{ "youtrack-disclaimer"|t }}</p>
