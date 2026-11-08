@@ -565,8 +565,14 @@ mod tests {
         // LC-1011: the cap is 18. Pin the literal so changing the constant is a
         // deliberate, visible edit, and cover the exact boundary the AC names.
         assert_eq!(MAX_USERNAME_CHARS, 18);
-        assert!(validate_handle(&"a".repeat(18)).is_ok(), "18 chars accepted");
-        assert!(validate_handle(&"a".repeat(19)).is_err(), "19 chars rejected");
+        assert!(
+            validate_handle(&"a".repeat(18)).is_ok(),
+            "18 chars accepted"
+        );
+        assert!(
+            validate_handle(&"a".repeat(19)).is_err(),
+            "19 chars rejected"
+        );
         // sanitize truncates an over-length SSO value to exactly the cap.
         assert_eq!(sanitize_handle(&"a".repeat(80)).chars().count(), 18);
     }
@@ -580,7 +586,10 @@ mod tests {
         let base = "a".repeat(80);
         for n in 2..=5u32 {
             let c = collision_candidate(&base, n);
-            assert!(c.chars().count() <= MAX_USERNAME_CHARS, "{c} exceeds the cap");
+            assert!(
+                c.chars().count() <= MAX_USERNAME_CHARS,
+                "{c} exceeds the cap"
+            );
             assert!(validate_handle(&c).is_ok(), "{c} must be a valid handle");
         }
         assert_eq!(
