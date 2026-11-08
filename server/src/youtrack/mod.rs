@@ -42,10 +42,7 @@ pub struct YoutrackConfig {
 
 /// Seal `token` with the instance secret key and store it as the `youtrack_token`
 /// settings row, base64 `v1:{nonce}:{ciphertext}`. An empty token clears the row.
-pub async fn store_token(
-    state: &AppState,
-    token: &str,
-) -> Result<(), crate::error::AppError> {
+pub async fn store_token(state: &AppState, token: &str) -> Result<(), crate::error::AppError> {
     put_token(&state.settings, state.secret_key.as_deref(), token).await
 }
 
@@ -159,7 +156,8 @@ pub async fn can_review(
     room_id: i64,
     user: &crate::models::User,
 ) -> Result<bool, crate::error::AppError> {
-    Ok(flag_on(state).await && crate::routes::ai_gate::allowed_in_room(state, room_id, user).await?)
+    Ok(flag_on(state).await
+        && crate::routes::ai_gate::allowed_in_room(state, room_id, user).await?)
 }
 
 /// May `user` FILE issues to YouTrack from a transcript in `room_id`? Filing is
@@ -334,7 +332,8 @@ pub async fn create_issue(
         .json()
         .await
         .map_err(|e| YoutrackError::Decode(e.to_string()))?;
-    parse_created_key(&body).ok_or_else(|| YoutrackError::Decode("no idReadable in response".into()))
+    parse_created_key(&body)
+        .ok_or_else(|| YoutrackError::Decode("no idReadable in response".into()))
 }
 
 // --- proposal generation (LLM) --------------------------------------------
@@ -342,7 +341,8 @@ pub async fn create_issue(
 /// The system prompt for turning a transcript into proposed issues. The
 /// transcript is DATA (guarded by the LLM client's guardrail wrapper), so a line
 /// inside it can never act as an instruction.
-pub const PROPOSE_SYSTEM: &str = "You read a call transcript (each line is 'Name: what they said', \
+pub const PROPOSE_SYSTEM: &str =
+    "You read a call transcript (each line is 'Name: what they said', \
 led by a 'Participants:' line) and extract the concrete tasks, promises and follow-ups worth \
 tracking as issues. Reply with ONLY a JSON array, no prose and no code fence. Each element is an \
 object with exactly these keys: \"summary\" (a short imperative issue title), \"assignee\" (the \
@@ -439,7 +439,8 @@ mod tests {
         let (ct, nonce) = crate::crypto::seal(&key, b"s3cr3t").unwrap();
         let b64 = base64::engine::general_purpose::STANDARD;
         let sealed = format!("v1:{}:{}", b64.encode(&nonce), b64.encode(&ct));
-        let cfg = narrow_config(ok("https://yt.example/"), ok(&sealed), ok("LC"), Some(&key)).unwrap();
+        let cfg =
+            narrow_config(ok("https://yt.example/"), ok(&sealed), ok("LC"), Some(&key)).unwrap();
         assert_eq!(cfg.base_url, "https://yt.example"); // trailing slash trimmed
         assert_eq!(cfg.token, "s3cr3t");
         assert_eq!(cfg.default_project, "LC");
@@ -452,7 +453,13 @@ mod tests {
         let b64 = base64::engine::general_purpose::STANDARD;
         let sealed = format!("v1:{}:{}", b64.encode(&nonce), b64.encode(&ct));
         // read error on base_url -> None
-        assert!(narrow_config(Err(sqlx::Error::RowNotFound), ok(&sealed), ok("LC"), Some(&key)).is_none());
+        assert!(narrow_config(
+            Err(sqlx::Error::RowNotFound),
+            ok(&sealed),
+            ok("LC"),
+            Some(&key)
+        )
+        .is_none());
         // wrong secret key cannot unseal -> None
         let wrong = [2u8; 32];
         assert!(narrow_config(ok("https://yt"), ok(&sealed), ok("LC"), Some(&wrong)).is_none());
@@ -466,7 +473,11 @@ mod tests {
     fn build_issue_payload_sets_project_summary_description() {
         let p = build_issue_payload(
             "0-7",
-            &NewIssue { summary: "Do X", description: "from the call", assignee_login: None },
+            &NewIssue {
+                summary: "Do X",
+                description: "from the call",
+                assignee_login: None,
+            },
         );
         assert_eq!(p["project"]["id"], "0-7");
         assert_eq!(p["summary"], "Do X");
@@ -478,7 +489,11 @@ mod tests {
     fn build_issue_payload_sets_assignee_custom_field_when_mapped() {
         let p = build_issue_payload(
             "0-7",
-            &NewIssue { summary: "Do X", description: "d", assignee_login: Some("vas") },
+            &NewIssue {
+                summary: "Do X",
+                description: "d",
+                assignee_login: Some("vas"),
+            },
         );
         assert_eq!(p["customFields"][0]["name"], "Assignee");
         assert_eq!(p["customFields"][0]["value"]["login"], "vas");
@@ -490,7 +505,10 @@ mod tests {
             parse_created_key(&serde_json::json!({"idReadable": "LC-1234"})),
             Some("LC-1234".to_string())
         );
-        assert_eq!(parse_created_key(&serde_json::json!({"idReadable": ""})), None);
+        assert_eq!(
+            parse_created_key(&serde_json::json!({"idReadable": ""})),
+            None
+        );
         assert_eq!(parse_created_key(&serde_json::json!({})), None);
     }
 
@@ -508,7 +526,10 @@ mod tests {
     fn error_display_does_not_leak_a_token() {
         // Status/Transport/Decode never embed the token; prove the formatted
         // string is the status/message only.
-        assert_eq!(YoutrackError::Status(401).to_string(), "youtrack returned status 401");
+        assert_eq!(
+            YoutrackError::Status(401).to_string(),
+            "youtrack returned status 401"
+        );
         assert!(!YoutrackError::Transport("connect refused".into())
             .to_string()
             .contains("Bearer"));
@@ -538,9 +559,7 @@ mod tests {
     #[test]
     fn parse_proposals_drops_malformed_and_caps_count_and_length() {
         // one good, one missing summary (dropped), one blank summary (dropped)
-        let out = parse_proposals(
-            r#"[{"summary":"Keep"},{"assignee":"x"},{"summary":"  "}]"#,
-        );
+        let out = parse_proposals(r#"[{"summary":"Keep"},{"assignee":"x"},{"summary":"  "}]"#);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].summary, "Keep");
 
@@ -556,7 +575,10 @@ mod tests {
 
         // length cap
         let long = format!("[{{\"summary\":\"{}\"}}]", "a".repeat(1000));
-        assert_eq!(parse_proposals(&long)[0].summary.chars().count(), MAX_SUMMARY_LEN);
+        assert_eq!(
+            parse_proposals(&long)[0].summary.chars().count(),
+            MAX_SUMMARY_LEN
+        );
     }
 
     #[test]

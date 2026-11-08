@@ -350,9 +350,15 @@ async fn file_issues_row_error_leaves_the_row_proposed() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(row.status, "proposed", "a failed create leaves the row fileable");
+    assert_eq!(
+        row.status, "proposed",
+        "a failed create leaves the row fileable"
+    );
     assert!(row.youtrack_issue_id.is_none());
-    assert!(body.contains("status 500"), "per-row error is shown: {body}");
+    assert!(
+        body.contains("status 500"),
+        "per-row error is shown: {body}"
+    );
 }
 
 #[tokio::test]

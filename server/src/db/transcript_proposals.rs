@@ -42,10 +42,12 @@ pub async fn replace_unfiled(
     proposals: &[NewProposal],
 ) -> sqlx::Result<()> {
     let mut tx = pool.begin().await?;
-    sqlx::query("DELETE FROM transcript_issue_proposals WHERE transcript_id = ? AND status = 'proposed'")
-        .bind(transcript_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "DELETE FROM transcript_issue_proposals WHERE transcript_id = ? AND status = 'proposed'",
+    )
+    .bind(transcript_id)
+    .execute(&mut *tx)
+    .await?;
     for p in proposals {
         sqlx::query(
             "INSERT INTO transcript_issue_proposals \
@@ -215,7 +217,10 @@ mod tests {
             .unwrap();
         let rows = list_for_transcript(&pool, 7).await.unwrap();
         let summaries: Vec<&str> = rows.iter().map(|r| r.summary.as_str()).collect();
-        assert!(summaries.contains(&"Keep me"), "filed row survives regenerate");
+        assert!(
+            summaries.contains(&"Keep me"),
+            "filed row survives regenerate"
+        );
         assert!(summaries.contains(&"New proposal"));
         assert_eq!(rows.len(), 2);
     }

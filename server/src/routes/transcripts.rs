@@ -1276,7 +1276,9 @@ pub async fn show(
     let youtrack_can_review = crate::youtrack::can_review(&state, room.id, &user).await?;
     let youtrack_can_file = crate::youtrack::can_file(&state, room.id, &user).await?;
     let youtrack_proposals = if youtrack_can_review {
-        let base = crate::youtrack::load_config(&state).await.map(|c| c.base_url);
+        let base = crate::youtrack::load_config(&state)
+            .await
+            .map(|c| c.base_url);
         build_proposal_views(
             db::transcript_proposals::list_for_transcript(&state.chat, transcript_id).await?,
             base.as_deref(),
@@ -1380,7 +1382,9 @@ pub async fn propose_issues(
     let proposals = crate::youtrack::parse_proposals(&raw);
     db::transcript_proposals::replace_unfiled(&state.chat, transcript_id, &proposals).await?;
 
-    let base = crate::youtrack::load_config(&state).await.map(|c| c.base_url);
+    let base = crate::youtrack::load_config(&state)
+        .await
+        .map(|c| c.base_url);
     let rows = db::transcript_proposals::list_for_transcript(&state.chat, transcript_id).await?;
     let can_file = crate::youtrack::can_file(&state, room.id, &user).await?;
     html(&IssueProposalsFragment {

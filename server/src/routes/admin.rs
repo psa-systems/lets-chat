@@ -392,9 +392,10 @@ pub async fn get_settings(
     let giphy_secret_key_present = state.secret_key.is_some();
     // LC-1135: org-wide YouTrack connection (base URL + project are plain; the
     // token is sealed and only its presence is exposed).
-    let youtrack_base_url = db::settings::get_setting(&state.settings, crate::youtrack::BASE_URL_KEY)
-        .await?
-        .unwrap_or_default();
+    let youtrack_base_url =
+        db::settings::get_setting(&state.settings, crate::youtrack::BASE_URL_KEY)
+            .await?
+            .unwrap_or_default();
     let youtrack_default_project =
         db::settings::get_setting(&state.settings, crate::youtrack::PROJECT_KEY)
             .await?
