@@ -490,14 +490,10 @@ async fn pick_username(
     if db::auth::handle_available_for(&state.auth, &base, "").await? {
         return Ok(base);
     }
-    // LC-1050: `_` not `-`, so the suffixed handle passes `validate_handle`
-    // (the LC-766 invariant); trim `base` so `_N` still fits the length cap.
-    let stem: String = base
-        .chars()
-        .take(crate::models::user::MAX_USERNAME_CHARS - 2)
-        .collect();
+    // LC-1050/LC-1011: `_` not `-` so the suffixed handle passes `validate_handle`,
+    // and `collision_candidate` trims `base` so `_N` still fits the length cap.
     for n in 2..=5u32 {
-        let candidate = format!("{stem}_{n}");
+        let candidate = crate::models::user::collision_candidate(&base, n);
         if db::auth::handle_available_for(&state.auth, &candidate, "").await? {
             return Ok(candidate);
         }
@@ -553,6 +549,16 @@ async fn mirror_bunyip_admin_role(
                 "mirroring lets-chat role from Bunyip claim"
             );
             db::auth::set_user_role(&state.auth, user_id, next).await?;
+            if next != "admin" {
+                state.hub.unsubscribe_user_from_topic(user_id, "admin");
+                state
+                    .hub
+                    .unsubscribe_user_from_topic_prefix(user_id, "enclave:");
+                state
+                    .hub
+                    .unsubscribe_user_from_non_member_rooms(user_id, &state.chat)
+                    .await;
+            }
         }
     }
     Ok(())
@@ -1002,5 +1008,51 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(username, "carol", "an expired reservation blocks nothing");
+    }
+
+    // LC-1148: a Bunyip-driven demotion (the subscriber claim overriding a
+    // stale local admin) must drop the same god-mode subscriptions `post_role`
+    // drops, since this is the other site-wide path that can revoke the admin
+    // role. Without this, an admin demoted by Bunyip SSO (rather than through
+    // the admin UI) keeps leaking enclave topic and non-member room updates.
+    #[tokio::test]
+    async fn bunyip_demotion_drops_godmode_subscriptions() {
+        use crate::ws::events::ChatEvent;
+
+        let state = test_state().await;
+        let admin = linked_user(&state, "alice", "sub-alice", "alice@example.com").await;
+        db::auth::set_user_role(&state.auth, &admin, "admin")
+            .await
+            .unwrap();
+
+        let (conn, mut rx, _) = state.hub.connect(&admin, "alice");
+        state.hub.subscribe_topic(conn, "admin");
+        state.hub.subscribe_topic(conn, "enclave:7");
+
+        let evt = ChatEvent::UserTyping {
+            room_id: 1,
+            user_id: "someone-else".into(),
+            username: "someone-else".into(),
+        };
+        state.hub.broadcast_to_topic("enclave:7", &evt);
+        assert!(rx.try_recv().is_ok(), "subscribed before demotion");
+
+        mirror_bunyip_admin_role(&state, &admin, Some("subscriber"))
+            .await
+            .unwrap();
+
+        let role = db::auth::get_user_role(&state.auth, &admin).await.unwrap();
+        assert_eq!(role.as_deref(), Some("user"));
+
+        state.hub.broadcast_to_topic("enclave:7", &evt);
+        assert!(
+            rx.try_recv().is_err(),
+            "demoted user must stop receiving enclave:* topic updates"
+        );
+        state.hub.broadcast_to_topic("admin", &evt);
+        assert!(
+            rx.try_recv().is_err(),
+            "demoted user must stop receiving the admin topic"
+        );
     }
 }

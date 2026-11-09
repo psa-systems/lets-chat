@@ -718,6 +718,79 @@ impl Hub {
         }
     }
 
+    /// Drop every one of a user's connections from every topic whose key starts
+    /// with `prefix`, sweeping a whole family of topics in one call instead of a
+    /// per-topic call. Used on role demotion: `"enclave:"` drops the god-mode
+    /// enclave grants across every enclave the demoted admin held (LC-1148), and
+    /// `"call_diag:"` drops the per-room diagnostics topics whose gate is checked
+    /// only at subscribe time (LC-1147). No-op if the user has no live
+    /// connections; connection ids are collected before mutating `topics` so no
+    /// `user_conns` borrow is held across the topic update.
+    pub fn unsubscribe_user_from_topic_prefix(&self, user_id: &str, prefix: &str) {
+        let conn_ids: Vec<ConnId> = self
+            .user_conns
+            .get(user_id)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default();
+        if conn_ids.is_empty() {
+            return;
+        }
+        let topics: Vec<String> = self
+            .topics
+            .iter()
+            .filter(|entry| entry.key().starts_with(prefix))
+            .map(|entry| entry.key().clone())
+            .collect();
+        for topic in topics {
+            for &conn_id in &conn_ids {
+                self.unsubscribe_topic(conn_id, &topic);
+            }
+        }
+    }
+
+    /// LC-1148: drop every one of a user's connections from a room subscription
+    /// that only exists because of the site-admin god-mode grant
+    /// (`is_room_accessible`'s `is_site_admin` branch). Called from `post_role`
+    /// right after a demotion so a non-member admin's open tab stops receiving
+    /// that room's live messages/reactions/polls immediately, instead of
+    /// leaking them until the tab happens to navigate and re-run the access
+    /// check. A room the user is still legitimately a member of (or still
+    /// admin for) is left alone: `is_room_accessible` is re-checked per room
+    /// with `is_site_admin=false`, so only rooms that would fail without the
+    /// grant are dropped.
+    pub async fn unsubscribe_user_from_non_member_rooms(
+        &self,
+        user_id: &str,
+        chat_pool: &sqlx::SqlitePool,
+    ) {
+        let conn_ids: Vec<ConnId> = self
+            .user_conns
+            .get(user_id)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default();
+        if conn_ids.is_empty() {
+            return;
+        }
+        let conn_id_set: HashSet<ConnId> = conn_ids.iter().copied().collect();
+        let room_ids: Vec<i64> = self
+            .rooms
+            .iter()
+            .filter(|e| e.value().iter().any(|c| conn_id_set.contains(c)))
+            .map(|e| *e.key())
+            .collect();
+        for room_id in room_ids {
+            let accessible =
+                crate::db::chat::is_room_accessible(chat_pool, room_id, user_id, false)
+                    .await
+                    .unwrap_or(false);
+            if !accessible {
+                for &conn_id in &conn_ids {
+                    self.unsubscribe(conn_id, room_id);
+                }
+            }
+        }
+    }
+
     /// LC-160: broadcast an event to every connection subscribed to `topic`.
     pub fn broadcast_to_topic(&self, topic: &str, event: &ChatEvent) {
         if let Some(conns) = self.topics.get(topic) {
@@ -1037,11 +1110,145 @@ mod tests {
         assert!(rx2.try_recv().is_ok());
     }
 
+    // LC-1148: a demoted admin's god-mode `enclave:*` subscriptions are
+    // dropped across every enclave at once, on every tab, while an unrelated
+    // topic and other users are unaffected.
+    #[test]
+    fn unsubscribe_user_from_topic_prefix_drops_every_matching_topic_for_that_user() {
+        let hub = Hub::new();
+        let (c1, mut rx1, _) = hub.connect("demoted", "demoted");
+        let (c2, mut rx2, _) = hub.connect("demoted", "demoted"); // second tab
+        let (c3, mut rx3, _) = hub.connect("other", "other");
+        hub.subscribe_topic(c1, "enclave:5");
+        hub.subscribe_topic(c2, "enclave:5");
+        hub.subscribe_topic(c1, "enclave:9");
+        hub.subscribe_topic(c3, "enclave:5");
+        hub.subscribe_topic(c1, "admin");
+
+        hub.unsubscribe_user_from_topic_prefix("demoted", "enclave:");
+
+        let enclave5 = ChatEvent::EnclaveMemberRemoved {
+            enclave_id: 5,
+            user_id: "x".into(),
+        };
+        let enclave9 = ChatEvent::EnclaveMemberRemoved {
+            enclave_id: 9,
+            user_id: "x".into(),
+        };
+        let admin_evt = ChatEvent::AdminUserChanged {
+            user_id: "x".into(),
+            removed: true,
+        };
+        hub.broadcast_to_topic("enclave:5", &enclave5);
+        hub.broadcast_to_topic("enclave:9", &enclave9);
+        hub.broadcast_to_topic("admin", &admin_evt);
+
+        assert!(rx2.try_recv().is_err(), "demoted tab 2 drops enclave:5");
+        assert!(rx3.try_recv().is_ok(), "other user keeps enclave:5");
+        assert!(
+            matches!(rx1.try_recv(), Ok(ChatEvent::AdminUserChanged { .. })),
+            "demoted tab 1 still receives admin (prefix is enclave-only), not enclave:5/9"
+        );
+        assert!(
+            rx1.try_recv().is_err(),
+            "demoted tab 1 got nothing else queued (enclave:5/enclave:9 were dropped)"
+        );
+    }
+
+    // LC-1147: a demoted admin is dropped from every call_diag:* topic across
+    // rooms, while another admin subscribed to the same topics is unaffected.
+    #[test]
+    fn unsubscribe_user_from_topic_prefix_stops_delivery_for_that_user_only() {
+        let hub = Hub::new();
+        let (c1, mut rx1, _) = hub.connect("demoted", "demoted");
+        let (c2, mut rx2, _) = hub.connect("admin2", "admin2");
+        hub.subscribe_topic(c1, "call_diag:1");
+        hub.subscribe_topic(c1, "call_diag:2");
+        hub.subscribe_topic(c2, "call_diag:1");
+        hub.subscribe_topic(c2, "call_diag:2");
+
+        hub.unsubscribe_user_from_topic_prefix("demoted", "call_diag:");
+
+        let evt = ChatEvent::CallDiag {
+            room_id: 1,
+            user_label: "x".into(),
+            kind: "connect".into(),
+            detail: None,
+        };
+        hub.broadcast_to_topic("call_diag:1", &evt);
+        hub.broadcast_to_topic("call_diag:2", &evt);
+        assert!(
+            rx1.try_recv().is_err(),
+            "demoted user must not receive call_diag:1 after prefix unsubscribe"
+        );
+        assert!(
+            rx2.try_recv().is_ok(),
+            "admin2 stays subscribed to call_diag:1"
+        );
+        assert!(
+            rx2.try_recv().is_ok(),
+            "admin2 stays subscribed to call_diag:2"
+        );
+    }
+
     #[test]
     fn unsubscribe_user_from_topic_is_noop_for_unknown_user() {
         let hub = Hub::new();
         // No connections / no subscription; must not panic.
         hub.unsubscribe_user_from_topic("ghost", "enclave:1");
+    }
+
+    // LC-1147: a demoted admin's connections are dropped from every
+    // call_diag:* topic, while another admin's subscriptions are unaffected.
+    #[test]
+    fn unsubscribe_user_from_topic_prefix_drops_only_matching_topics_for_that_user() {
+        let hub = Hub::new();
+        let (c1, mut rx1, _) = hub.connect("demoted", "demoted");
+        let (c2, mut rx2, _) = hub.connect("admin2", "admin2");
+        hub.subscribe_topic(c1, "call_diag:1");
+        hub.subscribe_topic(c1, "call_diag:2");
+        hub.subscribe_topic(c2, "call_diag:1");
+        hub.subscribe_topic(c2, "call_diag:2");
+        let evt1 = ChatEvent::CallDiag {
+            room_id: 1,
+            user_label: "x".into(),
+            kind: "connect".into(),
+            detail: None,
+        };
+        let evt2 = ChatEvent::CallDiag {
+            room_id: 2,
+            user_label: "x".into(),
+            kind: "connect".into(),
+            detail: None,
+        };
+
+        hub.unsubscribe_user_from_topic_prefix("demoted", "call_diag:");
+        hub.broadcast_to_topic("call_diag:1", &evt1);
+        hub.broadcast_to_topic("call_diag:2", &evt2);
+
+        assert!(
+            rx1.try_recv().is_err(),
+            "demoted admin must not receive call_diag:1"
+        );
+        assert!(
+            rx2.try_recv().is_ok(),
+            "admin2 must still receive call_diag:1"
+        );
+        assert!(
+            rx1.try_recv().is_err(),
+            "demoted admin must not receive call_diag:2"
+        );
+        assert!(
+            rx2.try_recv().is_ok(),
+            "admin2 must still receive call_diag:2"
+        );
+    }
+
+    #[test]
+    fn unsubscribe_user_from_topic_prefix_is_noop_for_unknown_user() {
+        let hub = Hub::new();
+        // No connections / no subscription; must not panic.
+        hub.unsubscribe_user_from_topic_prefix("ghost", "call_diag:");
     }
 
     // LC-859: the transcription-agent marker a late joiner reads to decide
