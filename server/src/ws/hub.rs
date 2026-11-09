@@ -718,6 +718,77 @@ impl Hub {
         }
     }
 
+    /// LC-1148: drop every one of a user's connections from every topic whose
+    /// name starts with `prefix` (e.g. `"enclave:"` to drop all enclave
+    /// topics at once on role demotion). Mirrors `unsubscribe_user_from_topic`
+    /// but sweeps every matching topic instead of a single named one, since a
+    /// demoted site admin may hold the god-mode grant on several enclaves at
+    /// once and the role change is a single event, not one per enclave.
+    pub fn unsubscribe_user_from_topic_prefix(&self, user_id: &str, prefix: &str) {
+        let conn_ids: Vec<ConnId> = self
+            .user_conns
+            .get(user_id)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default();
+        if conn_ids.is_empty() {
+            return;
+        }
+        let topics: Vec<String> = self
+            .topics
+            .iter()
+            .filter(|e| e.key().starts_with(prefix))
+            .map(|e| e.key().clone())
+            .collect();
+        for topic in topics {
+            for &conn_id in &conn_ids {
+                self.unsubscribe_topic(conn_id, &topic);
+            }
+        }
+    }
+
+    /// LC-1148: drop every one of a user's connections from a room subscription
+    /// that only exists because of the site-admin god-mode grant
+    /// (`is_room_accessible`'s `is_site_admin` branch). Called from `post_role`
+    /// right after a demotion so a non-member admin's open tab stops receiving
+    /// that room's live messages/reactions/polls immediately, instead of
+    /// leaking them until the tab happens to navigate and re-run the access
+    /// check. A room the user is still legitimately a member of (or still
+    /// admin for) is left alone: `is_room_accessible` is re-checked per room
+    /// with `is_site_admin=false`, so only rooms that would fail without the
+    /// grant are dropped.
+    pub async fn unsubscribe_user_from_non_member_rooms(
+        &self,
+        user_id: &str,
+        chat_pool: &sqlx::SqlitePool,
+    ) {
+        let conn_ids: Vec<ConnId> = self
+            .user_conns
+            .get(user_id)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default();
+        if conn_ids.is_empty() {
+            return;
+        }
+        let conn_id_set: HashSet<ConnId> = conn_ids.iter().copied().collect();
+        let room_ids: Vec<i64> = self
+            .rooms
+            .iter()
+            .filter(|e| e.value().iter().any(|c| conn_id_set.contains(c)))
+            .map(|e| *e.key())
+            .collect();
+        for room_id in room_ids {
+            let accessible =
+                crate::db::chat::is_room_accessible(chat_pool, room_id, user_id, false)
+                    .await
+                    .unwrap_or(false);
+            if !accessible {
+                for &conn_id in &conn_ids {
+                    self.unsubscribe(conn_id, room_id);
+                }
+            }
+        }
+    }
+
     /// LC-160: broadcast an event to every connection subscribed to `topic`.
     pub fn broadcast_to_topic(&self, topic: &str, event: &ChatEvent) {
         if let Some(conns) = self.topics.get(topic) {
