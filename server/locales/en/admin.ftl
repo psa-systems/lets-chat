@@ -591,3 +591,25 @@ admin-settings-call-diag-heading = In-call diagnostics
 admin-settings-call-diag-note = Shows a live diagnostics panel inside each call that only admins can see. It streams the same connection events as the per-call voice log (joins, drops, WebRTC errors) so you can trace a bad call while it is happening. Off by default.
 admin-settings-call-diag-admins-note = Admin-only whatever is chosen here: the panel, its live feed and its history are never shown to non-admins. On surfaces the panel to every admin in a call; Admins only is equivalent. Off hides it.
 admin-settings-call-diag-save = Save in-call diagnostics setting
+
+# LC-1135: YouTrack connection (settings) + the transcript-issues flag.
+admin-settings-youtrack-heading = YouTrack connection
+admin-settings-youtrack-intro = Connect an org-wide YouTrack so a reviewer can file a call transcript's action items as issues. The token is sealed on the server and never shown again.
+admin-settings-youtrack-saved = YouTrack settings saved.
+admin-settings-youtrack-no-secret-key = Storing the token requires a server secret key. Set
+admin-settings-youtrack-state-configured = A YouTrack token is stored. Leave the token field blank to keep it; enter a new one to replace it.
+admin-settings-youtrack-state-off = No YouTrack token is stored yet, so issue filing is unavailable.
+admin-settings-youtrack-base-url = Base URL
+admin-settings-youtrack-project = Default project
+admin-settings-youtrack-project-placeholder = Short name (e.g. LC) or id (e.g. 0-28)
+admin-settings-youtrack-token = API token
+admin-settings-youtrack-token-keep = Leave blank to keep the current token
+admin-settings-youtrack-token-unset = Paste a permanent token
+admin-settings-youtrack-clear = Clear the stored token
+admin-settings-youtrack-clear-note = Remove the saved token; issue filing is disabled until a new one is entered.
+admin-settings-youtrack-save = Save YouTrack settings
+admin-settings-youtrack-flag-heading = Transcript issues (YouTrack)
+admin-settings-youtrack-flag-note = Lets reviewers turn a call transcript's action items into proposed YouTrack issues and file the accepted ones. Who can review is scoped by the AI feature audience; only moderators and admins can file. Off by default.
+admin-settings-youtrack-flag-admins-note = This switch is a kill switch: On and Admins only both enable the surface. Reviewing is governed by the AI feature audience, and filing always requires a moderator or admin. Off hides it entirely.
+admin-settings-youtrack-flag-unconfigured = Set the YouTrack base URL, token and project under Settings before turning this on, or filing will fail.
+admin-settings-youtrack-flag-save = Save transcript-issues setting

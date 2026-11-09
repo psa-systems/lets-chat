@@ -115,5 +115,27 @@
     </form>
   </div>
 
+  {# LC-1135: transcript -> YouTrack issues. Kill switch; review audience is the
+     AI gate, filing is the staff set, so "admins" vs "everyone" both read as on. #}
+  <div class="card lc-set-card" id="lc-flag-youtrack-issues">
+    <div class="lc-set-card-head">
+      <h3 class="lc-set-card-title">{{ "admin-settings-youtrack-flag-heading"|t }}</h3>
+    </div>
+    <p class="lc-set-card-desc text-sm text-content-muted mb-3">{{ "admin-settings-youtrack-flag-note"|t }}</p>
+    {% if !youtrack_configured %}
+    <div class="mb-3 alert alert-warning">{{ "admin-settings-youtrack-flag-unconfigured"|t }}</div>
+    {% endif %}
+    <form class="lc-set-form" method="post" action="/admin/settings/youtrack-issues"
+          hx-post="/admin/settings/youtrack-issues" hx-target="#st-youtrack-issues" hx-swap="innerHTML" hx-disabled-elt="this">
+      {% let rollout = youtrack_issues_rollout %}
+      {% include "partials/rollout_radio.html" %}
+      <p class="lc-set-help">{{ "admin-settings-youtrack-flag-admins-note"|t }}</p>
+      <div class="lc-set-actions">
+        <button type="submit" class="btn btn-primary"><span class="lc-spinner htmx-indicator" aria-hidden="true"></span><span>{{ "admin-settings-youtrack-flag-save"|t }}</span></button>
+        <span id="st-youtrack-issues" class="lc-set-status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </div>
+
 </div>
 {% endblock %}

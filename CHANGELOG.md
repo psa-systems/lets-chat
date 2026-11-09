@@ -21,6 +21,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 ### Added
 
 - **Search the live transcript during a call (LC-1133).** The in-call transcript drawer now has a search box: typing filters the caption list to the lines that match and highlights the matched text, with a live match count, and new lines that arrive are filtered in step (a match appears, a non-match stays hidden). Clearing the box restores the full transcript. Entirely client-side over the captions already in the drawer.
+- **Turn a call's action items into YouTrack issues (LC-1135).** After a call, a reviewer can open the transcript and generate proposed issues from it: each proposal is a one-line summary, a proposed assignee (the spoken name), and the transcript lines it came from. The reviewer edits and accepts the ones they want and files them as real YouTrack issues in one step; nothing is filed without that review. An admin configures one org-wide YouTrack in Settings (base URL, a sealed API token, a default project), and a feature flag plus the moderator/admin role gate who can file, so a stray participant cannot spray the tracker. Proposing uses the transcript's LLM summary, so it follows the same AI audience and per-room AI toggle as the other transcript AI features.
 
 ### Fixed
 

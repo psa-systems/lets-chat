@@ -587,3 +587,25 @@ admin-settings-call-diag-heading = Diagnóstico en llamada
 admin-settings-call-diag-note = Muestra un panel de diagnóstico en vivo dentro de cada llamada que solo ven los administradores. Transmite los mismos eventos de conexión que el registro de voz por llamada (entradas, caídas, errores de WebRTC) para rastrear una llamada con problemas mientras ocurre. Desactivado por defecto.
 admin-settings-call-diag-admins-note = Solo para administradores, elijas lo que elijas aquí: el panel, su feed en vivo y su historial nunca se muestran a quienes no son administradores. Activado muestra el panel a cada administrador en una llamada; Solo administradores es equivalente. Desactivado lo oculta.
 admin-settings-call-diag-save = Guardar ajuste de diagnóstico en llamada
+
+# LC-1135: conexión con YouTrack (ajustes) + la bandera de incidencias de transcripción.
+admin-settings-youtrack-heading = Conexión con YouTrack
+admin-settings-youtrack-intro = Conecta un YouTrack para toda la organización para que un revisor pueda crear incidencias a partir de los puntos de acción de una transcripción. El token se cifra en el servidor y no se vuelve a mostrar.
+admin-settings-youtrack-saved = Ajustes de YouTrack guardados.
+admin-settings-youtrack-no-secret-key = Guardar el token requiere una clave secreta del servidor. Configura
+admin-settings-youtrack-state-configured = Hay un token de YouTrack guardado. Deja el campo del token en blanco para conservarlo; introduce uno nuevo para reemplazarlo.
+admin-settings-youtrack-state-off = Aún no hay ningún token de YouTrack guardado, así que la creación de incidencias no está disponible.
+admin-settings-youtrack-base-url = URL base
+admin-settings-youtrack-project = Proyecto predeterminado
+admin-settings-youtrack-project-placeholder = Nombre corto (p. ej. LC) o id (p. ej. 0-28)
+admin-settings-youtrack-token = Token de API
+admin-settings-youtrack-token-keep = Déjalo en blanco para conservar el token actual
+admin-settings-youtrack-token-unset = Pega un token permanente
+admin-settings-youtrack-clear = Borrar el token guardado
+admin-settings-youtrack-clear-note = Elimina el token guardado; la creación de incidencias se desactiva hasta introducir uno nuevo.
+admin-settings-youtrack-save = Guardar ajustes de YouTrack
+admin-settings-youtrack-flag-heading = Incidencias de transcripción (YouTrack)
+admin-settings-youtrack-flag-note = Permite a los revisores convertir los puntos de acción de una transcripción en incidencias propuestas de YouTrack y crear las aceptadas. Quién puede revisar lo define la audiencia de la función de IA; solo moderadores y administradores pueden crearlas. Desactivado por defecto.
+admin-settings-youtrack-flag-admins-note = Este control es un interruptor general: Activado y Solo administradores habilitan la función. La revisión se rige por la audiencia de la función de IA, y crear incidencias siempre requiere moderador o administrador. Desactivado la oculta por completo.
+admin-settings-youtrack-flag-unconfigured = Configura la URL base, el token y el proyecto de YouTrack en Ajustes antes de activar esto, o la creación fallará.
+admin-settings-youtrack-flag-save = Guardar ajuste de incidencias de transcripción

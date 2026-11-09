@@ -272,6 +272,22 @@ pub async fn outbound_trusted_post(url: &str) -> Result<reqwest::RequestBuilder,
     Ok(client_trusted().post(parsed))
 }
 
+/// GET sibling of [`outbound_trusted_post`]: same OPERATOR-CONFIGURED, TRUSTED
+/// posture (no public-IP SSRF filter, so it reaches an internal/localhost
+/// service the operator configured), scheme gated to http/https. Used for
+/// read-side calls to the same operator endpoint (LC-1135 YouTrack project
+/// lookup, paired with the create POST). **Never** pass a URL derived from user
+/// or remote input - only operator config.
+pub async fn outbound_trusted_get(url: &str) -> Result<reqwest::RequestBuilder, OutboundError> {
+    let parsed = url::Url::parse(url)?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(OutboundError::UnsupportedScheme(
+            parsed.scheme().to_string(),
+        ));
+    }
+    Ok(client_trusted().get(parsed))
+}
+
 /// LC-152 test seam. Returns a fresh `reqwest::Client` with the DEFAULT
 /// reqwest resolver (no public-IP filter) AND no URL-input validation,
 /// so tests can target loopback receivers. Mirrors the LC-75

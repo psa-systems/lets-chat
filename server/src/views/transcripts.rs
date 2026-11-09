@@ -98,6 +98,13 @@ pub struct TranscriptPage<'a> {
     /// LC-527: true when the summary has parseable "## Action items", so the
     /// "Create follow-up tasks" button is offered.
     pub has_action_items: bool,
+    /// LC-1135: viewer may see/generate proposed YouTrack issues (flag on + AI
+    /// gate). When false the panel is not rendered at all.
+    pub youtrack_can_review: bool,
+    /// LC-1135: viewer may file issues (flag on + staff set).
+    pub youtrack_can_file: bool,
+    /// LC-1135: the proposals already stored for this transcript.
+    pub youtrack_proposals: Vec<ProposalView>,
 }
 
 /// LC-396: the htmx response after generating a summary - the rendered summary
@@ -125,4 +132,31 @@ pub struct FollowUpsCreatedFragment {}
 pub struct TranscriptBriefFragment {
     pub transcript_id: i64,
     pub brief_html: String,
+}
+
+/// LC-1135: one proposed YouTrack issue as shown in the review panel.
+pub struct ProposalView {
+    pub id: i64,
+    pub summary: String,
+    pub assignee_name: Option<String>,
+    pub source_lines: String,
+    /// True once filed; the row then shows a link instead of the accept controls.
+    pub filed: bool,
+    /// The created issue's readable key (e.g. `LC-1234`), set when filed.
+    pub youtrack_issue_id: Option<String>,
+    /// The public issue URL, set when filed and the base URL is known.
+    pub issue_url: Option<String>,
+    /// A per-row error from the last file attempt (e.g. YouTrack rejected it).
+    pub error: Option<String>,
+}
+
+/// LC-1135: the "Proposed issues" panel body, swapped into
+/// `#lc-transcript-youtrack` after generation or filing.
+#[derive(Template)]
+#[template(path = "transcripts/issue_proposals_fragment.html")]
+pub struct IssueProposalsFragment {
+    pub transcript_id: i64,
+    pub proposals: Vec<ProposalView>,
+    /// Whether the viewer may file (shows the accept controls + file button).
+    pub can_file: bool,
 }

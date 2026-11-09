@@ -218,6 +218,7 @@ mod routes_trust_levels;
 mod routes_uploads;
 mod routes_user_groups;
 mod routes_webhooks;
+mod routes_youtrack_issues;
 mod scale_mentions;
 mod scheduled_dispatcher;
 mod security_headers;
