@@ -719,10 +719,11 @@ impl Hub {
     }
 
     /// LC-1147: drop every one of a user's connections from every topic whose
-    /// key starts with `prefix`, so a role change that revokes a whole family
-    /// of admin-gated topics (`call_diag:{room}` for every room) does not
-    /// require the caller to know each room id. Connection ids are collected
-    /// once up front, same as `unsubscribe_user_from_topic`.
+    /// key starts with `prefix`, so a revocation that gates a whole family of
+    /// per-room topics (`call_diag:{room}`) does not need a per-room call.
+    /// No-op if the user has no live connections. Connection ids are collected
+    /// before mutating `topics` so no `user_conns` borrow is held across the
+    /// topic update.
     pub fn unsubscribe_user_from_topic_prefix(&self, user_id: &str, prefix: &str) {
         let conn_ids: Vec<ConnId> = self
             .user_conns
@@ -1105,6 +1106,59 @@ mod tests {
         let hub = Hub::new();
         // No connections / no subscription; must not panic.
         hub.unsubscribe_user_from_topic("ghost", "enclave:1");
+    }
+
+    // LC-1147: a demoted admin's connections are dropped from every
+    // call_diag:* topic, while another admin's subscriptions are unaffected.
+    #[test]
+    fn unsubscribe_user_from_topic_prefix_drops_only_matching_topics_for_that_user() {
+        let hub = Hub::new();
+        let (c1, mut rx1, _) = hub.connect("demoted", "demoted");
+        let (c2, mut rx2, _) = hub.connect("admin2", "admin2");
+        hub.subscribe_topic(c1, "call_diag:1");
+        hub.subscribe_topic(c1, "call_diag:2");
+        hub.subscribe_topic(c2, "call_diag:1");
+        hub.subscribe_topic(c2, "call_diag:2");
+        let evt1 = ChatEvent::CallDiag {
+            room_id: 1,
+            user_label: "x".into(),
+            kind: "connect".into(),
+            detail: None,
+        };
+        let evt2 = ChatEvent::CallDiag {
+            room_id: 2,
+            user_label: "x".into(),
+            kind: "connect".into(),
+            detail: None,
+        };
+
+        hub.unsubscribe_user_from_topic_prefix("demoted", "call_diag:");
+        hub.broadcast_to_topic("call_diag:1", &evt1);
+        hub.broadcast_to_topic("call_diag:2", &evt2);
+
+        assert!(
+            rx1.try_recv().is_err(),
+            "demoted admin must not receive call_diag:1"
+        );
+        assert!(
+            rx2.try_recv().is_ok(),
+            "admin2 must still receive call_diag:1"
+        );
+        assert!(
+            rx1.try_recv().is_err(),
+            "demoted admin must not receive call_diag:2"
+        );
+        assert!(
+            rx2.try_recv().is_ok(),
+            "admin2 must still receive call_diag:2"
+        );
+    }
+
+    #[test]
+    fn unsubscribe_user_from_topic_prefix_is_noop_for_unknown_user() {
+        let hub = Hub::new();
+        // No connections / no subscription; must not panic.
+        hub.unsubscribe_user_from_topic_prefix("ghost", "call_diag:");
     }
 
     // LC-859: the transcription-agent marker a late joiner reads to decide
