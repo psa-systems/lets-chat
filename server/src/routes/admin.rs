@@ -1366,6 +1366,17 @@ pub async fn post_role(
     db::auth::set_user_role(&state.auth, &user_id, role).await?;
     if role != "admin" {
         state.hub.unsubscribe_user_from_topic(&user_id, "admin");
+        // LC-1148: the admin role also grants a read of every enclave's
+        // topic and god-mode access to every non-DM room (`is_room_accessible`,
+        // `topic_subscribe_allowed`); drop both so a demoted admin's open
+        // tab stops receiving live updates it no longer has access to.
+        state
+            .hub
+            .unsubscribe_user_from_topic_prefix(&user_id, "enclave:");
+        state
+            .hub
+            .unsubscribe_user_from_non_member_rooms(&user_id, &state.chat)
+            .await;
     }
     db::moderation::log_mod_action(
         &state.chat,

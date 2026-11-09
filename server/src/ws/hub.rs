@@ -718,6 +718,71 @@ impl Hub {
         }
     }
 
+    /// LC-1147/LC-1148: drop every one of a user's connections from every
+    /// topic whose key starts with `prefix` (e.g. "call_diag:" or
+    /// "enclave:"), so a role change that revokes a whole class of
+    /// admin-gated topics does not need to enumerate each live instance.
+    pub fn unsubscribe_user_from_topic_prefix(&self, user_id: &str, prefix: &str) {
+        let conn_ids: Vec<ConnId> = self
+            .user_conns
+            .get(user_id)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default();
+        if conn_ids.is_empty() {
+            return;
+        }
+        let topics: Vec<String> = self
+            .topics
+            .iter()
+            .filter(|e| e.key().starts_with(prefix))
+            .map(|e| e.key().clone())
+            .collect();
+        for topic in topics {
+            for &conn_id in &conn_ids {
+                self.unsubscribe_topic(conn_id, &topic);
+            }
+        }
+    }
+
+    /// LC-1148: drop every one of a user's connections from every room
+    /// subscription that depended on the site-admin god-mode grant in
+    /// `is_room_accessible`, so a demotion ends live room broadcasts (chat
+    /// messages, reactions, polls) a non-member admin was only receiving
+    /// because of the role. Re-checks each room the user's connections are
+    /// currently subscribed to without the admin grant; a room the user is
+    /// actually a member of (or a member of the enclave for a public room)
+    /// is left alone.
+    pub async fn unsubscribe_user_from_non_member_rooms(
+        &self,
+        user_id: &str,
+        pool: &sqlx::SqlitePool,
+    ) {
+        let conn_ids: Vec<ConnId> = self
+            .user_conns
+            .get(user_id)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default();
+        if conn_ids.is_empty() {
+            return;
+        }
+        let room_ids: Vec<i64> = self
+            .rooms
+            .iter()
+            .filter(|e| conn_ids.iter().any(|c| e.value().contains(c)))
+            .map(|e| *e.key())
+            .collect();
+        for room_id in room_ids {
+            let accessible = crate::db::chat::is_room_accessible(pool, room_id, user_id, false)
+                .await
+                .unwrap_or(false);
+            if !accessible {
+                for &conn_id in &conn_ids {
+                    self.unsubscribe(conn_id, room_id);
+                }
+            }
+        }
+    }
+
     /// LC-160: broadcast an event to every connection subscribed to `topic`.
     pub fn broadcast_to_topic(&self, topic: &str, event: &ChatEvent) {
         if let Some(conns) = self.topics.get(topic) {
@@ -1112,6 +1177,62 @@ mod tests {
         assert!(
             hub.transcript_agent_active(7),
             "a stale finalize for a superseded session must not block the current session"
+        );
+    }
+
+    // LC-1148: a non-member admin's god-mode subscription to a room is
+    // dropped on demotion; a genuine member's subscription to the same room
+    // is unaffected.
+    #[tokio::test]
+    async fn unsubscribe_user_from_non_member_rooms_drops_godmode_only() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("pool");
+        sqlx::migrate!("./migrations/chat")
+            .run(&pool)
+            .await
+            .expect("chat migrations");
+
+        let enclave_id = crate::db::enclave::create_enclave(&pool, "e1", None, "owner")
+            .await
+            .expect("create enclave");
+        let room_id = crate::db::chat::create_room(
+            &pool,
+            "private-room",
+            None,
+            "private",
+            None,
+            Some(enclave_id),
+        )
+        .await
+        .expect("create room");
+        crate::db::chat::add_room_member(&pool, room_id, "member")
+            .await
+            .expect("add member");
+
+        let hub = Hub::new();
+        let (admin_conn, mut admin_rx, _) = hub.connect("admin1", "admin1");
+        let (member_conn, mut member_rx, _) = hub.connect("member", "member");
+        // Both subscribed via the god-mode / membership path respectively,
+        // exactly like `apply_page_context` would do on page load.
+        hub.subscribe(admin_conn, room_id);
+        hub.subscribe(member_conn, room_id);
+
+        hub.unsubscribe_user_from_non_member_rooms("admin1", &pool)
+            .await;
+
+        let evt = ChatEvent::EnclaveMemberRemoved {
+            enclave_id,
+            user_id: "x".into(),
+        };
+        hub.broadcast_to_room(room_id, &evt);
+        assert!(
+            admin_rx.try_recv().is_err(),
+            "demoted non-member admin must stop receiving the room's broadcasts"
+        );
+        assert!(
+            member_rx.try_recv().is_ok(),
+            "a genuine member's subscription to the same room is unaffected"
         );
     }
 
