@@ -985,6 +985,10 @@ async fn chat_user_columns_are_purged_or_allowlisted() {
         ("slash_commands_custom", "created_by"),
         ("support_tickets", "handled_by"),
         ("transcript_segments", "user_id"),
+        // LC-1135: the staff member who filed a transcript action item as a
+        // YouTrack issue stays on the record, mirroring call_transcripts.started_by
+        // and mod_actions.actor_user (the filing is also in the mod-action audit log).
+        ("transcript_issue_proposals", "filed_by"),
         ("user_groups", "created_by"),
         ("voice_events", "user_id"),
     ];
