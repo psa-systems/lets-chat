@@ -1463,6 +1463,15 @@ pub async fn post_role(
     db::auth::set_user_role(&state.auth, &user_id, role).await?;
     if role != "admin" {
         state.hub.unsubscribe_user_from_topic(&user_id, "admin");
+        // LC-1148: the admin-only enclave:* topic grants and non-member room
+        // subscriptions must not outlive demotion.
+        state
+            .hub
+            .unsubscribe_user_from_topic_prefix(&user_id, "enclave:");
+        state
+            .hub
+            .unsubscribe_user_from_non_member_rooms(&user_id, &state.chat)
+            .await;
         // LC-1147: also drop every call_diag:{room} subscription the user's
         // live connections hold, since that gate is checked only once, on
         // subscribe, and never re-checked per broadcast.
