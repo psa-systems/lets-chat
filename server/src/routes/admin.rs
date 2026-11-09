@@ -40,6 +40,11 @@ pub fn router() -> Router<AppState> {
         .route("/admin/settings", get(get_settings).post(post_settings))
         .route("/admin/settings/imap", post(post_imap_settings))
         .route("/admin/settings/giphy", post(post_giphy_settings))
+        .route("/admin/settings/youtrack", post(post_youtrack_settings))
+        .route(
+            "/admin/settings/youtrack-issues",
+            post(post_youtrack_issues_flag),
+        )
         .route("/admin/feature-flags", get(get_feature_flags))
         .route("/admin/settings/llm", post(post_llm_flag))
         .route(
@@ -253,6 +258,9 @@ pub struct SettingsQuery {
     /// LC-1065: set after a successful /admin/settings/giphy POST so the page
     /// renders the Giphy-saved confirmation banner.
     pub giphy_saved: Option<i64>,
+    /// LC-1135: set after a successful /admin/settings/youtrack POST so the page
+    /// renders the YouTrack-saved confirmation banner.
+    pub youtrack_saved: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -382,6 +390,17 @@ pub async fn get_settings(
         .filter(|s| matches!(s.as_str(), "g" | "pg" | "pg-13" | "r"))
         .unwrap_or_else(|| "pg-13".to_string());
     let giphy_secret_key_present = state.secret_key.is_some();
+    // LC-1135: org-wide YouTrack connection (base URL + project are plain; the
+    // token is sealed and only its presence is exposed).
+    let youtrack_base_url =
+        db::settings::get_setting(&state.settings, crate::youtrack::BASE_URL_KEY)
+            .await?
+            .unwrap_or_default();
+    let youtrack_default_project =
+        db::settings::get_setting(&state.settings, crate::youtrack::PROJECT_KEY)
+            .await?
+            .unwrap_or_default();
+    let youtrack_token_configured = crate::youtrack::token_configured(&state).await;
     let page = SettingsPage {
         user: &user,
         sidebar_categories: &sidebar_categories,
@@ -432,6 +451,12 @@ pub async fn get_settings(
         giphy_secret_key_present,
         giphy_error: None,
         giphy_saved: q.giphy_saved.is_some(),
+        youtrack_base_url,
+        youtrack_default_project,
+        youtrack_token_configured,
+        youtrack_secret_key_present: state.secret_key.is_some(),
+        youtrack_error: None,
+        youtrack_saved: q.youtrack_saved.is_some(),
     };
     html(&page)
 }
@@ -778,6 +803,53 @@ pub async fn post_giphy_settings(
 }
 
 #[derive(Deserialize)]
+pub struct YoutrackSettingsForm {
+    pub youtrack_base_url: String,
+    pub youtrack_default_project: String,
+    /// Write-only token. Empty input preserves the existing sealed value; a
+    /// non-empty input re-seals and overwrites (mirrors IMAP / Giphy).
+    pub youtrack_token: String,
+    /// Checkbox: present clears the stored token.
+    #[serde(default)]
+    pub youtrack_clear_token: Option<String>,
+}
+
+/// LC-1135: save the org-wide YouTrack connection. Base URL and default project
+/// are plain settings; the token is AES-256-GCM-sealed under the process secret
+/// key like the IMAP password (empty input preserves, non-empty re-seals, the
+/// clear checkbox removes it). The token is never rendered back or logged.
+pub async fn post_youtrack_settings(
+    State(state): State<AppState>,
+    AdminUser(_user): AdminUser,
+    headers: HeaderMap,
+    Form(form): Form<YoutrackSettingsForm>,
+) -> Result<Response, AppError> {
+    let base_url = form.youtrack_base_url.trim().to_string();
+    let project = form.youtrack_default_project.trim().to_string();
+    db::settings::set_setting(&state.settings, crate::youtrack::BASE_URL_KEY, &base_url).await?;
+    db::settings::set_setting(&state.settings, crate::youtrack::PROJECT_KEY, &project).await?;
+
+    if form.youtrack_clear_token.is_some() {
+        crate::youtrack::store_token(&state, "").await?;
+    } else if !form.youtrack_token.trim().is_empty() {
+        if state.secret_key.is_none() {
+            let msg =
+                "YouTrack token requires LETS_CHAT_SECRET_KEY to be set on the server".to_string();
+            if is_hx(&headers) {
+                return Ok(html(&SettingsFeedback::err(msg))?.into_response());
+            }
+            return Err(AppError::BadRequest(msg));
+        }
+        crate::youtrack::store_token(&state, form.youtrack_token.trim()).await?;
+    }
+
+    if is_hx(&headers) {
+        return Ok(html(&SettingsFeedback::ok(translate_current("admin-saved")))?.into_response());
+    }
+    Ok(Redirect::to("/admin/settings?youtrack_saved=1").into_response())
+}
+
+#[derive(Deserialize)]
 pub struct EmailDigestDefaultForm {
     /// Form-checkbox convention: a checked box submits the field, an
     /// unchecked box omits it.
@@ -911,7 +983,9 @@ pub async fn get_feature_flags(
     State(state): State<AppState>,
     AdminUser(user): AdminUser,
 ) -> Result<Html, AppError> {
-    use super::feature_flags::{rollout, CALL_DIAGNOSTICS, REMOTE_CONTROL, TRANSCRIPTION};
+    use super::feature_flags::{
+        rollout, CALL_DIAGNOSTICS, REMOTE_CONTROL, TRANSCRIPTION, YOUTRACK_ISSUES,
+    };
     let (
         sidebar_categories,
         sidebar_starred_rooms,
@@ -945,6 +1019,8 @@ pub async fn get_feature_flags(
         transcription_rollout: rollout(&state, &TRANSCRIPTION).await.as_str(),
         stt_configured: state.stt_available(),
         call_diagnostics_rollout: rollout(&state, &CALL_DIAGNOSTICS).await.as_str(),
+        youtrack_issues_rollout: rollout(&state, &YOUTRACK_ISSUES).await.as_str(),
+        youtrack_configured: crate::youtrack::load_config(&state).await.is_some(),
     };
     html(&page)
 }
@@ -1036,6 +1112,27 @@ pub async fn post_call_diagnostics_flag(
         &headers,
         &super::feature_flags::CALL_DIAGNOSTICS,
         "call_diagnostics",
+        form,
+    )
+    .await
+}
+
+/// LC-1135: set the transcript -> YouTrack issues rollout. A kill switch for the
+/// whole surface (Off vs on); who may review is scoped by the AI gate and who
+/// may file by the staff set, so the audience row is not used as a second
+/// audience. Read live, like the other flags.
+pub async fn post_youtrack_issues_flag(
+    State(state): State<AppState>,
+    AdminUser(actor): AdminUser,
+    headers: HeaderMap,
+    axum::Form(form): axum::Form<RolloutForm>,
+) -> Result<Response, AppError> {
+    save_rollout(
+        &state,
+        &actor,
+        &headers,
+        &super::feature_flags::YOUTRACK_ISSUES,
+        "youtrack_issues",
         form,
     )
     .await
