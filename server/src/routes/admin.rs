@@ -1366,6 +1366,9 @@ pub async fn post_role(
     db::auth::set_user_role(&state.auth, &user_id, role).await?;
     if role != "admin" {
         state.hub.unsubscribe_user_from_topic(&user_id, "admin");
+        state
+            .hub
+            .unsubscribe_user_from_topic_prefix(&user_id, "call_diag:");
     }
     db::moderation::log_mod_action(
         &state.chat,

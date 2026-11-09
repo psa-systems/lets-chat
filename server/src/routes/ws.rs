@@ -983,7 +983,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                     render_transcript_segment(&e)
                                 }
                                 // LC-1118: in-call diagnostics row. Only admins
-                                // subscribed to call_diag:{room} receive it, so no
+                                // subscribed to call_diag:{room} receive it, and
+                                // LC-1147 makes a role demotion drop that
+                                // subscription immediately (`post_role` calls
+                                // `unsubscribe_user_from_topic_prefix`), so no
                                 // per-recipient guard is needed here.
                                 ChatEvent::CallDiag { .. } => render_call_diag(&e),
                                 _ => render_event(&e),
