@@ -294,6 +294,73 @@
     else document.body.classList.add('lc-transcript-scrolled');
   }
 
+  // ---- live transcript search (LC-1133) ---------------------------------
+  // Pure: does `text` contain `query` (case-insensitive)? An empty query
+  // matches everything (no filtering).
+  function capLineMatches(text, query) {
+    if (!query) return true;
+    return String(text).toLowerCase().indexOf(String(query).toLowerCase()) !== -1;
+  }
+  function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  // Pure: `text` as escaped HTML with every case-insensitive occurrence of
+  // `query` wrapped in <mark class="lc-cap-hit">. All text is escaped, so a
+  // caption containing markup cannot inject anything.
+  function highlightHtml(text, query) {
+    text = String(text);
+    if (!query) return escHtml(text);
+    var lc = text.toLowerCase();
+    var ql = String(query).toLowerCase();
+    var out = '';
+    var i = 0;
+    while (true) {
+      var idx = lc.indexOf(ql, i);
+      if (idx === -1) { out += escHtml(text.slice(i)); break; }
+      out += escHtml(text.slice(i, idx));
+      out += '<mark class="lc-cap-hit">' + escHtml(text.slice(idx, idx + ql.length)) + '</mark>';
+      i = idx + ql.length;
+    }
+    return out;
+  }
+
+  var searchQuery = '';
+  // Filter #lc-caption-log to lines matching searchQuery, highlight the matched
+  // text, and update the match count. An empty query restores every line. Reads
+  // each line's current textContent as the source of truth, so it is idempotent
+  // across re-applies (the <mark> wrappers flatten back to plain text).
+  function applyTranscriptFilter() {
+    var log = document.getElementById('lc-caption-log');
+    if (!log) return;
+    var query = searchQuery.trim();
+    var lines = log.querySelectorAll('.lc-cap-line');
+    var count = 0;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var textEl = line.querySelector('.lc-cap-text');
+      if (!textEl) continue;
+      var raw = textEl.textContent;
+      if (query) {
+        var match = capLineMatches(raw, query);
+        textEl.innerHTML = highlightHtml(raw, query);
+        if (line.classList.toggle) line.classList.toggle('lc-cap-hidden', !match);
+        if (match) count++;
+      } else {
+        textEl.textContent = raw;
+        if (line.classList.remove) line.classList.remove('lc-cap-hidden');
+      }
+    }
+    document.body.classList.toggle('lc-transcript-searching', !!query);
+    var countEl = q('[data-lc-transcript-match-count]');
+    var nEl = q('[data-lc-transcript-match-n]');
+    var clearBtn = q('[data-lc-transcript-search-clear]');
+    if (nEl) nEl.textContent = String(count);
+    if (countEl) countEl.hidden = !query;
+    if (clearBtn) clearBtn.hidden = !query;
+  }
+
   // ---- segment POST -----------------------------------------------------
   function postSegment(text) {
     if (transcriptId == null || !text) return;
@@ -692,6 +759,9 @@
         Array.prototype.forEach.call(muts[i].addedNodes, decorateLine);
       }
       onNewCaptions();
+      // LC-1133: a new line that arrives while a search is active must be
+      // filtered/highlighted in step, so a match shows and a non-match hides.
+      if (searchQuery.trim()) applyTranscriptFilter();
     }).observe(log, { childList: true });
   }
   // Track scroll position so the jump-to-live affordance reveals when scrolled
@@ -706,11 +776,27 @@
     document.body.classList.toggle('lc-transcript-scrolled', !followLive);
   }, true);
 
+  // LC-1133: live transcript search box -> filter + highlight on every keystroke.
+  document.addEventListener('input', function (e) {
+    var t = e.target;
+    if (t && t.matches && t.matches('[data-lc-transcript-search]')) {
+      searchQuery = t.value || '';
+      applyTranscriptFilter();
+    }
+  });
+
   // ---- transcript drawer controls (LC-402) ------------------------------
   regClick(function (e) {
     if (!e.target.closest) return;
     if (e.target.closest('[data-lc-transcript-close]')) { showPanel(false); return; }
     if (e.target.closest('[data-lc-jump-live]')) { scrollToLive(); return; }
+    if (e.target.closest('[data-lc-transcript-search-clear]')) { // LC-1133
+      searchQuery = '';
+      var input = q('[data-lc-transcript-search]');
+      if (input) { input.value = ''; input.focus(); }
+      applyTranscriptFilter();
+      return;
+    }
     var copy = e.target.closest('[data-lc-transcript-copy]');
     if (copy) { copyTranscript(copy); return; } // LC-411
     var pt = e.target.closest('[data-lc-transcript-panel-toggle]');
@@ -870,6 +956,8 @@
     chooseEngine: chooseEngine,
     nearBottom: nearBottom,
     bleedGateDrops: bleedGateDrops,
+    capLineMatches: capLineMatches,
+    highlightHtml: highlightHtml,
   };
 
   // Learn the engine (browser vs server STT) up front, then keep toggles in step.
