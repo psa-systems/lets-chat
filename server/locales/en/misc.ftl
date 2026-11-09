@@ -181,6 +181,11 @@ voice-transcript-tip = Toggle transcript panel
 voice-transcript-close = Close transcript
 voice-diag-title = Diagnostics
 voice-jump-live = Jump to live
+# LC-1133: search the live transcript during a call.
+voice-transcript-search-placeholder = Search transcript
+voice-transcript-search-label = Search the live transcript
+voice-transcript-matches = matches
+voice-transcript-search-clear = Clear search
 # LC-1123: in-call text chat.
 voice-chat-label = Chat
 voice-chat-tip = Open chat
