@@ -78,6 +78,7 @@ mod email_notification_post_path;
 mod enclave_msg_rate_limit;
 mod ephemeral_messages;
 mod health;
+mod hub_demotion_room_drop;
 mod huddle;
 mod huddle_remote_control;
 mod huddle_ring;

@@ -1108,6 +1108,51 @@ mod tests {
         assert!(rx2.try_recv().is_ok());
     }
 
+    // LC-1148: a demoted admin's god-mode `enclave:*` subscriptions are
+    // dropped across every enclave at once, on every tab, while an unrelated
+    // topic and other users are unaffected.
+    #[test]
+    fn unsubscribe_user_from_topic_prefix_drops_every_matching_topic_for_that_user() {
+        let hub = Hub::new();
+        let (c1, mut rx1, _) = hub.connect("demoted", "demoted");
+        let (c2, mut rx2, _) = hub.connect("demoted", "demoted"); // second tab
+        let (c3, mut rx3, _) = hub.connect("other", "other");
+        hub.subscribe_topic(c1, "enclave:5");
+        hub.subscribe_topic(c2, "enclave:5");
+        hub.subscribe_topic(c1, "enclave:9");
+        hub.subscribe_topic(c3, "enclave:5");
+        hub.subscribe_topic(c1, "admin");
+
+        hub.unsubscribe_user_from_topic_prefix("demoted", "enclave:");
+
+        let enclave5 = ChatEvent::EnclaveMemberRemoved {
+            enclave_id: 5,
+            user_id: "x".into(),
+        };
+        let enclave9 = ChatEvent::EnclaveMemberRemoved {
+            enclave_id: 9,
+            user_id: "x".into(),
+        };
+        let admin_evt = ChatEvent::AdminUserChanged {
+            user_id: "x".into(),
+            removed: true,
+        };
+        hub.broadcast_to_topic("enclave:5", &enclave5);
+        hub.broadcast_to_topic("enclave:9", &enclave9);
+        hub.broadcast_to_topic("admin", &admin_evt);
+
+        assert!(rx2.try_recv().is_err(), "demoted tab 2 drops enclave:5");
+        assert!(rx3.try_recv().is_ok(), "other user keeps enclave:5");
+        assert!(
+            matches!(rx1.try_recv(), Ok(ChatEvent::AdminUserChanged { .. })),
+            "demoted tab 1 still receives admin (prefix is enclave-only), not enclave:5/9"
+        );
+        assert!(
+            rx1.try_recv().is_err(),
+            "demoted tab 1 got nothing else queued (enclave:5/enclave:9 were dropped)"
+        );
+    }
+
     #[test]
     fn unsubscribe_user_from_topic_is_noop_for_unknown_user() {
         let hub = Hub::new();
