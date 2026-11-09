@@ -982,9 +982,14 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_transcript_segment(&e)
                                 }
-                                // LC-1118: in-call diagnostics row. Only admins
-                                // subscribed to call_diag:{room} receive it, so no
-                                // per-recipient guard is needed here.
+                                // LC-1118: in-call diagnostics row, delivered to
+                                // whoever is subscribed to call_diag:{room}.
+                                // LC-1147 made `post_role` drop that subscription
+                                // on every live connection the instant a role
+                                // change takes the user off `admin`, so no
+                                // per-recipient role check is needed here either:
+                                // a demoted admin's socket is already off the
+                                // topic by the time this fires.
                                 ChatEvent::CallDiag { .. } => render_call_diag(&e),
                                 _ => render_event(&e),
                             };

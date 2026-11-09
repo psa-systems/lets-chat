@@ -1366,6 +1366,12 @@ pub async fn post_role(
     db::auth::set_user_role(&state.auth, &user_id, role).await?;
     if role != "admin" {
         state.hub.unsubscribe_user_from_topic(&user_id, "admin");
+        // LC-1147: also drop every call_diag:{room} subscription the user's
+        // live connections hold, since that gate is checked only once, on
+        // subscribe, and never re-checked per broadcast.
+        state
+            .hub
+            .unsubscribe_user_from_topic_prefix(&user_id, "call_diag:");
     }
     db::moderation::log_mod_action(
         &state.chat,

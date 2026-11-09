@@ -718,6 +718,33 @@ impl Hub {
         }
     }
 
+    /// LC-1147: drop every one of a user's connections from every topic whose
+    /// key starts with `prefix`, so a role change that revokes a whole family
+    /// of admin-gated topics (`call_diag:{room}` for every room) does not
+    /// require the caller to know each room id. Connection ids are collected
+    /// once up front, same as `unsubscribe_user_from_topic`.
+    pub fn unsubscribe_user_from_topic_prefix(&self, user_id: &str, prefix: &str) {
+        let conn_ids: Vec<ConnId> = self
+            .user_conns
+            .get(user_id)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default();
+        if conn_ids.is_empty() {
+            return;
+        }
+        let topics: Vec<String> = self
+            .topics
+            .iter()
+            .filter(|entry| entry.key().starts_with(prefix))
+            .map(|entry| entry.key().clone())
+            .collect();
+        for topic in topics {
+            for &conn_id in &conn_ids {
+                self.unsubscribe_topic(conn_id, &topic);
+            }
+        }
+    }
+
     /// LC-160: broadcast an event to every connection subscribed to `topic`.
     pub fn broadcast_to_topic(&self, topic: &str, event: &ChatEvent) {
         if let Some(conns) = self.topics.get(topic) {
@@ -1035,6 +1062,42 @@ mod tests {
         hub.broadcast_to_topic("admin", &evt);
         assert!(rx1.try_recv().is_err());
         assert!(rx2.try_recv().is_ok());
+    }
+
+    // LC-1147: a demoted admin is dropped from every call_diag:* topic across
+    // rooms, while another admin subscribed to the same topics is unaffected.
+    #[test]
+    fn unsubscribe_user_from_topic_prefix_stops_delivery_for_that_user_only() {
+        let hub = Hub::new();
+        let (c1, mut rx1, _) = hub.connect("demoted", "demoted");
+        let (c2, mut rx2, _) = hub.connect("admin2", "admin2");
+        hub.subscribe_topic(c1, "call_diag:1");
+        hub.subscribe_topic(c1, "call_diag:2");
+        hub.subscribe_topic(c2, "call_diag:1");
+        hub.subscribe_topic(c2, "call_diag:2");
+
+        hub.unsubscribe_user_from_topic_prefix("demoted", "call_diag:");
+
+        let evt = ChatEvent::CallDiag {
+            room_id: 1,
+            user_label: "x".into(),
+            kind: "connect".into(),
+            detail: None,
+        };
+        hub.broadcast_to_topic("call_diag:1", &evt);
+        hub.broadcast_to_topic("call_diag:2", &evt);
+        assert!(
+            rx1.try_recv().is_err(),
+            "demoted user must not receive call_diag:1 after prefix unsubscribe"
+        );
+        assert!(
+            rx2.try_recv().is_ok(),
+            "admin2 stays subscribed to call_diag:1"
+        );
+        assert!(
+            rx2.try_recv().is_ok(),
+            "admin2 stays subscribed to call_diag:2"
+        );
     }
 
     #[test]
