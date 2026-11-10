@@ -8,6 +8,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.11.0] - 2026-11-10
+
 ### Security
 
 - **Bot creation now validates the bot's handle (LC-1010).** The admin "create bot" form wrote `users.username` with no validation beyond non-empty, so an admin POST could store an over-length or illegal handle that no other path would accept. Bot handles now go through the same validator as every other handle (length cap, allowed charset), closing the last unvalidated handle write path.
