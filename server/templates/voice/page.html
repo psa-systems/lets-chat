@@ -41,8 +41,8 @@
          can_manage_sidebar_categories, which load_chrome zeroes on a boosted
          nav, so the link never rendered on the normal path into a voice room. #}
       {% if can_manage_overrides %}
-      {# LC-1091: visible label, matching the text room's Manage link at
-         room_header.html:259-266. #}
+      {# LC-1091: icon plus visible label, matching the text room's "Manage this
+         room" shield at partials/room_header.html:258-267. #}
       <a href="/room/{{ room.id }}/manage" {% include "partials/nav_boost.html" %}
          class="lc-header-action" aria-label="{{ "partials-room-manage-title"|t }}"
          data-lc-tip="{{ "partials-room-manage-title"|t }}" data-lc-tip-pos="bottom">
