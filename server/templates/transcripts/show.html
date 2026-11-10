@@ -107,6 +107,22 @@
       </div>
     </div>
     {% endif %}
+    {# LC-1135: turn the transcript's action items into proposed YouTrack issues,
+       reviewed and filed by a privileged user. Shown only to reviewers (flag on
+       + AI gate); the file controls appear only for the staff set. #}
+    {% if youtrack_can_review && !lines.is_empty() %}
+    <div class="lc-page-medium card mb-4 overflow-hidden">
+      <header class="border-b border-border px-3 py-2">
+        <div class="font-semibold leading-tight">{{ "youtrack-heading"|t }}</div>
+        <div class="text-xs text-content-muted">{{ "youtrack-scope"|t }}</div>
+      </header>
+      <div id="lc-transcript-youtrack" class="min-w-0 break-words p-3">
+        {% let proposals = youtrack_proposals.as_slice() %}
+        {% let can_file = youtrack_can_file %}
+        {% include "transcripts/issue_proposals_fragment.html" %}
+      </div>
+    </div>
+    {% endif %}
     {% if lines.is_empty() %}
     <p class="lc-body text-content-muted">{{ "transcript-empty"|t }}</p>
     {% else %}

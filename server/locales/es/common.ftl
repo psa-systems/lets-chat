@@ -274,14 +274,14 @@ settings-display-name = Nombre visible
 settings-display-name-help = Se muestra en todas partes, en cada sala, y se usa para la letra de tu avatar. Se sincroniza con tu nombre de Bunyip cada vez que inicias sesión. Un apodo por sala (configurado en las Preferencias de una sala) lo reemplaza solo en esa sala.
 # LC-766: identificador editable
 settings-handle = Identificador
-settings-handle-help = Tu nombre para @menciones en lets-chat. Es independiente de tu usuario de Bunyip y Bunyip nunca lo cambia. Solo letras, números y _. Puedes cambiarlo una vez cada 30 días.
+settings-handle-help = Tu nombre para @menciones en lets-chat. Es independiente de tu usuario de Bunyip y Bunyip nunca lo cambia. Hasta 18 caracteres: solo letras, números y _. Puedes cambiarlo una vez cada 30 días.
 settings-handle-locked = Podrás cambiar tu identificador de nuevo el
 # LC-766: elección del identificador en el primer acceso
 welcome-handle-title = Elige tu identificador
 welcome-handle-heading = Elige tu identificador
 welcome-handle-intro = Es el nombre con el que otros te ven y te mencionan. Hemos sugerido uno a partir de tu cuenta; consérvalo o elige el tuyo.
 welcome-handle-label = Identificador
-welcome-handle-help = Solo letras, números y _ - .
+welcome-handle-help = Hasta 18 caracteres: solo letras, números y _.
 welcome-handle-submit = Continuar
 welcome-handle-logo-alt = Logotipo
 settings-email = Correo electrónico

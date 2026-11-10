@@ -2066,6 +2066,16 @@ pub fn build_router(state: AppState) -> Router {
             "/transcripts/{transcript_id}/follow-ups",
             post(transcripts::create_followups),
         )
+        // LC-1135: propose YouTrack issues from the transcript, then file the
+        // accepted ones.
+        .route(
+            "/transcripts/{transcript_id}/propose-issues",
+            post(transcripts::propose_issues),
+        )
+        .route(
+            "/transcripts/{transcript_id}/file-issues",
+            post(transcripts::file_issues),
+        )
         // LC-441: DELETE on a row removes that one transcript.
         .route(
             "/transcripts/{transcript_id}",
