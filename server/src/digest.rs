@@ -97,7 +97,9 @@ fn render_html_snippet(s: &str) -> String {
     // Same shape as `db::mentions::TOKEN_PATTERN`: leading whitespace OR
     // start-of-string, then `@` + 1-32 chars of `[A-Za-z0-9_-]`. Captures
     // the username so we can wrap it in <strong> without including the
-    // leading whitespace inside the tag.
+    // leading whitespace inside the tag. LC-1011: the `{1,32}` bound stays wider
+    // than the 18-char handle cap on purpose, so handles grandfathered above 18
+    // stay matchable (see db::mentions::TOKEN_PATTERN).
     let mention_re = MENTION_RE
         .get_or_init(|| regex::Regex::new(r"(?:^|\s)@([A-Za-z0-9_-]{1,32})").expect("regex"));
 

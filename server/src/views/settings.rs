@@ -19,6 +19,9 @@ pub struct SessionView {
 #[template(path = "settings/page.html")]
 pub struct UserSettingsPage<'a> {
     pub user: &'a User,
+    /// LC-1011: the handle-length cap (`MAX_USERNAME_CHARS`), driving the handle
+    /// field's `maxlength` so the client hint cannot drift from the server rule.
+    pub max_handle_len: usize,
     pub sidebar_categories: &'a [crate::views::layout::SidebarCategoryGroup],
     pub sidebar_starred_rooms: &'a [SidebarRoom],
     pub sidebar_starred_peers: &'a [SidebarPeer],

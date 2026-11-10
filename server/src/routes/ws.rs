@@ -982,9 +982,14 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_transcript_segment(&e)
                                 }
-                                // LC-1118: in-call diagnostics row. Only admins
-                                // subscribed to call_diag:{room} receive it, so no
-                                // per-recipient guard is needed here.
+                                // LC-1118: in-call diagnostics row, delivered to
+                                // whoever is subscribed to call_diag:{room}.
+                                // LC-1147 made `post_role` drop that subscription
+                                // on every live connection the instant a role
+                                // change takes the user off `admin`, so no
+                                // per-recipient role check is needed here either:
+                                // a demoted admin's socket is already off the
+                                // topic by the time this fires.
                                 ChatEvent::CallDiag { .. } => render_call_diag(&e),
                                 _ => render_event(&e),
                             };
@@ -2565,7 +2570,17 @@ pub async fn relay_control_signal(
         refuse("rate_limited");
         return;
     }
-    if !remote_control_allowed(&state.auth, &user.id, &peer_id).await {
+    // LC-953: the pairwise eligibility gate (both verified, neither blocked)
+    // applies ONLY to establishing control - `request`/`grant`. `deny`/`revoke`
+    // must always go through, so an in-flight session can be torn down and its
+    // audit row closed even after the pair's eligibility changes mid-session (a
+    // block lands, or an admin unverifies an email); otherwise a revoke returned
+    // here before the audit-close/relay below, leaving the session open until the
+    // disconnect backstop and the peer never told. Mirrors the huddle path's
+    // guard (relay_huddle_control_signal).
+    if matches!(kind, "request" | "grant")
+        && !remote_control_allowed(&state.auth, &user.id, &peer_id).await
+    {
         // Only a `request` has a waiting requester UI to notify.
         if kind == "request" {
             refuse("not_allowed");

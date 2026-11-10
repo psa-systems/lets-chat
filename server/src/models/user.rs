@@ -258,9 +258,14 @@ fn mute_active(muted_until: Option<&str>, now: chrono::DateTime<chrono::Utc>) ->
     }
 }
 
-/// LC-766: maximum handle length. LC-996: matches the `{1,32}` bound of the
-/// mention token pattern so every handle is addressable.
-pub const MAX_USERNAME_CHARS: usize = 32;
+/// LC-766: maximum handle length. LC-1011: capped at 18 for readability (a
+/// handle should not dominate a message row, member list entry or mention pill).
+/// This is a SUBSET of the `{1,32}` mention-token bound, not a match for it: the
+/// token pattern deliberately stays wider so handles grandfathered above 18 (the
+/// cap is enforced only on write, not retroactively) remain addressable. The
+/// over-match is harmless because mention resolution is an exact lookup against
+/// `users.username`, so a 19-to-32-char token simply resolves to nothing.
+pub const MAX_USERNAME_CHARS: usize = 18;
 
 /// LC-993: maximum display-name length, shared by the profile form and the SSO
 /// paths so an IdP `name` claim can never exceed what a user could type.
@@ -286,6 +291,21 @@ pub fn avatar_initial(label: &str) -> String {
         .find(|c| c.is_alphanumeric())
         .map(|c| c.to_uppercase().collect())
         .unwrap_or_else(|| "?".to_string())
+}
+
+/// LC-1011: a collision-resolution candidate handle - the base truncated so the
+/// `_{n}` suffix still fits `MAX_USERNAME_CHARS`, plus that suffix. Shared by the
+/// SSO (`pick_username`) and admin-seed (`pick_handle`) provisioning paths so a
+/// derived handle can never exceed the cap its own owner could re-enter in
+/// settings. The suffix uses `_` (not `-`) so the result passes
+/// `handle_char_allowed` (LC-1050). Callers use `n` in `2..=5` (one digit), for
+/// which `MAX_USERNAME_CHARS - 2` reserves exactly the `_` + digit.
+pub fn collision_candidate(base: &str, n: u32) -> String {
+    let stem: String = base
+        .chars()
+        .take(MAX_USERNAME_CHARS.saturating_sub(2))
+        .collect();
+    format!("{stem}_{n}")
 }
 
 /// LC-766: characters allowed in a chat handle. Kept in one place so the SSO
@@ -541,6 +561,44 @@ mod tests {
     }
 
     #[test]
+    fn handle_cap_is_eighteen_chars() {
+        // LC-1011: the cap is 18. Pin the literal so changing the constant is a
+        // deliberate, visible edit, and cover the exact boundary the AC names.
+        assert_eq!(MAX_USERNAME_CHARS, 18);
+        assert!(
+            validate_handle(&"a".repeat(18)).is_ok(),
+            "18 chars accepted"
+        );
+        assert!(
+            validate_handle(&"a".repeat(19)).is_err(),
+            "19 chars rejected"
+        );
+        // sanitize truncates an over-length SSO value to exactly the cap.
+        assert_eq!(sanitize_handle(&"a".repeat(80)).chars().count(), 18);
+    }
+
+    #[test]
+    fn collision_candidate_fits_the_cap_for_a_full_length_base() {
+        // LC-1011: a collision on a maximal base (as pick_username/pick_handle
+        // pass) must still yield a handle its own owner could re-enter - at most
+        // 18 chars and a valid handle (so the `_` suffix, not `-`, is covered).
+        use super::collision_candidate;
+        let base = "a".repeat(80);
+        for n in 2..=5u32 {
+            let c = collision_candidate(&base, n);
+            assert!(
+                c.chars().count() <= MAX_USERNAME_CHARS,
+                "{c} exceeds the cap"
+            );
+            assert!(validate_handle(&c).is_ok(), "{c} must be a valid handle");
+        }
+        assert_eq!(
+            collision_candidate("abcdefghijklmnopqrstuvwxyz", 3),
+            "abcdefghijklmnop_3"
+        );
+    }
+
+    #[test]
     fn sanitize_handle_coerces_for_the_provisioning_path() {
         // The SSO path has no human to correct a bad value, so it strips instead.
         assert_eq!(sanitize_handle("ada lovelace!"), "adalovelace");
@@ -589,6 +647,19 @@ mod tests {
                 validate_handle(&out).is_ok(),
                 "sanitize_handle({input:?}) = {out:?} was rejected by validate_handle"
             );
+            // LC-1012: on a collision, pick_username / pick_handle append `_{n}`
+            // to this output. The separator was `-{n}` before LC-1050, which
+            // `handle_char_allowed` rejects, so the account held a handle its own
+            // settings form refused. The suffix is appended AFTER sanitize_handle
+            // returns, so the bare assertion above missed it; assert the suffixed
+            // form validates too, closing the drift that let the separator diverge.
+            for n in 2..=5u32 {
+                let suffixed = super::collision_candidate(&out, n);
+                assert!(
+                    validate_handle(&suffixed).is_ok(),
+                    "collision_candidate({out:?}, {n}) = {suffixed:?} was rejected by validate_handle"
+                );
+            }
         }
     }
 

@@ -902,6 +902,12 @@ def rules [] {
             fix: "add a commented entry mirroring docs/configuration.md's wording to whichever of .env.standalone / .env.saas is missing it, or add it to docs/configuration.md if the code changed first; a name deliberately absent from one of the three surfaces goes on the ENV_VAR_ALLOWLIST above with a one-line reason (LC-937)"
             check: {|| undocumented-env-vars }
         }
+        {
+            id: "no-hardcoded-handle-maxlength"
+            pending: null
+            fix: "a handle input (name=\"username\") must set maxlength=\"{{ max_handle_len }}\" (driven from MAX_USERNAME_CHARS), never a hardcoded number, so the client hint cannot drift from the server handle cap the way settings/welcome said 64 while the server rejected at 33 (LC-1011)"
+            check: {|| handle-inputs-with-hardcoded-maxlength }
+        }
     ]
 }
 
@@ -923,7 +929,37 @@ def control-input-without-arm [] {
     } | flatten
 }
 
+# LC-1011: a handle input (`name="username"`) must drive its `maxlength` from
+# MAX_USERNAME_CHARS (`maxlength="{{ max_handle_len }}"`), never a hardcoded
+# number. A literal let the client hint drift from the server cap - the field
+# said 64 while the server rejected at 33. Pure line predicate so the rule can
+# be self-tested below without touching the filesystem.
+def handle-maxlength-violation [line: string] {
+    ($line =~ 'name="username"') and ($line =~ 'maxlength="[0-9]')
+}
+
+def handle-inputs-with-hardcoded-maxlength [] {
+    template-files | each {|file|
+        open --raw $file | decode utf-8 | lines | enumerate | each {|row|
+            if (handle-maxlength-violation $row.item) {
+                [$"($file):($row.index + 1): handle input has a hardcoded maxlength; use maxlength=\"{{ max_handle_len }}\""]
+            } else { [] }
+        } | flatten
+    } | flatten
+}
+
 def main [] {
+    # LC-1011 self-test: the handle-maxlength rule must flag a hardcoded number
+    # and pass the constant-driven form, so this guard cannot silently stop
+    # asserting (the failure mode the 64-vs-32 drift slipped through).
+    if not (handle-maxlength-violation '<input name="username" maxlength="32">') {
+        print --stderr "self-test failed: handle-maxlength rule did not flag a hardcoded maxlength"
+        exit 1
+    }
+    if (handle-maxlength-violation '<input name="username" maxlength="{{ max_handle_len }}">') {
+        print --stderr "self-test failed: handle-maxlength rule flagged the constant-driven form"
+        exit 1
+    }
     mut failing = 0
     for rule in (rules) {
         let hits = (do $rule.check)

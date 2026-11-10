@@ -56,6 +56,7 @@ pub mod stats;
 pub mod support_tickets;
 pub mod thread_followers;
 pub mod thread_muters;
+pub mod transcript_proposals;
 pub mod transcripts;
 pub mod translations;
 pub mod uploads;
