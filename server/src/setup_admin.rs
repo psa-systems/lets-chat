@@ -128,13 +128,10 @@ async fn pick_handle(pool: &SqlitePool, base: &str) -> Result<Option<String>, sq
     if db::auth::handle_available_for(pool, base, "").await? {
         return Ok(Some(base.to_string()));
     }
-    // LC-1050: `_N`, not `-N`, so the handle passes `validate_handle`.
-    let stem: String = base
-        .chars()
-        .take(crate::models::user::MAX_USERNAME_CHARS - 2)
-        .collect();
+    // LC-1050/LC-1011: `_N` not `-N` (passes `validate_handle`), and
+    // `collision_candidate` trims the base so `_N` still fits the length cap.
     for n in 2..=5u32 {
-        let candidate = format!("{stem}_{n}");
+        let candidate = crate::models::user::collision_candidate(base, n);
         if db::auth::handle_available_for(pool, &candidate, "").await? {
             return Ok(Some(candidate));
         }

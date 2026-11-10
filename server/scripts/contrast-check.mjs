@@ -130,11 +130,23 @@ function contrastRatio(fg, bg) {
 
 // --- run ------------------------------------------------------------------
 
+// Text pairs: foreground copy on a background. AA (4.5) for light / dark, AAA
+// (7.0) for the high-contrast modes.
 const PAIRS = [
   ["content", "surface"],
   ["content-muted", "surface"],
   ["accent-content", "accent"],
 ];
+
+// LC-1013: non-text pairs. A state fill is surface-on-surface, which the text
+// thresholds above never evaluate, so a hover fill that vanished against its
+// own surface shipped unnoticed. WCAG 2.2 SC 1.4.11 (Non-text Contrast) asks
+// for 3:1 on the visual information that identifies a component's state, so
+// this list carries its own 3.0 floor in every mode (the hc modes included -
+// they exist to be legible). Kept as a separate list because the threshold
+// differs from the text pairs.
+const NONTEXT_PAIRS = [["sidebar-hover", "sidebar-surface"]];
+const NONTEXT_MIN = 3.0;
 
 const rows = [];
 let failCount = 0;
@@ -171,6 +183,25 @@ for (const palette of PALETTES) {
         pass,
       });
     }
+    // LC-1013: non-text (state-fill) pairs at the SC 1.4.11 3:1 floor, same
+    // floor in every mode.
+    for (const [fgName, bgName] of NONTEXT_PAIRS) {
+      const fg = read(fgName);
+      const bg = read(bgName);
+      const ratio = contrastRatio(fg, bg);
+      const pass = ratio >= NONTEXT_MIN;
+      if (!pass) failCount++;
+      rows.push({
+        palette,
+        mode,
+        pair: `${fgName}/${bgName}`,
+        fg,
+        bg,
+        ratio,
+        threshold: NONTEXT_MIN,
+        pass,
+      });
+    }
   }
 }
 
@@ -182,19 +213,19 @@ const padL = (s, n) => String(s).padStart(n);
 console.log(
   pad("PALETTE", 12) +
     pad("MODE", 10) +
-    pad("PAIR", 26) +
+    pad("PAIR", 31) +
     pad("FG", 10) +
     pad("BG", 10) +
     padL("RATIO", 8) +
     padL("MIN", 6) +
     "  RESULT",
 );
-console.log("-".repeat(92));
+console.log("-".repeat(97));
 for (const r of rows) {
   console.log(
     pad(r.palette, 12) +
       pad(r.mode, 10) +
-      pad(r.pair, 26) +
+      pad(r.pair, 31) +
       pad(r.fg, 10) +
       pad(r.bg, 10) +
       padL(r.ratio.toFixed(2), 8) +
@@ -203,11 +234,13 @@ for (const r of rows) {
       (r.pass ? "PASS" : "FAIL"),
   );
 }
-console.log("-".repeat(92));
+console.log("-".repeat(97));
 const total = rows.length;
+const combos = PALETTES.length * MODES.length;
 console.log(
   `${total} checks: ${total - failCount} pass, ${failCount} fail ` +
-    `(${PALETTES.length} palettes x ${MODES.length} modes x ${PAIRS.length} pairs)`,
+    `(${PALETTES.length} palettes x ${MODES.length} modes = ${combos} combos x ` +
+    `[${PAIRS.length} text pairs AA/AAA + ${NONTEXT_PAIRS.length} non-text pair >= ${NONTEXT_MIN.toFixed(1)}])`,
 );
 
 if (failCount > 0) {
