@@ -34,6 +34,10 @@ js-call-no-mic = Could not access your microphone.
 # user knows the change did not take rather than trusting a self-corrected button.
 js-call-mic-toggle-failed = Could not change your microphone. Try muting and unmuting again.
 js-call-no-screenshare = Screen sharing is not supported by your browser.
+# LC-1138: shown when a peer's shared screen stays black for this viewer even
+# after the automatic recovery attempts (ICE restart, then a peer-connection
+# rebuild), so the last resort is to rejoin the call.
+js-call-screen-blackout = A shared screen is black for you. Leave and rejoin the call to fix it.
 js-call-a-contact = A contact
 js-call-request-control = Request control
 js-call-requesting = Requesting...

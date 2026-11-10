@@ -50,6 +50,17 @@ pub const CALL_DIAGNOSTICS: Flag = Flag {
     audience_key: "call_diagnostics_audience",
 };
 
+/// LC-1135: turn call-transcript action items into YouTrack issues. Default off.
+/// The flag is a kill switch for the whole surface (review panel + generation +
+/// filing); it is `on` whenever the rollout is not `Off`. Who may *review* is
+/// scoped by the AI gate (the surface uses the LLM), and *filing* additionally
+/// requires the staff set, so this flag's audience row is not used as a second
+/// audience - `is_on()` is what the feature reads.
+pub const YOUTRACK_ISSUES: Flag = Flag {
+    enabled_key: "youtrack_issues_enabled",
+    audience_key: "youtrack_issues_audience",
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rollout {
     Off,

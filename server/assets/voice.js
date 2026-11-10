@@ -60,6 +60,10 @@
   // screenStarted / clearScreenRx / checkScreenBlackout below.
   var screenRx = {};
   var SCREEN_BLACKOUT_MS = 4000;
+  // LC-1138: after a recovery attempt, wait a little longer before re-checking -
+  // an ICE restart re-gathers candidates and a peer-connection rebuild has to
+  // re-offer/answer, so frames take a few seconds to resume.
+  var SCREEN_RECOVER_WAIT_MS = 6000;
 
   // Keep a handle on the chat socket wrapper regardless of page type.
   document.body.addEventListener('htmx:wsOpen', function (e) {
@@ -195,12 +199,10 @@
     quality.setAttribute('data-lc-voice-quality', '');
     quality.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="2" y="12" width="3" height="6" rx="1"/><rect x="8.5" y="8" width="3" height="10" rx="1"/><rect x="15" y="3" width="3" height="15" rx="1"/></svg>';
     name.appendChild(quality);
-    // LC-416: animated active-speaker equalizer (CSS shows it on data-speaking).
-    var speaking = document.createElement('span');
-    speaking.className = 'lc-voice-speaking';
-    speaking.setAttribute('aria-hidden', 'true');
-    speaking.innerHTML = '<i></i><i></i><i></i>';
-    name.appendChild(speaking);
+    // LC-1134: the active-speaker cue is a live mic-level ring on the tile +
+    // avatar (voice.js drives --lc-level from the analyser), not an equalizer in
+    // the name pill - the old three-bar equalizer looked identical to the
+    // connection-quality signal glyph beside it. See pollSpeaking + main.css.
     var nameText = document.createElement('span');
     nameText.className = 'lc-voice-name-text';
     nameText.textContent = label;
@@ -523,18 +525,40 @@
       var isSelf = cfg && tile.getAttribute('data-lc-voice-tile') === cfg.selfId;
       var v = tile.querySelector('[data-lc-voice-video]');
       var stream = isSelf ? localStream : (v && v.srcObject);
-      var speaking = false;
-      if (stream && tile.getAttribute('data-muted') !== 'true') speaking = levelOf(stream) > 18;
+      // LC-1134: drive a live mic-level ring. levelOf is a 0..255 average
+      // magnitude; map it to a 0..1 intensity (`--lc-level`) with a small floor
+      // so room noise stays flat and normal speech fills the ring well below max.
+      // Muted or silent => 0 => the ring/glow collapses flat.
+      var lvl = 0;
+      if (stream && tile.getAttribute('data-muted') !== 'true') lvl = levelOf(stream);
+      var speaking = lvl > 18;
+      var norm = Math.max(0, Math.min(1, (lvl - 12) / 60));
+      tile.style.setProperty('--lc-level', speaking ? norm.toFixed(3) : '0');
       tile.setAttribute('data-speaking', speaking ? 'true' : 'false');
+      // LC-1131: stamp the last time OUR OWN (echo-cancelled) mic showed speech.
+      // transcribe.js gates a browser Web Speech caption on this: the Web Speech
+      // engine taps a raw mic that also hears other participants through the
+      // speakers, so a caption produced while this value is stale came from that
+      // bleed-through (e.g. a Firefox user whose own browser cannot transcribe)
+      // and would otherwise be mis-attributed to us. localStream carries the
+      // echoCancellation constraint, so its level reflects us, not the bleed.
+      if (isSelf && speaking) window.__lcLastLocalSpeechAt = Date.now();
     }
   }
   function startSpeaking() {
     var ctx = ensureAudioCtx();
     if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+    // LC-1131: tell transcribe.js the local-speech gate is usable only when the
+    // VAD actually works (a real AudioContext). Without one, levelOf() is always
+    // 0 and would wrongly drop every caption, so the gate fails open instead.
+    window.__lcLocalVadActive = !!ctx;
     if (speakLoop) return;
-    speakLoop = setInterval(pollSpeaking, 250);
+    // LC-1134: 120ms (was 250) so the live mic-level ring tracks speech smoothly;
+    // a CSS transition eases between samples.
+    speakLoop = setInterval(pollSpeaking, 120);
   }
   function stopSpeaking() {
+    window.__lcLocalVadActive = false; // LC-1131: gate off once we stop monitoring
     if (speakLoop) { clearInterval(speakLoop); speakLoop = 0; }
     Object.keys(analysers).forEach(function (id) {
       try { analysers[id].src.disconnect(); } catch (e) {}
@@ -767,6 +791,43 @@
     }
     delete peers[userId];
     removeTile(userId);
+  }
+
+  // LC-1138: tear down and rebuild one peer's RTCPeerConnection WITHOUT removing
+  // its tile or peer record (unlike removePeer). Used by the screen-blackout
+  // stage-2 recovery to reconnect a single pair with fresh ICE, the scoped
+  // equivalent of a page reload. `iAmOfferer` picks who re-initiates: the side
+  // that asked to renegotiate offers, the other answers lazily from that offer.
+  function resetPeerConnection(userId, iAmOfferer) {
+    var p = peers[userId];
+    if (!p) return;
+    if (p.pc) {
+      p.pc.onicecandidate = p.pc.ontrack = p.pc.onnegotiationneeded = p.pc.onconnectionstatechange = null;
+      try { p.pc.close(); } catch (e) {}
+      p.pc = null;
+    }
+    p.makingOffer = false;
+    p.ignoreOffer = false;
+    p.polite = !iAmOfferer;
+    p.pending = [];
+    p.diagRoute = false;
+    p.diagFailed = false;
+    if (iAmOfferer) {
+      makePc(userId);
+      addLocalTracks(p.pc); // -> negotiationneeded -> offer
+    }
+    // else: the pc is rebuilt lazily from the incoming offer in onOffer.
+  }
+
+  // LC-1138: a peer whose screen we see as black asked us to rebuild our shared
+  // connection. Reset our side as the ANSWERER (they offer) and keep the tile;
+  // our addLocalTracks on their fresh offer re-publishes the screen track if we
+  // are still sharing.
+  function onRenegotiate(userId, name) {
+    var p = peers[userId];
+    if (!p) return; // not connected to this peer: nothing to rebuild
+    if (name && !p.name) p.name = name;
+    resetPeerConnection(userId, false);
   }
 
   function onOffer(userId, name, sdp) {
@@ -1083,26 +1144,129 @@
     if (!cfg || userId === cfg.selfId) return;
     var s = screenRx[userId];
     if (s && s.recv) return; // already tracking this share - do not repeat
-    s = screenRx[userId] = { recv: true, blackoutTimer: 0, blackoutFired: false };
+    // LC-1138: `stage` drives the auto-heal ladder (0 = none yet, 1 = ICE
+    // restart tried, 2 = peer-connection rebuild tried); `done` stops the
+    // one-shot checks once the share is healthy, recovered, or given up on.
+    s = screenRx[userId] = { recv: true, blackoutTimer: 0, stage: 0, done: false };
     voiceDiag('screen: receiving from peer ' + String(userId).slice(0, 8), 'diag');
     s.blackoutTimer = setTimeout(function () { checkScreenBlackout(userId); }, screenBlackoutMs());
   }
+  // LC-1138: is this peer's screen tile currently rendering no frames? Mirrors
+  // the original LC-1129 test: zero decoded dimensions, or no live/unmuted
+  // video track backing the tile.
+  function screenTileBlack(userId) {
+    var v = tileVideo(userId);
+    if (!v) return false; // tile gone (peer left / share stopped): not a fault
+    // Decoding real frames (non-zero dimensions) is the ground truth for "not
+    // black"; a wedged media path leaves videoWidth/Height at 0.
+    return !(v.videoWidth > 0 && v.videoHeight > 0);
+  }
+  // LC-1138: inbound-video frame counters + selected ICE route for a peer, so a
+  // blackout row says WHY (e.g. "frames 0/0 via host"), not just "no frames".
+  // Resolves to null if stats are unavailable.
+  function screenRxStats(userId) {
+    var p = peers[userId];
+    if (!p || !p.pc || !p.pc.getStats) return Promise.resolve(null);
+    return p.pc.getStats().then(function (stats) {
+      var decoded = null, received = null, localId = null, localType = {};
+      stats.forEach(function (r) {
+        if (r.type === 'inbound-rtp' && r.kind === 'video') {
+          if (typeof r.framesDecoded === 'number') decoded = r.framesDecoded;
+          if (typeof r.framesReceived === 'number') received = r.framesReceived;
+        }
+        if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || r.selected)) {
+          localId = r.localCandidateId;
+        }
+        if (r.type === 'local-candidate') localType[r.id] = r.candidateType;
+      });
+      return { decoded: decoded, received: received, route: (localId && localType[localId]) || null };
+    }).catch(function () { return null; });
+  }
+  function screenStatsLabel(st) {
+    if (!st) return 'no stats';
+    var d = st.decoded == null ? '?' : st.decoded;
+    var r = st.received == null ? '?' : st.received;
+    return 'frames ' + d + '/' + r + (st.route ? ' via ' + st.route : '');
+  }
   function checkScreenBlackout(userId) {
     var s = screenRx[userId];
-    if (!s || s.blackoutFired) return;
+    if (!s || s.done) return;
     s.blackoutTimer = 0;
-    var v = tileVideo(userId);
-    if (!v) return;
-    var noDecode = (v.videoWidth === 0 || v.videoHeight === 0);
-    var stream = v.srcObject;
-    var vids = (stream && stream.getVideoTracks) ? stream.getVideoTracks() : [];
-    var trackBad = vids.length === 0 || vids.some(function (tr) {
-      return tr.muted || tr.readyState !== 'live';
-    });
-    if (noDecode || trackBad) {
-      s.blackoutFired = true;
-      voiceDiag('screen blackout: peer ' + String(userId).slice(0, 8) + ' (no frames)', 'error');
+    if (!tileVideo(userId)) { s.done = true; return; } // tile gone
+    if (!screenTileBlack(userId)) {
+      // Frames are flowing. If this followed a recovery attempt, say so.
+      if (s.stage > 0) {
+        voiceDiag('screen recovered: peer ' + String(userId).slice(0, 8) + ' after recovery', 'diag');
+      }
+      s.done = true;
+      return;
     }
+    // Still black. Capture why, then climb the recovery ladder.
+    screenRxStats(userId).then(function (st) {
+      if (!s || s.done || !screenRx[userId]) return;
+      var why = screenStatsLabel(st);
+      var short = String(userId).slice(0, 8);
+      // The auto-heal ladder is mesh-only: it acts on a peer RTCPeerConnection.
+      // The SFU path (no peers[] entry) owns its own media in huddle_sfu.js, so
+      // there we keep the original LC-1129 behavior - one enriched blackout row,
+      // no recovery.
+      var canRecover = !sfu && peers[userId] && peers[userId].pc;
+      if (!canRecover) {
+        voiceDiag('screen blackout: peer ' + short + ' (no frames)', 'error');
+        s.done = true;
+        return;
+      }
+      if (s.stage === 0) {
+        s.stage = 1;
+        voiceDiag('screen blackout: peer ' + short + ' (no frames; ' + why + ') - recovering via ICE restart', 'error');
+        recoverScreenIceRestart(userId);
+        s.blackoutTimer = setTimeout(function () { checkScreenBlackout(userId); }, SCREEN_RECOVER_WAIT_MS);
+      } else if (s.stage === 1) {
+        s.stage = 2;
+        voiceDiag('screen blackout: peer ' + short + ' (still black; ' + why + ') - rebuilding peer connection', 'error');
+        recoverScreenRebuild(userId);
+        s.blackoutTimer = setTimeout(function () { checkScreenBlackout(userId); }, SCREEN_RECOVER_WAIT_MS);
+      } else {
+        voiceDiag('screen blackout: peer ' + short + ' persists after recovery (' + why + ')', 'error');
+        s.done = true;
+        window.__lcNotify('err', window.__lcS('callScreenBlackout',
+          "A shared screen is black for you. Leave and rejoin the call to fix it."));
+      }
+    });
+  }
+  // LC-1138: stage 1 - restart ICE on the viewer<->sharer connection. Re-gathers
+  // candidates and renegotiates through the existing offer/answer relay (no new
+  // signal), which clears a wedged media path (e.g. a dead host-candidate pair).
+  function recoverScreenIceRestart(userId) {
+    var p = peers[userId];
+    if (!p || !p.pc) return;
+    p.diagRoute = false; // let the recovered route re-report
+    try {
+      if (typeof p.pc.restartIce === 'function') {
+        p.pc.restartIce(); // -> onnegotiationneeded -> fresh offer
+        return;
+      }
+    } catch (e) { /* fall through to the explicit offer */ }
+    // Older engines without restartIce(): force an ICE-restart offer directly.
+    try {
+      p.makingOffer = true;
+      p.pc.createOffer({ iceRestart: true })
+        .then(function (o) { return p.pc.setLocalDescription(o); })
+        .then(function () { voiceSend('offer', userId, JSON.stringify(p.pc.localDescription)); })
+        .catch(function (e) { console.warn('voice: screen ICE restart failed', e); })
+        .finally(function () { p.makingOffer = false; });
+    } catch (e) { console.warn('voice: screen ICE restart threw', e); }
+  }
+  // LC-1138: stage 2 - rebuild just this one peer connection (the scoped
+  // equivalent of a page reload for this pair). We tell the sharer to reset the
+  // same peer via a `renegotiate` signal, then both sides tear down and rebuild
+  // their RTCPeerConnection with deterministic roles (the viewer offers), while
+  // KEEPING the tile. The sharer re-adds its screen track on the fresh offer, so
+  // the media path starts over with new ICE.
+  function recoverScreenRebuild(userId) {
+    if (!peers[userId]) return;
+    voiceSend('renegotiate', userId, null);
+    resetPeerConnection(userId, true); // viewer initiates -> offerer
   }
   function clearScreenRx(userId) {
     var s = screenRx[userId];
@@ -1485,6 +1649,7 @@
     if (kind === 'offer') onOffer(userId, username, payload);
     else if (kind === 'answer') onAnswer(userId, payload);
     else if (kind === 'ice') onIce(userId, payload);
+    else if (kind === 'renegotiate') onRenegotiate(userId, username); // LC-1138
   }
 
   // LC-616: the drain loop is shared with call.js (rtc_common.js).

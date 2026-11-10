@@ -279,14 +279,14 @@ settings-display-name = Display name
 settings-display-name-help = Shown everywhere, in every room, and used for your avatar letter. Synced from your Bunyip name each time you sign in. A per-room nickname (set from a room's Preferences) overrides it in that one room.
 # LC-766: editable chat handle
 settings-handle = Handle
-settings-handle-help = Your @mention name in lets-chat. It is separate from your Bunyip username and Bunyip never changes it. Letters, numbers, and _ only. You can change it once every 30 days.
+settings-handle-help = Your @mention name in lets-chat. It is separate from your Bunyip username and Bunyip never changes it. Up to 18 characters: letters, numbers, and _ only. You can change it once every 30 days.
 settings-handle-locked = You can change your handle again on
 # LC-766: first-entry handle prompt
 welcome-handle-title = Choose your handle
 welcome-handle-heading = Choose your handle
 welcome-handle-intro = This is the name others see and mention you by. We have suggested one from your account; keep it or pick your own.
 welcome-handle-label = Handle
-welcome-handle-help = Letters, numbers, and _ - . only.
+welcome-handle-help = Up to 18 characters: letters, numbers, and _ only.
 welcome-handle-submit = Continue
 welcome-handle-logo-alt = Logo
 settings-email = Email

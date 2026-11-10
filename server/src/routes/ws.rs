@@ -217,7 +217,12 @@ const CALL_SIGNAL_KINDS: &[&str] = &[
 ];
 
 /// Recognized `kind` discriminators for a voice-channel mesh signal.
-const VOICE_SIGNAL_KINDS: &[&str] = &["offer", "answer", "ice"];
+/// LC-1138: `renegotiate` is an ephemeral, payload-less request from a viewer
+/// whose screen-share tile is black to the sharer, asking it to tear down and
+/// rebuild just that peer connection (the scoped screen-blackout recovery). It
+/// is relayed to the target like the SDP signals and is never recorded as a
+/// voice_event (it carries no diagnostic of its own).
+const VOICE_SIGNAL_KINDS: &[&str] = &["offer", "answer", "ice", "renegotiate"];
 
 /// LC-183: recognized `kind`s for the remote-control consent handshake.
 const REMOTE_CONTROL_KINDS: &[&str] = &["request", "grant", "deny", "revoke"];
@@ -977,9 +982,14 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 {
                                     render_transcript_segment(&e)
                                 }
-                                // LC-1118: in-call diagnostics row. Only admins
-                                // subscribed to call_diag:{room} receive it, so no
-                                // per-recipient guard is needed here.
+                                // LC-1118: in-call diagnostics row, delivered to
+                                // whoever is subscribed to call_diag:{room}.
+                                // LC-1147 made `post_role` drop that subscription
+                                // on every live connection the instant a role
+                                // change takes the user off `admin`, so no
+                                // per-recipient role check is needed here either:
+                                // a demoted admin's socket is already off the
+                                // topic by the time this fires.
                                 ChatEvent::CallDiag { .. } => render_call_diag(&e),
                                 _ => render_event(&e),
                             };
@@ -2560,7 +2570,17 @@ pub async fn relay_control_signal(
         refuse("rate_limited");
         return;
     }
-    if !remote_control_allowed(&state.auth, &user.id, &peer_id).await {
+    // LC-953: the pairwise eligibility gate (both verified, neither blocked)
+    // applies ONLY to establishing control - `request`/`grant`. `deny`/`revoke`
+    // must always go through, so an in-flight session can be torn down and its
+    // audit row closed even after the pair's eligibility changes mid-session (a
+    // block lands, or an admin unverifies an email); otherwise a revoke returned
+    // here before the audit-close/relay below, leaving the session open until the
+    // disconnect backstop and the peer never told. Mirrors the huddle path's
+    // guard (relay_huddle_control_signal).
+    if matches!(kind, "request" | "grant")
+        && !remote_control_allowed(&state.auth, &user.id, &peer_id).await
+    {
         // Only a `request` has a waiting requester UI to notify.
         if kind == "request" {
             refuse("not_allowed");

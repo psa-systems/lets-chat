@@ -135,13 +135,14 @@ async fn feature_flags_tab_holds_every_switch_and_settings_no_longer_does() {
         "lc-flag-remote-control",
         "lc-flag-transcription",
         "lc-flag-call-diagnostics",
+        "lc-flag-youtrack-issues",
     ] {
         assert!(html.contains(id), "{id} card renders");
     }
     assert!(html.contains(r#"href="/admin/feature-flags" class="lc-set-tab" aria-current="page""#));
-    // Fresh install: all three three-state flags (remote control, transcription,
-    // call diagnostics) start Off.
-    assert_eq!(html.matches(r#"value="off" checked"#).count(), 3, "{html}");
+    // Fresh install: all four three-state flags (remote control, transcription,
+    // call diagnostics, youtrack issues) start Off.
+    assert_eq!(html.matches(r#"value="off" checked"#).count(), 4, "{html}");
 
     let (_, settings) = send(
         &f.app,

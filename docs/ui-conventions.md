@@ -80,7 +80,7 @@ An accent utility behind a state prefix is not the third shape and stays as it i
 
 ## Page top bars (LC-742)
 
-Every page-level top bar is `<header class="lc-header">` (`server/assets/main.css`). The class fixes the bar's height floor (`min-height: 3.5rem`), padding (`0.875rem 1.25rem`) and bottom border in one place, and its 20px gutter is what lines the bar's content up with the `px-5` message timeline below it. Hand-rolling the bar with utilities is what gave the app four different top-bar heights that jumped as the user navigated; `server/tests/lc742_page_header_shape.rs` now fails if a `<header>` re-creates the skeleton or a converted bar loses the class. The admin console's `.lc-admin-header` keeps the same height floor and padding.
+Every page-level top bar is `<header class="lc-header">` (`server/assets/main.css`). The class fixes the bar's height floor (`min-height: 3.5rem`), padding (`0.875rem 1.25rem`) and bottom border in one place, and its 20px gutter is what lines the bar's content up with the `px-5` message timeline below it. Hand-rolling the bar with utilities is what gave the app four different top-bar heights that jumped as the user navigated; `server/tests/it/lc742_page_header_shape.rs` now fails if a `<header>` re-creates the skeleton or a converted bar loses the class. The admin console's `.lc-admin-header` keeps the same height floor and padding.
 
 `.lc-header` is `display: flex` with `align-items: center` and `justify-content: space-between`, so it wants exactly two children: the title block and the action cluster. A bar whose content needs a different alignment gets its own wrapper element (see `room/info.html` and `settings/blocked.html`) rather than a Tailwind override: `main.css` loads AFTER `tailwind-built.css`, so an equal-specificity utility such as `items-start` or `gap-3` does NOT win against the class. Utilities that `.lc-header` does not set (`flex-wrap` on `transcripts/index.html`) still compose normally.
 
@@ -271,7 +271,7 @@ Every `<input>`, `<select>` and `<textarea>` resolves an accessible name, from a
 - Where voice control should be able to say the field's name, use an `sr-only` `<label for>` instead, so the name is a real label. The `admin/branding.html` hex fields do this.
 - `type="hidden"`, `submit`, `button`, `reset` and `image` are exempt: they are not announced, or they take their name from `value` / `alt`.
 
-`server/tests/template_a11y.rs` sweeps every template and fails with the file, line and tag of anything unnamed. It is a test rather than a rule in `check-ui-conventions.nu` because a wrapping `<label>` can only be resolved from element ranges, not from a single line.
+`server/tests/it/template_a11y.rs` sweeps every template and fails with the file, line and tag of anything unnamed. It is a test rather than a rule in `check-ui-conventions.nu` because a wrapping `<label>` can only be resolved from element ranges, not from a single line.
 
 ## File pickers (LC-740)
 
@@ -293,7 +293,7 @@ Bind these names with `{% let %}` and include the partial; put any help text aft
 ```
 
 - `max_bytes` MUST equal the cap the handler behind `name` enforces (`MAX_AVATAR_BYTES`, `MAX_EMOJI_BYTES`, `persist_brand_file`'s 1 MiB, the route's `DefaultBodyLimit`). Read it from the handler rather than picking a round number, and cite it in a template comment.
-- The input stays `sr-only`, so the browser's own "no file chosen" chrome never renders next to our echo. `ci-build/check-file-pickers.nu` (wired into `just check` and the Check workflow) rejects any `<input type="file">` in a template that is neither `sr-only` nor `class="hidden"`; the one `class="hidden"` exemption is the composer's programmatically-driven attachment input. `server/tests/routes_file_pickers.rs` pins the rendered shape and every `data-lc-max-bytes`.
+- The input stays `sr-only`, so the browser's own "no file chosen" chrome never renders next to our echo. `ci-build/check-file-pickers.nu` (wired into `just check` and the Check workflow) rejects any `<input type="file">` in a template that is neither `sr-only` nor `class="hidden"`; the one `class="hidden"` exemption is the composer's programmatically-driven attachment input. `server/tests/it/routes_file_pickers.rs` pins the rendered shape and every `data-lc-max-bytes`.
 - Per-site extras (the avatar preview in `settings.js`, the logo preview in `branding.js`) listen for the `lc:file-picked` event the handler dispatches (`detail.file` is null when the pick was rejected). Never re-implement the filename echo or the validation.
 
 ## Data tables (LC-510, LC-737, LC-745, LC-756)

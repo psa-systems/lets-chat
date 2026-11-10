@@ -52,3 +52,4 @@ pub mod views;
 pub mod vision;
 pub mod weekly_recap;
 pub mod ws;
+pub mod youtrack;

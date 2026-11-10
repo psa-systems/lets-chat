@@ -42,10 +42,18 @@ const CLIP_MAX_BYTES: i64 = 64 * 1024 * 1024;
 
 /// Resolve max upload size from settings.db, falling back to 10 MiB.
 async fn max_upload_bytes(state: &AppState) -> i64 {
-    db::settings::get_setting(&state.settings, "max_upload_bytes")
-        .await
-        .ok()
-        .flatten()
+    // LC-1026: a settings-read error logs a WARN before falling back, instead of
+    // silently accepting/rejecting uploads against the default when the operator
+    // set a different cap. Kept separate from the db::settings and email-ingress
+    // resolvers on purpose (each documents its own cap).
+    let value = match db::settings::get_setting(&state.settings, "max_upload_bytes").await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, key = "max_upload_bytes", "setting read failed; using default");
+            None
+        }
+    };
+    value
         .and_then(|v| v.parse::<i64>().ok())
         .filter(|v| *v > 0)
         .unwrap_or(DEFAULT_MAX_UPLOAD_BYTES)

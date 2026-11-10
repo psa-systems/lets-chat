@@ -290,7 +290,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
        `.lc-sidebar { background: var(--sidebar-surface) }` rules onto them (same
        pattern as the rail's .lc-rail-tile). Adding the vars is a visual no-op. */
     --sidebar-surface:     #071a2f; /* dark navy chrome over the light page */
-    --sidebar-elevated:    #0b2542; /* raised / hover rows */
+    --sidebar-elevated:    #0b2542; /* raised panels, count pill, flyout (LC-1013: no longer the hover fill) */
+    --sidebar-hover:       #486b91; /* LC-1013: row/control hover fill, >= 3:1 (WCAG SC 1.4.11) on --sidebar-surface */
     --sidebar-sunken:      #041326; /* search field, inset */
     --sidebar-content:     #eaf4ff; /* primary text on navy */
     --sidebar-muted:       #9fb6d0; /* section headers, secondary text */
@@ -379,7 +380,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
        #071a2f page (same posture as the rail above) so it still reads as
        distinct chrome; text ramp matches the page. */
     --sidebar-surface:     #041326; /* one step darker than the navy page */
-    --sidebar-elevated:    #16283b; /* raised / hover rows */
+    --sidebar-elevated:    #16283b; /* raised panels, count pill, flyout */
+    --sidebar-hover:       #46668e; /* LC-1013: row/control hover fill, >= 3:1 on --sidebar-surface */
     --sidebar-sunken:      #020c18; /* search field, inset */
     --sidebar-content:     #eaf4ff;
     --sidebar-muted:       #9fb6d0;
@@ -465,7 +467,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     /* LC-554 phase 1b: hc-light sidebar is pure-black chrome with white text +
        white dividers, matching the hc rail. Contrast-first, not blue-tinted. */
     --sidebar-surface:     #000000;
-    --sidebar-elevated:    #1f2937; /* gray-800 hover row */
+    --sidebar-elevated:    #1f2937; /* gray-800 raised panels */
+    --sidebar-hover:       #5d5d5d; /* LC-1013: row/control hover fill, >= 3:1 on pure-black sidebar */
     --sidebar-sunken:      #000000;
     --sidebar-content:     #ffffff;
     --sidebar-muted:       #ffffff;
@@ -537,7 +540,8 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
     /* LC-554 phase 1b: hc-dark sidebar is pure-black chrome with white text +
        white dividers, matching the hc rail. Contrast-first, not blue-tinted. */
     --sidebar-surface:     #000000;
-    --sidebar-elevated:    #1f2937; /* gray-800 hover row */
+    --sidebar-elevated:    #1f2937; /* gray-800 raised panels */
+    --sidebar-hover:       #5d5d5d; /* LC-1013: row/control hover fill, >= 3:1 on pure-black sidebar */
     --sidebar-sunken:      #000000;
     --sidebar-content:     #ffffff;
     --sidebar-muted:       #ffffff;
@@ -562,7 +566,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#d4e3f7; --border-strong:#aec8eb;
   --accent:#0f62fe; --accent-hover:#0043ce; --accent-content:#ffffff;
   --accent-surface:#d0e2ff; --accent-surface-content:#0043ce; --ring:#4589ff;
-  --sidebar-surface:#061932; --sidebar-elevated:#0a2750; --sidebar-sunken:#031022;
+  --sidebar-surface:#061932; --sidebar-elevated:#0a2750; --sidebar-hover:#496a94; --sidebar-sunken:#031022;
   --sidebar-content:#eff6ff; --sidebar-muted:#9db4d1; --sidebar-border:#143d70;
   --rail-surface:#031022; --rail-tile:#0a2750; --rail-tile-hover:#0043ce;
   --rail-content:#ffffff; --rail-content-muted:#9db4d1;
@@ -573,7 +577,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#143d70; --border-strong:#1e5a9e;
   --accent:#4589ff; --accent-hover:#78a9ff; --accent-content:#031022;
   --accent-surface:#003a6d; --accent-surface-content:#d0e2ff; --ring:#78a9ff;
-  --sidebar-surface:#061932; --sidebar-elevated:#0a2750; --sidebar-sunken:#031022;
+  --sidebar-surface:#061932; --sidebar-elevated:#0a2750; --sidebar-hover:#496a94; --sidebar-sunken:#031022;
   --sidebar-content:#eff6ff; --sidebar-muted:#9db4d1; --sidebar-border:#143d70;
   --rail-surface:#031022; --rail-tile:#0a2750; --rail-tile-hover:#78a9ff;
   --rail-content:#ffffff; --rail-content-muted:#9db4d1;
@@ -584,7 +588,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#000000; --border-strong:#000000;
   --accent:#0043ce; --accent-hover:#002d9c; --accent-content:#ffffff;
   --accent-surface:#d0e2ff; --accent-surface-content:#0043ce; --ring:#000000;
-  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-hover:#5d5d5d; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
@@ -595,7 +599,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#ffffff; --border-strong:#ffffff;
   --accent:#78a9ff; --accent-hover:#a6c8ff; --accent-content:#031022;
   --accent-surface:#003a6d; --accent-surface-content:#d0e2ff; --ring:#ffffff;
-  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-hover:#5d5d5d; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
@@ -608,7 +612,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#dce7ef; --border-strong:#bfccd8;
   --accent:#1e40af; --accent-hover:#1e3a8a; --accent-content:#ffffff;
   --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#2563eb;
-  --sidebar-surface:#07111f; --sidebar-elevated:#142233; --sidebar-sunken:#030914;
+  --sidebar-surface:#07111f; --sidebar-elevated:#142233; --sidebar-hover:#46658f; --sidebar-sunken:#030914;
   --sidebar-content:#edf6ff; --sidebar-muted:#9aaec4; --sidebar-border:#1b334f;
   --rail-surface:#030914; --rail-tile:#0d1b2d; --rail-tile-hover:#1e3a8a;
   --rail-content:#ffffff; --rail-content-muted:#9aaec4;
@@ -619,7 +623,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#1b334f; --border-strong:#2b4d72;
   --accent:#60a5fa; --accent-hover:#93c5fd; --accent-content:#06101f;
   --accent-surface:#172554; --accent-surface-content:#dbeafe; --ring:#60a5fa;
-  --sidebar-surface:#07111f; --sidebar-elevated:#142233; --sidebar-sunken:#030914;
+  --sidebar-surface:#07111f; --sidebar-elevated:#142233; --sidebar-hover:#46658f; --sidebar-sunken:#030914;
   --sidebar-content:#edf6ff; --sidebar-muted:#9aaec4; --sidebar-border:#1b334f;
   --rail-surface:#030914; --rail-tile:#0d1b2d; --rail-tile-hover:#93c5fd;
   --rail-content:#ffffff; --rail-content-muted:#9aaec4;
@@ -630,7 +634,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#000000; --border-strong:#000000;
   --accent:#1e40af; --accent-hover:#1e3a8a; --accent-content:#ffffff;
   --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#000000;
-  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-hover:#5d5d5d; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
@@ -641,7 +645,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#ffffff; --border-strong:#ffffff;
   --accent:#60a5fa; --accent-hover:#93c5fd; --accent-content:#06101f;
   --accent-surface:#172554; --accent-surface-content:#dbeafe; --ring:#ffffff;
-  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-hover:#5d5d5d; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
@@ -654,7 +658,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#d8e4ee; --border-strong:#c4d7eb;
   --accent:#0369a1; --accent-hover:#075985; --accent-content:#ffffff;
   --accent-surface:#e0f2fe; --accent-surface-content:#0369a1; --ring:#0ea5e9;
-  --sidebar-surface:#062033; --sidebar-elevated:#0a2c47; --sidebar-sunken:#031522;
+  --sidebar-surface:#062033; --sidebar-elevated:#0a2c47; --sidebar-hover:#47708f; --sidebar-sunken:#031522;
   --sidebar-content:#ecfeff; --sidebar-muted:#9bc4d6; --sidebar-border:#174764;
   --rail-surface:#031522; --rail-tile:#0a2c47; --rail-tile-hover:#0369a1;
   --rail-content:#ffffff; --rail-content-muted:#9bc4d6;
@@ -665,7 +669,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#174764; --border-strong:#246487;
   --accent:#38bdf8; --accent-hover:#7dd3fc; --accent-content:#031522;
   --accent-surface:#075985; --accent-surface-content:#e0f2fe; --ring:#38bdf8;
-  --sidebar-surface:#062033; --sidebar-elevated:#0a2c47; --sidebar-sunken:#031522;
+  --sidebar-surface:#062033; --sidebar-elevated:#0a2c47; --sidebar-hover:#47708f; --sidebar-sunken:#031522;
   --sidebar-content:#ecfeff; --sidebar-muted:#9bc4d6; --sidebar-border:#174764;
   --rail-surface:#031522; --rail-tile:#0a2c47; --rail-tile-hover:#7dd3fc;
   --rail-content:#ffffff; --rail-content-muted:#9bc4d6;
@@ -676,7 +680,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#000000; --border-strong:#000000;
   --accent:#075985; --accent-hover:#0c4a6e; --accent-content:#ffffff;
   --accent-surface:#e0f2fe; --accent-surface-content:#0369a1; --ring:#000000;
-  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-hover:#5d5d5d; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
@@ -687,7 +691,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#ffffff; --border-strong:#ffffff;
   --accent:#38bdf8; --accent-hover:#7dd3fc; --accent-content:#031522;
   --accent-surface:#075985; --accent-surface-content:#e0f2fe; --ring:#ffffff;
-  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-hover:#5d5d5d; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
@@ -700,7 +704,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#d3eaf0; --border-strong:#afd1dc;
   --accent:#0e7490; --accent-hover:#155e75; --accent-content:#ffffff;
   --accent-surface:#cffafe; --accent-surface-content:#0e7490; --ring:#06b6d4;
-  --sidebar-surface:#041923; --sidebar-elevated:#082836; --sidebar-sunken:#020f15;
+  --sidebar-surface:#041923; --sidebar-elevated:#082836; --sidebar-hover:#406c82; --sidebar-sunken:#020f15;
   --sidebar-content:#ecfeff; --sidebar-muted:#9bc6d0; --sidebar-border:#164150;
   --rail-surface:#020f15; --rail-tile:#082836; --rail-tile-hover:#0e7490;
   --rail-content:#ffffff; --rail-content-muted:#9bc6d0;
@@ -711,7 +715,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#164150; --border-strong:#236173;
   --accent:#22d3ee; --accent-hover:#67e8f9; --accent-content:#021014;
   --accent-surface:#164e63; --accent-surface-content:#cffafe; --ring:#22d3ee;
-  --sidebar-surface:#041923; --sidebar-elevated:#082836; --sidebar-sunken:#020f15;
+  --sidebar-surface:#041923; --sidebar-elevated:#082836; --sidebar-hover:#406c82; --sidebar-sunken:#020f15;
   --sidebar-content:#ecfeff; --sidebar-muted:#9bc6d0; --sidebar-border:#164150;
   --rail-surface:#020f15; --rail-tile:#082836; --rail-tile-hover:#67e8f9;
   --rail-content:#ffffff; --rail-content-muted:#9bc6d0;
@@ -722,7 +726,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#000000; --border-strong:#000000;
   --accent:#155e75; --accent-hover:#164e63; --accent-content:#ffffff;
   --accent-surface:#cffafe; --accent-surface-content:#0e7490; --ring:#000000;
-  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-hover:#5d5d5d; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
@@ -733,7 +737,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#ffffff; --border-strong:#ffffff;
   --accent:#22d3ee; --accent-hover:#67e8f9; --accent-content:#021014;
   --accent-surface:#164e63; --accent-surface-content:#cffafe; --ring:#ffffff;
-  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-hover:#5d5d5d; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
@@ -746,7 +750,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#dae2f5; --border-strong:#bbc8e5;
   --accent:#1d4ed8; --accent-hover:#1e3a8a; --accent-content:#ffffff;
   --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#2563eb;
-  --sidebar-surface:#080f2a; --sidebar-elevated:#101b45; --sidebar-sunken:#050a1a;
+  --sidebar-surface:#080f2a; --sidebar-elevated:#101b45; --sidebar-hover:#4f60a0; --sidebar-sunken:#050a1a;
   --sidebar-content:#eff3ff; --sidebar-muted:#a3aed0; --sidebar-border:#23306a;
   --rail-surface:#050a1a; --rail-tile:#101b45; --rail-tile-hover:#1e3a8a;
   --rail-content:#ffffff; --rail-content-muted:#a3aed0;
@@ -757,7 +761,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#23306a; --border-strong:#35479a;
   --accent:#60a5fa; --accent-hover:#93c5fd; --accent-content:#050a1a;
   --accent-surface:#1e3a8a; --accent-surface-content:#dbeafe; --ring:#60a5fa;
-  --sidebar-surface:#080f2a; --sidebar-elevated:#101b45; --sidebar-sunken:#050a1a;
+  --sidebar-surface:#080f2a; --sidebar-elevated:#101b45; --sidebar-hover:#4f60a0; --sidebar-sunken:#050a1a;
   --sidebar-content:#eff3ff; --sidebar-muted:#a3aed0; --sidebar-border:#23306a;
   --rail-surface:#050a1a; --rail-tile:#101b45; --rail-tile-hover:#93c5fd;
   --rail-content:#ffffff; --rail-content-muted:#a3aed0;
@@ -768,7 +772,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#000000; --border-strong:#000000;
   --accent:#1e40af; --accent-hover:#1e3a8a; --accent-content:#ffffff;
   --accent-surface:#dbeafe; --accent-surface-content:#1e3a8a; --ring:#000000;
-  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-hover:#5d5d5d; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
@@ -779,7 +783,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#ffffff; --border-strong:#ffffff;
   --accent:#60a5fa; --accent-hover:#93c5fd; --accent-content:#050a1a;
   --accent-surface:#1e3a8a; --accent-surface-content:#dbeafe; --ring:#ffffff;
-  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-hover:#5d5d5d; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
@@ -794,7 +798,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#e6ddf7; --border-strong:#cebfec;
   --accent:#7c3aed; --accent-hover:#6d28d9; --accent-content:#ffffff;
   --accent-surface:#ede4ff; --accent-surface-content:#6d28d9; --ring:#8b5cf6;
-  --sidebar-surface:#1a1030; --sidebar-elevated:#2b1d46; --sidebar-sunken:#120a22;
+  --sidebar-surface:#1a1030; --sidebar-elevated:#2b1d46; --sidebar-hover:#7157ac; --sidebar-sunken:#120a22;
   --sidebar-content:#f3eeff; --sidebar-muted:#b6a9d1; --sidebar-border:#33245a;
   --rail-surface:#120a22; --rail-tile:#241640; --rail-tile-hover:#6d28d9;
   --rail-content:#ffffff; --rail-content-muted:#b6a9d1;
@@ -805,7 +809,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#33245a; --border-strong:#4a3680;
   --accent:#a78bfa; --accent-hover:#c4b5fd; --accent-content:#120a22;
   --accent-surface:#3a2a6b; --accent-surface-content:#ede4ff; --ring:#c4b5fd;
-  --sidebar-surface:#120a22; --sidebar-elevated:#2b1d46; --sidebar-sunken:#0d0719;
+  --sidebar-surface:#120a22; --sidebar-elevated:#2b1d46; --sidebar-hover:#6f52a7; --sidebar-sunken:#0d0719;
   --sidebar-content:#f3eeff; --sidebar-muted:#b6a9d1; --sidebar-border:#33245a;
   --rail-surface:#0d0719; --rail-tile:#241640; --rail-tile-hover:#c4b5fd;
   --rail-content:#ffffff; --rail-content-muted:#b6a9d1;
@@ -816,7 +820,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#000000; --border-strong:#000000;
   --accent:#6b21a8; --accent-hover:#581c87; --accent-content:#ffffff;
   --accent-surface:#ede4ff; --accent-surface-content:#6b21a8; --ring:#000000;
-  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-hover:#5d5d5d; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
@@ -827,7 +831,7 @@ html[data-lc-unread-only] [data-lc-sb-section]:not(:has([data-lc-unread]:not(:em
   --border:#ffffff; --border-strong:#ffffff;
   --accent:#d8b4fe; --accent-hover:#e9d5ff; --accent-content:#000000;
   --accent-surface:#2e1065; --accent-surface-content:#d8b4fe; --ring:#ffffff;
-  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-sunken:#000000;
+  --sidebar-surface:#000000; --sidebar-elevated:#1f2937; --sidebar-hover:#5d5d5d; --sidebar-sunken:#000000;
   --sidebar-content:#ffffff; --sidebar-muted:#ffffff; --sidebar-border:#ffffff;
   --rail-surface:#000000; --rail-tile:#1f2937; --rail-tile-hover:#374151;
   --rail-content:#ffffff; --rail-content-muted:#ffffff;
@@ -2558,7 +2562,8 @@ math {
 .lc-sb-chip:hover,
 .lc-sb-tool:hover {
     color: var(--content);
-    background-color: var(--surface-elevated);
+    /* LC-1013: visible hover state fill (>= 3:1 on the sidebar surface). */
+    background-color: var(--sidebar-hover);
 }
 .lc-sb-chip[aria-pressed="true"] {
     color: var(--accent-content);
@@ -3805,7 +3810,14 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
    swap has a target) still took a flex gap each, parking the unread pill short
    of the row's right edge. */
 .lc-sb-row > a > :empty { display: none; }
-.lc-sb-row:not(.lc-room-row-active):hover,
+/* LC-1013: hover takes the dedicated --sidebar-hover state fill (>= 3:1 on the
+   sidebar surface, SC 1.4.11). Focus is left on --surface-elevated (= the
+   sidebar-elevated panel tint) deliberately: the <a> already carries a visible
+   focus:ring-2, which satisfies state indication, so repointing focus is a
+   visual change nobody asked for. */
+.lc-sb-row:not(.lc-room-row-active):hover {
+    background-color: var(--sidebar-hover);
+}
 .lc-sb-row:not(.lc-room-row-active):focus-within {
     background-color: var(--surface-elevated);
 }
@@ -4272,7 +4284,12 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
    the later :has([data-screen]) stage rule still wins while presenting. */
 .lc-voice-grid--page {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
-    align-content: center;
+    /* LC-1132: `safe center` keeps the rows centered while they fit, but falls
+       back to top-anchored once the tiles are taller than the stage (a short or
+       narrow window, few large tiles). Plain `center` centered the overflow, so
+       the first row's top was clipped behind the control bar and could not be
+       scrolled to - it read as the tiles overlapping the controls. */
+    align-content: safe center;
 }
 .lc-voice-tile {
     position: relative;
@@ -4282,37 +4299,24 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     border: 2px solid transparent;
     aspect-ratio: 16 / 9;
     min-height: 140px;
+    /* LC-1134: live mic level for this tile (0..1), set by voice.js pollSpeaking.
+       Drives the speaking glow + avatar ring; 0 when muted or silent. */
+    --lc-level: 0;
 }
 /* On the page gallery a tile scales with its column, so the 140px floor (which
    forces the narrow single column to overflow) does not apply. */
 .lc-voice-grid--page .lc-voice-tile { min-height: 0; }
-/* active-speaker highlight (voice.js toggles data-speaking via an analyser) */
+/* active-speaker highlight (voice.js toggles data-speaking via an analyser).
+   LC-1134: the ring now PULSES with the live mic level (--lc-level): a speaking
+   tile keeps the solid green border, and its outer glow grows with volume, so
+   the tile visibly reacts to how loud the speaker is and sits flat when silent.
+   This replaces the old name-pill equalizer, which looked identical to the
+   connection-quality signal glyph beside it. */
 .lc-voice-tile[data-speaking="true"] {
     border-color: var(--success);
-    box-shadow: 0 0 0 3px var(--success-surface);
+    box-shadow: 0 0 0 calc(3px + var(--lc-level) * 5px) var(--success-surface);
+    transition: box-shadow 120ms linear;
 }
-/* LC-416: animated equalizer in the name pill, the same active-speaker cue on
-   every tile (the lone bars from the reference, made consistent). Shown only
-   while the tile is speaking; the three bars bob out of phase. */
-.lc-voice-speaking {
-    display: none;
-    align-items: flex-end;
-    gap: 2px;
-    height: 0.8125rem;
-    flex: none;
-}
-.lc-voice-tile[data-speaking="true"] .lc-voice-speaking { display: inline-flex; }
-.lc-voice-speaking i {
-    display: block;
-    width: 3px;
-    height: 40%;
-    border-radius: 1px;
-    background: var(--success);
-    animation: lc-eq 0.9s ease-in-out infinite;
-}
-.lc-voice-speaking i:nth-child(2) { animation-delay: 0.15s; }
-.lc-voice-speaking i:nth-child(3) { animation-delay: 0.3s; }
-@keyframes lc-eq { 0%, 100% { height: 30%; } 50% { height: 100%; } }
 .lc-voice-tile video {
     position: absolute;
     inset: 0;
@@ -4355,6 +4359,13 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     width: 5rem;
     border-radius: 9999px;
     object-fit: cover;
+    /* LC-1134: live mic-level ring. --lc-level (0..1 from voice.js, inherited
+       from the tile, 0 by default) scales the ring radius + opacity, so it grows
+       with volume and vanishes when silent/muted. */
+    box-shadow:
+        0 0 0 calc(var(--lc-level, 0) * 6px) color-mix(in srgb, var(--success) calc(var(--lc-level, 0) * 90%), transparent),
+        0 0 calc(var(--lc-level, 0) * 18px) calc(var(--lc-level, 0) * 5px) color-mix(in srgb, var(--success) calc(var(--lc-level, 0) * 70%), transparent);
+    transition: box-shadow 120ms linear;
 }
 .lc-voice-name {
     position: absolute;
@@ -5153,6 +5164,67 @@ body.lc-transcript-open .lc-support-root { right: calc(1.25rem + 20rem); }
     padding-top: 0.375rem;
 }
 #lc-caption-log { display: flex; flex-direction: column; gap: 0.375rem; }
+/* LC-1133: live transcript search bar. Sits between the boundary notes and the
+   caption body; transcribe.js toggles the count + clear button on a non-empty
+   query and adds .lc-transcript-searching to the body while filtering. */
+.lc-transcript-search {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    flex: none;
+    margin: 0 0.75rem 0.375rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 0.4375rem;
+    background: var(--surface-sunken);
+}
+.lc-transcript-search-ico {
+    height: 0.875rem;
+    width: 0.875rem;
+    flex: none;
+    color: var(--content-muted);
+}
+.lc-transcript-search-input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--content);
+    font-size: 0.8125rem;
+    outline: none;
+}
+.lc-transcript-search-input::placeholder { color: var(--content-muted); }
+.lc-transcript-match-count {
+    flex: none;
+    font-size: 0.6875rem;
+    color: var(--content-muted);
+    white-space: nowrap;
+}
+.lc-transcript-search-clear {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.25rem;
+    width: 1.25rem;
+    border-radius: 0.25rem;
+    color: var(--content-muted);
+    cursor: pointer;
+}
+.lc-transcript-search-clear:hover { background: var(--surface); color: var(--content); }
+/* A caption line the active search filtered out. */
+.lc-cap-line.lc-cap-hidden { display: none; }
+/* The matched substring inside a shown line. */
+.lc-cap-hit {
+    background: color-mix(in srgb, var(--warning) 40%, transparent);
+    color: inherit;
+    border-radius: 0.125rem;
+    padding: 0 0.0625rem;
+}
+/* While filtering, a surviving line whose speaker header was hidden by the
+   consecutive-speaker grouping must show it again (its group-mate may be
+   filtered out), so every visible match is attributed. */
+.lc-transcript-searching .lc-cap-line.lc-cap-cont .lc-cap-head { display: flex; }
 /* "Jump to live" affordance, revealed when the user scrolls up off the bottom. */
 .lc-transcript-jump {
     position: sticky;
@@ -5252,9 +5324,16 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
     50% { opacity: 0.3; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .lc-rec-core, .lc-transcript-rec, .lc-voice-speaking i,
+    .lc-rec-core, .lc-transcript-rec,
     .lc-voice-tile[data-quality="reconnecting"] .lc-voice-quality { animation: none; }
     .lc-transcript, #main { transition: none; }
+    /* LC-1134: no live pulsing for reduced-motion; a speaking tile shows a plain
+       steady green ring and the avatar glow is dropped. */
+    .lc-voice-tile[data-speaking="true"] {
+        box-shadow: 0 0 0 3px var(--success-surface);
+        transition: none;
+    }
+    .lc-voice-avatar { box-shadow: none; transition: none; }
 }
 
 /* ---- LC-409: mobile / responsive call pass ----------------------------- */

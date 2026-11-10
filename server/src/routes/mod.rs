@@ -1473,10 +1473,26 @@ pub(crate) async fn broadcast_room_message(
     // user on the server (a blast-radius and a scaling cost) and, paired with
     // the old subscribe authorizer, leaked message bodies to non-members. This
     // matches is_room_accessible, the predicate that admits a public room.
-    let recipients: Vec<String> = match room.room_type.as_str() {
+    let mut recipients: Vec<String> = match room.room_type.as_str() {
         "public" => db::chat::list_enclave_member_ids_for_room(&state.chat, room.id).await?,
         _ => db::chat::list_room_member_ids(&state.chat, room.id).await?,
     };
+    // LC-1137: the message author ALWAYS receives their own NewMessage, even when
+    // they are not in the room's membership set. A site admin can post in any
+    // non-DM room via god-mode (is_room_accessible returns true for an admin
+    // without a room_members/enclave_members row), so dropping into a call late
+    // in a room they never joined left them out of `recipients`: their own
+    // connection was skipped, so the author's echo never arrived. Most visible in
+    // the in-call chat, whose composer posts with hx-swap="none" and renders no
+    // optimistic placeholder, so the author saw nothing while every member saw
+    // the message. The author branch of render_new_message_or_bump already
+    // renders (and dedupes) their own echo, so delivering it is always correct;
+    // the `contains` guard keeps a member author from being sent to twice.
+    if let ChatEvent::NewMessage { message, .. } = event {
+        if !message.user_id.is_empty() && !recipients.contains(&message.user_id) {
+            recipients.push(message.user_id.clone());
+        }
+    }
     for uid in recipients {
         // OOB DOM updates always deliver - DND only suppresses attention-
         // grabbing notifications (push/toast/sound). When that delivery path
@@ -2049,6 +2065,16 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/transcripts/{transcript_id}/follow-ups",
             post(transcripts::create_followups),
+        )
+        // LC-1135: propose YouTrack issues from the transcript, then file the
+        // accepted ones.
+        .route(
+            "/transcripts/{transcript_id}/propose-issues",
+            post(transcripts::propose_issues),
+        )
+        .route(
+            "/transcripts/{transcript_id}/file-issues",
+            post(transcripts::file_issues),
         )
         // LC-441: DELETE on a row removes that one transcript.
         .route(
