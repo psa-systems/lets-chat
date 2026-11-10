@@ -185,7 +185,6 @@ voice-jump-live = Jump to live
 voice-transcript-search-placeholder = Search transcript
 voice-transcript-search-label = Search the live transcript
 voice-transcript-matches = matches
-voice-transcript-search-clear = Clear search
 # LC-1123: in-call text chat.
 voice-chat-label = Chat
 voice-chat-tip = Open chat
