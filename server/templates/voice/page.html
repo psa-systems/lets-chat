@@ -213,15 +213,10 @@
     <div class="max-h-64 overflow-y-auto border-t border-border px-3 py-2">
       <div id="lc-call-diag-log" class="flex flex-col gap-0.5">
         {% for e in call_diag_events %}
-        <div class="flex items-center gap-2 py-0.5 text-xs">
-          {% if e.kind == "dropped" || e.kind == "error" %}
-          <span class="rounded bg-danger-surface px-1.5 py-0.5 font-mono uppercase tracking-wide text-danger">{{ e.kind }}</span>
-          {% else %}
-          <span class="font-mono text-content-muted">{{ e.kind }}</span>
-          {% endif %}
-          <span class="font-medium">{{ e.user_label }}</span>
-          {% if let Some(d) = e.detail %}<span class="break-all text-content-muted">{{ d }}</span>{% endif %}
-        </div>
+        {% let kind = e.kind.as_str() %}
+        {% let user_label = e.user_label.as_str() %}
+        {% let detail = e.detail.as_deref() %}
+        {% include "ws/call_diag_row_inner.html" %}
         {% endfor %}
       </div>
     </div>
