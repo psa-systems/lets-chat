@@ -32,7 +32,7 @@
         <td class="font-mono text-xs">#{{ c.room_id }}</td>
         <td>
           {% if let Some(ended) = c.ended_at.as_ref() %}
-          <span class="text-content-muted text-xs whitespace-nowrap"><time datetime="{{ ended|iso }}">{{ ended }}</time></span>
+          <span class="text-content-muted text-xs whitespace-nowrap"><time datetime="{{ ended|iso }}" title="{{ ended }}">{{ ended }}</time></span>
           {% else %}
           <span class="rounded bg-success-surface text-success text-xs px-1.5 py-0.5 uppercase tracking-wide font-mono">{{ "admin-voice-log-live"|t }}</span>
           {% endif %}

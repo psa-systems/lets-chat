@@ -13,9 +13,9 @@
     <span class="text-content-muted font-mono text-xs ml-2">{{ "admin-voice-log-th-room"|t }} #{{ call.room_id }}</span>
   </p>
   <p class="text-xs text-content-muted mt-1">
-    <time datetime="{{ call.started_at|iso }}">{{ call.started_at }}</time>
+    <time datetime="{{ call.started_at|iso }}" title="{{ call.started_at }}">{{ call.started_at }}</time>
     {% if let Some(ended) = call.ended_at.as_ref() %}
-    &rarr; <time datetime="{{ ended|iso }}">{{ ended }}</time>
+    &rarr; <time datetime="{{ ended|iso }}" title="{{ ended }}">{{ ended }}</time>
     {% else %}
     <span class="rounded bg-success-surface text-success px-1.5 py-0.5 uppercase tracking-wide font-mono ml-1">{{ "admin-voice-log-live"|t }}</span>
     {% endif %}
