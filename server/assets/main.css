@@ -5166,52 +5166,24 @@ body.lc-transcript-open .lc-support-root { right: calc(1.25rem + 20rem); }
 #lc-caption-log { display: flex; flex-direction: column; gap: 0.375rem; }
 /* LC-1133: live transcript search bar. Sits between the boundary notes and the
    caption body; transcribe.js toggles the count + clear button on a non-empty
-   query and adds .lc-transcript-searching to the body while filtering. */
+   query and adds .lc-transcript-searching to the body while filtering. Reuses
+   .lc-search-field/.lc-search-input/.lc-search-clear (LC-699); only the
+   placement margin and the match-count badge have no shared-component
+   equivalent. */
 .lc-transcript-search {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
     flex: none;
     margin: 0 0.75rem 0.375rem;
-    padding: 0.25rem 0.5rem;
-    border: 1px solid var(--border);
-    border-radius: 0.4375rem;
-    background: var(--surface-sunken);
 }
-.lc-transcript-search-ico {
-    height: 0.875rem;
-    width: 0.875rem;
-    flex: none;
-    color: var(--content-muted);
-}
-.lc-transcript-search-input {
-    flex: 1;
-    min-width: 0;
-    border: 0;
-    background: transparent;
-    color: var(--content);
-    font-size: 0.8125rem;
-    outline: none;
-}
-.lc-transcript-search-input::placeholder { color: var(--content-muted); }
+.lc-transcript-search .lc-search-input { padding-right: 3.25rem; }
 .lc-transcript-match-count {
-    flex: none;
+    position: absolute;
+    right: 1.875rem;
+    top: 50%;
+    transform: translateY(-50%);
     font-size: 0.6875rem;
     color: var(--content-muted);
     white-space: nowrap;
 }
-.lc-transcript-search-clear {
-    flex: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 1.25rem;
-    width: 1.25rem;
-    border-radius: 0.25rem;
-    color: var(--content-muted);
-    cursor: pointer;
-}
-.lc-transcript-search-clear:hover { background: var(--surface); color: var(--content); }
 /* A caption line the active search filtered out. */
 .lc-cap-line.lc-cap-hidden { display: none; }
 /* The matched substring inside a shown line. */
