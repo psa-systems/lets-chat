@@ -124,6 +124,10 @@ jobs:
               --build-arg $"BUILD_DATE=($build_date)"
               --build-arg $"LETS_CHAT_UPDATE_REGISTRY_URL=($env.GITHUB_SERVER_URL)"
               --build-arg $"LETS_CHAT_UPDATE_REPOSITORY=($update_repository)"
+              # LC-1163: continuous / `latest` builds keep the localhost default
+              # (empty). Only publish-release.yml bakes the production server. The
+              # value is still passed because the Dockerfile now declares the ARG.
+              --build-arg "LETS_CHAT_DEFAULT_SERVER_URL="
               --tag lets-chat-desktop:build
               --load
               -f ci-build/Dockerfile.desktop-linux-bundles

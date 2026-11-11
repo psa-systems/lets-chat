@@ -125,6 +125,9 @@ jobs:
               --build-arg $"BUILD_DATE=($build_date)"
               --build-arg $"LETS_CHAT_UPDATE_REGISTRY_URL=($env.GITHUB_SERVER_URL)"
               --build-arg $"LETS_CHAT_UPDATE_REPOSITORY=($update_repository)"
+              # LC-1163: continuous / `latest` builds keep the localhost default
+              # (empty); only publish-release.yml bakes production.
+              --build-arg "LETS_CHAT_DEFAULT_SERVER_URL="
               --tag lets-chat-desktop-windows:build
               --load
               -f ci-build/Dockerfile.desktop-windows
@@ -160,6 +163,12 @@ jobs:
           (
             ^docker buildx build
               --build-arg $"APP_VERSION=($version)"
+              # LC-1163: inert for makensis, but the installer Dockerfile now
+              # declares these ARGs (to satisfy the release-injection guard), so
+              # every build of it must pass them. Empty here - continuous builds.
+              --build-arg "LETS_CHAT_UPDATE_REGISTRY_URL="
+              --build-arg "LETS_CHAT_UPDATE_REPOSITORY="
+              --build-arg "LETS_CHAT_DEFAULT_SERVER_URL="
               --tag lets-chat-windows-installer:build
               --load
               -f ci-build/Dockerfile.desktop-windows-installer

@@ -258,6 +258,12 @@ jobs:
           (
             ^docker buildx build
               --build-arg $"APP_VERSION=($version)"
+              # LC-1163: inert for makensis (the exe is already compiled), but the
+              # release-injection guard requires every image this workflow builds
+              # to pass every option_env! override. See the installer Dockerfile.
+              --build-arg $"LETS_CHAT_UPDATE_REGISTRY_URL=($env.UPDATE_REGISTRY_URL)"
+              --build-arg $"LETS_CHAT_UPDATE_REPOSITORY=($env.UPDATE_REPOSITORY)"
+              --build-arg $"LETS_CHAT_DEFAULT_SERVER_URL=($env.DESKTOP_RELEASE_SERVER_URL)"
               --tag lets-chat-windows-installer:publish
               --load
               -f ci-build/Dockerfile.desktop-windows-installer
