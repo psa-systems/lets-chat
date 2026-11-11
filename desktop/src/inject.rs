@@ -394,6 +394,11 @@ fn unread_overlay_icon() -> tauri::image::Image<'static> {
 
 pub const BRIDGE_JS: &str = r#"
 (function () {
+  // LC-1165: mark the page as running inside the desktop shell so the web app
+  // can take WKWebView-only code paths (e.g. keeping the camera device open
+  // across a video toggle, because WKWebView cannot re-acquire it after stop()).
+  // A plain browser leaves this undefined.
+  try { window.__lcDesktop = true; } catch (e) {}
   // LC-640/LC-933: advertise to the page that this client HAS a native
   // injector, so when it is the one being controlled it can tell the
   // controller their input will actually land. A plain browser leaves this

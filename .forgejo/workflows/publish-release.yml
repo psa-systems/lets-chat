@@ -17,6 +17,12 @@
 #      resolves, and `{version}-{os}-x86_64`, the rollback target. LC-831: the
 #      updater has pulled its release over the OCI distribution API since
 #      LC-733 and nothing published those tags, so every check answered 404.
+#   4. LC-1163: attaches the desktop installers (Linux .deb + .AppImage, Windows
+#      NSIS setup.exe + portable .exe) to the Forgejo RELEASE as downloadable
+#      assets, so Releases -> download -> run works. This is additive; the
+#      Generic Packages and OCI paths above are unchanged. macOS has no CI
+#      runner yet (LC-1157), so the .dmg is attached manually from a local
+#      `just build-desktop-mac` build (see the attach step).
 #
 # The manifest pseudo-version is overwritten every release; Generic Packages
 # rejects duplicate files, so each upload is preceded by a best-effort DELETE
@@ -47,6 +53,16 @@ jobs:
       # endpoint. PACKAGE_OWNER and PACKAGE_NAME survive at job-env fine.
       PACKAGE_OWNER: ${{ vars.PSA_SYSTEMS_PRIVATE_PACKAGE_OWNER }}
       PACKAGE_NAME: lets-chat
+      # LC-1163: the server a RELEASED installer opens by default on first launch.
+      # This single value is the one place to change the production endpoint; it
+      # is baked into the release binaries below via the LETS_CHAT_DEFAULT_SERVER_URL
+      # build-arg (config.rs reads it through option_env!). The runtime
+      # LETS_CHAT_SERVER_URL env var and the persisted welcome-page choice still
+      # take precedence, so a self-hosted / multi-instance user repoints without a
+      # rebuild (model C). Only release builds bake this; `just build-desktop-mac`
+      # and the continuous build-desktop-*.yml `latest` builds do not, so they
+      # keep the localhost default.
+      DESKTOP_RELEASE_SERVER_URL: https://chat.psa.systems
 
     steps:
       # LC-594: org variables and secrets do not follow a repo across orgs, so
@@ -61,6 +77,10 @@ jobs:
           # Secrets must be read at step-env: at job-env they arrive empty
           # inside a nu step (see the job-level note above).
           PACKAGE_PAT: ${{ secrets.PSA_SYSTEMS_PRIVATE_PACKAGE_PAT }}
+          # LC-1163: the release-asset attach step writes to THIS repo's release
+          # through the repo API, which needs a token with write:repository (the
+          # same FORGEJO_PAT create-release.yml uses), not the packages PAT.
+          FORGEJO_PAT: ${{ secrets.FORGEJO_PAT }}
         run: |
           # `$env.X?` rather than `$env.X`: an undefined variable is exactly the
           # state being checked for, and the bare form errors on it instead of
@@ -68,6 +88,7 @@ jobs:
           let required = [
             { name: "vars.PSA_SYSTEMS_PRIVATE_PACKAGE_OWNER", value: ($env.PACKAGE_OWNER? | default "") }
             { name: "secrets.PSA_SYSTEMS_PRIVATE_PACKAGE_PAT", value: ($env.PACKAGE_PAT? | default "") }
+            { name: "secrets.FORGEJO_PAT", value: ($env.FORGEJO_PAT? | default "") }
           ]
           let missing = ($required | where {|r| $r.value | is-empty } | get name)
           if ($missing | is-not-empty) {
@@ -151,6 +172,9 @@ jobs:
               # where releases actually land.
               --build-arg $"LETS_CHAT_UPDATE_REGISTRY_URL=($env.UPDATE_REGISTRY_URL)"
               --build-arg $"LETS_CHAT_UPDATE_REPOSITORY=($env.UPDATE_REPOSITORY)"
+              # LC-1163: bake the production server as the released installer's
+              # default (see the DESKTOP_RELEASE_SERVER_URL job env).
+              --build-arg $"LETS_CHAT_DEFAULT_SERVER_URL=($env.DESKTOP_RELEASE_SERVER_URL)"
               --tag lets-chat-desktop-linux:publish
               --load
               -f ci-build/Dockerfile.desktop-linux-bundles
@@ -199,18 +223,66 @@ jobs:
               --build-arg $"BUILD_DATE=($build_date)"
               --build-arg $"LETS_CHAT_UPDATE_REGISTRY_URL=($env.UPDATE_REGISTRY_URL)"
               --build-arg $"LETS_CHAT_UPDATE_REPOSITORY=($env.UPDATE_REPOSITORY)"
+              # LC-1163: bake the production server as the released installer's
+              # default (see the DESKTOP_RELEASE_SERVER_URL job env).
+              --build-arg $"LETS_CHAT_DEFAULT_SERVER_URL=($env.DESKTOP_RELEASE_SERVER_URL)"
               --tag lets-chat-desktop-windows:publish
               --load
               -f ci-build/Dockerfile.desktop-windows
               .
           )
           let container = (^docker create lets-chat-desktop-windows:publish)
+          # LC-1163: stage the raw exe under its plain name too -
+          # Dockerfile.desktop-windows-installer COPYs `artifacts/lets-chat-desktop.exe`
+          # to wrap in the NSIS installer and the portable zip below. The
+          # versioned-name copy stays the source for the Generic Packages upload,
+          # latest.json and the OCI push, which all reference it.
           (
             ^docker cp
               $"($container):/build/target/x86_64-pc-windows-gnu/release/lets-chat-desktop.exe"
-              "artifacts/lets-chat-desktop-windows-x86_64.exe"
+              "artifacts/lets-chat-desktop.exe"
+          )
+          cp artifacts/lets-chat-desktop.exe artifacts/lets-chat-desktop-windows-x86_64.exe
+          ^docker rm $container
+
+      # LC-1163: build the Windows NSIS installer (and the portable zip) here too,
+      # so the release can attach a real installer, not just the raw binary. Ported
+      # from build-desktop-windows.yml; the same Dockerfile wraps the cross-built
+      # exe staged above with makensis (LC-131: no Windows host, no wine).
+      - name: Build Windows installer + portable zip
+        shell: nu {0}
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          let version = $env.RELEASE_VERSION
+          (
+            ^docker buildx build
+              --build-arg $"APP_VERSION=($version)"
+              # LC-1163: inert for makensis (the exe is already compiled), but the
+              # release-injection guard requires every image this workflow builds
+              # to pass every option_env! override. See the installer Dockerfile.
+              --build-arg $"LETS_CHAT_UPDATE_REGISTRY_URL=($env.UPDATE_REGISTRY_URL)"
+              --build-arg $"LETS_CHAT_UPDATE_REPOSITORY=($env.UPDATE_REPOSITORY)"
+              --build-arg $"LETS_CHAT_DEFAULT_SERVER_URL=($env.DESKTOP_RELEASE_SERVER_URL)"
+              --tag lets-chat-windows-installer:publish
+              --load
+              -f ci-build/Dockerfile.desktop-windows-installer
+              .
+          )
+          let container = (^docker create lets-chat-windows-installer:publish)
+          (
+            ^docker cp
+              $"($container):/out/lets-chat-desktop-setup-x86_64.exe"
+              "artifacts/lets-chat-desktop-setup-x86_64.exe"
+          )
+          (
+            ^docker cp
+              $"($container):/out/lets-chat-desktop-windows-x86_64.zip"
+              "artifacts/lets-chat-desktop-windows-x86_64.zip"
           )
           ^docker rm $container
+          print "Windows installer + portable zip:"
+          ls artifacts/lets-chat-desktop-setup-x86_64.exe artifacts/lets-chat-desktop-windows-x86_64.zip | print
 
       - name: Generate update manifest
         shell: nu {0}
@@ -351,6 +423,95 @@ jobs:
               }
           }
           rm --force $auth_file
+
+      # LC-1163: attach the desktop installers to the Forgejo RELEASE as
+      # downloadable assets (Releases -> download -> run), in addition to the
+      # Generic Packages / OCI paths above, which stay untouched. The release for
+      # this `v*` tag already exists (create-release.yml creates it on the
+      # release-PR merge, which raises this tag push); for a manually pushed
+      # dry-run tag with no release, a prerelease is created so the attach can be
+      # exercised without a version bump. Same-named assets are removed first so a
+      # re-run (or repeated dry-run on one tag) replaces rather than piles up. All
+      # assets are UNSIGNED / un-notarized (Phase 3): Windows SmartScreen and
+      # macOS Gatekeeper warn until signed.
+      #
+      # macOS: there is no macOS CI runner yet (LC-1157 infra), so no `.dmg` is
+      # produced here. Build it locally with `just build-desktop-mac` and attach
+      # it to the same release with the same API and matching name:
+      #   curl -sS --fail -H "Authorization: token $FORGEJO_PAT" \
+      #     -F "attachment=@target/release/bundle/dmg/lets-chat_<ver>_x64.dmg" \
+      #     "<server>/api/v1/repos/<owner>/lets-chat/releases/<id>/assets?name=lets-chat-desktop-<ver>-x64.dmg"
+      - name: Attach desktop installers to the release
+        shell: nu {0}
+        env:
+          FORGEJO_PAT: ${{ secrets.FORGEJO_PAT }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          let version = $env.RELEASE_VERSION
+          # Asset names carry the numeric version (no leading `v`), matching what
+          # a user expects to see on the download page.
+          let ver_num = ($version | str replace --regex '^v' '')
+          let api = $"($env.GITHUB_SERVER_URL)/api/v1/repos/($env.GITHUB_REPOSITORY)"
+          let auth = [Authorization $"token ($env.FORGEJO_PAT)"]
+
+          # Find the release for this tag; create a prerelease if none exists
+          # (the dry-run path - a manually pushed `v*` tag with no release PR).
+          let lookup = (
+              http get --full --allow-errors --headers $auth $"($api)/releases/tags/($version)"
+          )
+          let release_id = if $lookup.status == 200 {
+              $lookup.body.id
+          } else if $lookup.status == 404 {
+              print $"No release for ($version); creating a prerelease for the dry-run."
+              let created = (
+                  http post --content-type application/json --headers $auth
+                      $"($api)/releases"
+                      { tag_name: $version, name: $version, prerelease: true, draft: false }
+              )
+              $created.id
+          } else {
+              print --stderr $"Unexpected status ($lookup.status) looking up release ($version)."
+              exit 1
+          }
+          print $"Release id: ($release_id)"
+
+          # Tauri stamps the Linux bundles with the crate version; resolve the
+          # first match rather than baking the stem in.
+          let deb_src = (ls artifacts/bundle-linux/*.deb | first | get name)
+          let appimage_src = (ls artifacts/bundle-linux/*.AppImage | first | get name)
+          let assets = [
+              { src: $deb_src,                                         name: $"lets-chat-desktop-($ver_num)-linux-amd64.deb" }
+              { src: $appimage_src,                                    name: $"lets-chat-desktop-($ver_num)-linux-x86_64.AppImage" }
+              { src: "artifacts/lets-chat-desktop-setup-x86_64.exe",   name: $"lets-chat-desktop-($ver_num)-windows-x64-setup.exe" }
+              { src: "artifacts/lets-chat-desktop-windows-x86_64.exe", name: $"lets-chat-desktop-($ver_num)-windows-x64.exe" }
+          ]
+
+          # Current assets, so a re-run replaces a same-named one instead of
+          # leaving a duplicate (Forgejo allows duplicate asset names).
+          let existing = (
+              http get --headers $auth $"($api)/releases/($release_id)/assets"
+          )
+          # curl does the multipart upload (nushell has no file-part form). The
+          # token goes in a --config file so it never reaches the process args,
+          # the same posture as the oras auth file in the OCI step.
+          let cfg = (^mktemp | str trim)
+          $"header = \"Authorization: token ($env.FORGEJO_PAT)\"\n" | save --force $cfg
+          for a in $assets {
+              for dup in ($existing | where name == $a.name) {
+                  print $"Replacing existing asset ($a.name) \(id ($dup.id)\)"
+                  http delete --allow-errors --headers $auth $"($api)/releases/($release_id)/assets/($dup.id)"
+              }
+              print $"Attaching ($a.src) as ($a.name)"
+              (
+                  ^curl --silent --show-error --fail
+                      --config $cfg
+                      --form $"attachment=@($a.src)"
+                      $"($api)/releases/($release_id)/assets?name=($a.name)"
+              )
+          }
+          rm --force $cfg
+          print $"Attached ($assets | length) installers to release ($version)."
+          print "macOS .dmg: build locally with `just build-desktop-mac` and attach it manually (see the step comment above)."
 
       - name: Print release summary
         shell: nu {0}

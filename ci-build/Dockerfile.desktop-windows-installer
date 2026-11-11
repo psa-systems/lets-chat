@@ -31,6 +31,20 @@ RUN apt-get update \
 
 ARG APP_VERSION=0.0.0-dev
 
+# LC-1163: this stage runs makensis over the ALREADY-compiled exe and never
+# invokes rustc, so these three override values have no effect here - the server
+# default and the update coordinates are already baked into the exe this wraps.
+# They are declared and re-exported only to satisfy the uniform release-injection
+# guard (ci-build/check-update-injection.nu, Rule A), which requires every image
+# the release workflow builds to carry every option_env! override the client
+# reads. The release workflow passes them; a local build leaves them empty.
+ARG LETS_CHAT_UPDATE_REGISTRY_URL=
+ARG LETS_CHAT_UPDATE_REPOSITORY=
+ARG LETS_CHAT_DEFAULT_SERVER_URL=
+ENV LETS_CHAT_UPDATE_REGISTRY_URL=${LETS_CHAT_UPDATE_REGISTRY_URL} \
+    LETS_CHAT_UPDATE_REPOSITORY=${LETS_CHAT_UPDATE_REPOSITORY} \
+    LETS_CHAT_DEFAULT_SERVER_URL=${LETS_CHAT_DEFAULT_SERVER_URL}
+
 WORKDIR /pkg
 COPY desktop/installer/lets-chat.nsi ./
 COPY desktop/installer/portable-README.txt ./
