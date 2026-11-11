@@ -593,6 +593,11 @@
   </script>
   <link rel="stylesheet" href="/assets/tailwind-built.css?v={{ asset_version }}">
   <link rel="stylesheet" href="/assets/main.css?v={{ asset_version }}">
+  {# LC-1162: HTMLFormElement.requestSubmit() polyfill for Safari < 16 (the
+     macOS <= 12 desktop webview). Loaded before htmx and the app bundle so the
+     method exists before the composer's Enter-to-send handler can reach for it;
+     a no-op where the native method is present. #}
+  <script src="/assets/polyfills.js?v={{ asset_version }}" defer></script>
   <script src="/assets/vendor/htmx.min.js?v={{ asset_version }}" defer></script>
   <script src="/assets/vendor/htmx-ext-ws.js?v={{ asset_version }}" defer></script>
   <script src="/assets/vendor/idiomorph.min.js?v={{ asset_version }}" defer></script>
