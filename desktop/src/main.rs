@@ -406,8 +406,14 @@ mod deep_link_tests {
 
     #[test]
     fn maps_host_and_path_onto_app_routes() {
-        assert_eq!(deep_link_to_path("lets-chat://room/15").as_deref(), Some("/room/15"));
-        assert_eq!(deep_link_to_path("lets-chat://dm/abc").as_deref(), Some("/dm/abc"));
+        assert_eq!(
+            deep_link_to_path("lets-chat://room/15").as_deref(),
+            Some("/room/15")
+        );
+        assert_eq!(
+            deep_link_to_path("lets-chat://dm/abc").as_deref(),
+            Some("/dm/abc")
+        );
         // message anchor + query are preserved
         assert_eq!(
             deep_link_to_path("lets-chat://room/15#msg-7").as_deref(),
@@ -418,7 +424,10 @@ mod deep_link_tests {
             Some("/room/15?focus=1")
         );
         // empty-host absolute form collapses to a single leading slash
-        assert_eq!(deep_link_to_path("lets-chat:///room/15").as_deref(), Some("/room/15"));
+        assert_eq!(
+            deep_link_to_path("lets-chat:///room/15").as_deref(),
+            Some("/room/15")
+        );
         // not our scheme -> ignored
         assert_eq!(deep_link_to_path("https://evil.example/room/15"), None);
         assert_eq!(deep_link_to_path("not a url"), None);
