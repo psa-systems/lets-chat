@@ -295,6 +295,33 @@ fn scan_code(code: &str) -> Option<(u16, bool)> {
 /// forwards the LC-184 control DOM events to the native injector. Uses the
 /// internal IPC entrypoint so we do not have to expose the whole global Tauri
 /// API surface to the remote page (`withGlobalTauri` stays off).
+/// Desktop notification bridge (audit Phase 2): show an OS-native notification
+/// on behalf of the web UI. The configured server origin reaches this over the
+/// same runtime remote capability as the rc / update-token commands (see
+/// `grant_native_notify_ipc` in main.rs). The web page builds the title/body
+/// with its own, already-DND-gated notification logic and the shell renders it
+/// natively; `BRIDGE_JS` shims the browser `Notification` away so only the
+/// native one fires (no double notification). `target` is the in-app path the
+/// notification refers to - carried through for the click-to-navigate handoff
+/// to the deep-link ticket, not acted on here.
+#[tauri::command]
+pub fn desktop_notify(app: tauri::AppHandle, title: String, body: String, target: Option<String>) {
+    use tauri_plugin_notification::NotificationExt;
+    let _ = target; // reserved for the deep-link click-to-navigate follow-up
+    let title = if title.trim().is_empty() {
+        "Let's Chat".to_string()
+    } else {
+        title
+    };
+    let mut builder = app.notification().builder().title(title);
+    if !body.is_empty() {
+        builder = builder.body(body);
+    }
+    if let Err(e) = builder.show() {
+        eprintln!("lets-chat-desktop: native notification failed: {e}");
+    }
+}
+
 pub const BRIDGE_JS: &str = r#"
 (function () {
   // LC-640/LC-933: advertise to the page that this client HAS a native
@@ -353,6 +380,67 @@ pub const BRIDGE_JS: &str = r#"
     document.addEventListener('DOMContentLoaded', pushRegistryToken);
   } else {
     pushRegistryToken();
+  }
+
+  // --- Native OS notifications (audit Phase 2) ------------------------------
+  // Route the web UI's notifications to the OS instead of the browser. We reuse
+  // the page's OWN logic and gating rather than re-deriving anything:
+  //  - Mentions / DMs / reminders: the page's fireNotification() already honours
+  //    the user's notification preference and DND/mute (the #lc-notify-bus child
+  //    it reacts to is emitted by the server only when the mute gate allows it),
+  //    builds the per-kind title + body, and calls `new Notification(...)`. We
+  //    shim window.Notification so THAT call fires a native notification, never
+  //    a browser one - so DND is respected for free and there is never a double
+  //    notification.
+  //  - Incoming calls do not go through Notification today (only an in-page ring
+  //    dialog), yet they are the highest-value case (do not miss a huddle while
+  //    backgrounded), so we watch the incoming-call dialog and fire natively.
+  // Click-to-focus/navigate: the OS-notification click has to be routed back
+  // into the window with the target path; that plumbing is shared with the
+  // deep-link scheme and is handed off to that ticket. `target` is passed
+  // through now so the handoff has it.
+  function nativeNotify(title, body, target) {
+    try { inv('desktop_notify', { title: String(title || ''), body: String(body || ''), target: target || null }); } catch (e) {}
+  }
+  // Shim the browser Notification API so the page's existing path renders
+  // natively. permission is pre-granted so fireNotification() proceeds (the
+  // real gate stays the user's notification preference + the server mute gate);
+  // constructing one fires natively and nothing reaches the browser.
+  function NativeNotification(title, opts) {
+    opts = opts || {};
+    // tag is 'lc-' + target_path (layout.html), so recover the target for the
+    // click-to-navigate handoff without needing a separate field.
+    var target = null;
+    if (typeof opts.tag === 'string' && opts.tag.indexOf('lc-') === 0) target = opts.tag.slice(3);
+    nativeNotify(title, opts.body, target);
+    this.onclick = null; this.onclose = null; this.onerror = null; this.onshow = null;
+  }
+  NativeNotification.permission = 'granted';
+  NativeNotification.requestPermission = function (cb) {
+    if (typeof cb === 'function') { try { cb('granted'); } catch (e) {} }
+    return Promise.resolve('granted');
+  };
+  NativeNotification.prototype.close = function () {};
+  try { window.Notification = NativeNotification; } catch (e) {}
+
+  function watchIncomingCall() {
+    var dlg = document.querySelector('[data-lc-call-incoming]');
+    if (!dlg || !window.MutationObserver) { return; }
+    var shown = !dlg.classList.contains('hidden');
+    new MutationObserver(function () {
+      var nowShown = !dlg.classList.contains('hidden');
+      if (nowShown && !shown) {
+        var nameEl = dlg.querySelector('[data-lc-call-incoming-name]');
+        var who = ((nameEl && nameEl.textContent) || '').trim();
+        nativeNotify('Incoming call', who ? ('Call from ' + who) : 'Someone is calling you', location.pathname);
+      }
+      shown = nowShown;
+    }).observe(dlg, { attributes: true, attributeFilter: ['class'] });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', watchIncomingCall);
+  } else {
+    watchIncomingCall();
   }
 })();
 "#;

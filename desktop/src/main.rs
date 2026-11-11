@@ -52,6 +52,7 @@ fn set_server_url(url: String, app: tauri::AppHandle) -> Result<ProbeResult, Str
     // has no allow-rc-* permission for the rest of the session.
     grant_remote_control_ipc(&app, &trimmed);
     grant_update_token_ipc(&app, &trimmed);
+    grant_native_notify_ipc(&app, &trimmed);
     Ok(match welcome::server_reachable(&trimmed) {
         Ok(()) => ProbeResult {
             url: trimmed,
@@ -137,7 +138,8 @@ fn main() {
             set_server_url,
             inject::rc_session,
             inject::rc_input,
-            inject::set_registry_token
+            inject::set_registry_token,
+            inject::desktop_notify
         ])
         .register_uri_scheme_protocol(WELCOME_SCHEME, move |_ctx, _request| {
             let body = welcome_html.clone().into_bytes();
@@ -163,6 +165,7 @@ fn main() {
             install_media_permission_handler(&window)?;
             grant_remote_control_ipc(app.handle(), &url_for_cap);
             grant_update_token_ipc(app.handle(), &url_for_cap);
+            grant_native_notify_ipc(app.handle(), &url_for_cap);
             // LC-186: register the kill-switch hotkey. Non-fatal if the combo
             // is already taken by another app - the on-banner button remains.
             {
@@ -255,6 +258,29 @@ fn grant_update_token_ipc(app: &tauri::AppHandle, server_url: &str) {
         .permission("allow-set-registry-token");
     if let Err(e) = app.add_capability(cap) {
         eprintln!("lets-chat-desktop: update-token capability not added: {e}");
+    }
+}
+
+// Desktop notification bridge (audit Phase 2): let the configured server origin
+// (and only it) call `desktop_notify`, so the web UI can raise OS-native
+// notifications for mentions / DMs / incoming calls. Same shape and trust
+// argument as `grant_remote_control_ipc` / `grant_update_token_ipc`; kept its
+// own capability so the grant stays independently reviewable. The command only
+// shows a notification, so it is strictly less sensitive than the rc grant.
+fn grant_native_notify_ipc(app: &tauri::AppHandle, server_url: &str) {
+    use tauri::{ipc::CapabilityBuilder, Manager};
+    let Some(pattern) = remote_url_pattern(server_url) else {
+        eprintln!("lets-chat-desktop: native notifications disabled (unparseable server URL)");
+        return;
+    };
+    let cap = CapabilityBuilder::new("native-notify")
+        .window("main")
+        // Remote-only: the local welcome page raises no notifications.
+        .local(false)
+        .remote(pattern)
+        .permission("allow-desktop-notify");
+    if let Err(e) = app.add_capability(cap) {
+        eprintln!("lets-chat-desktop: native-notify capability not added: {e}");
     }
 }
 
