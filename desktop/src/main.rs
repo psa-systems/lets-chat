@@ -111,7 +111,7 @@ fn main() {
     let title_for_window = title.clone();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             // Re-launch attempt: focus the existing window instead of opening
             // a second one. Silent if the window is already gone (eg. user
             // is mid-shutdown).
@@ -119,7 +119,21 @@ fn main() {
                 let _ = w.show();
                 let _ = w.set_focus();
             }
+            // Deep links (audit Phase 2): on Windows/Linux a `lets-chat://` link
+            // launches a second process with the URL in argv; single-instance
+            // forwards that argv here, so this is the WARM deep-link path -
+            // focus (above) + navigate the already-running window.
+            if let Some(link) = first_deep_link(&argv) {
+                open_deep_link(app, &link);
+            }
         }))
+        // Deep links (audit Phase 2): registers the `lets-chat://` scheme (the
+        // Windows registry entry + the Linux `.desktop` MimeType are generated
+        // from tauri.conf.json's plugins.deep-link.schemes). Navigation is driven
+        // from argv (cold: setup(); warm: the single-instance handler above),
+        // which is the reliable path on Windows + Linux; macOS uses on_open_url
+        // and is a separate ticket (no Mac runner yet).
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_notification::init())
         // LC-186: global kill-switch for remote control. The handler fires on
         // ANY registered shortcut press; we register only the kill hotkey
@@ -178,6 +192,19 @@ fn main() {
                 }
             }
             build_tray_icon(app.handle())?;
+            // Deep links (audit Phase 2): register the scheme at runtime (covers
+            // `cargo run` / dev; installed bundles register from tauri.conf), then
+            // handle the COLD-start path - a `lets-chat://` URL on this process's
+            // own argv navigates the just-built window to the target.
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register_all() {
+                    eprintln!("lets-chat-desktop: deep-link runtime registration skipped: {e}");
+                }
+            }
+            if let Some(link) = first_deep_link(&std::env::args().skip(1).collect::<Vec<_>>()) {
+                open_deep_link(app.handle(), &link);
+            }
             // LC-710: started here, not before the builder, because the check
             // needs an AppHandle to raise its native "update available"
             // notification.
@@ -299,6 +326,112 @@ fn remote_url_pattern(url: &str) -> Option<String> {
         return None;
     }
     Some(format!("{scheme}://{host}/*"))
+}
+
+// Deep links (audit Phase 2) ------------------------------------------------
+//
+// The first `lets-chat://...` argument, if any. The OS passes the clicked link
+// as a plain argv entry on Windows + Linux (cold start to a fresh process,
+// warm start forwarded by single-instance).
+fn first_deep_link(args: &[String]) -> Option<String> {
+    args.iter().find(|a| a.starts_with("lets-chat://")).cloned()
+}
+
+// Map a `lets-chat://` URL onto an existing in-app route. The host + path are
+// concatenated so `lets-chat://room/15` -> `/room/15` and `lets-chat://dm/abc`
+// -> `/dm/abc`; a `#msg-7` fragment (message anchor) and any query are kept.
+// Returns None for anything that is not a `lets-chat://` URL, so a stray argv
+// entry is ignored. No new server route is invented - these are the routes the
+// web app already serves.
+fn deep_link_to_path(raw: &str) -> Option<String> {
+    let u = url::Url::parse(raw.trim()).ok()?;
+    if u.scheme() != "lets-chat" {
+        return None;
+    }
+    let host = u.host_str().unwrap_or("");
+    let mut out = String::from("/");
+    out.push_str(host);
+    let path = u.path();
+    if !path.is_empty() && path != "/" {
+        out.push_str(path);
+    }
+    // Collapse a leading `//` (empty host + absolute path, e.g. `lets-chat:///x`).
+    while out.starts_with("//") {
+        out.remove(0);
+    }
+    if let Some(q) = u.query() {
+        out.push('?');
+        out.push_str(q);
+    }
+    if let Some(f) = u.fragment() {
+        out.push('#');
+        out.push_str(f);
+    }
+    Some(out)
+}
+
+// The ONE navigation sink, shared by every "open to this room" trigger (deep
+// links today; a click-capable notification once one exists - see the note in
+// inject::desktop_notify). Focuses the window and navigates the webview to the
+// configured server origin + `path`, reusing the app's existing routes. Using
+// the absolute server URL means it also recovers from the offline welcome page.
+fn navigate_to_path(app: &tauri::AppHandle, path: &str) {
+    use tauri::Manager;
+    let Some(w) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = w.unminimize();
+    let _ = w.show();
+    let _ = w.set_focus();
+    let base = config::initial_server_url();
+    let full = format!("{}{}", base.trim_end_matches('/'), path);
+    let js = format!(
+        "location.assign({})",
+        serde_json::to_string(&full).unwrap_or_else(|_| "\"/\"".to_string())
+    );
+    let _ = w.eval(&js);
+}
+
+// Open a `lets-chat://` URL: map it to an in-app route and navigate there.
+fn open_deep_link(app: &tauri::AppHandle, raw: &str) {
+    match deep_link_to_path(raw) {
+        Some(path) => navigate_to_path(app, &path),
+        None => eprintln!("lets-chat-desktop: ignoring non-deep-link argument {raw:?}"),
+    }
+}
+
+#[cfg(test)]
+mod deep_link_tests {
+    use super::deep_link_to_path;
+
+    #[test]
+    fn maps_host_and_path_onto_app_routes() {
+        assert_eq!(
+            deep_link_to_path("lets-chat://room/15").as_deref(),
+            Some("/room/15")
+        );
+        assert_eq!(
+            deep_link_to_path("lets-chat://dm/abc").as_deref(),
+            Some("/dm/abc")
+        );
+        // message anchor + query are preserved
+        assert_eq!(
+            deep_link_to_path("lets-chat://room/15#msg-7").as_deref(),
+            Some("/room/15#msg-7")
+        );
+        assert_eq!(
+            deep_link_to_path("lets-chat://room/15?focus=1").as_deref(),
+            Some("/room/15?focus=1")
+        );
+        // empty-host absolute form collapses to a single leading slash
+        assert_eq!(
+            deep_link_to_path("lets-chat:///room/15").as_deref(),
+            Some("/room/15")
+        );
+        // not our scheme -> ignored
+        assert_eq!(deep_link_to_path("https://evil.example/room/15"), None);
+        assert_eq!(deep_link_to_path("not a url"), None);
+    }
 }
 
 // Build a system-tray icon with Show / Quit menu items. Left-click focuses

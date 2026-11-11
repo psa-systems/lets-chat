@@ -23,6 +23,12 @@ tauri = { version = "2", features = ["tray-icon", "image-png"] }
 # already running. Cheap to wire up now; saves a "second window appeared"
 # bug report later.
 tauri-plugin-single-instance = "2"
+# Deep links (audit Phase 2): register the `lets-chat://` URL scheme so a link
+# opens/focuses the app and navigates to the room/DM/message. Handles the
+# Windows registry entry and the Linux `.desktop` MimeType registration from
+# the scheme declared in tauri.conf.json. macOS registration/verification is a
+# separate ticket (needs a Mac runner); only Windows + Linux are built today.
+tauri-plugin-deep-link = "2"
 # OS-native notifications. The server pages call
 # invoke('plugin:notification|notify', { title, body }) once the
 # server-side integration lands; the plugin and capability are wired
