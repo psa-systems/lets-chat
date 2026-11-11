@@ -50,6 +50,16 @@ fn main() {
             // credential through this one; without the declaration there is no
             // `allow-set-registry-token` permission for main.rs to grant.
             "set_registry_token",
+            // #1109 / #1111: the desktop notification + dock-badge bridge. The
+            // server page invokes these from the configured remote origin, which
+            // main.rs grants via the runtime `native-notify` capability
+            // (allow-desktop-notify / allow-desktop-set-badge). Both MUST be
+            // declared here or those permissions do not exist and the capability
+            // grant panics at launch (UnknownPermission), crashing the app on
+            // every platform. CI only type-checks the crate, it never launches
+            // the bundle, so the omission was invisible until the first real run.
+            "desktop_notify",
+            "desktop_set_badge",
         ]));
     tauri_build::try_build(attrs).expect("tauri_build failed");
 }
