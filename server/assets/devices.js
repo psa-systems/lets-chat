@@ -106,21 +106,38 @@
     return err && (err.name === 'OverconstrainedError' || err.name === 'NotFoundError');
   }
 
+  // LC-1165: a device acquisition right after a prior track was stopped can fail
+  // transiently while the OS/engine is still releasing the device - seen on the
+  // desktop webview (WKWebView) joining a call after a leave, or re-acquiring a
+  // camera. A single short-delayed retry recovers it. Browsers normally succeed
+  // first try, so this only fires on the `NotReadableError` / `AbortError`
+  // transient and is a no-op on the happy path.
+  function withReacquireRetry(attempt) {
+    return attempt().catch(function (err) {
+      var n = err && err.name;
+      if (n !== 'NotReadableError' && n !== 'AbortError') throw err;
+      return new Promise(function (resolve) { setTimeout(resolve, 500); }).then(attempt);
+    });
+  }
+
   // Acquire mic (+ camera when withVideo) honoring the pinned devices. If a
   // pinned device has been unplugged the exact constraint throws; retry once
   // with plain defaults so the call still connects on whatever is available.
   function getUserMedia(withVideo) {
     if (!available()) return Promise.reject(new Error('getUserMedia unavailable'));
-    var c = { audio: audioConstraint(), video: withVideo ? videoConstraint(true) : false };
-    return navigator.mediaDevices.getUserMedia(c).catch(function (err) {
-      if (isPinError(err)) {
-        return navigator.mediaDevices.getUserMedia({
-          audio: window.LetsChatMedia.audio(),
-          video: withVideo ? videoConstraint(false) : false,
-        });
-      }
-      throw err;
-    }).then(guardBlurStream);
+    function attempt() {
+      var c = { audio: audioConstraint(), video: withVideo ? videoConstraint(true) : false };
+      return navigator.mediaDevices.getUserMedia(c).catch(function (err) {
+        if (isPinError(err)) {
+          return navigator.mediaDevices.getUserMedia({
+            audio: window.LetsChatMedia.audio(),
+            video: withVideo ? videoConstraint(false) : false,
+          });
+        }
+        throw err;
+      });
+    }
+    return withReacquireRetry(attempt).then(guardBlurStream);
   }
 
   // Camera-only acquisition (camera toggle, screen-share restore). Same
@@ -128,10 +145,13 @@
   // camera restored after a screen-share is blurred exactly like the call path.
   function getCamera() {
     if (!available()) return Promise.reject(new Error('getUserMedia unavailable'));
-    return navigator.mediaDevices.getUserMedia({ video: videoConstraint(true) }).catch(function (err) {
-      if (isPinError(err)) return navigator.mediaDevices.getUserMedia({ video: videoConstraint(false) });
-      throw err;
-    }).then(guardBlurStream);
+    function attempt() {
+      return navigator.mediaDevices.getUserMedia({ video: videoConstraint(true) }).catch(function (err) {
+        if (isPinError(err)) return navigator.mediaDevices.getUserMedia({ video: videoConstraint(false) });
+        throw err;
+      });
+    }
+    return withReacquireRetry(attempt).then(guardBlurStream);
   }
 
   // ---- blur performance guard ---------------------------------------
