@@ -721,7 +721,7 @@
       if (p.pc !== pc) return;
       applyConnectionState(userId, pc.connectionState); // LC-410: live quality
       if (pc.connectionState === 'failed') {
-        console.warn('voice: connection to', userId, 'failed; awaiting VoiceLeft');
+        console.warn('voice: connection to', userId, 'failed');
         // LC-869: report the ICE failure once per failure edge - the mesh can
         // flap a peer through 'failed' transiently, and the server rate-limits
         // anyway, but a client-side guard keeps a single flap to one row.
@@ -730,8 +730,26 @@
           voiceDiag('ice failed: peer ' + String(userId).slice(0, 8));
         }
         p.diagRoute = false; // a recovery should re-report its route
+        // LC-1154: a failed mesh connection used to sit dead until the peer's
+        // VoiceLeft or the user manually left and rejoined - the "late joiner
+        // cannot hear anyone until they rejoin a couple of times" report. Auto-
+        // recover with an ICE restart instead. Only the offerer (impolite) side
+        // restarts, so the pair does not glare; once per failure edge; and after
+        // a short settle delay, re-checking it is still failed, because the mesh
+        // flaps a peer through 'failed' transiently when another participant
+        // leaves (handled above by NOT removing the peer here).
+        if (shouldAutoIceRestart(p.polite, p.iceRecoverTried, pc.connectionState)) {
+          p.iceRecoverTried = true;
+          setTimeout(function () {
+            if (peers[userId] === p && p.pc === pc && pc.connectionState === 'failed') {
+              voiceDiag('ice failed: peer ' + String(userId).slice(0, 8) + ' - recovering via ICE restart', 'diag');
+              restartPeerIce(userId);
+            }
+          }, ICE_RECOVER_DELAY_MS);
+        }
       } else if (pc.connectionState === 'connected') {
         p.diagFailed = false;
+        p.iceRecoverTried = false; // a later failure may recover again
         reportIceRoute(userId); // LC-1114: report the host/srflx/relay route
       }
     };
@@ -1219,7 +1237,7 @@
       if (s.stage === 0) {
         s.stage = 1;
         voiceDiag('screen blackout: peer ' + short + ' (no frames; ' + why + ') - recovering via ICE restart', 'error');
-        recoverScreenIceRestart(userId);
+        restartPeerIce(userId);
         s.blackoutTimer = setTimeout(function () { checkScreenBlackout(userId); }, SCREEN_RECOVER_WAIT_MS);
       } else if (s.stage === 1) {
         s.stage = 2;
@@ -1234,10 +1252,23 @@
       }
     });
   }
-  // LC-1138: stage 1 - restart ICE on the viewer<->sharer connection. Re-gathers
-  // candidates and renegotiates through the existing offer/answer relay (no new
-  // signal), which clears a wedged media path (e.g. a dead host-candidate pair).
-  function recoverScreenIceRestart(userId) {
+  // LC-1154: how long to let a 'failed' connection settle before auto-restarting
+  // ICE. The mesh flaps 'failed' transiently when a participant leaves, so a
+  // brief wait avoids restarting a connection that would recover on its own.
+  var ICE_RECOVER_DELAY_MS = 2500;
+  // LC-1154: pure - should this side auto-restart ICE for a peer right now? Only
+  // when the connection is 'failed', this side is the OFFERER (impolite, so the
+  // pair does not both restart and glare), and we have not already tried for
+  // this failure edge. Exported for unit testing.
+  function shouldAutoIceRestart(polite, tried, state) {
+    return state === 'failed' && !polite && !tried;
+  }
+  // LC-1138 / LC-1154: restart ICE on one peer connection. Re-gathers candidates
+  // and renegotiates through the existing offer/answer relay (no new signal),
+  // which clears a wedged media path (e.g. a dead host-candidate pair). Used by
+  // the screen-blackout ladder (stage 1) and by the connection-failed
+  // auto-recovery, which is why it is peer-generic rather than screen-specific.
+  function restartPeerIce(userId) {
     var p = peers[userId];
     if (!p || !p.pc) return;
     p.diagRoute = false; // let the recovered route re-report
@@ -1253,9 +1284,9 @@
       p.pc.createOffer({ iceRestart: true })
         .then(function (o) { return p.pc.setLocalDescription(o); })
         .then(function () { voiceSend('offer', userId, JSON.stringify(p.pc.localDescription)); })
-        .catch(function (e) { console.warn('voice: screen ICE restart failed', e); })
+        .catch(function (e) { console.warn('voice: ICE restart failed', e); })
         .finally(function () { p.makingOffer = false; });
-    } catch (e) { console.warn('voice: screen ICE restart threw', e); }
+    } catch (e) { console.warn('voice: ICE restart threw', e); }
   }
   // LC-1138: stage 2 - rebuild just this one peer connection (the scoped
   // equivalent of a page reload for this pair). We tell the sharer to reset the
@@ -1801,5 +1832,7 @@
   window.LetsChatVoice = {
     leave: function () { if (joined) leave(); },
     isJoined: function () { return joined; },
+    // LC-1154: pure guard, exported for unit testing.
+    shouldAutoIceRestart: shouldAutoIceRestart,
   };
 })();

@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Fixed
+
+- **A dropped voice connection now recovers on its own instead of staying silent until you rejoin (LC-1154).** In a mesh call, when a peer connection failed to establish (common for a late joiner whose network path can't be negotiated on the first try), it used to sit dead until the person left and rejoined the call a couple of times - so they could not hear or be heard by that peer. The connection now automatically restarts ICE when it fails and re-establishes the media path. Only one side of each pair restarts (so the two ends don't collide), it tries once per failure and waits a moment first (a transient blip when someone else leaves resolves on its own), and a successful recovery is noted in the per-call voice log.
+
 ## [v0.11.0] - 2026-11-10
 
 ### Security

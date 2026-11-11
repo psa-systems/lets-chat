@@ -521,3 +521,20 @@ test('LC-1129: a remote screen that renders no frames logs a blackout error once
   assert.equal(h.sent.filter((f) => f.detail === 'screen blackout: peer u2 (no frames)').length, 1,
     'no second blackout after the share stopped');
 });
+
+// LC-1154: a failed mesh connection auto-restarts ICE instead of waiting for
+// the user to rejoin - but only on the offerer (impolite) side, once per
+// failure edge, and only while actually 'failed'. This pins that guard.
+test('LC-1154: shouldAutoIceRestart gates the connection-failed auto-recovery', () => {
+  const g = load().voice.shouldAutoIceRestart;
+  // Offerer (impolite => polite=false), first failure: restart.
+  assert.equal(g(false, false, 'failed'), true, 'offerer restarts a failed pc');
+  // Polite side waits for the offerer's fresh offer (no glare).
+  assert.equal(g(true, false, 'failed'), false, 'polite side does not restart');
+  // Already tried this edge: do not restart again (no storm).
+  assert.equal(g(false, true, 'failed'), false, 'one restart per failure edge');
+  // Any non-failed state never restarts, whatever the role.
+  for (const s of ['connected', 'connecting', 'disconnected', 'new', 'closed']) {
+    assert.equal(g(false, false, s), false, `no restart while ${s}`);
+  }
+});
