@@ -23,6 +23,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 - **The per-call voice log now says why a call problem happened, not just that it did (LC-1154).** Connection and screen-share diagnostics used to be too thin to act on: a failure logged only "ice failed", a successful connection only its local network route ("via host"), and a black screen share "frames ?/?" with no further clue. Each row now carries the specifics an operator needs: a successful connection shows the full route and round-trip time (e.g. "via host/srflx rtt 42ms"); a failure shows whether a route was ever established and, if not, which candidate types were gathered (so a missing relay from a STUN/TURN gap is visible); and a black screen share shows the frames, bytes and resolution arriving, distinguishing "nothing is arriving" from "arriving but not decoding".
 
+### Fixed
+
+- **Pressing Enter sends a message again on older Safari and the macOS desktop app (LC-1162).** On Safari 15 and earlier (which includes the system webview the desktop app uses on macOS 12 and below), pressing Enter in the composer did nothing: no message sent and not even a newline, so you had to click Send. The composer relied on a browser feature (`requestSubmit`) that those versions lack, so the keypress silently failed. A small compatibility shim restores it, so Enter-to-send, thread replies, saving a message edit with Cmd/Ctrl+Enter, and in-call chat all work again on those browsers. Current browsers are unaffected.
+
 ## [v0.11.0] - 2026-11-10
 
 ### Security
