@@ -8,7 +8,9 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
-### Fixed
+### Added
+
+- **The desktop app now raises native OS notifications for mentions, DMs and incoming calls.** Running inside the Let's Chat desktop shell, a mention, direct message or reminder that would have shown a browser notification now fires a real OS notification instead (and only one - the browser notification is not also shown). Incoming calls, which previously only rang in-page, now also notify natively so a huddle is not missed while the window is in the background. Notifications honour the same notification preference and per-room mute / do-not-disturb gating as everywhere else (the desktop bridge reuses the server-gated signal, so a muted room stays silent). Clicking a notification to jump straight to the room arrives with the deep-link work.
 
 - **A dropped voice connection now recovers on its own instead of staying silent until you rejoin (LC-1154).** In a mesh call, when a peer connection failed to establish (common for a late joiner whose network path can't be negotiated on the first try), it used to sit dead until the person left and rejoined the call a couple of times - so they could not hear or be heard by that peer. The connection now automatically restarts ICE when it fails and re-establishes the media path. Only one side of each pair restarts (so the two ends don't collide), it tries once per failure and waits a moment first (a transient blip when someone else leaves resolves on its own), and a successful recovery is noted in the per-call voice log.
 
