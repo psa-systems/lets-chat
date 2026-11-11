@@ -169,6 +169,15 @@ fn main() {
             } else {
                 WebviewUrl::CustomProtocol(WELCOME_URL.parse()?)
             };
+            // LC-1159: where an "open in new tab" link (target=_blank /
+            // window.open) is allowed to navigate the app shell in-place. A
+            // wrapped webview otherwise just drops the new-window request, so a
+            // portal "Community" link to Let's Chat appeared dead. First-party
+            // links navigate the existing window; everything else goes to the
+            // system browser (see route_new_window). Derived from the configured
+            // server origin (plus our product domains), not one hardcoded host.
+            let first_party = first_party_suffixes(&config::initial_server_url());
+            let new_window_app = app.handle().clone();
             let window = WebviewWindowBuilder::new(app, "main", webview_url)
                 .title(&title_for_window)
                 .inner_size(1100.0, 750.0)
@@ -176,6 +185,13 @@ fn main() {
                 // injector. Runs at document start, before the server's page
                 // scripts, so the listeners are attached before call.js fires.
                 .initialization_script(inject::BRIDGE_JS)
+                // LC-1159: intercept new-window / target=_blank / window.open
+                // requests (wry wires this to the WKWebView UI delegate, the
+                // WebView2 NewWindowRequested event and the WebKitGTK `create`
+                // signal, so one handler covers macOS / Windows / Linux).
+                .on_new_window(move |url, _features| {
+                    route_new_window(&new_window_app, &url, &first_party)
+                })
                 .build()?;
             install_media_permission_handler(&window)?;
             grant_remote_control_ipc(app.handle(), &url_for_cap);
@@ -417,6 +433,126 @@ fn open_deep_link(app: &tauri::AppHandle, raw: &str) {
     match deep_link_to_path(raw) {
         Some(path) => navigate_to_path(app, &path),
         None => eprintln!("lets-chat-desktop: ignoring non-deep-link argument {raw:?}"),
+    }
+}
+
+// LC-1159: decide what happens when the page asks to open a URL in a NEW window
+// (a `target=_blank` link or `window.open`). A wrapped single-window webview has
+// no second window to put it in and silently drops the request, which is why the
+// portal's "Community" link to Let's Chat looked dead. We never let the webview
+// spawn its own window (always `Deny`); instead:
+//   * a first-party URL (the configured server's own domain, our product
+//     domains, sibling apps) navigates the EXISTING window in-app, and
+//   * anything else opens in the user's default browser.
+// This keeps untrusted web content out of the app shell while making the
+// in-product "jump to Let's Chat" link work. wry delivers the request on the UI
+// thread on every platform, so navigating the main window here is safe.
+fn route_new_window(
+    app: &tauri::AppHandle,
+    url: &url::Url,
+    first_party: &[String],
+) -> tauri::webview::NewWindowResponse<tauri::Wry> {
+    use tauri::Manager;
+    // Only web links are routed; ignore anything exotic (data:, blob:, custom
+    // schemes) rather than hand it to the OS.
+    if !matches!(url.scheme(), "http" | "https") {
+        return tauri::webview::NewWindowResponse::Deny;
+    }
+    if is_first_party_host(url.host_str().unwrap_or_default(), first_party) {
+        if let Some(w) = app.get_webview_window("main") {
+            if let Err(e) = w.navigate(url.clone()) {
+                eprintln!("lets-chat-desktop: in-app navigate to {url} failed: {e}");
+            }
+        }
+    } else if let Err(e) = open::that(url.as_str()) {
+        eprintln!("lets-chat-desktop: could not open {url} in the browser: {e}");
+    }
+    tauri::webview::NewWindowResponse::Deny
+}
+
+// First-party host suffixes a new-window link may navigate to IN-APP. Built from
+// the configured server origin's registrable domain (so a self-hosted / custom
+// deployment and its sibling subdomains are covered without hardcoding one host)
+// plus the known product domains. Any host not matching one of these opens in
+// the system browser instead.
+fn first_party_suffixes(server_url: &str) -> Vec<String> {
+    let mut out = vec!["a8n.systems".to_string(), "psa.systems".to_string()];
+    if let Some(domain) = url::Url::parse(server_url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string))
+        .and_then(|h| registrable_domain(&h))
+    {
+        if !out.iter().any(|s| s.eq_ignore_ascii_case(&domain)) {
+            out.push(domain);
+        }
+    }
+    out
+}
+
+// Approximate registrable domain as the last two dot-labels (e.g.
+// `chat.a8n.systems` -> `a8n.systems`). Correct for the single-label TLDs in use
+// (.systems, .com, .net, ...); for a multi-label public suffix like `.co.uk` it
+// over-widens to the second level, which at worst routes one more first-party-
+// looking link in-app for a self-hoster on such a TLD. Never used as a security
+// boundary for the native bridge (that is origin-scoped separately).
+fn registrable_domain(host: &str) -> Option<String> {
+    let labels: Vec<&str> = host.split('.').filter(|l| !l.is_empty()).collect();
+    if labels.len() < 2 {
+        return None;
+    }
+    Some(labels[labels.len() - 2..].join("."))
+}
+
+// True when `host` equals, or is a dot-boundary subdomain of, one of the
+// first-party suffixes. The leading-dot check stops a look-alike host like
+// `nota8n.systems` or `a8n.systems.evil.com` from matching `a8n.systems`.
+fn is_first_party_host(host: &str, suffixes: &[String]) -> bool {
+    if host.is_empty() {
+        return false;
+    }
+    let host = host.to_ascii_lowercase();
+    suffixes.iter().any(|s| {
+        let s = s.to_ascii_lowercase();
+        host == s || host.ends_with(&format!(".{s}"))
+    })
+}
+
+#[cfg(test)]
+mod new_window_tests {
+    use super::{first_party_suffixes, is_first_party_host, registrable_domain};
+
+    #[test]
+    fn registrable_domain_takes_last_two_labels() {
+        assert_eq!(
+            registrable_domain("chat.a8n.systems").as_deref(),
+            Some("a8n.systems")
+        );
+        assert_eq!(
+            registrable_domain("a8n.systems").as_deref(),
+            Some("a8n.systems")
+        );
+        assert_eq!(registrable_domain("localhost"), None);
+    }
+
+    #[test]
+    fn first_party_matches_product_and_configured_domains() {
+        // Configured server on a self-hosted domain: its registrable domain and
+        // the product domains are all first-party.
+        let suffixes = first_party_suffixes("https://chat.example.org:8443/");
+        assert!(is_first_party_host("chat.a8n.systems", &suffixes)); // product
+        assert!(is_first_party_host("dashboard.a8n.systems", &suffixes)); // sibling
+        assert!(is_first_party_host("chat.psa.systems", &suffixes)); // product
+        assert!(is_first_party_host("example.org", &suffixes)); // configured
+        assert!(is_first_party_host("chat.example.org", &suffixes)); // configured sub
+    }
+
+    #[test]
+    fn look_alikes_and_third_parties_are_not_first_party() {
+        let suffixes = first_party_suffixes("https://chat.a8n.systems/");
+        assert!(!is_first_party_host("nota8n.systems", &suffixes));
+        assert!(!is_first_party_host("a8n.systems.evil.com", &suffixes));
+        assert!(!is_first_party_host("github.com", &suffixes));
+        assert!(!is_first_party_host("", &suffixes));
     }
 }
 
