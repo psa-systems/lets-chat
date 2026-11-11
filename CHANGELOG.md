@@ -26,6 +26,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 ### Fixed
 
 - **Pressing Enter sends a message again on older Safari and the macOS desktop app (LC-1162).** On Safari 15 and earlier (which includes the system webview the desktop app uses on macOS 12 and below), pressing Enter in the composer did nothing: no message sent and not even a newline, so you had to click Send. The composer relied on a browser feature (`requestSubmit`) that those versions lack, so the keypress silently failed. A small compatibility shim restores it, so Enter-to-send, thread replies, saving a message edit with Cmd/Ctrl+Enter, and in-call chat all work again on those browsers. Current browsers are unaffected.
+- **Turning your camera off then on again now works in the desktop app (LC-1165).** In the desktop app on macOS, turning video off and back on during a call failed after the first time (the camera would not come back), and joining a call could be intermittent - the system webview there cannot re-open a camera or microphone once it has been released, unlike a normal browser. The desktop app now keeps the camera held (but not transmitting) while video is off, so re-enabling it is instant and reliable, and a call join/rejoin retries the device briefly if it is momentarily busy. In the desktop app the camera's indicator light therefore stays on while video is off (nothing is sent); in a regular browser the camera is released as before. Screen sharing in the desktop app on macOS 12 is a separate, known limitation.
 
 ## [v0.11.0] - 2026-11-10
 

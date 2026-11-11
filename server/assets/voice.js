@@ -40,6 +40,24 @@
   // was on so the camera track is re-acquired when sharing ends.
   var screenTrack = null;
   var restoreCameraAfterShare = false;
+  // LC-1165: in the desktop shell (WKWebView) a camera track cannot be
+  // re-acquired with a fresh getUserMedia after it is stopped, so turning video
+  // off then on would throw. On desktop we keep the camera open across the
+  // toggle and stash the paused track here (removed from the local stream and
+  // every peer, so nothing is transmitted - only the local device stays powered)
+  // to reuse on re-enable. Always null in a browser, where stop()/re-acquire
+  // works and the camera light should go out when video is off.
+  var heldCameraTrack = null;
+  // LC-1165: true inside the Tauri desktop webview (the bridge sets
+  // window.__lcDesktop; __TAURI_INTERNALS__ is the fallback). Gates the
+  // keep-camera-open path above so browser behaviour is unchanged.
+  function isDesktopShell() {
+    try {
+      return !!(window.__lcDesktop || window.__TAURI_INTERNALS__);
+    } catch (e) {
+      return false;
+    }
+  }
   // Live snapshot of who is in the voice channel right now, keyed by user_id.
   // Kept in sync from the initial server-rendered preview plus VoiceJoined /
   // VoiceLeft / VoiceRoster events. The preview HTML is re-rendered from
@@ -1118,6 +1136,13 @@
 
   function leave() {
     if (!joined) return;
+    // LC-1165: release the camera kept open across a video toggle (desktop), so
+    // the device and its light are freed when the call ends, not just on a
+    // browser stop() path that this track never went through.
+    if (heldCameraTrack) {
+      try { heldCameraTrack.stop(); } catch (e) {}
+      heldCameraTrack = null;
+    }
     // LC-1129: no screen blackout timer outlives the call (the SFU branch below
     // does not iterate removeTile over remote peers, so clear them all here).
     Object.keys(screenRx).forEach(clearScreenRx);
@@ -1434,12 +1459,32 @@
         var sender = pc.getSenders().find(function (s) { return s.track === existing; });
         if (sender) pc.removeTrack(sender);
       });
-      existing.stop();
+      // LC-1165: on desktop keep the device open and reuse it on re-enable
+      // (WKWebView cannot re-acquire a camera after stop()); in a browser stop
+      // it so the camera light goes out.
+      if (isDesktopShell()) {
+        heldCameraTrack = existing;
+      } else {
+        existing.stop();
+      }
       localStream.removeTrack(existing);
       var sv = tileVideo(cfg.selfId);
       // Re-assign (null first) so the <video> re-renders with the changed
       // track set - assigning the same stream object can be a no-op.
       if (sv) { sv.srcObject = null; sv.srcObject = localStream; }
+      updateTileMedia(cfg.selfId);
+      setCameraBtn();
+    } else if (heldCameraTrack && heldCameraTrack.readyState === 'live') {
+      // LC-1165 (desktop): reuse the camera kept open on the last toggle-off,
+      // so re-enabling never calls getUserMedia again (which WKWebView rejects).
+      var held = heldCameraTrack;
+      heldCameraTrack = null;
+      localStream.addTrack(held);
+      Object.keys(peers).forEach(function (uid) {
+        if (peers[uid].pc) peers[uid].pc.addTrack(held, localStream);
+      });
+      var svh = tileVideo(cfg.selfId);
+      if (svh) { svh.srcObject = null; svh.srcObject = localStream; }
       updateTileMedia(cfg.selfId);
       setCameraBtn();
     } else {
