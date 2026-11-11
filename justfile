@@ -322,6 +322,20 @@ build-desktop-windows:
     docker cp "$container:/build/target/x86_64-pc-windows-gnu/release/lets-chat-desktop.exe" artifacts/lets-chat-desktop-windows-x86_64.exe
     echo "Artifact: artifacts/lets-chat-desktop-windows-x86_64.exe"
 
+# Build the macOS .app + .dmg bundles natively on a Mac (LC-1157). UNLIKE the
+# Linux/Windows cross-builds above this is NOT dockerized: macOS bundling needs
+# the native Apple toolchain (WKWebView frameworks, the Info.plist/entitlements
+# merge, the .dmg packager), which only exists on a real macOS host. Produces an
+# UNSIGNED, un-notarized bundle (Developer ID signing + notarization + a Mac CI
+# runner are deferred, Phase 3), so Gatekeeper will quarantine it on first open:
+# right-click the .app -> Open, or `xattr -dr com.apple.quarantine <path>.app`.
+# Requires a macOS host with the Xcode command-line tools and tauri-cli 2.x
+# (`cargo install tauri-cli --version '^2'`). The bundles land in
+# desktop/target/release/bundle/{macos,dmg}/.
+[group('build')]
+build-desktop-mac:
+    cd desktop && cargo tauri build --bundles app,dmg
+
 # Build args common to every compose recipe so the server logs the right
 # git metadata in its banner. Computed on the host because the builder
 # image has no git history of its repo to introspect.

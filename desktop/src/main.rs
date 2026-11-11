@@ -131,8 +131,8 @@ fn main() {
         // Windows registry entry + the Linux `.desktop` MimeType are generated
         // from tauri.conf.json's plugins.deep-link.schemes). Navigation is driven
         // from argv (cold: setup(); warm: the single-instance handler above),
-        // which is the reliable path on Windows + Linux; macOS uses on_open_url
-        // and is a separate ticket (no Mac runner yet).
+        // which is the reliable path on Windows + Linux; macOS delivers URLs via
+        // on_open_url instead (wired in setup() below, LC-1157).
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_notification::init())
         // LC-186: global kill-switch for remote control. The handler fires on
@@ -205,6 +205,22 @@ fn main() {
             }
             if let Some(link) = first_deep_link(&std::env::args().skip(1).collect::<Vec<_>>()) {
                 open_deep_link(app.handle(), &link);
+            }
+            // Deep links on macOS (LC-1157): macOS does not carry the URL in argv
+            // the way Windows/Linux do - it delivers it through on_open_url, for
+            // both a cold launch (the plugin buffers the launch URL until a
+            // handler is registered here) and a warm re-open. Route both through
+            // the same open_deep_link -> navigate_to_path sink the argv path uses,
+            // so every platform lands on one navigation path.
+            #[cfg(target_os = "macos")]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        open_deep_link(&handle, url.as_str());
+                    }
+                });
             }
             // LC-710: started here, not before the builder, because the check
             // needs an AppHandle to raise its native "update available"

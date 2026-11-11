@@ -5,9 +5,15 @@
 
   This file is auto-merged into the bundle's generated Info.plist by
   tauri-bundler at `cargo tauri build` time (it looks for an `Info.plist`
-  next to tauri.conf.json). It only takes effect once the macOS build path
-  lands under LC-126 (currently parked for lack of macOS hardware + Apple
-  credentials); on Linux/Windows builds the file is ignored.
+  next to tauri.conf.json). It takes effect on the macOS build path, which
+  LC-1157 brings up as a local unsigned .app/.dmg (`just build-desktop-mac`);
+  on Linux/Windows builds the file is ignored. Signing + notarization + a Mac
+  CI runner remain deferred (Phase 3).
+
+  The `lets-chat://` deep-link scheme is NOT declared here: the deep-link
+  plugin's build.rs injects CFBundleURLTypes into the generated Info.plist on
+  the macOS/iOS build from tauri.conf.json's plugins.deep-link.desktop.schemes,
+  so the scheme stays single-sourced in that config.
 
   Why this is the macOS slice of the work:
 

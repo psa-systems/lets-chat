@@ -6,10 +6,12 @@
   Tauri signs with the hardened runtime enabled, and under it a signed app
   needs the matching capability entitlement to reach a TCC-protected device
   API (camera, microphone, ...). These entitlements are inert until the
-  codesign step runs, which only happens on the macOS build path owned by
-  LC-126 (parked for lack of macOS hardware + Apple credentials). On
-  Linux / Windows builds this file is ignored, and macOS is not yet in
-  bundle.targets, so nothing consumes it today; it is wired into
+  codesign step runs. LC-1157 brings up a local UNSIGNED .app/.dmg
+  (`just build-desktop-mac`) for development, so on that unsigned build the
+  hardened runtime is not applied and these keys stay inert; mic/camera TCC
+  prompts still fire from the Info.plist usage strings. Developer ID signing +
+  notarization (which make these keys live) + a Mac CI runner remain deferred
+  (Phase 3). On Linux / Windows builds this file is ignored. It is wired into
   tauri.conf.json (bundle.macOS.entitlements) so the keys are in place when
   signing lands.
 
