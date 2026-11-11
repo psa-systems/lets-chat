@@ -538,3 +538,39 @@ test('LC-1154: shouldAutoIceRestart gates the connection-failed auto-recovery', 
     assert.equal(g(false, false, s), false, `no restart while ${s}`);
   }
 });
+
+// LC-1154: the voice diagnostics were too thin to act on (bare "ice failed",
+// "frames ?/?"). summarizeStats + the label builders turn a getStats() report
+// into an actionable one-liner: the real route, whether RTP is arriving, and
+// (on failure) what was gathered. These are pure, so they run on fixtures.
+test('LC-1154: summarizeStats + labels read route, frames, and failure cause', () => {
+  const v = load().voice;
+  // A healthy pair: host(local) <-> srflx(remote), 42ms, video arriving+decoding.
+  const ok = [
+    { type: 'transport', selectedCandidatePairId: 'pair1' },
+    { type: 'candidate-pair', id: 'pair1', state: 'succeeded', nominated: true, currentRoundTripTime: 0.042, localCandidateId: 'L', remoteCandidateId: 'R' },
+    { type: 'local-candidate', id: 'L', candidateType: 'host' },
+    { type: 'remote-candidate', id: 'R', candidateType: 'srflx' },
+    { type: 'inbound-rtp', kind: 'video', framesDecoded: 90, framesReceived: 100, bytesReceived: 2048, frameWidth: 1280, frameHeight: 720 },
+  ];
+  const s = v.summarizeStats(ok);
+  assert.equal(s.localType, 'host');
+  assert.equal(s.remoteType, 'srflx');
+  assert.equal(s.rtt, 42);
+  assert.equal(v.iceOkLabel(s), 'via host/srflx rtt 42ms');
+  assert.equal(v.framesLabel(s), 'frames 90/100 2KB 1280x720 via host/srflx');
+
+  // Failure with NO connected pair: name the gathered candidate types, which
+  // exposes a missing srflx/relay (STUN/TURN gap) - the field-report cause.
+  const failHostOnly = [
+    { type: 'local-candidate', id: 'L1', candidateType: 'host' },
+  ];
+  assert.equal(v.iceFailLabel(v.summarizeStats(failHostOnly)), 'no connected pair; gathered host');
+  assert.equal(v.iceFailLabel(v.summarizeStats([])), 'no connected pair; gathered none');
+
+  // Arriving but not decoding (bytes > 0, 0 decoded) vs the old bare "?/?".
+  const stalled = [{ type: 'inbound-rtp', mediaType: 'video', framesDecoded: 0, framesReceived: 0, bytesReceived: 5120 }];
+  assert.equal(v.framesLabel(v.summarizeStats(stalled)), 'frames 0/0 5KB');
+  // No video stats at all -> frames ?/? (still honest, but now the ONLY ?/? case).
+  assert.equal(v.framesLabel(v.summarizeStats([])), 'frames ?/?');
+});

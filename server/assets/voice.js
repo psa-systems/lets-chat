@@ -103,22 +103,87 @@
   // carried it (host / srflx / relay) as an informational diag. `relay` means
   // TURN relayed it; its ABSENCE on a call that later fails is the signal that
   // there was no TURN (LC-1107). Reported once per connection.
+  // LC-1154: pull a compact health summary out of a getStats() report (or any
+  // forEach-able of plain stat records, so it is unit-testable). The old
+  // diagnostics logged only the local candidate type ("via host") and degraded
+  // to "frames ?/?" with no clue why, which was too thin to act on. This single
+  // summary feeds the ice-ok / ice-failed / screen-blackout rows below so each
+  // says which route, whether RTP is even arriving, and (on failure) what was
+  // gathered. Every field is null when the report does not carry it.
+  function summarizeStats(stats) {
+    var pairs = {}, local = {}, remote = {}, transportSel = null, gathered = {};
+    var vBytes = null, vFramesRecv = null, vFramesDec = null, vW = null, vH = null;
+    stats.forEach(function (r) {
+      if (!r || !r.type) return;
+      if (r.type === 'transport' && r.selectedCandidatePairId) transportSel = r.selectedCandidatePairId;
+      else if (r.type === 'candidate-pair') pairs[r.id] = r;
+      else if (r.type === 'local-candidate') { local[r.id] = r; if (r.candidateType) gathered[r.candidateType] = 1; }
+      else if (r.type === 'remote-candidate') remote[r.id] = r;
+      else if (r.type === 'inbound-rtp' && (r.kind === 'video' || r.mediaType === 'video')) {
+        // A peer may send camera AND screen; sum across video inbound streams so
+        // "is any video arriving / decoding" is answered for the tile as a whole.
+        if (typeof r.bytesReceived === 'number') vBytes = (vBytes || 0) + r.bytesReceived;
+        if (typeof r.framesReceived === 'number') vFramesRecv = (vFramesRecv || 0) + r.framesReceived;
+        if (typeof r.framesDecoded === 'number') vFramesDec = (vFramesDec || 0) + r.framesDecoded;
+        if (typeof r.frameWidth === 'number' && r.frameWidth > (vW || 0)) { vW = r.frameWidth; vH = r.frameHeight || null; }
+      }
+    });
+    var sel = (transportSel && pairs[transportSel]) || null;
+    if (!sel) {
+      for (var id in pairs) {
+        var pr = pairs[id];
+        if (pr.state === 'succeeded' && (pr.nominated || pr.selected)) { sel = pr; break; }
+      }
+    }
+    return {
+      localType: sel && local[sel.localCandidateId] ? local[sel.localCandidateId].candidateType : null,
+      remoteType: sel && remote[sel.remoteCandidateId] ? remote[sel.remoteCandidateId].candidateType : null,
+      rtt: sel && typeof sel.currentRoundTripTime === 'number' ? Math.round(sel.currentRoundTripTime * 1000) : null,
+      hasPair: !!sel,
+      pairState: sel ? sel.state : null,
+      gathered: Object.keys(gathered),
+      vBytes: vBytes, vFramesRecv: vFramesRecv, vFramesDec: vFramesDec, vW: vW, vH: vH,
+    };
+  }
+  // LC-1154: "local/remote" candidate types for the selected pair (the real
+  // route), e.g. "host/srflx". Null when no pair is selected yet.
+  function routeLabel(s) {
+    if (!s || (!s.localType && !s.remoteType)) return null;
+    return (s.localType || '?') + '/' + (s.remoteType || '?');
+  }
+  function iceOkLabel(s) {
+    return 'via ' + (routeLabel(s) || '?') + (s && s.rtt != null ? ' rtt ' + s.rtt + 'ms' : '');
+  }
+  // LC-1154: say WHY a connection failed. A selected-but-dead pair names the
+  // route and its state; no pair at all lists the candidate types we gathered,
+  // which reveals a missing srflx/relay (a STUN/TURN config gap - the exact
+  // cause of the srflx-only failures in the field report).
+  function iceFailLabel(s) {
+    if (s && s.hasPair) return 'pair ' + (routeLabel(s) || '?') + ' ' + (s.pairState || 'down');
+    var g = s && s.gathered && s.gathered.length ? s.gathered.join(',') : 'none';
+    return 'no connected pair; gathered ' + g;
+  }
+  // LC-1154: frames + bytes + dimensions + route, so a black tile says whether
+  // nothing is arriving (0 bytes = transport) or arriving but not decoding
+  // (bytes > 0, 0 decoded = decode/codec), instead of a bare "frames ?/?".
+  function framesLabel(s) {
+    if (!s) return 'no stats';
+    var out = 'frames ' + (s.vFramesDec == null ? '?' : s.vFramesDec) + '/' + (s.vFramesRecv == null ? '?' : s.vFramesRecv);
+    if (s.vBytes != null) out += ' ' + Math.round(s.vBytes / 1024) + 'KB';
+    if (s.vW) out += ' ' + s.vW + 'x' + (s.vH || '?');
+    var route = routeLabel(s);
+    if (route) out += ' via ' + route;
+    return out;
+  }
+
   function reportIceRoute(userId) {
     var p = peers[userId];
     if (!p || !p.pc || !p.pc.getStats || p.diagRoute) return;
     p.pc.getStats().then(function (stats) {
-      var localId = null;
-      var localType = {};
-      stats.forEach(function (r) {
-        if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || r.selected)) {
-          localId = r.localCandidateId;
-        }
-        if (r.type === 'local-candidate') localType[r.id] = r.candidateType;
-      });
-      var t = localId && localType[localId];
-      if (t && peers[userId] && !peers[userId].diagRoute) {
+      var s = summarizeStats(stats);
+      if (routeLabel(s) && peers[userId] && !peers[userId].diagRoute) {
         peers[userId].diagRoute = true;
-        voiceDiag('ice ok: peer ' + String(userId).slice(0, 8) + ' via ' + t, 'diag');
+        voiceDiag('ice ok: peer ' + String(userId).slice(0, 8) + ' ' + iceOkLabel(s), 'diag');
       }
     }).catch(function () {});
   }
@@ -727,7 +792,17 @@
         // anyway, but a client-side guard keeps a single flap to one row.
         if (!p.diagFailed) {
           p.diagFailed = true;
-          voiceDiag('ice failed: peer ' + String(userId).slice(0, 8));
+          // LC-1154: say WHY it failed from getStats (no connected pair + the
+          // candidate types gathered, or a dead selected route), so the log is
+          // actionable; fall back to the bare row if stats are unavailable.
+          var sid = String(userId).slice(0, 8);
+          if (pc.getStats) {
+            pc.getStats().then(function (stats) {
+              voiceDiag('ice failed: peer ' + sid + ' (' + iceFailLabel(summarizeStats(stats)) + ')');
+            }).catch(function () { voiceDiag('ice failed: peer ' + sid); });
+          } else {
+            voiceDiag('ice failed: peer ' + sid);
+          }
         }
         p.diagRoute = false; // a recovery should re-report its route
         // LC-1154: a failed mesh connection used to sit dead until the peer's
@@ -1182,29 +1257,18 @@
   // LC-1138: inbound-video frame counters + selected ICE route for a peer, so a
   // blackout row says WHY (e.g. "frames 0/0 via host"), not just "no frames".
   // Resolves to null if stats are unavailable.
+  // LC-1154: the screen-blackout "why" now rides the shared summarizeStats, so
+  // it reports decoded/received frames, bytes arriving, the decoded dimensions
+  // and the local/remote route instead of a bare "frames ?/?".
   function screenRxStats(userId) {
     var p = peers[userId];
     if (!p || !p.pc || !p.pc.getStats) return Promise.resolve(null);
     return p.pc.getStats().then(function (stats) {
-      var decoded = null, received = null, localId = null, localType = {};
-      stats.forEach(function (r) {
-        if (r.type === 'inbound-rtp' && r.kind === 'video') {
-          if (typeof r.framesDecoded === 'number') decoded = r.framesDecoded;
-          if (typeof r.framesReceived === 'number') received = r.framesReceived;
-        }
-        if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || r.selected)) {
-          localId = r.localCandidateId;
-        }
-        if (r.type === 'local-candidate') localType[r.id] = r.candidateType;
-      });
-      return { decoded: decoded, received: received, route: (localId && localType[localId]) || null };
+      return summarizeStats(stats);
     }).catch(function () { return null; });
   }
   function screenStatsLabel(st) {
-    if (!st) return 'no stats';
-    var d = st.decoded == null ? '?' : st.decoded;
-    var r = st.received == null ? '?' : st.received;
-    return 'frames ' + d + '/' + r + (st.route ? ' via ' + st.route : '');
+    return framesLabel(st);
   }
   function checkScreenBlackout(userId) {
     var s = screenRx[userId];
@@ -1832,7 +1896,11 @@
   window.LetsChatVoice = {
     leave: function () { if (joined) leave(); },
     isJoined: function () { return joined; },
-    // LC-1154: pure guard, exported for unit testing.
+    // LC-1154: pure guard + diagnostic summarizers, exported for unit testing.
     shouldAutoIceRestart: shouldAutoIceRestart,
+    summarizeStats: summarizeStats,
+    iceOkLabel: iceOkLabel,
+    iceFailLabel: iceFailLabel,
+    framesLabel: framesLabel,
   };
 })();
