@@ -134,7 +134,7 @@ hex = { version = "0.4" }
 # bunyip-api's JWKS, and (when the `saas` feature is on) by `saas_auth.rs` for
 # its existing JWT path. Non-feature-gated so the standalone build that runs
 # SSO has access without re-shuffling features.
-jsonwebtoken = "10"
+jsonwebtoken = { version = "10", default-features = false, features = ["use_pem", "aws_lc_rs"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 # Pinned to v2 deliberately. v3+ reshuffled the SimpleFileOptions /
 # ZipWriter API and our backup module is intentionally feature-light
