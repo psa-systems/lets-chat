@@ -4,6 +4,13 @@
   "version": "0.1.0",
   "identifier": "run.a8n.lets-chat-desktop",
   "build": {},
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["lets-chat"]
+      }
+    }
+  },
   "app": {
     "windows": [],
     "security": {

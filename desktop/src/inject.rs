@@ -307,7 +307,15 @@ fn scan_code(code: &str) -> Option<(u16, bool)> {
 #[tauri::command]
 pub fn desktop_notify(app: tauri::AppHandle, title: String, body: String, target: Option<String>) {
     use tauri_plugin_notification::NotificationExt;
-    let _ = target; // reserved for the deep-link click-to-navigate follow-up
+    // `target` is the room/DM path a click should open. The shared navigation
+    // sink now exists (`navigate_to_path` in main.rs, used by deep links), but
+    // tauri-plugin-notification 2.3.3's desktop `show()` is fire-and-forget -
+    // it surfaces no click/activation callback (action types are mobile-only) -
+    // so there is nothing to route a click through yet. Kept so the wiring is a
+    // one-liner once a click-capable notification path lands (notify-rust
+    // actions / toast activation, or a newer plugin). Focus-on-click, where the
+    // OS provides it, still works.
+    let _ = target;
     let title = if title.trim().is_empty() {
         "Let's Chat".to_string()
     } else {
