@@ -1,0 +1,12 @@
+{# LC-1151: the in-call diagnostics row itself, factored out of
+   ws/call_diag_row.html so voice/page.html's seed loop and the OOB append
+   path render identically. Takes `kind`, `user_label`, `detail`. #}
+<div class="flex items-center gap-2 py-0.5 text-xs">
+  {% if kind == "dropped" || kind == "error" %}
+  <span class="rounded bg-danger-surface text-danger px-1.5 py-0.5 font-mono uppercase tracking-wide">{{ kind }}</span>
+  {% else %}
+  <span class="font-mono text-content-muted">{{ kind }}</span>
+  {% endif %}
+  <span class="font-medium">{{ user_label }}</span>
+  {% if let Some(d) = detail %}<span class="text-content-muted break-all">{{ d }}</span>{% endif %}
+</div>
