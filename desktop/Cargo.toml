@@ -61,6 +61,12 @@ self-replace = "1"
 # $XDG_CONFIG_HOME on Linux, ~/Library/Application Support on macOS,
 # %APPDATA% on Windows.
 dirs = "5"
+# LC-1159: hand off-origin / new-window ("open in new tab") links to the OS
+# default browser from the webview's on_new_window handler (main.rs). Shells
+# out to `open` / `xdg-open` / `cmd start`; called directly from Rust, so it
+# needs no Tauri command, permission or capability. First-party links are kept
+# in-app instead (navigated in the existing window).
+open = "5"
 
 # Linux-only: gives access to the WebKit2GTK `permission-request` signal
 # that wry exposes via PlatformWebview::inner(). Required because the
