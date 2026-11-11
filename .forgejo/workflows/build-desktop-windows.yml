@@ -53,6 +53,10 @@ jobs:
       # PACKAGE_NAME survive at job-env fine.
       PACKAGE_OWNER: ${{ vars.PSA_SYSTEMS_PRIVATE_PACKAGE_OWNER }}
       PACKAGE_NAME: lets-chat
+      # LC-1163: production server baked into a TAGGED build only (see the build
+      # step). Keep in sync with publish-release.yml's DESKTOP_RELEASE_SERVER_URL
+      # and build-desktop-linux.yml; a repo variable could single-source it.
+      DESKTOP_RELEASE_SERVER_URL: https://chat.psa.systems
 
     steps:
       - name: Clone the repository
@@ -113,10 +117,19 @@ jobs:
           # releases land rather than whatever the source fallback happens to
           # name.
           let update_repository = $"($env.PACKAGE_OWNER)/($env.PACKAGE_NAME)"
+          # LC-1163: a tagged RELEASE build bakes the production server so the
+          # Generic-Packages hand-download .exe / installer match the Releases
+          # page; a main-push `latest` build keeps localhost (empty). version is
+          # "latest" on a main push, the vX.Y.Z tag otherwise (get-version step).
+          # The installer step below wraps this exe, so a tagged installer is
+          # production too.
+          let version = "${{ steps.get-version.outputs.version }}"
+          let default_server = if $version == "latest" { "" } else { $env.DESKTOP_RELEASE_SERVER_URL }
           print $"CARGO_BUILD_JOBS=($jobs)"
           print $"GIT_HASH=($git_hash)"
           print $"GIT_VERSION=($git_version)"
           print $"BUILD_DATE=($build_date)"
+          print $"LETS_CHAT_DEFAULT_SERVER_URL=($default_server)"
           (
             ^docker buildx build
               --build-arg $"CARGO_BUILD_JOBS=($jobs)"
@@ -125,9 +138,7 @@ jobs:
               --build-arg $"BUILD_DATE=($build_date)"
               --build-arg $"LETS_CHAT_UPDATE_REGISTRY_URL=($env.GITHUB_SERVER_URL)"
               --build-arg $"LETS_CHAT_UPDATE_REPOSITORY=($update_repository)"
-              # LC-1163: continuous / `latest` builds keep the localhost default
-              # (empty); only publish-release.yml bakes production.
-              --build-arg "LETS_CHAT_DEFAULT_SERVER_URL="
+              --build-arg $"LETS_CHAT_DEFAULT_SERVER_URL=($default_server)"
               --tag lets-chat-desktop-windows:build
               --load
               -f ci-build/Dockerfile.desktop-windows
