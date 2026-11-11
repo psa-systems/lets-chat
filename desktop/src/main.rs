@@ -153,7 +153,8 @@ fn main() {
             inject::rc_session,
             inject::rc_input,
             inject::set_registry_token,
-            inject::desktop_notify
+            inject::desktop_notify,
+            inject::desktop_set_badge
         ])
         .register_uri_scheme_protocol(WELCOME_SCHEME, move |_ctx, _request| {
             let body = welcome_html.clone().into_bytes();
@@ -288,12 +289,13 @@ fn grant_update_token_ipc(app: &tauri::AppHandle, server_url: &str) {
     }
 }
 
-// Desktop notification bridge (audit Phase 2): let the configured server origin
-// (and only it) call `desktop_notify`, so the web UI can raise OS-native
-// notifications for mentions / DMs / incoming calls. Same shape and trust
-// argument as `grant_remote_control_ipc` / `grant_update_token_ipc`; kept its
-// own capability so the grant stays independently reviewable. The command only
-// shows a notification, so it is strictly less sensitive than the rc grant.
+// Desktop notification + badge bridge (audit Phase 2): let the configured
+// server origin (and only it) call `desktop_notify` and `desktop_set_badge`, so
+// the web UI can raise OS-native notifications (mentions / DMs / calls) and set
+// the dock/taskbar unread badge. Same shape and trust argument as
+// `grant_remote_control_ipc` / `grant_update_token_ipc`; kept its own capability
+// so the grant stays independently reviewable. Both commands only drive the app
+// icon / a notification, so they are strictly less sensitive than the rc grant.
 fn grant_native_notify_ipc(app: &tauri::AppHandle, server_url: &str) {
     use tauri::{ipc::CapabilityBuilder, Manager};
     let Some(pattern) = remote_url_pattern(server_url) else {
@@ -302,10 +304,12 @@ fn grant_native_notify_ipc(app: &tauri::AppHandle, server_url: &str) {
     };
     let cap = CapabilityBuilder::new("native-notify")
         .window("main")
-        // Remote-only: the local welcome page raises no notifications.
+        // Remote-only: the local welcome page raises no notifications / badge.
         .local(false)
         .remote(pattern)
-        .permission("allow-desktop-notify");
+        .permission("allow-desktop-notify")
+        // Dock/taskbar unread badge (audit Phase 2): same bridge, same origin.
+        .permission("allow-desktop-set-badge");
     if let Err(e) = app.add_capability(cap) {
         eprintln!("lets-chat-desktop: native-notify capability not added: {e}");
     }
