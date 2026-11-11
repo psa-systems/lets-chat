@@ -330,6 +330,68 @@ pub fn desktop_notify(app: tauri::AppHandle, title: String, body: String, target
     }
 }
 
+/// Dock/taskbar unread badge (audit Phase 2): set the app icon's badge to the
+/// web UI's current unread total. The web page already renders that total in its
+/// title (`(N) ...`), driven by the same mute-gated `#lc-notify-bus` + `counts`
+/// store as the sidebar's `@N` chips; `BRIDGE_JS` reads it and calls this, so
+/// the badge mirrors what the UI shows and the two never disagree. Reached over
+/// the same runtime remote capability as the other bridge commands.
+///
+/// Platform split (Tauri 2): `set_badge_count` shows the number on macOS (dock)
+/// and Linux (Unity launcher, where the DE supports it - degrades to nothing
+/// elsewhere); Windows does not support it, so there we set a small unread-dot
+/// taskbar overlay instead (a numbered Windows overlay needs runtime glyph
+/// rendering - deferred). macOS is coded here but validated under the macOS
+/// parity ticket (no Mac runner yet).
+#[tauri::command]
+pub fn desktop_set_badge(app: tauri::AppHandle, count: i64) {
+    use tauri::Manager;
+    let Some(w) = app.get_webview_window("main") else {
+        return;
+    };
+    let value = if count > 0 { Some(count) } else { None };
+    if let Err(e) = w.set_badge_count(value) {
+        eprintln!("lets-chat-desktop: set_badge_count failed: {e}");
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let overlay = if count > 0 {
+            Some(unread_overlay_icon())
+        } else {
+            None
+        };
+        if let Err(e) = w.set_overlay_icon(overlay) {
+            eprintln!("lets-chat-desktop: set_overlay_icon failed: {e}");
+        }
+    }
+}
+
+// A small solid red dot as a Windows taskbar overlay "you have unread" marker.
+// Built as a raw RGBA buffer (a filled circle) so it needs no image crate or
+// font: Windows overlays are icons, not numbers, so this signals presence; the
+// exact count still shows in-app (and on the macOS/Linux numeric badge).
+#[cfg(target_os = "windows")]
+fn unread_overlay_icon() -> tauri::image::Image<'static> {
+    const S: u32 = 32;
+    let center = (S as f32 - 1.0) / 2.0;
+    let radius = S as f32 / 2.0 - 1.0;
+    let mut px = vec![0u8; (S * S * 4) as usize];
+    for y in 0..S {
+        for x in 0..S {
+            let dx = x as f32 - center;
+            let dy = y as f32 - center;
+            if (dx * dx + dy * dy).sqrt() <= radius {
+                let i = ((y * S + x) * 4) as usize;
+                px[i] = 0xEF; // red-500-ish
+                px[i + 1] = 0x44;
+                px[i + 2] = 0x44;
+                px[i + 3] = 0xFF;
+            }
+        }
+    }
+    tauri::image::Image::new_owned(px, S, S)
+}
+
 pub const BRIDGE_JS: &str = r#"
 (function () {
   // LC-640/LC-933: advertise to the page that this client HAS a native
@@ -449,6 +511,35 @@ pub const BRIDGE_JS: &str = r#"
     document.addEventListener('DOMContentLoaded', watchIncomingCall);
   } else {
     watchIncomingCall();
+  }
+
+  // --- Dock/taskbar unread badge (audit Phase 2) ----------------------------
+  // The page renders its unread total (mentions/DMs, mute-gated - the same
+  // `counts` store behind the sidebar @N chips) as the title prefix "(N) ...".
+  // Mirror that number to the native badge, so the dock/taskbar count matches
+  // the title and sidebar exactly (one source of truth: the page's refresh()).
+  function currentBadgeCount() {
+    var m = /^\((\d+)\)/.exec(document.title || '');
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  var lastBadge = -1;
+  function syncBadge() {
+    var n = currentBadgeCount();
+    if (n === lastBadge) { return; }
+    lastBadge = n;
+    try { inv('desktop_set_badge', { count: n }); } catch (e) {}
+  }
+  function watchBadge() {
+    syncBadge(); // initial state (0 clears any stale badge)
+    var titleEl = document.querySelector('title');
+    if (titleEl && window.MutationObserver) {
+      new MutationObserver(syncBadge).observe(titleEl, { childList: true, characterData: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', watchBadge);
+  } else {
+    watchBadge();
   }
 })();
 "#;
