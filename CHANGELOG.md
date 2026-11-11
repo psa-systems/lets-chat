@@ -26,6 +26,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 ### Fixed
 
 - **Pressing Enter sends a message again on older Safari and the macOS desktop app (LC-1162).** On Safari 15 and earlier (which includes the system webview the desktop app uses on macOS 12 and below), pressing Enter in the composer did nothing: no message sent and not even a newline, so you had to click Send. The composer relied on a browser feature (`requestSubmit`) that those versions lack, so the keypress silently failed. A small compatibility shim restores it, so Enter-to-send, thread replies, saving a message edit with Cmd/Ctrl+Enter, and in-call chat all work again on those browsers. Current browsers are unaffected.
+- **Call reactions animate again on older Safari and the macOS desktop app (LC-1167).** The floating emoji reactions in a call rise and swell as they float up; on Safari 15 and earlier (the system webview on macOS 12 and below) they instead just appeared at the bottom and faded, because the animation measured its travel in a CSS unit those versions do not support. The animation now uses a plain pixel measurement, so reactions animate the same everywhere.
 
 ## [v0.11.0] - 2026-11-10
 
