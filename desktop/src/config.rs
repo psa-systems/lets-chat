@@ -113,10 +113,33 @@ fn update_at(path: &Path, f: impl FnOnce(&mut Config)) -> std::io::Result<()> {
     Ok(())
 }
 
+// LC-1163: compile-time default server URL. Release installers bake the
+// production server here via `LETS_CHAT_DEFAULT_SERVER_URL` (injected by
+// publish-release.yml), so a freshly downloaded installer opens the right server
+// on first launch instead of localhost. Local / dev builds and `cargo run` do
+// not set it and keep the localhost fallback. Both higher-precedence sources
+// below (the runtime `LETS_CHAT_SERVER_URL` env var and the persisted
+// welcome-page choice) still win, so a self-hosted / multi-instance user can
+// repoint without a rebuild (model C). Read exactly like update.rs's
+// DEFAULT_REGISTRY_URL, and the injected name must match the workflow.
+const DEFAULT_SERVER_URL: &str = match option_env!("LETS_CHAT_DEFAULT_SERVER_URL") {
+    Some(u) if !u.is_empty() => u,
+    _ => "http://localhost:8080",
+};
+
+/// The build-time override name the const above reads (`option_env!` needs a
+/// literal, so this cannot feed it). publish-release.yml must inject exactly
+/// this; the release-injection guard in `update::tests` checks the two sides
+/// agree, so a renamed arg or a dead injection fails the build. Test-only: the
+/// runtime path reads the value through `option_env!`, never this name.
+#[cfg(test)]
+pub(crate) const DEFAULT_SERVER_URL_VAR: &str = "LETS_CHAT_DEFAULT_SERVER_URL";
+
 // Resolve the URL the webview should load on startup. Precedence:
 //   1. LETS_CHAT_SERVER_URL env var (dev override; never written to disk).
-//   2. Persisted config file.
-//   3. Built-in default.
+//   2. Persisted config file (the welcome-page choice).
+//   3. Built-in default: the compile-time DEFAULT_SERVER_URL (production in a
+//      release build, localhost otherwise).
 pub fn initial_server_url() -> String {
     if let Ok(url) = std::env::var("LETS_CHAT_SERVER_URL") {
         if !url.is_empty() {
@@ -128,7 +151,7 @@ pub fn initial_server_url() -> String {
             return url;
         }
     }
-    "http://localhost:8080".to_string()
+    DEFAULT_SERVER_URL.to_string()
 }
 
 /// Registry token for the update fetch, or None when the user has not signed

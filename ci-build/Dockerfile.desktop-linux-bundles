@@ -26,11 +26,16 @@ ARG BUILD_DATE=unknown
 # a local build keeps the in-source fallback.
 ARG LETS_CHAT_UPDATE_REGISTRY_URL=
 ARG LETS_CHAT_UPDATE_REPOSITORY=
+# LC-1163: the default server a released installer opens on first launch
+# (config.rs reads it through option_env!). Empty here so a local build keeps
+# the localhost fallback; publish-release.yml injects the production URL.
+ARG LETS_CHAT_DEFAULT_SERVER_URL=
 ENV GIT_HASH=${GIT_HASH} \
     GIT_VERSION=${GIT_VERSION} \
     BUILD_DATE=${BUILD_DATE} \
     LETS_CHAT_UPDATE_REGISTRY_URL=${LETS_CHAT_UPDATE_REGISTRY_URL} \
-    LETS_CHAT_UPDATE_REPOSITORY=${LETS_CHAT_UPDATE_REPOSITORY}
+    LETS_CHAT_UPDATE_REPOSITORY=${LETS_CHAT_UPDATE_REPOSITORY} \
+    LETS_CHAT_DEFAULT_SERVER_URL=${LETS_CHAT_DEFAULT_SERVER_URL}
 
 # Cargo parallelism comes from the CI runner via --build-arg CARGO_BUILD_JOBS;
 # `default` is cargo's own keyword for all CPUs, for ad-hoc local builds.

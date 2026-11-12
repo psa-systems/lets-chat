@@ -568,12 +568,18 @@ mod tests {
     /// so every release shipped the hardcoded fallback and the plumbing still
     /// read like a live guard.
     ///
-    /// Both directions again: a name this module reads that nothing injects
-    /// silently ships the fallback, and an injected name this module does not
-    /// read is the dead plumbing above.
+    /// Both directions again: a name a Rust source reads that nothing injects
+    /// silently ships the fallback, and an injected name nothing reads is the
+    /// dead plumbing above. The read set spans the crate, not just this module:
+    /// REGISTRY/REPOSITORY are read here, and LC-1163's DEFAULT_SERVER_URL is
+    /// read by config.rs, so a release server-URL default is covered too.
     #[test]
     fn release_build_injects_exactly_the_overrides_this_module_reads() {
-        let read_by_client = [REGISTRY_URL_VAR, REPOSITORY_VAR];
+        let read_by_client = [
+            REGISTRY_URL_VAR,
+            REPOSITORY_VAR,
+            crate::config::DEFAULT_SERVER_URL_VAR,
+        ];
         let workflow = repo_file(PUBLISH_WORKFLOW);
         let injected = build_arg_names_starting_with(&workflow, "LETS_CHAT_");
         for name in read_by_client {

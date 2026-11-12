@@ -176,6 +176,7 @@ const TEXT_EXTENSIONS = ["rs" "html" "js" "css" "ftl" "md" "nu" "toml" "yml" "ya
 # closed by LC-952 with commented template entries, so they need no allowlist.
 const ENV_VAR_ALLOWLIST = {
     LETS_CHAT_SERVER_URL: "desktop-only (docs/configuration.md Desktop app section); deliberately absent from the server templates, see docs/configuration.md Desktop app section"
+    LETS_CHAT_DEFAULT_SERVER_URL: "desktop-only build-time default baked by publish-release.yml via option_env! (LC-1163), not a server runtime var; see LETS_CHAT_SERVER_URL above"
     LETS_CHAT_UPDATE_REGISTRY_URL: "desktop-only, see LETS_CHAT_SERVER_URL above"
     LETS_CHAT_UPDATE_REPOSITORY: "desktop-only, see LETS_CHAT_SERVER_URL above"
     LETS_CHAT_UPDATE_TAG: "desktop-only, see LETS_CHAT_SERVER_URL above"
