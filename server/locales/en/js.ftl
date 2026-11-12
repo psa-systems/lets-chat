@@ -34,6 +34,10 @@ js-call-no-mic = Could not access your microphone.
 # user knows the change did not take rather than trusting a self-corrected button.
 js-call-mic-toggle-failed = Could not change your microphone. Try muting and unmuting again.
 js-call-no-screenshare = Screen sharing is not supported by your browser.
+# LC-1173: shown when getDisplayMedia rejects for a reason other than the user
+# cancelling the picker (for example missing GStreamer/PipeWire packages on
+# Linux), so the failure is visible instead of a silent white tile.
+js-call-screenshare-failed = Screen sharing failed (%error%). On Linux, see the screen sharing prerequisites in the docs.
 # LC-1138: shown when a peer's shared screen stays black for this viewer even
 # after the automatic recovery attempts (ICE restart, then a peer-connection
 # rebuild), so the last resort is to rejoin the call.

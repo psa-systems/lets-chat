@@ -841,8 +841,16 @@
         addTrackAndFinalize(sender);
       }
     }).catch(function (e) {
-      // User-cancel from the picker lands here too; nothing to undo.
-      if (e && e.name !== 'NotAllowedError') console.warn('call: getDisplayMedia failed', e);
+      // User-cancel from the picker lands here too; nothing to undo. Only a
+      // real failure (not the user dismissing the picker) is a fault worth
+      // logging and surfacing (LC-1173).
+      var name = e && e.name ? e.name : 'error';
+      if (name !== 'NotAllowedError' && name !== 'AbortError') {
+        console.warn('call: getDisplayMedia failed', e);
+        window.__lcNotify('err', window.__lcS('callScreenshareFailed',
+          'Screen sharing failed (%error%). On Linux, see the screen sharing prerequisites in the docs.')
+          .replace('%error%', name));
+      }
     });
   }
 
