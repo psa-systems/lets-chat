@@ -8,6 +8,11 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Fixed
+
+- **A stopped screen share no longer leaves a frozen frame in the sharer's tile (LC-1172).** When someone stopped sharing their screen, their call tile could keep showing the last frozen frame instead of reverting to their avatar or camera, because some browsers leave the stopped video track live-but-frozen on the receiver. The tile now clears that stale frame as soon as the "stopped sharing" signal arrives (and re-shows their camera if they switch to one).
+- **The live-transcription audio upload now backs off instead of hammering the server (LC-1172).** When the server rejected a transcription audio clip - rate-limited (HTTP 429) or the transcript was gone (404) - the client kept uploading the next clip anyway, filling the console with repeated errors and adding load. It now pauses uploads for a cooldown after a rate-limit, and stops uploading to a transcript that has gone away.
+
 ## [v0.12.0] - 2026-11-11
 
 ### Added
