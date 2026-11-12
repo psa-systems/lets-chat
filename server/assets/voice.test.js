@@ -103,6 +103,9 @@ function load() {
     __lcS: (k, fb) => fb,
     location: { pathname: '/room/7', search: '', hash: '' },
     history: { replaceState: () => {} },
+    // LC-1155: every RTCPeerConnection voice.js opens (one per mesh peer) is
+    // recorded here so a test can reach a peer's pc to drive its ontrack.
+    __lcTestPcs: [],
     // LC-616: voice.js takes its control-bar dispatch and event bus from here.
     LetsChatRtc: {
       bindControls: (map) => { controls = map; },
@@ -155,6 +158,34 @@ function load() {
     Promise,
     URLSearchParams,
     CustomEvent: class { constructor(t, o) { this.type = t; this.detail = o && o.detail; } },
+    // LC-1155: minimal WebRTC stubs so a test can drive the mesh receiver path
+    // (createTile/bindRemoteVideo/applyScreen over a peer's remoteStream). Only
+    // the methods voice.js actually calls are present.
+    MediaStream: class {
+      constructor(tracks) { this._tracks = tracks ? tracks.slice() : []; }
+      getTracks() { return this._tracks.slice(); }
+      getVideoTracks() { return this._tracks.filter((t) => t.kind === 'video'); }
+      getAudioTracks() { return this._tracks.filter((t) => t.kind === 'audio'); }
+      addTrack(t) { if (this._tracks.indexOf(t) === -1) this._tracks.push(t); }
+      removeTrack(t) { const i = this._tracks.indexOf(t); if (i >= 0) this._tracks.splice(i, 1); }
+    },
+    RTCPeerConnection: class {
+      constructor() {
+        this._senders = [];
+        this.connectionState = 'new';
+        this.localDescription = {};
+        this.ontrack = this.onicecandidate = this.onnegotiationneeded = this.onconnectionstatechange = null;
+        try { window.__lcTestPcs.push(this); } catch (e) {}
+      }
+      addTrack(track) { const s = { track, replaceTrack(t) { this.track = t; return Promise.resolve(); } }; this._senders.push(s); return s; }
+      getSenders() { return this._senders.slice(); }
+      addIceCandidate() { return Promise.resolve(); }
+      setLocalDescription() { return Promise.resolve(); }
+      setRemoteDescription() { return Promise.resolve(); }
+      createOffer() { return Promise.resolve({}); }
+      createAnswer() { return Promise.resolve({}); }
+      close() {}
+    },
   };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
@@ -674,4 +705,52 @@ test('LC-1175: a focused tile keeps the stage slot (CSS order:-1), not an inline
 
   h.voice.setFocus(null);
   assert.equal(grid.querySelector('[data-lc-voice-tile="u3"]').style.order, '2', 'releasing focus restores its slot');
+});
+
+// LC-1155: the mesh-only frozen-frame-after-stop. A mesh share stops via
+// replaceTrack(null) on the SAME sender, so the receiver keeps the same live
+// (often not even muted) video track. applyScreen(false) force-clears the tile
+// (LC-1172), but handleEvent used to then bindRemoteVideo() on the stop, which
+// re-derived that still-live track from the peer's remoteStream and re-added the
+// frozen frame. (SFU has no peers[] entry, so bindRemoteVideo was a no-op there -
+// why the freeze was mesh-only.) The stop must NOT re-derive.
+test('LC-1155: a mesh peer stopping a screen share clears the tile, not re-adds the frozen frame', async () => {
+  const h = load();
+  const dock = makeDock(7, false); // sfu=false -> the mesh path, and it has a grid
+  h.main.appendChild(dock);
+  h.fire('htmx:afterSettle');
+  h.join();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(h.voice.isJoined(), true, 'setup: the mesh call is live');
+  h.win.__lcScreenBlackoutMs = 1000000; // keep the one-shot blackout check out of the test window
+
+  // A remote peer joins; as the newest joiner we offer, which opens a pc.
+  h.event({ 'data-room-id': 7, 'data-kind': 'roster', 'data-peers': JSON.stringify([['u2', 'Bob']]) });
+  const grid = dock.querySelector('[data-lc-voice-grid]');
+  const tile = grid.querySelector('[data-lc-voice-tile="u2"]');
+  assert.ok(tile, 'the peer tile exists');
+  const video = tile.querySelector('[data-lc-voice-video]');
+
+  // The peer's media arrives: one live screen video track (+ audio). Mesh keeps
+  // this same track object through the stop, still live and unmuted - the freeze.
+  const pc = h.win.__lcTestPcs[h.win.__lcTestPcs.length - 1];
+  const screenTrack = { kind: 'video', readyState: 'live', muted: false };
+  const audioTrack = { kind: 'audio', readyState: 'live', muted: false };
+  const remoteStream = { getVideoTracks: () => [screenTrack], getAudioTracks: () => [audioTrack] };
+  pc.ontrack({ streams: [remoteStream], track: screenTrack });
+  assert.equal(video.srcObject.getVideoTracks().length, 1, 'precondition: the peer video is bound');
+
+  h.event({ 'data-room-id': 7, 'data-kind': 'screen', 'data-user-id': 'u2', 'data-payload': '1' });
+  assert.equal(tile.getAttribute('data-screen'), 'true', 'precondition: the share is staged');
+
+  // The peer stops sharing (no camera to swap back to).
+  h.event({ 'data-room-id': 7, 'data-kind': 'screen', 'data-user-id': 'u2', 'data-payload': '0' });
+
+  assert.equal(video.srcObject.getVideoTracks().length, 0, 'the frozen screen track is cleared, not re-added');
+  assert.equal(video.style.display, 'none', 'the tile shows the avatar, not a frozen frame');
+  assert.equal(tile.getAttribute('data-media'), 'audio');
+  assert.equal(tile.hasAttribute('data-screen'), false, 'the share pin is cleared');
+
+  h.voice.leave(); // stop the mesh speaking/quality intervals so the test process exits
 });
