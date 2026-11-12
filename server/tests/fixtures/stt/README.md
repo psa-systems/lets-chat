@@ -1,6 +1,6 @@
 # STT comparison fixtures (LC-861)
 
-Audio fixtures the transcription comparison harness (`server/tests/stt_comparison.rs`)
+Audio fixtures the transcription comparison harness (`server/tests/it/stt_comparison.rs`)
 replays, identically, through every configured STT service so they can be judged
 on the same input instead of on separate live meetings.
 
@@ -21,7 +21,7 @@ Each contains:
   (word error rate). Lowercase, punctuation-optional; the scorer normalizes both
   sides, so exact casing/punctuation do not matter.
 
-`server/tests/stt_comparison.rs` discovers fixtures by scanning the subdirectories
+`server/tests/it/stt_comparison.rs` discovers fixtures by scanning the subdirectories
 here, so adding a case is: make a directory, drop an `audio.*` and a
 `reference.txt` in it. Supported audio extensions map to the MIME the adapters
 expect (`.wav`, `.webm`, `.ogg`, `.mp3`, `.m4a`, `.flac`).
@@ -50,5 +50,5 @@ python3 server/tests/fixtures/stt/generate_placeholders.py
 
 The deterministic harness tests (WER scoring, report shaping) run in CI with mock
 adapters and need none of this audio. The live run is opt-in and hits real
-endpoints - see the module docs at the top of `server/tests/stt_comparison.rs`,
+endpoints - see the module docs at the top of `server/tests/it/stt_comparison.rs`,
 or `just stt-bench`.
