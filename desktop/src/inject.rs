@@ -295,8 +295,110 @@ fn scan_code(code: &str) -> Option<(u16, bool)> {
 /// forwards the LC-184 control DOM events to the native injector. Uses the
 /// internal IPC entrypoint so we do not have to expose the whole global Tauri
 /// API surface to the remote page (`withGlobalTauri` stays off).
+/// Desktop notification bridge (audit Phase 2): show an OS-native notification
+/// on behalf of the web UI. The configured server origin reaches this over the
+/// same runtime remote capability as the rc / update-token commands (see
+/// `grant_native_notify_ipc` in main.rs). The web page builds the title/body
+/// with its own, already-DND-gated notification logic and the shell renders it
+/// natively; `BRIDGE_JS` shims the browser `Notification` away so only the
+/// native one fires (no double notification). `target` is the in-app path the
+/// notification refers to - carried through for the click-to-navigate handoff
+/// to the deep-link ticket, not acted on here.
+#[tauri::command]
+pub fn desktop_notify(app: tauri::AppHandle, title: String, body: String, target: Option<String>) {
+    use tauri_plugin_notification::NotificationExt;
+    // `target` is the room/DM path a click should open. The shared navigation
+    // sink now exists (`navigate_to_path` in main.rs, used by deep links), but
+    // tauri-plugin-notification 2.3.3's desktop `show()` is fire-and-forget -
+    // it surfaces no click/activation callback (action types are mobile-only) -
+    // so there is nothing to route a click through yet. Kept so the wiring is a
+    // one-liner once a click-capable notification path lands (notify-rust
+    // actions / toast activation, or a newer plugin). Focus-on-click, where the
+    // OS provides it, still works.
+    let _ = target;
+    let title = if title.trim().is_empty() {
+        "Let's Chat".to_string()
+    } else {
+        title
+    };
+    let mut builder = app.notification().builder().title(title);
+    if !body.is_empty() {
+        builder = builder.body(body);
+    }
+    if let Err(e) = builder.show() {
+        eprintln!("lets-chat-desktop: native notification failed: {e}");
+    }
+}
+
+/// Dock/taskbar unread badge (audit Phase 2): set the app icon's badge to the
+/// web UI's current unread total. The web page already renders that total in its
+/// title (`(N) ...`), driven by the same mute-gated `#lc-notify-bus` + `counts`
+/// store as the sidebar's `@N` chips; `BRIDGE_JS` reads it and calls this, so
+/// the badge mirrors what the UI shows and the two never disagree. Reached over
+/// the same runtime remote capability as the other bridge commands.
+///
+/// Platform split (Tauri 2): `set_badge_count` shows the number on macOS (dock)
+/// and Linux (Unity launcher, where the DE supports it - degrades to nothing
+/// elsewhere); Windows does not support it, so there we set a small unread-dot
+/// taskbar overlay instead (a numbered Windows overlay needs runtime glyph
+/// rendering - deferred). macOS is coded here but validated under the macOS
+/// parity ticket (no Mac runner yet).
+#[tauri::command]
+pub fn desktop_set_badge(app: tauri::AppHandle, count: i64) {
+    use tauri::Manager;
+    let Some(w) = app.get_webview_window("main") else {
+        return;
+    };
+    let value = if count > 0 { Some(count) } else { None };
+    if let Err(e) = w.set_badge_count(value) {
+        eprintln!("lets-chat-desktop: set_badge_count failed: {e}");
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let overlay = if count > 0 {
+            Some(unread_overlay_icon())
+        } else {
+            None
+        };
+        if let Err(e) = w.set_overlay_icon(overlay) {
+            eprintln!("lets-chat-desktop: set_overlay_icon failed: {e}");
+        }
+    }
+}
+
+// A small solid red dot as a Windows taskbar overlay "you have unread" marker.
+// Built as a raw RGBA buffer (a filled circle) so it needs no image crate or
+// font: Windows overlays are icons, not numbers, so this signals presence; the
+// exact count still shows in-app (and on the macOS/Linux numeric badge).
+#[cfg(target_os = "windows")]
+fn unread_overlay_icon() -> tauri::image::Image<'static> {
+    const S: u32 = 32;
+    let center = (S as f32 - 1.0) / 2.0;
+    let radius = S as f32 / 2.0 - 1.0;
+    let mut px = vec![0u8; (S * S * 4) as usize];
+    for y in 0..S {
+        for x in 0..S {
+            let dx = x as f32 - center;
+            let dy = y as f32 - center;
+            if (dx * dx + dy * dy).sqrt() <= radius {
+                let i = ((y * S + x) * 4) as usize;
+                px[i] = 0xEF; // red-500-ish
+                px[i + 1] = 0x44;
+                px[i + 2] = 0x44;
+                px[i + 3] = 0xFF;
+            }
+        }
+    }
+    tauri::image::Image::new_owned(px, S, S)
+}
+
 pub const BRIDGE_JS: &str = r#"
 (function () {
+  // LC-1165: mark the page as running inside the desktop shell so the web app
+  // can take WKWebView-only code paths (e.g. keeping the camera device open
+  // across a video toggle, because WKWebView cannot re-acquire it after stop()).
+  // A plain browser leaves this undefined.
+  try { window.__lcDesktop = true; } catch (e) {}
   // LC-640/LC-933: advertise to the page that this client HAS a native
   // injector, so when it is the one being controlled it can tell the
   // controller their input will actually land. A plain browser leaves this
@@ -353,6 +455,96 @@ pub const BRIDGE_JS: &str = r#"
     document.addEventListener('DOMContentLoaded', pushRegistryToken);
   } else {
     pushRegistryToken();
+  }
+
+  // --- Native OS notifications (audit Phase 2) ------------------------------
+  // Route the web UI's notifications to the OS instead of the browser. We reuse
+  // the page's OWN logic and gating rather than re-deriving anything:
+  //  - Mentions / DMs / reminders: the page's fireNotification() already honours
+  //    the user's notification preference and DND/mute (the #lc-notify-bus child
+  //    it reacts to is emitted by the server only when the mute gate allows it),
+  //    builds the per-kind title + body, and calls `new Notification(...)`. We
+  //    shim window.Notification so THAT call fires a native notification, never
+  //    a browser one - so DND is respected for free and there is never a double
+  //    notification.
+  //  - Incoming calls do not go through Notification today (only an in-page ring
+  //    dialog), yet they are the highest-value case (do not miss a huddle while
+  //    backgrounded), so we watch the incoming-call dialog and fire natively.
+  // Click-to-focus/navigate: the OS-notification click has to be routed back
+  // into the window with the target path; that plumbing is shared with the
+  // deep-link scheme and is handed off to that ticket. `target` is passed
+  // through now so the handoff has it.
+  function nativeNotify(title, body, target) {
+    try { inv('desktop_notify', { title: String(title || ''), body: String(body || ''), target: target || null }); } catch (e) {}
+  }
+  // Shim the browser Notification API so the page's existing path renders
+  // natively. permission is pre-granted so fireNotification() proceeds (the
+  // real gate stays the user's notification preference + the server mute gate);
+  // constructing one fires natively and nothing reaches the browser.
+  function NativeNotification(title, opts) {
+    opts = opts || {};
+    // tag is 'lc-' + target_path (layout.html), so recover the target for the
+    // click-to-navigate handoff without needing a separate field.
+    var target = null;
+    if (typeof opts.tag === 'string' && opts.tag.indexOf('lc-') === 0) target = opts.tag.slice(3);
+    nativeNotify(title, opts.body, target);
+    this.onclick = null; this.onclose = null; this.onerror = null; this.onshow = null;
+  }
+  NativeNotification.permission = 'granted';
+  NativeNotification.requestPermission = function (cb) {
+    if (typeof cb === 'function') { try { cb('granted'); } catch (e) {} }
+    return Promise.resolve('granted');
+  };
+  NativeNotification.prototype.close = function () {};
+  try { window.Notification = NativeNotification; } catch (e) {}
+
+  function watchIncomingCall() {
+    var dlg = document.querySelector('[data-lc-call-incoming]');
+    if (!dlg || !window.MutationObserver) { return; }
+    var shown = !dlg.classList.contains('hidden');
+    new MutationObserver(function () {
+      var nowShown = !dlg.classList.contains('hidden');
+      if (nowShown && !shown) {
+        var nameEl = dlg.querySelector('[data-lc-call-incoming-name]');
+        var who = ((nameEl && nameEl.textContent) || '').trim();
+        nativeNotify('Incoming call', who ? ('Call from ' + who) : 'Someone is calling you', location.pathname);
+      }
+      shown = nowShown;
+    }).observe(dlg, { attributes: true, attributeFilter: ['class'] });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', watchIncomingCall);
+  } else {
+    watchIncomingCall();
+  }
+
+  // --- Dock/taskbar unread badge (audit Phase 2) ----------------------------
+  // The page renders its unread total (mentions/DMs, mute-gated - the same
+  // `counts` store behind the sidebar @N chips) as the title prefix "(N) ...".
+  // Mirror that number to the native badge, so the dock/taskbar count matches
+  // the title and sidebar exactly (one source of truth: the page's refresh()).
+  function currentBadgeCount() {
+    var m = /^\((\d+)\)/.exec(document.title || '');
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  var lastBadge = -1;
+  function syncBadge() {
+    var n = currentBadgeCount();
+    if (n === lastBadge) { return; }
+    lastBadge = n;
+    try { inv('desktop_set_badge', { count: n }); } catch (e) {}
+  }
+  function watchBadge() {
+    syncBadge(); // initial state (0 clears any stale badge)
+    var titleEl = document.querySelector('title');
+    if (titleEl && window.MutationObserver) {
+      new MutationObserver(syncBadge).observe(titleEl, { childList: true, characterData: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', watchBadge);
+  } else {
+    watchBadge();
   }
 })();
 "#;
