@@ -142,8 +142,10 @@ function load() {
     },
   };
 
+  const nav = { mediaDevices: {} };
   const sandbox = {
     window,
+    navigator: nav,
     document,
     localStorage: {
       getItem: (k) => (store.has(k) ? store.get(k) : null),
@@ -212,6 +214,8 @@ function load() {
     popout: window.LetsChatHuddlePopout,
     join: () => controls['[data-lc-voice-join]'](),
     toasts,
+    nav,
+    screenClick: () => controls['[data-lc-voice-screen]'](),
     sfuHooks: () => sfuHooks,
     // Deliver one inbound server frame as a bus node (data-* attributes), the
     // way LetsChatRtc.watchBus would hand it to voice.js's handleEvent.
@@ -753,4 +757,29 @@ test('LC-1155: a mesh peer stopping a screen share clears the tile, not re-adds 
   assert.equal(tile.hasAttribute('data-screen'), false, 'the share pin is cleared');
 
   h.voice.leave(); // stop the mesh speaking/quality intervals so the test process exits
+});
+
+test('LC-1173: a getDisplayMedia failure other than cancel shows an error toast; cancel stays silent', async () => {
+  const h = load();
+  h.main.appendChild(makeDock(7, false));
+  h.fire('htmx:afterSettle');
+  h.join();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(h.voice.isJoined(), true, 'setup: the mesh call is live');
+
+  const fail = async (name) => {
+    h.nav.mediaDevices.getDisplayMedia = () => Promise.reject({ name });
+    h.toasts.length = 0;
+    h.screenClick();
+    await new Promise((r) => setTimeout(r, 0));
+  };
+  await fail('NotReadableError');
+  assert.equal(h.toasts.length, 1, 'one error toast');
+  assert.equal(h.toasts[0][0], 'err');
+  assert.match(h.toasts[0][1], /NotReadableError/, 'names the error');
+  await fail('NotAllowedError');
+  assert.equal(h.toasts.length, 0, 'user cancel is not an error');
+  await fail('AbortError');
+  assert.equal(h.toasts.length, 0, 'abort is not an error');
 });

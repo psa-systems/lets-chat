@@ -842,7 +842,12 @@
       }
     }).catch(function (e) {
       // User-cancel from the picker lands here too; nothing to undo.
-      if (e && e.name !== 'NotAllowedError') console.warn('call: getDisplayMedia failed', e);
+      var name = e && e.name ? e.name : 'error';
+      if (name !== 'NotAllowedError' && name !== 'AbortError') {
+        console.warn('call: getDisplayMedia failed', e);
+        // LC-1173: surface the failure (Linux: missing GStreamer/PipeWire) instead of a silent no-op.
+        window.__lcNotify('err', window.__lcS('callScreenshareFailed', 'Screen sharing failed (%error%).').replace('%error%', name));
+      }
     });
   }
 
