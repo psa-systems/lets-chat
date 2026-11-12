@@ -766,6 +766,7 @@ test('LC-1173: a getDisplayMedia failure other than cancel shows an error toast;
   h.join();
   await Promise.resolve();
   await Promise.resolve();
+  try {
   assert.equal(h.voice.isJoined(), true, 'setup: the mesh call is live');
 
   const fail = async (name) => {
@@ -782,4 +783,7 @@ test('LC-1173: a getDisplayMedia failure other than cancel shows an error toast;
   assert.equal(h.toasts.length, 0, 'user cancel is not an error');
   await fail('AbortError');
   assert.equal(h.toasts.length, 0, 'abort is not an error');
+  } finally {
+    h.leaveClick(); // voice.js intervals keep the runner alive if an assertion throws first
+  }
 });
