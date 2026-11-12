@@ -618,3 +618,60 @@ test('LC-1174: a focused peer leaving drops the grid out of focus mode', () => {
   assert.equal(grid.classList.contains('lc-voice-grid--focus'), false, 'the stage class is dropped with the tile');
   assert.equal(grid.querySelectorAll('[data-lc-focus]').length, 0);
 });
+
+// LC-1175: viewer-local tile reorder. The drag + keyboard paths both funnel
+// through moveTile / moveTileBefore (exposed as reorder.move / reorder.moveBefore);
+// the pointer drag itself is not exercised here (the DOM stub has no pointer
+// events or elementFromPoint). The order never goes on the wire.
+test('LC-1175: reorder.move rearranges the viewer order and clamps at the ends', () => {
+  const h = joined();
+  h.sfuHooks().addTile('u2', 'Bob');
+  h.sfuHooks().addTile('u3', 'Cara');
+  h.sfuHooks().addTile('u4', 'Dan');
+  assert.equal(h.voice.reorder.ids().join(','), 'u1,u2,u3,u4', 'arrival order to start');
+
+  h.voice.reorder.move('u4', -2);
+  assert.equal(h.voice.reorder.ids().join(','), 'u1,u4,u2,u3', 'u4 moved two slots earlier');
+
+  h.voice.reorder.move('u1', -5); // already first
+  assert.equal(h.voice.reorder.ids().join(','), 'u1,u4,u2,u3', 'clamped: no change at the start');
+
+  h.voice.reorder.move('u3', 9); // already last
+  assert.equal(h.voice.reorder.ids().join(','), 'u1,u4,u2,u3', 'clamped: no change at the end');
+
+  // The order is applied as each non-focused tile's CSS order, in DOM-stable place.
+  const grid = h.dock.querySelector('[data-lc-voice-grid]');
+  assert.equal(grid.querySelector('[data-lc-voice-tile="u4"]').style.order, '1', 'u4 sits in slot 1');
+  assert.equal(grid.querySelector('[data-lc-voice-tile="u2"]').style.order, '2');
+
+  assert.equal(h.sent.filter((f) => /order|reorder/i.test(f.type || '')).length, 0, 'order is never sent to peers');
+});
+
+test('LC-1175: moveBefore drops a tile ahead of a target, and a leaver is forgotten', () => {
+  const h = joined();
+  h.sfuHooks().addTile('u2', 'Bob');
+  h.sfuHooks().addTile('u3', 'Cara');
+
+  h.voice.reorder.moveBefore('u3', 'u2');
+  assert.equal(h.voice.reorder.ids().join(','), 'u1,u3,u2', 'u3 placed before u2');
+
+  h.sfuHooks().removeTile('u3');
+  assert.equal(h.voice.reorder.ids().join(','), 'u1,u2', 'a leaving peer drops out of the order');
+});
+
+test('LC-1175: a focused tile keeps the stage slot (CSS order:-1), not an inline order', () => {
+  const h = joined();
+  h.sfuHooks().addTile('u2', 'Bob');
+  h.sfuHooks().addTile('u3', 'Cara');
+  const grid = h.dock.querySelector('[data-lc-voice-grid]');
+
+  h.voice.setFocus('u3');
+  // The focused tile's inline order is cleared so the stylesheet's order:-1 wins;
+  // the rest still carry their numeric slot.
+  assert.equal(grid.querySelector('[data-lc-voice-tile="u3"]').style.order, '', 'focused tile yields to the CSS stage order');
+  assert.equal(grid.querySelector('[data-lc-voice-tile="u1"]').style.order, '0');
+  assert.equal(grid.querySelector('[data-lc-voice-tile="u2"]').style.order, '1');
+
+  h.voice.setFocus(null);
+  assert.equal(grid.querySelector('[data-lc-voice-tile="u3"]').style.order, '2', 'releasing focus restores its slot');
+});

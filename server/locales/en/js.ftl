@@ -108,6 +108,7 @@ js-voice-waiting = Waiting for others to join...
 js-voice-presenting = Presenting
 js-voice-focus-tile = Expand tile
 js-voice-unfocus-tile = Minimize tile
+js-voice-reorder-tile = Reorder tile
 js-conn-good = Connection: good
 js-conn-degraded = Connection: degraded
 js-conn-reconnecting = Reconnecting...
