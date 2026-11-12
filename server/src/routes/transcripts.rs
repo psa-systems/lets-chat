@@ -1358,7 +1358,8 @@ pub async fn propose_issues(
         .ok_or(AppError::NotFound)?;
     let room = fetch_call_room(&state, session.room_id).await?;
     require_access(&state, &user, &room).await?;
-    if !crate::youtrack::flag_on(&state).await {
+    let youtrack_flag_on = crate::youtrack::flag_on(&state).await;
+    if !youtrack_flag_on {
         return Err(AppError::Forbidden);
     }
     // Review uses the LLM, so it is scoped by the AI gate (flag + room toggle +
@@ -1390,7 +1391,10 @@ pub async fn propose_issues(
         .await
         .map(|c| c.base_url);
     let rows = db::transcript_proposals::list_for_transcript(&state.chat, transcript_id).await?;
-    let can_file = crate::youtrack::can_file(&state, room.id, &user).await?;
+    // LC-1170: reuse the `youtrack_flag_on` already read above instead of
+    // `can_file` re-reading it.
+    let can_file =
+        youtrack_flag_on && super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
     html(&IssueProposalsFragment {
         transcript_id,
         proposals: build_proposal_views(rows, base.as_deref()),
@@ -1415,10 +1419,18 @@ pub async fn file_issues(
         .ok_or(AppError::NotFound)?;
     let room = fetch_call_room(&state, session.room_id).await?;
     require_access(&state, &user, &room).await?;
-    if !crate::youtrack::flag_on(&state).await {
+    let youtrack_flag_on = crate::youtrack::flag_on(&state).await;
+    if !youtrack_flag_on {
         return Err(AppError::Forbidden);
     }
-    crate::youtrack::require_file(&state, room.id, &user).await?;
+    // LC-1170: inlined from `youtrack::require_file`/`can_file` to reuse
+    // `youtrack_flag_on` and share this single `privileged_in_room` read with
+    // the fragment's `can_file` below instead of each re-reading both.
+    let can_file =
+        youtrack_flag_on && super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
+    if !can_file {
+        return Err(AppError::Forbidden);
+    }
     let Some(cfg) = crate::youtrack::load_config(&state).await else {
         return Err(AppError::BadRequest("YouTrack is not configured".into()));
     };
@@ -1496,7 +1508,6 @@ pub async fn file_issues(
             p.error = Some(err.clone());
         }
     }
-    let can_file = crate::youtrack::can_file(&state, room.id, &user).await?;
     html(&IssueProposalsFragment {
         transcript_id,
         proposals,
