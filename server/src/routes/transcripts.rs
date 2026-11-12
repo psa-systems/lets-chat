@@ -1268,13 +1268,17 @@ pub async fn show(
 
     // LC-679/LC-702: audience-scoped AI gate for the transcript "Summarize" action.
     let ai_flag_on = super::ai_gate::flag_on(&state).await;
-    let ai_llm = ai_flag_on
-        && state.llm_available()
-        && super::ai_gate::allowed_in_room(&state, room.id, &user).await?;
+    let ai_allowed = super::ai_gate::allowed_in_room(&state, room.id, &user).await?;
+    let ai_llm = ai_flag_on && state.llm_available() && ai_allowed;
     // LC-1135: the "Proposed issues" panel. Review is scoped by the AI gate (it
-    // uses the LLM); filing additionally needs the staff set.
-    let youtrack_can_review = crate::youtrack::can_review(&state, room.id, &user).await?;
-    let youtrack_can_file = crate::youtrack::can_file(&state, room.id, &user).await?;
+    // uses the LLM); filing additionally needs the staff set. LC-1170: inlined
+    // from `youtrack::can_review`/`can_file` to reuse `ai_allowed` and the single
+    // `flag_on` read below instead of each re-running its own `allowed_in_room`/
+    // `flag_on` chain.
+    let youtrack_flag = crate::youtrack::flag_on(&state).await;
+    let youtrack_can_review = youtrack_flag && ai_allowed;
+    let youtrack_can_file =
+        youtrack_flag && super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
     let youtrack_proposals = if youtrack_can_review {
         let base = crate::youtrack::load_config(&state)
             .await
