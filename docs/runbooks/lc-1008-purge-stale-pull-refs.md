@@ -21,14 +21,14 @@ frozen on a pre-rewrite commit and keeps the scrubbed objects addressable.
   and `LETS_CHAT_SMTP_PASSWORD` values (PR #253 is itself the SMTP-redaction PR).
 - `git fetch origin 875b7433` (by SHA) is already refused by the server
   (`uploadpack.allowAnySHA1InWant` is off), so today the exposure is reachable
-  **only via the frozen pull refs** — which is exactly what this runbook removes.
+  **only via the frozen pull refs**, which is exactly what this runbook removes.
 
 ## Prerequisite that actually ends the exposure (do not skip)
 
 This runbook stops **the server** from serving the old values. It does **not**
 un-expose them: anyone who cloned before 2026-09-21 already holds them. The
 `LETS_CHAT_SECRET_KEY` and `LETS_CHAT_SMTP_PASSWORD` (and any other secret in the
-scrubbed blobs) **must be rotated** — that is LC-522 AC1 and the step that ends
+scrubbed blobs) **must be rotated**: that is LC-522 AC1 and the step that ends
 the credential's usefulness. Treat rotation as the real fix and this as closing
 the "the server still hands them out" finding.
 
