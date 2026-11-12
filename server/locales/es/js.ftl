@@ -104,6 +104,7 @@ js-voice-waiting = Esperando a que se unan otros...
 js-voice-presenting = Presentando
 js-voice-focus-tile = Ampliar mosaico
 js-voice-unfocus-tile = Minimizar mosaico
+js-voice-reorder-tile = Reordenar mosaico
 js-conn-good = Conexión: buena
 js-conn-degraded = Conexión: degradada
 js-conn-reconnecting = Reconectando...
