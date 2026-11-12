@@ -174,12 +174,6 @@ jobs:
           (
             ^docker buildx build
               --build-arg $"APP_VERSION=($version)"
-              # LC-1163: inert for makensis, but the installer Dockerfile now
-              # declares these ARGs (to satisfy the release-injection guard), so
-              # every build of it must pass them. Empty here - continuous builds.
-              --build-arg "LETS_CHAT_UPDATE_REGISTRY_URL="
-              --build-arg "LETS_CHAT_UPDATE_REPOSITORY="
-              --build-arg "LETS_CHAT_DEFAULT_SERVER_URL="
               --tag lets-chat-windows-installer:build
               --load
               -f ci-build/Dockerfile.desktop-windows-installer
