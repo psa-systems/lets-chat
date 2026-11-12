@@ -1405,8 +1405,28 @@
     else t.removeAttribute('data-screen');
     // LC-1129: receiver diagnostics, only for a REMOTE peer's share.
     if (cfg && userId !== cfg.selfId) {
-      if (sharing) screenStarted(userId);
-      else clearScreenRx(userId); // share stopped: drop the armed blackout check
+      if (sharing) {
+        screenStarted(userId);
+      } else {
+        clearScreenRx(userId); // share stopped: drop the armed blackout check
+        // LC-1172: a screen-only stop swaps the sender's video to null
+        // (replaceTrack), which some browsers leave as a live-but-frozen track
+        // on the receiver - so bindRemoteVideo keeps rendering the last screen
+        // frame and the tile stays frozen. The voice_screen=false signal is the
+        // authoritative "stopped" cue, so drop the video from the tile now (keep
+        // audio); the avatar shows. If the peer swapped back to a camera, that
+        // is a fresh track whose ontrack/onunmute re-binds and re-shows it.
+        var v = tileVideo(userId);
+        if (v && v.srcObject && v.srcObject.getAudioTracks && typeof MediaStream !== 'undefined') {
+          v.srcObject = new MediaStream(v.srcObject.getAudioTracks());
+          if (window.LetsChatDevices && window.LetsChatDevices.applySpeaker) {
+            window.LetsChatDevices.applySpeaker(v);
+          }
+        }
+        // Always re-evaluate the tile (an ended/muted track reverts to audio);
+        // the rebind above additionally drops a live-but-frozen screen track.
+        updateTileMedia(userId);
+      }
     }
   }
   // Mark our own tile and tell the channel so peers pin our share too.
