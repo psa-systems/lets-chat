@@ -52,6 +52,7 @@ fn set_server_url(url: String, app: tauri::AppHandle) -> Result<ProbeResult, Str
     // has no allow-rc-* permission for the rest of the session.
     grant_remote_control_ipc(&app, &trimmed);
     grant_update_token_ipc(&app, &trimmed);
+    grant_native_notify_ipc(&app, &trimmed);
     Ok(match welcome::server_reachable(&trimmed) {
         Ok(()) => ProbeResult {
             url: trimmed,
@@ -110,7 +111,7 @@ fn main() {
     let title_for_window = title.clone();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             // Re-launch attempt: focus the existing window instead of opening
             // a second one. Silent if the window is already gone (eg. user
             // is mid-shutdown).
@@ -118,7 +119,21 @@ fn main() {
                 let _ = w.show();
                 let _ = w.set_focus();
             }
+            // Deep links (audit Phase 2): on Windows/Linux a `lets-chat://` link
+            // launches a second process with the URL in argv; single-instance
+            // forwards that argv here, so this is the WARM deep-link path -
+            // focus (above) + navigate the already-running window.
+            if let Some(link) = first_deep_link(&argv) {
+                open_deep_link(app, &link);
+            }
         }))
+        // Deep links (audit Phase 2): registers the `lets-chat://` scheme (the
+        // Windows registry entry + the Linux `.desktop` MimeType are generated
+        // from tauri.conf.json's plugins.deep-link.schemes). Navigation is driven
+        // from argv (cold: setup(); warm: the single-instance handler above),
+        // which is the reliable path on Windows + Linux; macOS delivers URLs via
+        // on_open_url instead (wired in setup() below, LC-1157).
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_notification::init())
         // LC-186: global kill-switch for remote control. The handler fires on
         // ANY registered shortcut press; we register only the kill hotkey
@@ -137,7 +152,9 @@ fn main() {
             set_server_url,
             inject::rc_session,
             inject::rc_input,
-            inject::set_registry_token
+            inject::set_registry_token,
+            inject::desktop_notify,
+            inject::desktop_set_badge
         ])
         .register_uri_scheme_protocol(WELCOME_SCHEME, move |_ctx, _request| {
             let body = welcome_html.clone().into_bytes();
@@ -152,6 +169,15 @@ fn main() {
             } else {
                 WebviewUrl::CustomProtocol(WELCOME_URL.parse()?)
             };
+            // LC-1159: where an "open in new tab" link (target=_blank /
+            // window.open) is allowed to navigate the app shell in-place. A
+            // wrapped webview otherwise just drops the new-window request, so a
+            // portal "Community" link to Let's Chat appeared dead. First-party
+            // links navigate the existing window; everything else goes to the
+            // system browser (see route_new_window). Derived from the configured
+            // server origin (plus our product domains), not one hardcoded host.
+            let first_party = first_party_suffixes(&config::initial_server_url());
+            let new_window_app = app.handle().clone();
             let window = WebviewWindowBuilder::new(app, "main", webview_url)
                 .title(&title_for_window)
                 .inner_size(1100.0, 750.0)
@@ -159,10 +185,18 @@ fn main() {
                 // injector. Runs at document start, before the server's page
                 // scripts, so the listeners are attached before call.js fires.
                 .initialization_script(inject::BRIDGE_JS)
+                // LC-1159: intercept new-window / target=_blank / window.open
+                // requests (wry wires this to the WKWebView UI delegate, the
+                // WebView2 NewWindowRequested event and the WebKitGTK `create`
+                // signal, so one handler covers macOS / Windows / Linux).
+                .on_new_window(move |url, _features| {
+                    route_new_window(&new_window_app, &url, &first_party)
+                })
                 .build()?;
             install_media_permission_handler(&window)?;
             grant_remote_control_ipc(app.handle(), &url_for_cap);
             grant_update_token_ipc(app.handle(), &url_for_cap);
+            grant_native_notify_ipc(app.handle(), &url_for_cap);
             // LC-186: register the kill-switch hotkey. Non-fatal if the combo
             // is already taken by another app - the on-banner button remains.
             {
@@ -175,6 +209,35 @@ fn main() {
                 }
             }
             build_tray_icon(app.handle())?;
+            // Deep links (audit Phase 2): register the scheme at runtime (covers
+            // `cargo run` / dev; installed bundles register from tauri.conf), then
+            // handle the COLD-start path - a `lets-chat://` URL on this process's
+            // own argv navigates the just-built window to the target.
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register_all() {
+                    eprintln!("lets-chat-desktop: deep-link runtime registration skipped: {e}");
+                }
+            }
+            if let Some(link) = first_deep_link(&std::env::args().skip(1).collect::<Vec<_>>()) {
+                open_deep_link(app.handle(), &link);
+            }
+            // Deep links on macOS (LC-1157): macOS does not carry the URL in argv
+            // the way Windows/Linux do - it delivers it through on_open_url, for
+            // both a cold launch (the plugin buffers the launch URL until a
+            // handler is registered here) and a warm re-open. Route both through
+            // the same open_deep_link -> navigate_to_path sink the argv path uses,
+            // so every platform lands on one navigation path.
+            #[cfg(target_os = "macos")]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        open_deep_link(&handle, url.as_str());
+                    }
+                });
+            }
             // LC-710: started here, not before the builder, because the check
             // needs an AppHandle to raise its native "update available"
             // notification.
@@ -258,6 +321,32 @@ fn grant_update_token_ipc(app: &tauri::AppHandle, server_url: &str) {
     }
 }
 
+// Desktop notification + badge bridge (audit Phase 2): let the configured
+// server origin (and only it) call `desktop_notify` and `desktop_set_badge`, so
+// the web UI can raise OS-native notifications (mentions / DMs / calls) and set
+// the dock/taskbar unread badge. Same shape and trust argument as
+// `grant_remote_control_ipc` / `grant_update_token_ipc`; kept its own capability
+// so the grant stays independently reviewable. Both commands only drive the app
+// icon / a notification, so they are strictly less sensitive than the rc grant.
+fn grant_native_notify_ipc(app: &tauri::AppHandle, server_url: &str) {
+    use tauri::{ipc::CapabilityBuilder, Manager};
+    let Some(pattern) = remote_url_pattern(server_url) else {
+        eprintln!("lets-chat-desktop: native notifications disabled (unparseable server URL)");
+        return;
+    };
+    let cap = CapabilityBuilder::new("native-notify")
+        .window("main")
+        // Remote-only: the local welcome page raises no notifications / badge.
+        .local(false)
+        .remote(pattern)
+        .permission("allow-desktop-notify")
+        // Dock/taskbar unread badge (audit Phase 2): same bridge, same origin.
+        .permission("allow-desktop-set-badge");
+    if let Err(e) = app.add_capability(cap) {
+        eprintln!("lets-chat-desktop: native-notify capability not added: {e}");
+    }
+}
+
 // Build an origin URL-pattern (`scheme://host[:port]/*`) from the configured
 // server URL for the remote capability. Strips path/query/fragment and any
 // userinfo so the pattern matches every page under the origin. Returns None
@@ -273,6 +362,232 @@ fn remote_url_pattern(url: &str) -> Option<String> {
         return None;
     }
     Some(format!("{scheme}://{host}/*"))
+}
+
+// Deep links (audit Phase 2) ------------------------------------------------
+//
+// The first `lets-chat://...` argument, if any. The OS passes the clicked link
+// as a plain argv entry on Windows + Linux (cold start to a fresh process,
+// warm start forwarded by single-instance).
+fn first_deep_link(args: &[String]) -> Option<String> {
+    args.iter().find(|a| a.starts_with("lets-chat://")).cloned()
+}
+
+// Map a `lets-chat://` URL onto an existing in-app route. The host + path are
+// concatenated so `lets-chat://room/15` -> `/room/15` and `lets-chat://dm/abc`
+// -> `/dm/abc`; a `#msg-7` fragment (message anchor) and any query are kept.
+// Returns None for anything that is not a `lets-chat://` URL, so a stray argv
+// entry is ignored. No new server route is invented - these are the routes the
+// web app already serves.
+fn deep_link_to_path(raw: &str) -> Option<String> {
+    let u = url::Url::parse(raw.trim()).ok()?;
+    if u.scheme() != "lets-chat" {
+        return None;
+    }
+    let host = u.host_str().unwrap_or("");
+    let mut out = String::from("/");
+    out.push_str(host);
+    let path = u.path();
+    if !path.is_empty() && path != "/" {
+        out.push_str(path);
+    }
+    // Collapse a leading `//` (empty host + absolute path, e.g. `lets-chat:///x`).
+    while out.starts_with("//") {
+        out.remove(0);
+    }
+    if let Some(q) = u.query() {
+        out.push('?');
+        out.push_str(q);
+    }
+    if let Some(f) = u.fragment() {
+        out.push('#');
+        out.push_str(f);
+    }
+    Some(out)
+}
+
+// The ONE navigation sink, shared by every "open to this room" trigger (deep
+// links today; a click-capable notification once one exists - see the note in
+// inject::desktop_notify). Focuses the window and navigates the webview to the
+// configured server origin + `path`, reusing the app's existing routes. Using
+// the absolute server URL means it also recovers from the offline welcome page.
+fn navigate_to_path(app: &tauri::AppHandle, path: &str) {
+    use tauri::Manager;
+    let Some(w) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = w.unminimize();
+    let _ = w.show();
+    let _ = w.set_focus();
+    let base = config::initial_server_url();
+    let full = format!("{}{}", base.trim_end_matches('/'), path);
+    let js = format!(
+        "location.assign({})",
+        serde_json::to_string(&full).unwrap_or_else(|_| "\"/\"".to_string())
+    );
+    let _ = w.eval(&js);
+}
+
+// Open a `lets-chat://` URL: map it to an in-app route and navigate there.
+fn open_deep_link(app: &tauri::AppHandle, raw: &str) {
+    match deep_link_to_path(raw) {
+        Some(path) => navigate_to_path(app, &path),
+        None => eprintln!("lets-chat-desktop: ignoring non-deep-link argument {raw:?}"),
+    }
+}
+
+// LC-1159: decide what happens when the page asks to open a URL in a NEW window
+// (a `target=_blank` link or `window.open`). A wrapped single-window webview has
+// no second window to put it in and silently drops the request, which is why the
+// portal's "Community" link to Let's Chat looked dead. We never let the webview
+// spawn its own window (always `Deny`); instead:
+//   * a first-party URL (the configured server's own domain, our product
+//     domains, sibling apps) navigates the EXISTING window in-app, and
+//   * anything else opens in the user's default browser.
+// This keeps untrusted web content out of the app shell while making the
+// in-product "jump to Let's Chat" link work. wry delivers the request on the UI
+// thread on every platform, so navigating the main window here is safe.
+fn route_new_window(
+    app: &tauri::AppHandle,
+    url: &url::Url,
+    first_party: &[String],
+) -> tauri::webview::NewWindowResponse<tauri::Wry> {
+    use tauri::Manager;
+    // Only web links are routed; ignore anything exotic (data:, blob:, custom
+    // schemes) rather than hand it to the OS.
+    if !matches!(url.scheme(), "http" | "https") {
+        return tauri::webview::NewWindowResponse::Deny;
+    }
+    if is_first_party_host(url.host_str().unwrap_or_default(), first_party) {
+        if let Some(w) = app.get_webview_window("main") {
+            if let Err(e) = w.navigate(url.clone()) {
+                eprintln!("lets-chat-desktop: in-app navigate to {url} failed: {e}");
+            }
+        }
+    } else if let Err(e) = open::that(url.as_str()) {
+        eprintln!("lets-chat-desktop: could not open {url} in the browser: {e}");
+    }
+    tauri::webview::NewWindowResponse::Deny
+}
+
+// First-party host suffixes a new-window link may navigate to IN-APP. Built from
+// the configured server origin's registrable domain (so a self-hosted / custom
+// deployment and its sibling subdomains are covered without hardcoding one host)
+// plus the known product domains. Any host not matching one of these opens in
+// the system browser instead.
+fn first_party_suffixes(server_url: &str) -> Vec<String> {
+    let mut out = vec!["a8n.systems".to_string(), "psa.systems".to_string()];
+    if let Some(domain) = url::Url::parse(server_url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string))
+        .and_then(|h| registrable_domain(&h))
+    {
+        if !out.iter().any(|s| s.eq_ignore_ascii_case(&domain)) {
+            out.push(domain);
+        }
+    }
+    out
+}
+
+// Approximate registrable domain as the last two dot-labels (e.g.
+// `chat.a8n.systems` -> `a8n.systems`). Correct for the single-label TLDs in use
+// (.systems, .com, .net, ...); for a multi-label public suffix like `.co.uk` it
+// over-widens to the second level, which at worst routes one more first-party-
+// looking link in-app for a self-hoster on such a TLD. Never used as a security
+// boundary for the native bridge (that is origin-scoped separately).
+fn registrable_domain(host: &str) -> Option<String> {
+    let labels: Vec<&str> = host.split('.').filter(|l| !l.is_empty()).collect();
+    if labels.len() < 2 {
+        return None;
+    }
+    Some(labels[labels.len() - 2..].join("."))
+}
+
+// True when `host` equals, or is a dot-boundary subdomain of, one of the
+// first-party suffixes. The leading-dot check stops a look-alike host like
+// `nota8n.systems` or `a8n.systems.evil.com` from matching `a8n.systems`.
+fn is_first_party_host(host: &str, suffixes: &[String]) -> bool {
+    if host.is_empty() {
+        return false;
+    }
+    let host = host.to_ascii_lowercase();
+    suffixes.iter().any(|s| {
+        let s = s.to_ascii_lowercase();
+        host == s || host.ends_with(&format!(".{s}"))
+    })
+}
+
+#[cfg(test)]
+mod new_window_tests {
+    use super::{first_party_suffixes, is_first_party_host, registrable_domain};
+
+    #[test]
+    fn registrable_domain_takes_last_two_labels() {
+        assert_eq!(
+            registrable_domain("chat.a8n.systems").as_deref(),
+            Some("a8n.systems")
+        );
+        assert_eq!(
+            registrable_domain("a8n.systems").as_deref(),
+            Some("a8n.systems")
+        );
+        assert_eq!(registrable_domain("localhost"), None);
+    }
+
+    #[test]
+    fn first_party_matches_product_and_configured_domains() {
+        // Configured server on a self-hosted domain: its registrable domain and
+        // the product domains are all first-party.
+        let suffixes = first_party_suffixes("https://chat.example.org:8443/");
+        assert!(is_first_party_host("chat.a8n.systems", &suffixes)); // product
+        assert!(is_first_party_host("dashboard.a8n.systems", &suffixes)); // sibling
+        assert!(is_first_party_host("chat.psa.systems", &suffixes)); // product
+        assert!(is_first_party_host("example.org", &suffixes)); // configured
+        assert!(is_first_party_host("chat.example.org", &suffixes)); // configured sub
+    }
+
+    #[test]
+    fn look_alikes_and_third_parties_are_not_first_party() {
+        let suffixes = first_party_suffixes("https://chat.a8n.systems/");
+        assert!(!is_first_party_host("nota8n.systems", &suffixes));
+        assert!(!is_first_party_host("a8n.systems.evil.com", &suffixes));
+        assert!(!is_first_party_host("github.com", &suffixes));
+        assert!(!is_first_party_host("", &suffixes));
+    }
+}
+
+#[cfg(test)]
+mod deep_link_tests {
+    use super::deep_link_to_path;
+
+    #[test]
+    fn maps_host_and_path_onto_app_routes() {
+        assert_eq!(
+            deep_link_to_path("lets-chat://room/15").as_deref(),
+            Some("/room/15")
+        );
+        assert_eq!(
+            deep_link_to_path("lets-chat://dm/abc").as_deref(),
+            Some("/dm/abc")
+        );
+        // message anchor + query are preserved
+        assert_eq!(
+            deep_link_to_path("lets-chat://room/15#msg-7").as_deref(),
+            Some("/room/15#msg-7")
+        );
+        assert_eq!(
+            deep_link_to_path("lets-chat://room/15?focus=1").as_deref(),
+            Some("/room/15?focus=1")
+        );
+        // empty-host absolute form collapses to a single leading slash
+        assert_eq!(
+            deep_link_to_path("lets-chat:///room/15").as_deref(),
+            Some("/room/15")
+        );
+        // not our scheme -> ignored
+        assert_eq!(deep_link_to_path("https://evil.example/room/15"), None);
+        assert_eq!(deep_link_to_path("not a url"), None);
+    }
 }
 
 // Build a system-tray icon with Show / Quit menu items. Left-click focuses

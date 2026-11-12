@@ -339,6 +339,12 @@
     // LC-828 / LC-829 / LC-830: how much the glyph swells by the top of its rise (2.4x-3.0x),
     // randomised so a burst is not a row of identical balloons.
     el.style.setProperty('--lc-grow', (2.4 + Math.random() * 0.6).toFixed(2));
+    // LC-1167: the glyph rises by the layer's height. The keyframe reads this as
+    // a plain pixel custom property rather than the container-query unit `cqh`,
+    // which is unsupported on Safari < 16 (the macOS 12 desktop webview) and was
+    // silently dropping the rise + grow there (the emoji just appeared and
+    // faded). clientHeight is a snapshot, fine for a ~3.5s float.
+    el.style.setProperty('--lc-react-h', (layer.clientHeight || 320) + 'px');
     var done = false;
     function rm() { if (done) return; done = true; if (el.parentNode) el.parentNode.removeChild(el); }
     el.addEventListener('animationend', function (ev) { if (ev.target === el) rm(); });

@@ -9,8 +9,15 @@
 # runs `bun test` in the agent's Dockerfile test stage and fails the build (and
 # thus this job) on any test failure. LC-841 adds the `typecheck` stage beside
 # it: the tests never import the LiveKit SDK, so agent.ts could (and did) ship
-# with type errors against it. Path-filtered so it only fires on agent changes
-# and never gates unrelated PRs.
+# with type errors against it.
+#
+# LC-1128: the pull_request trigger carries no `paths` filter (STD-3.1
+# forbids one: Forgejo drops the whole workflow when it does not match and a
+# required check never reports). Instead, the `classify-diff` job gates
+# `agent-test` on `common`'s shared classifier (STD-3.1/STD-3.2, PC-134), so a
+# docs-only or comments-only PR still reports this check, as `skipped`,
+# instead of leaving it pending. The `push` trigger keeps its `paths` filter;
+# STD-3.1 only concerns the `pull_request` trigger.
 name: Agent check
 
 on:
@@ -23,13 +30,26 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - "services/transcription-agent/**"
-      - ".forgejo/workflows/agent-check.yml"
 
 jobs:
+  classify-diff:
+    name: classify diff
+    # MEDIUM: classify-diff runs `nu` against the diff, no compile.
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_MEDIUM }}
+    outputs:
+      result: ${{ steps.classify-diff.outputs.result }}
+    steps:
+      - name: Clone the repository
+        uses: https://code.forgejo.org/actions/checkout@v5
+
+      - name: Classify diff
+        id: classify-diff
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/classify-diff@ebf8abfad73f1cff915e78d0d4358c7dc815bffd # main
+
   agent-test:
     name: transcription agent (bun test)
+    needs: classify-diff
+    if: needs.classify-diff.outputs.result == 'code'
     # HEAVY: runs `docker buildx build` (bun test + typecheck stages).
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_HEAVY }}
 

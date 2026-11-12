@@ -422,7 +422,10 @@ pub fn stage_extract(zip_path: &Path, staged_dir: &Path) -> Result<(), AppError>
         let mut file = archive
             .by_index(i)
             .map_err(|e| AppError::Internal(format!("zip read: {e}")))?;
-        let name = file.name().to_string();
+        let name = file
+            .name()
+            .map_err(|e| AppError::Internal(format!("zip name: {e}")))?
+            .to_string();
         // Defend against absolute paths and `..` traversal so a
         // malicious archive cannot write outside `staged_dir`.
         if name.starts_with('/')

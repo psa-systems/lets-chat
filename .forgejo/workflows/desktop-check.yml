@@ -3,10 +3,17 @@
 # LC-997: pre-merge fmt + clippy + tests for the desktop crate. check.yml
 # deliberately skips desktop (its GTK/WebKit toolchain is heavy), and
 # build-desktop-linux.yml only runs on push to main / release, so a desktop
-# regression could merge unseen. Like agent-check.yml this is path-filtered, so
-# server-only PRs never pay for it. The work runs inside `docker buildx build`
+# regression could merge unseen. The work runs inside `docker buildx build`
 # (context shipped, no bind mount) because ./dev/cargo-desktop cannot run on
 # this runner; see ci-build/Dockerfile.desktop-check.
+#
+# LC-1128: the pull_request trigger carries no `paths` filter (STD-3.1
+# forbids one: Forgejo drops the whole workflow when it does not match and a
+# required check never reports). Instead, the `classify-diff` job gates
+# `desktop-check` on `common`'s shared classifier (STD-3.1/STD-3.2, PC-134),
+# so a docs-only or comments-only PR still reports this check, as `skipped`,
+# instead of leaving it pending. The `push` trigger keeps its `paths` filter;
+# STD-3.1 only concerns the `pull_request` trigger.
 name: Desktop check
 
 on:
@@ -21,15 +28,26 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - "desktop/**"
-      - "ci-build/Dockerfile.desktop-check"
-      - ".dockerignore"
-      - ".forgejo/workflows/desktop-check.yml"
 
 jobs:
+  classify-diff:
+    name: classify diff
+    # MEDIUM: classify-diff runs `nu` against the diff, no compile.
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_MEDIUM }}
+    outputs:
+      result: ${{ steps.classify-diff.outputs.result }}
+    steps:
+      - name: Clone the repository
+        uses: https://code.forgejo.org/actions/checkout@v5
+
+      - name: Classify diff
+        id: classify-diff
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/classify-diff@ebf8abfad73f1cff915e78d0d4358c7dc815bffd # main
+
   desktop-check:
     name: desktop (fmt + clippy + tests)
+    needs: classify-diff
+    if: needs.classify-diff.outputs.result == 'code'
     # HEAVY: runs `docker buildx build`, which compiles the desktop crate.
     runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_HEAVY }}
 

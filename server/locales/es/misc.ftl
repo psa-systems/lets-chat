@@ -183,7 +183,6 @@ voice-jump-live = Ir a lo último
 voice-transcript-search-placeholder = Buscar en la transcripción
 voice-transcript-search-label = Buscar en la transcripción en vivo
 voice-transcript-matches = coincidencias
-voice-transcript-search-clear = Borrar búsqueda
 # LC-1123: chat de texto dentro de la llamada.
 voice-chat-label = Chat
 voice-chat-tip = Abrir chat
