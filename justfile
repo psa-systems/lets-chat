@@ -336,15 +336,17 @@ build-desktop-windows:
 build-desktop-mac:
     cd desktop && cargo tauri build --bundles app,dmg
 
-# LC-1163: identical to build-desktop-mac but bakes the production server
+# LC-1163/LC-1171: identical to build-desktop-mac but bakes the production server
 # (https://chat.psa.systems) as the installed app's default via
 # LETS_CHAT_DEFAULT_SERVER_URL (config.rs reads it through option_env!), matching
-# what publish-release.yml bakes into the Windows/Linux release installers. Use
-# this for the .dmg you attach to a release so it can never be a staging build;
-# plain build-desktop-mac leaves the localhost default for local testing. Keep
-# the URL in sync with the three workflows' DESKTOP_RELEASE_SERVER_URL.
+# what the CI builds bake into the Windows/Linux installers. Use this for the
+# .dmg you upload to the PRIVATE package registry (dev.a8n.run/psa-systems-private,
+# generic/lets-chat/<version>/) so it can never be a staging build; it is not
+# attached to the public release page. Plain build-desktop-mac leaves the
+# localhost default for local testing. Keep the URL in sync with the three
+# workflows' DESKTOP_RELEASE_SERVER_URL.
 #
-# Build the production macOS .app + .dmg to attach to a release (LC-1163).
+# Build the production macOS .app + .dmg for the private registry (LC-1171).
 [group('build')]
 build-desktop-mac-release:
     cd desktop && LETS_CHAT_DEFAULT_SERVER_URL="https://chat.psa.systems" cargo tauri build --bundles app,dmg
