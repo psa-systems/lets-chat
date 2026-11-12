@@ -296,11 +296,34 @@
       you.textContent = window.__lcS('voiceYou', 'You');
       name.appendChild(you);
     }
+    // LC-1174: viewer-local expand/minimize control. Clicking it makes this tile
+    // the stage on the local screen (and picks which share wins when several are
+    // live); clicking again restores the auto layout. Purely client-side - the
+    // choice is never sent to peers. Hidden until the tile is hovered/focused
+    // (and only while the grid carries video or a share; see main.css).
+    var focusBtn = document.createElement('button');
+    focusBtn.type = 'button';
+    focusBtn.className = 'lc-voice-focus-btn';
+    focusBtn.setAttribute('data-lc-voice-focus-btn', '');
+    focusBtn.setAttribute('aria-pressed', 'false');
+    focusBtn.setAttribute('aria-label', window.__lcS('voiceFocusTile', 'Expand tile'));
+    // Two glyphs toggled by the tile's [data-lc-focus] state (CSS): arrows out
+    // to expand, arrows in to minimize.
+    focusBtn.innerHTML =
+      '<svg class="lc-voice-focus-expand" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M4 4h5a1 1 0 010 2H6.41l3.3 3.29a1 1 0 11-1.42 1.42L5 7.41V10a1 1 0 11-2 0V5a1 1 0 011-1zm12 12h-5a1 1 0 010-2h2.59l-3.3-3.29a1 1 0 111.42-1.42L15 12.59V10a1 1 0 112 0v5a1 1 0 01-1 1z"/></svg>' +
+      '<svg class="lc-voice-focus-collapse" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M9 5v2.59L5.71 4.29A1 1 0 004.29 5.71L7.59 9H5a1 1 0 000 2h5a1 1 0 001-1V5a1 1 0 00-2 0zm2 10v-2.59l3.29 3.3a1 1 0 001.42-1.42L12.41 11H15a1 1 0 000-2h-5a1 1 0 00-1 1v5a1 1 0 002 0z"/></svg>';
+    focusBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (tile.hasAttribute('data-lc-focus')) setFocus(null);
+      else setFocus(userId);
+    });
     tile.appendChild(video);
     tile.appendChild(avatar);
     tile.appendChild(mute);
     tile.appendChild(screen);
     tile.appendChild(name);
+    tile.appendChild(focusBtn);
     g.appendChild(tile);
     updateWaiting();
   }
@@ -428,9 +451,41 @@
     clearScreenRx(userId); // LC-1129: a leaving peer cancels its blackout check
     var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
     if (t) t.remove();
+    syncFocus(); // LC-1174: drop the stage class if the focused tile just left
     updateWaiting();
   }
   function cssEscape(s) { return String(s).replace(/["\\]/g, '\\$&'); }
+
+  // LC-1174: viewer-local tile focus. setFocus(uid) promotes one tile to the
+  // stage on THIS viewer's screen (overriding the sharer-driven data-screen auto
+  // layout so the viewer can pick which share, or camera, fills the dock);
+  // setFocus(null) restores the auto layout. The choice never leaves the client.
+  function setFocus(userId) {
+    var g = grid();
+    if (!g) return;
+    Array.prototype.forEach.call(g.querySelectorAll('[data-lc-focus]'), function (t) {
+      t.removeAttribute('data-lc-focus');
+    });
+    var target = userId && g.querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
+    if (target) target.setAttribute('data-lc-focus', '');
+    syncFocus();
+  }
+  // Toggle the grid stage class + each focus button's label/pressed state from
+  // the DOM, so removeTile / replaceChildren can leave the attributes authoritative.
+  function syncFocus() {
+    var g = grid();
+    if (!g) return;
+    var focused = g.querySelector('[data-lc-focus]');
+    g.classList.toggle('lc-voice-grid--focus', !!focused);
+    Array.prototype.forEach.call(g.querySelectorAll('[data-lc-voice-focus-btn]'), function (btn) {
+      var tile = btn.closest('[data-lc-voice-tile]');
+      var on = !!(tile && tile.hasAttribute('data-lc-focus'));
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.setAttribute('aria-label', on
+        ? window.__lcS('voiceUnfocusTile', 'Minimize tile')
+        : window.__lcS('voiceFocusTile', 'Expand tile'));
+    });
+  }
 
   // LC-493: a huddle root ([data-lc-huddle]) stays hidden until the viewer is
   // on the line OR someone else is (so an idle group room shows nothing but the
@@ -1157,7 +1212,7 @@
       wsSend({ type: 'voice_leave', room_id: cfg.roomId });
       removeTile(cfg.selfId);
       var gs = grid();
-      if (gs) gs.replaceChildren();
+      if (gs) { gs.replaceChildren(); gs.classList.remove('lc-voice-grid--focus'); } // LC-1174
       joined = false;
       var sss = q('[data-lc-voice-screen]');
       if (sss) { setLabel(sss, window.__lcS('callShareScreen', 'Share screen')); sss.setAttribute('aria-pressed', 'false'); }
@@ -1182,7 +1237,7 @@
     }
     removeTile(cfg.selfId);
     var g = grid();
-    if (g) g.replaceChildren();
+    if (g) { g.replaceChildren(); g.classList.remove('lc-voice-grid--focus'); } // LC-1174
     joined = false;
     var ss = q('[data-lc-voice-screen]');
     if (ss) { setLabel(ss, window.__lcS('callShareScreen', 'Share screen')); ss.setAttribute('aria-pressed', 'false'); }
@@ -1961,6 +2016,9 @@
   window.LetsChatVoice = {
     leave: function () { if (joined) leave(); },
     isJoined: function () { return joined; },
+    // LC-1174: viewer-local tile focus (expand/minimize). Exposed so the per-tile
+    // button and unit tests can drive it; pass null to restore the auto layout.
+    setFocus: setFocus,
     // LC-1154: pure guard + diagnostic summarizers, exported for unit testing.
     shouldAutoIceRestart: shouldAutoIceRestart,
     summarizeStats: summarizeStats,

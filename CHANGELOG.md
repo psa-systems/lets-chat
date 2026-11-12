@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Added
+
+- **You can now expand any call tile to focus it, and pick which screen share to watch (LC-1174).** During a call, each participant tile has an expand button (shown on hover or keyboard focus): click it to blow that tile up to fill the call area on your screen and shrink the rest into a filmstrip, and minimize it to go back to the automatic layout. This also lets you choose which share to watch when more than one person is sharing at once - previously every share was enlarged with no way to pick one. The choice is yours alone and is not sent to anyone else, so each person can focus on whatever they want. Works in the room huddle, the voice-channel page, and the pop-out / floating call window.
+
 ### Fixed
 
 - **A stopped screen share no longer leaves a frozen frame in the sharer's tile (LC-1172).** When someone stopped sharing their screen, their call tile could keep showing the last frozen frame instead of reverting to their avatar or camera, because some browsers leave the stopped video track live-but-frozen on the receiver. The tile now clears that stale frame as soon as the "stopped sharing" signal arrives (and re-shows their camera if they switch to one).

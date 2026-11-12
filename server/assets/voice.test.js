@@ -574,3 +574,47 @@ test('LC-1154: summarizeStats + labels read route, frames, and failure cause', (
   // No video stats at all -> frames ?/? (still honest, but now the ONLY ?/? case).
   assert.equal(v.framesLabel(v.summarizeStats([])), 'frames ?/?');
 });
+
+// LC-1174: viewer-local tile focus. setFocus promotes one tile to the stage on
+// this viewer's screen and suspends the sharer-driven auto layout; the choice
+// never goes on the wire. The per-tile button drives the same entry point (not
+// exercised here: the DOM stub's addEventListener is a no-op).
+test('LC-1174: setFocus stages one tile and setFocus(null) restores the auto layout', () => {
+  const h = joined();
+  const grid = h.dock.querySelector('[data-lc-voice-grid]');
+  h.sfuHooks().addTile('u2', 'Bob');
+  h.sfuHooks().addTile('u3', 'Cara');
+
+  h.voice.setFocus('u2');
+  assert.equal(grid.classList.contains('lc-voice-grid--focus'), true, 'the grid enters focus mode');
+  assert.equal(grid.querySelector('[data-lc-voice-tile="u2"]').hasAttribute('data-lc-focus'), true, 'u2 is the stage');
+  assert.equal(grid.querySelectorAll('[data-lc-focus]').length, 1, 'exactly one tile is focused');
+  // The focus button reflects the state for the screen reader.
+  const btn = grid.querySelector('[data-lc-voice-tile="u2"]').querySelector('[data-lc-voice-focus-btn]');
+  assert.equal(btn.getAttribute('aria-pressed'), 'true');
+
+  // Focusing another tile moves the stage, it does not add a second one.
+  h.voice.setFocus('u3');
+  assert.equal(grid.querySelector('[data-lc-voice-tile="u2"]').hasAttribute('data-lc-focus'), false, 'u2 released');
+  assert.equal(grid.querySelector('[data-lc-voice-tile="u3"]').hasAttribute('data-lc-focus'), true, 'u3 is the stage');
+  assert.equal(grid.querySelectorAll('[data-lc-focus]').length, 1);
+
+  h.voice.setFocus(null);
+  assert.equal(grid.classList.contains('lc-voice-grid--focus'), false, 'focus mode cleared');
+  assert.equal(grid.querySelectorAll('[data-lc-focus]').length, 0, 'no tile stays focused');
+
+  // Nothing about this left the client.
+  assert.equal(h.sent.filter((f) => /focus/i.test(f.type || '')).length, 0, 'focus is never sent to peers');
+});
+
+test('LC-1174: a focused peer leaving drops the grid out of focus mode', () => {
+  const h = joined();
+  const grid = h.dock.querySelector('[data-lc-voice-grid]');
+  h.sfuHooks().addTile('u2', 'Bob');
+  h.voice.setFocus('u2');
+  assert.equal(grid.classList.contains('lc-voice-grid--focus'), true, 'precondition: focused on u2');
+
+  h.sfuHooks().removeTile('u2');
+  assert.equal(grid.classList.contains('lc-voice-grid--focus'), false, 'the stage class is dropped with the tile');
+  assert.equal(grid.querySelectorAll('[data-lc-focus]').length, 0);
+});
