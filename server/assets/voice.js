@@ -1960,12 +1960,24 @@
       // live screen share (the black-out bug); gate on identity directly since
       // the `sfu` flag is unreliable in this bus echo.
       if (!(cfg && userId === cfg.selfId)) {
-        // LC-1110: re-derive the mesh peer's bound stream so the screen track
-        // shows on start (bug C). bindRemoteVideo is a no-op without a peers[]
-        // entry (an SFU tile has none), so always run updateTileMedia too - it
-        // reverts a frozen last frame on stop (bug D) and covers SFU tiles.
-        bindRemoteVideo(userId);
-        updateTileMedia(userId);
+        if (payload === '1') {
+          // LC-1110: on START, re-derive the mesh peer's bound stream so a screen
+          // track that arrived on a renegotiation whose ontrack we already drained
+          // still shows (bug C). bindRemoteVideo ends in updateTileMedia.
+          bindRemoteVideo(userId);
+        } else {
+          // LC-1155: on STOP, do NOT re-derive. applyScreen() has already cleared
+          // this tile (LC-1172 force-clear). Re-deriving here would re-pick the
+          // peer's still-live-but-frozen screen track from remoteStream - the mesh
+          // keeps the SAME track object through a replaceTrack(null) stop, so the
+          // track is often live (and, on some engines, not even muted), and
+          // bindRemoteVideo would re-add that frozen frame, undoing the clear. This
+          // was the mesh-only freeze (SFU has no peers[] entry, so bindRemoteVideo
+          // was already a no-op there, which is why LC-1172 looked fixed on SFU). A
+          // camera the peer swaps back in returns via the track's own onunmute ->
+          // bindRemoteVideo. updateTileMedia keeps SFU tiles covered.
+          updateTileMedia(userId);
+        }
       }
       return;
     }
