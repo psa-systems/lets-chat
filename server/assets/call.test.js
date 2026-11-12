@@ -11,7 +11,8 @@ const vm = require('node:vm');
 
 const { El } = require('./test_dom.js');
 
-function load(voiceJoined) {
+function load(voiceJoined, opts) {
+  opts = opts || {};
   const src = fs.readFileSync(path.join(__dirname, 'call.js'), 'utf8');
   const root = new El('div');
   root.setAttribute('id', 'lc-call-root');
@@ -45,7 +46,7 @@ function load(voiceJoined) {
       isJoined: () => voiceJoined,
       leave: () => { voiceCalls.push('leave'); voiceJoined = false; },
     },
-    LetsChatDevices: { getUserMedia: pending },
+    LetsChatDevices: { getUserMedia: opts.getUserMedia || pending, applySpeaker: () => {} },
     __lcS: (k, fb) => fb,
     __lcWS: { send: (s) => { try { wsSends.push(JSON.parse(s)); } catch (e) { wsSends.push(s); } } },
     __lcNotify: (kind, msg) => notifies.push({ kind, msg }),
@@ -69,8 +70,8 @@ function load(voiceJoined) {
   const sandbox = {
     window,
     document,
-    navigator: { mediaDevices: {} },
-    fetch: pending,
+    navigator: { mediaDevices: { getDisplayMedia: opts.getDisplayMedia || pending } },
+    fetch: opts.fetch || pending,
     MutationObserver: class { observe() {} disconnect() {} },
     CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
     alert: () => {},
@@ -80,6 +81,7 @@ function load(voiceJoined) {
     setInterval,
     clearInterval,
   };
+  if (opts.RTCPeerConnection) sandbox.RTCPeerConnection = opts.RTCPeerConnection;
   sandbox.self = window;
   vm.runInNewContext(src, sandbox);
   const start = (video) => {
@@ -102,7 +104,11 @@ function load(voiceJoined) {
     signalHandler(n);
   };
   const incomingShown = () => !incoming.classList.contains('hidden');
-  return { start, voiceCalls, signal, wsSends, notifies, incomingShown };
+  return {
+    start, voiceCalls, signal, wsSends, notifies, incomingShown,
+    win: window,
+    screenClick: () => controls['[data-lc-call-screen]'](),
+  };
 }
 
 test('LC-839: placing an outgoing call leaves a joined voice channel or huddle first', () => {
@@ -136,4 +142,57 @@ test('LC-1064: an invite while idle still rings and sends no busy decline', () =
     'an idle recipient does not auto-decline',
   );
   assert.equal(h.incomingShown(), true, 'the incoming panel rings');
+});
+
+// LC-1173: a getDisplayMedia failure other than the user cancelling the
+// picker (e.g. missing GStreamer/PipeWire packages on Linux) used to only
+// console.warn, so the share button just did nothing with no clue why.
+test('LC-1173: a getDisplayMedia failure other than cancel notifies the call UI', async () => {
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  const h = load(false, {
+    getUserMedia: () => Promise.resolve({
+      getTracks: () => [],
+      getAudioTracks: () => [],
+      getVideoTracks: () => [],
+    }),
+    fetch: () => Promise.reject(new Error('no ice config')),
+    RTCPeerConnection: class { addTrack() {} },
+    getDisplayMedia: () => Promise.reject(Object.assign(new Error('not found'), { name: 'NotFoundError' })),
+  });
+  h.start(false);           // becomes the outgoing caller once media resolves
+  await tick(); await tick();
+  h.signal('accept');       // peer answers: onAccept() creates the pc
+  await tick();
+
+  h.screenClick();
+  await tick(); await tick();
+
+  const errs = h.notifies.filter((n) => n.kind === 'err');
+  assert.equal(errs.length, 1, 'exactly one error notification');
+  assert.match(errs[0].msg, /Screen sharing failed/);
+});
+
+// LC-1173: the user dismissing the picker (NotAllowedError/AbortError) is not
+// a fault - no notification for that case.
+test('LC-1173: cancelling the screen picker does not notify', async () => {
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  const h = load(false, {
+    getUserMedia: () => Promise.resolve({
+      getTracks: () => [],
+      getAudioTracks: () => [],
+      getVideoTracks: () => [],
+    }),
+    fetch: () => Promise.reject(new Error('no ice config')),
+    RTCPeerConnection: class { addTrack() {} },
+    getDisplayMedia: () => Promise.reject(Object.assign(new Error('cancelled'), { name: 'NotAllowedError' })),
+  });
+  h.start(false);
+  await tick(); await tick();
+  h.signal('accept');
+  await tick();
+
+  h.screenClick();
+  await tick(); await tick();
+
+  assert.equal(h.notifies.length, 0, 'a user cancel is not a fault');
 });

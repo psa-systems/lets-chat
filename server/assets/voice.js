@@ -1816,6 +1816,8 @@
       if (name !== 'NotAllowedError' && name !== 'AbortError') {
         console.warn('voice: getDisplayMedia failed', e);
         voiceDiag('getDisplayMedia failed: ' + name); // LC-1114
+        // LC-1173: a silent failure left Linux users with no clue (missing GStreamer/PipeWire).
+        window.__lcNotify('err', window.__lcS('callScreenshareFailed', 'Screen sharing failed (%error%).').replace('%error%', name));
       }
     });
   }

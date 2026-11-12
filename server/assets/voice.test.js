@@ -68,7 +68,8 @@ function makeVoicePage(roomId) {
 // the swapped <main id="main"> plus the persistent body a floated dock is
 // re-parented into. Document order is real - the page's own dock is inside
 // #main and so precedes a floating panel appended to the body.
-function load() {
+function load(opts) {
+  opts = opts || {};
   const body = new El('body');
   const main = new El('main');
   main.setAttribute('id', 'main');
@@ -145,6 +146,11 @@ function load() {
   const sandbox = {
     window,
     document,
+    navigator: {
+      mediaDevices: {
+        getDisplayMedia: opts.getDisplayMedia || (() => new Promise(() => {})),
+      },
+    },
     localStorage: {
       getItem: (k) => (store.has(k) ? store.get(k) : null),
       setItem: (k, v) => store.set(k, String(v)),
@@ -211,6 +217,7 @@ function load() {
     voice: window.LetsChatVoice,
     popout: window.LetsChatHuddlePopout,
     join: () => controls['[data-lc-voice-join]'](),
+    screenClick: () => controls['[data-lc-voice-screen]'](),
     toasts,
     sfuHooks: () => sfuHooks,
     // Deliver one inbound server frame as a bus node (data-* attributes), the
@@ -349,6 +356,49 @@ test('LC-832: the enclave voice channel page floats too, and its mesh leave rele
   assert.equal(h.body.contains(page), false);
   assert.equal(h.sent.filter((f) => f.type === 'voice_leave').length, 1);
   assert.equal(h.tracks[0].stopped, true, 'the microphone is released');
+});
+
+// LC-1173: a getDisplayMedia failure other than the user cancelling the
+// picker (e.g. missing GStreamer/PipeWire packages on Linux) used to only
+// console.warn + voiceDiag, so the share button just did nothing with no
+// clue why.
+test('LC-1173: a getDisplayMedia failure other than cancel notifies the call UI', async () => {
+  const err = Object.assign(new Error('not found'), { name: 'NotFoundError' });
+  const h = load({ getDisplayMedia: () => Promise.reject(err) });
+  h.main.appendChild(makeVoicePage(7));
+  h.fire('htmx:afterSettle');
+  h.join();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(h.voice.isJoined(), true, 'setup: the mesh call is live');
+
+  h.screenClick();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const errs = h.toasts.filter((t) => t[0] === 'err');
+  assert.equal(errs.length, 1, 'exactly one error notification');
+  assert.match(errs[0][1], /Screen sharing failed/);
+  h.leaveClick(); // voice.js intervals keep the node test runner alive otherwise
+});
+
+// LC-1173: the user dismissing the picker (NotAllowedError/AbortError) is not
+// a fault - no notification for that case.
+test('LC-1173: cancelling the screen picker does not notify', async () => {
+  const err = Object.assign(new Error('cancelled'), { name: 'NotAllowedError' });
+  const h = load({ getDisplayMedia: () => Promise.reject(err) });
+  h.main.appendChild(makeVoicePage(7));
+  h.fire('htmx:afterSettle');
+  h.join();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  h.screenClick();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(h.toasts.length, 0, 'a user cancel is not a fault');
+  h.leaveClick();
 });
 
 test('LC-870: switching enclaves mid-call floats the live dock and marks the new room busy, never leaves', () => {
