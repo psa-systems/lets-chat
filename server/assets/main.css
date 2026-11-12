@@ -4494,7 +4494,7 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-huddle [data-lc-voice-grid]:has(.lc-voice-waiting):not(:has(.lc-voice-tile[data-screen])) {
     grid-template-columns: minmax(0, calc((var(--lc-huddle-h, 14rem) - 0.75rem) * 16 / 9));
 }
-.lc-huddle [data-lc-voice-grid]:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
+.lc-huddle [data-lc-voice-grid]:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
     max-height: calc(var(--lc-huddle-h, 14rem) - 0.75rem);
 }
 /* The handle straddles the dock's top border: a thin hit area with a centered
@@ -4722,8 +4722,8 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-huddle.lc-huddle--float [data-lc-voice-grid]:has(.lc-voice-waiting):not(:has(.lc-voice-tile[data-screen])) {
     grid-template-columns: minmax(0, calc((100cqh - 4.5rem) * 16 / 9));
 }
-.lc-huddle.lc-huddle--popout [data-lc-voice-grid]:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen],
-.lc-huddle.lc-huddle--float [data-lc-voice-grid]:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
+.lc-huddle.lc-huddle--popout [data-lc-voice-grid]:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen],
+.lc-huddle.lc-huddle--float [data-lc-voice-grid]:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
     max-height: calc(100cqh - 4.5rem);
 }
 /* LC-1110: when a pop-out/float also has non-screen participants, cap the shared
@@ -5017,29 +5017,162 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
    the sharing tile spans the full width (forcing a wrap) and the rest flow
    below as a centered filmstrip of small tiles. Placed after the grid rules so
    it wins; the :has() toggles automatically when voice.js sets data-screen. */
-.lc-voice-grid:has(.lc-voice-tile[data-screen]) {
+.lc-voice-grid:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) {
     display: flex;
     flex-wrap: wrap;
     gap: 1rem;
     align-content: flex-start;
     justify-content: center;
 }
-.lc-voice-grid:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
+.lc-voice-grid:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
     flex: 1 1 100%;
     aspect-ratio: 16 / 9;
     max-height: 70vh;
     background: #0b0c0f; /* shared screens read best on a neutral-dark stage */
 }
 /* Don't crop the shared screen - letterbox it instead. */
-.lc-voice-grid:has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] video {
+.lc-voice-grid:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] video {
     object-fit: contain;
 }
-.lc-voice-grid:has(.lc-voice-tile[data-screen]) .lc-voice-tile:not([data-screen]) {
+.lc-voice-grid:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-tile:not([data-screen]) {
     flex: 0 0 clamp(120px, 16vw, 196px);
     aspect-ratio: 16 / 9;
     min-height: 0;
 }
-.lc-voice-grid:has(.lc-voice-tile[data-screen]) .lc-voice-waiting { display: none; }
+.lc-voice-grid:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-waiting { display: none; }
+
+/* ---- LC-1174: viewer-local tile focus ----------------------------------- */
+/* A viewer can expand any tile to the stage on their own screen with the
+   per-tile button (voice.js setFocus). The grid then carries .lc-voice-grid--focus
+   and the chosen tile carries [data-lc-focus]. This mirrors the LC-408 screen
+   stage but is driven by the viewer's choice, and it SUSPENDS the data-screen
+   auto-stage (every rule above is gated :not(.lc-voice-grid--focus)) so the
+   viewer decides which tile fills the dock even when several people share. The
+   choice is never sent to peers. */
+.lc-voice-grid--focus {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-content: flex-start;
+    justify-content: center;
+}
+.lc-voice-grid--focus .lc-voice-tile[data-lc-focus] {
+    order: -1; /* the focused tile leads, whatever its DOM position */
+    flex: 1 1 100%;
+    aspect-ratio: 16 / 9;
+    max-height: 70vh;
+    background: #0b0c0f;
+}
+.lc-voice-grid--focus .lc-voice-tile[data-lc-focus] video { object-fit: contain; }
+.lc-voice-grid--focus .lc-voice-tile:not([data-lc-focus]) {
+    flex: 0 0 clamp(120px, 16vw, 196px);
+    aspect-ratio: 16 / 9;
+    min-height: 0;
+}
+.lc-voice-grid--focus .lc-voice-waiting { display: none; }
+/* In the compact dock and the pop-out/float hosts the stage tile is capped to
+   the available height (as the screen stage is), so the filmstrip stays in view. */
+.lc-huddle [data-lc-voice-grid].lc-voice-grid--focus .lc-voice-tile[data-lc-focus] {
+    max-height: calc(var(--lc-huddle-h, 14rem) - 0.75rem);
+}
+.lc-huddle.lc-huddle--popout [data-lc-voice-grid].lc-voice-grid--focus .lc-voice-tile[data-lc-focus],
+.lc-huddle.lc-huddle--float [data-lc-voice-grid].lc-voice-grid--focus .lc-voice-tile[data-lc-focus] {
+    max-height: calc(100cqh - 4.5rem);
+}
+.lc-huddle.lc-huddle--popout [data-lc-voice-grid].lc-voice-grid--focus:has(.lc-voice-tile:not([data-lc-focus])) .lc-voice-tile[data-lc-focus],
+.lc-huddle.lc-huddle--float [data-lc-voice-grid].lc-voice-grid--focus:has(.lc-voice-tile:not([data-lc-focus])) .lc-voice-tile[data-lc-focus] {
+    max-height: calc(100cqh - 4.5rem - 8rem);
+}
+
+/* The expand/minimize button: top-right of each tile. In an audio-only chip
+   strip it stays out of the layout entirely (focus is meaningless there, and it
+   would be a stray tab stop). Once the dock carries a camera or a share it joins
+   the layout - so keyboard users can tab to it - but stays invisible until the
+   tile is hovered or focused, and is always visible on the focused tile so the
+   way back out is never hidden. */
+.lc-voice-focus-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 11;
+    display: none;        /* audio-only: fully out of the layout (no tab stop) */
+    opacity: 0;           /* in video mode: present but invisible until revealed */
+    pointer-events: none;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0.375rem;
+    background: rgb(0 0 0 / 0.55);
+    color: #fff;
+    cursor: pointer;
+    transition: opacity 0.12s ease;
+}
+.lc-voice-focus-btn:hover { background: rgb(0 0 0 / 0.75); }
+.lc-voice-focus-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.lc-voice-focus-btn svg { width: 1rem; height: 1rem; }
+.lc-voice-focus-btn .lc-voice-focus-collapse { display: none; }
+.lc-voice-tile[data-lc-focus] .lc-voice-focus-btn .lc-voice-focus-expand { display: none; }
+.lc-voice-tile[data-lc-focus] .lc-voice-focus-btn .lc-voice-focus-collapse { display: block; }
+/* Join the layout (tabbable) once the grid shows video or a share, or in focus
+   mode; opacity from the base rule keeps it invisible until revealed below. */
+.lc-voice-grid:has(.lc-voice-tile[data-media="video"], .lc-voice-tile[data-screen]) .lc-voice-focus-btn,
+.lc-voice-grid--focus .lc-voice-focus-btn { display: grid; }
+/* Reveal on hover / keyboard focus, and permanently on the focused tile. These
+   outrank the base opacity:0 (lower specificity), never the display toggle. */
+.lc-voice-tile:hover .lc-voice-focus-btn,
+.lc-voice-tile:focus-within .lc-voice-focus-btn,
+.lc-voice-focus-btn:focus-visible,
+.lc-voice-grid--focus .lc-voice-tile[data-lc-focus] .lc-voice-focus-btn {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* ---- LC-1175: viewer-local reorder handle ------------------------------- */
+/* Grab handle, top-left of each tile. Same reveal rules as the focus button
+   (out of the layout in the audio chip strip, present-but-invisible otherwise,
+   shown on hover/keyboard focus). touch-action:none so a finger drag reorders
+   instead of scrolling the grid; cursor:grab so it reads as draggable. */
+.lc-voice-reorder-handle {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 11;
+    display: none;
+    opacity: 0;
+    pointer-events: none;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0.375rem;
+    background: rgb(0 0 0 / 0.55);
+    color: #fff;
+    cursor: grab;
+    touch-action: none;
+    transition: opacity 0.12s ease;
+}
+.lc-voice-reorder-handle:hover { background: rgb(0 0 0 / 0.75); }
+.lc-voice-reorder-handle:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.lc-voice-reorder-handle svg { width: 1rem; height: 1rem; }
+.lc-voice-grid:has(.lc-voice-tile[data-media="video"], .lc-voice-tile[data-screen]) .lc-voice-reorder-handle,
+.lc-voice-grid--focus .lc-voice-reorder-handle { display: grid; }
+.lc-voice-tile:hover .lc-voice-reorder-handle,
+.lc-voice-tile:focus-within .lc-voice-reorder-handle,
+.lc-voice-reorder-handle:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+/* The tile being dragged: lifted and semi-transparent, and grabbing. */
+.lc-voice-tile--dragging {
+    opacity: 0.6;
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+.lc-voice-tile--dragging .lc-voice-reorder-handle { cursor: grabbing; }
+
 /* "Presenting" badge, shown on a tile that is the active screen share. */
 .lc-voice-screen-badge {
     display: none;

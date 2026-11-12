@@ -8,6 +8,16 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Added
+
+- **You can now expand any call tile to focus it, and pick which screen share to watch (LC-1174).** During a call, each participant tile has an expand button (shown on hover or keyboard focus): click it to blow that tile up to fill the call area on your screen and shrink the rest into a filmstrip, and minimize it to go back to the automatic layout. This also lets you choose which share to watch when more than one person is sharing at once - previously every share was enlarged with no way to pick one. The choice is yours alone and is not sent to anyone else, so each person can focus on whatever they want. Works in the room huddle, the voice-channel page, and the pop-out / floating call window.
+
+### Fixed
+
+- **A teammate's tile no longer keeps a frozen frame after they stop screen-sharing, in a mesh call (LC-1155).** The LC-1172 fix cleared the frozen frame for SFU calls but not for peer-to-peer (mesh) calls: right after clearing the tile, the client re-derived the peer's video from the connection and re-showed the same still-live-but-frozen screen track, putting the frozen frame straight back. The client no longer re-derives on a stop signal, so the tile reliably drops to the avatar (and a camera the teammate switches to still appears).
+- **A stopped screen share no longer leaves a frozen frame in the sharer's tile (LC-1172).** When someone stopped sharing their screen, their call tile could keep showing the last frozen frame instead of reverting to their avatar or camera, because some browsers leave the stopped video track live-but-frozen on the receiver. The tile now clears that stale frame as soon as the "stopped sharing" signal arrives (and re-shows their camera if they switch to one).
+- **The live-transcription audio upload now backs off instead of hammering the server (LC-1172).** When the server rejected a transcription audio clip - rate-limited (HTTP 429) or the transcript was gone (404) - the client kept uploading the next clip anyway, filling the console with repeated errors and adding load. It now pauses uploads for a cooldown after a rate-limit, and stops uploading to a transcript that has gone away.
+
 ## [v0.12.0] - 2026-11-11
 
 ### Added
