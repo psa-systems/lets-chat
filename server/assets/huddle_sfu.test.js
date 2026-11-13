@@ -211,3 +211,29 @@ test('LC-840: a second session is not confused by the first room disconnecting l
   assert.deepEqual(second.calls, []);
   assert.equal(t.sfu.active(), true, 'the live session is untouched');
 });
+
+// LC-1166: a real screen-share failure (not a user-cancel) must propagate so the
+// call UI can surface it. A Linux user missing GStreamer/PipeWire hit this and
+// toggleScreen used to swallow it, leaving the share button apparently dead.
+test('LC-1166: a non-cancel screen-share failure rethrows out of toggleScreen', async () => {
+  const t = load();
+  const h = videoHooks();
+  await t.sfu.start({ roomId: 7 }, h);
+  const err = Object.assign(new Error('no portal'), { name: 'NotFoundError' });
+  t.rooms[0].localParticipant.setScreenShareEnabled = async () => { throw err; };
+
+  await assert.rejects(() => t.sfu.toggleScreen(), /no portal/);
+});
+
+// LC-1166: the user dismissing the OS picker (NotAllowedError/AbortError) is not
+// a fault - it is swallowed and the state stays off.
+test('LC-1166: a user-cancel of the screen picker is swallowed, not rethrown', async () => {
+  const t = load();
+  const h = videoHooks();
+  await t.sfu.start({ roomId: 7 }, h);
+  const err = Object.assign(new Error('cancelled'), { name: 'NotAllowedError' });
+  t.rooms[0].localParticipant.setScreenShareEnabled = async () => { throw err; };
+
+  const result = await t.sfu.toggleScreen();
+  assert.equal(result, false, 'sharing stays off and no error propagates');
+});
