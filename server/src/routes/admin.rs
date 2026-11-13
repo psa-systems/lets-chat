@@ -3973,20 +3973,21 @@ pub async fn post_bridges(
         .await?
         .into_response());
     };
-    let bot_username = form.bot_username.trim();
+    // LC-1179: a bridge bot handle is written to users.username like any
+    // other handle, so it must pass the same validation `post_bots` applies
+    // (non-empty, <= MAX_USERNAME_CHARS, allowed charset) - previously this
+    // path only rejected an empty string, so an admin POST could store an
+    // over-length or illegal handle the cap is meant to forbid.
+    let bot_username = match crate::models::user::validate_handle(&form.bot_username) {
+        Ok(h) => h,
+        Err(e) => {
+            return Ok(render_bridges_page(&state, &actor, None, None, Some(e))
+                .await?
+                .into_response());
+        }
+    };
     let kind = form.kind.trim();
     let config = form.config.trim();
-    if bot_username.is_empty() {
-        return Ok(render_bridges_page(
-            &state,
-            &actor,
-            None,
-            None,
-            Some("Bot username is required.".into()),
-        )
-        .await?
-        .into_response());
-    }
     // v1 ships Matrix only. The schema accepts any kind (TEXT, no CHECK), so
     // adding IRC/XMPP later is a code-level loosening; the gate is here.
     if kind != "matrix" {
@@ -4040,7 +4041,7 @@ pub async fn post_bridges(
         }
     }
     // 1. Mint bot user.
-    let bot_id = match db::auth::create_bot(&state.auth, bot_username).await {
+    let bot_id = match db::auth::create_bot(&state.auth, &bot_username).await {
         Ok(id) => id,
         Err(db::auth::CreateBotError::Reserved) => {
             return Ok(render_bridges_page(
@@ -4118,7 +4119,7 @@ pub async fn post_bridges(
         "bridge_create",
         &bot_id,
         &actor.id,
-        Some(bot_username),
+        Some(bot_username.as_str()),
         None,
         Some(kind),
     )
