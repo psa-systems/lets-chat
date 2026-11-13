@@ -1771,6 +1771,15 @@
         // requests. announceScreen also sets selfSharing.
         announceScreen(on);
         setScreenBtn();
+      }).catch(function (e) {
+        // LC-1166: a real SFU screen-share failure (not a user-cancel - those are
+        // swallowed in huddle_sfu) used to vanish silently. Surface it the way the
+        // mesh path does (LC-1173), so e.g. a Linux user missing GStreamer/PipeWire
+        // sees why. The shared callScreenshareFailed string carries the Linux hint.
+        var name = e && e.name ? e.name : 'error';
+        console.warn('voice: SFU screen share failed', e);
+        voiceDiag('screen share failed: ' + name, 'error');
+        window.__lcNotify('err', window.__lcS('callScreenshareFailed', 'Screen sharing failed (%error%).').replace('%error%', name));
       });
       return;
     }

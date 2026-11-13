@@ -128,6 +128,9 @@ function load(opts) {
       // LC-840: keep the hooks so a test can fire onDisconnected as the SFU would.
       start: (_cfg, hooks) => { sfuCalls.push('start'); sfuHooks = hooks; return Promise.resolve(true); },
       stop: () => { sfuCalls.push('stop'); },
+      // LC-1166: the SFU screen toggle. `sfuScreenError` makes it reject (a real
+      // failure, e.g. Linux missing GStreamer/PipeWire); otherwise it resolves.
+      toggleScreen: () => (opts.sfuScreenError ? Promise.reject(opts.sfuScreenError) : Promise.resolve(true)),
     },
     __lcToast: (kind, msg) => { toasts.push([kind, msg]); },
     __lcNotify: (kind, msg) => { toasts.push([kind, msg]); },
@@ -850,6 +853,33 @@ test('LC-1166: the desktop app shows a macOS-specific screen-share message', () 
   const errs = h.toasts.filter((t) => t[0] === 'err');
   assert.equal(errs.length, 1, 'exactly one error notification');
   assert.match(errs[0][1], /macOS 13/);
+
+  h.voice.leave();
+});
+
+// LC-1166: on a group (SFU) call, a real screen-share failure (not a user-cancel)
+// used to be swallowed in huddle_sfu.toggleScreen with no toast and no voice-log
+// entry - the Linux "missing GStreamer/PipeWire" case reported as "does nothing".
+// voice.js now surfaces an SFU toggle rejection the way the mesh path does.
+test('LC-1166: an SFU screen-share failure surfaces a toast and a voice-log entry', async () => {
+  const err = Object.assign(new Error('no portal'), { name: 'NotFoundError' });
+  const h = load({ sfuScreenError: err }); // getDisplayMedia present; the LiveKit toggle fails
+  const dock = makeDock(7); // SFU
+  h.main.appendChild(dock);
+  h.fire('htmx:afterSettle');
+  h.join();
+  assert.equal(h.voice.isJoined(), true, 'setup: the SFU call is live');
+
+  h.screenClick();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const errs = h.toasts.filter((t) => t[0] === 'err');
+  assert.equal(errs.length, 1, 'exactly one error notification');
+  assert.match(errs[0][1], /Screen sharing failed/);
+  const diag = h.sent.filter((f) => f.type === 'voice_diag');
+  assert.ok(diag.some((f) => /screen share failed/.test(f.detail || '') && f.level === 'error'),
+    'the failure is recorded in the voice log');
 
   h.voice.leave();
 });
