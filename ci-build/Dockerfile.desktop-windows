@@ -8,10 +8,12 @@
 # the hood) talks to WebView2 via Windows-RT bindings (the webview2-com
 # crate); tauri-build also embeds a Windows resource through `embed-resource`,
 # which shells out to `x86_64-w64-mingw32-windres`. No extra build-time
-# libraries beyond those provided by the base image are required. The
-# runtime artifact is the single binary at
-# /build/target/x86_64-pc-windows-gnu/release/lets-chat-desktop.exe, which
-# the CI workflow extracts via `docker create` + `docker cp`.
+# libraries beyond those provided by the base image are required. The runtime
+# artifacts are the binary at
+# /build/target/x86_64-pc-windows-gnu/release/lets-chat-desktop.exe and, beside
+# it, WebView2Loader.dll (LC-1176 - the mingw target links the loader
+# dynamically, so the DLL must travel with the exe). The CI workflow extracts
+# both via `docker create` + `docker cp`.
 
 FROM ghcr.io/niceguyit/rust-builder-glibc-windows:v1.2.0-rust1.98.1-trixie AS builder
 ARG GIT_HASH=unknown
@@ -49,3 +51,16 @@ WORKDIR /build
 COPY . .
 
 RUN cargo build --release -p lets-chat-desktop --target x86_64-pc-windows-gnu
+
+# LC-1176: the x86_64-pc-windows-gnu (mingw) target links WebView2Loader
+# DYNAMICALLY - the static WebView2LoaderStatic.lib the webview2-com-sys crate
+# ships is MSVC-only - so the runtime exe needs WebView2Loader.dll next to it or
+# it dies at launch with "WebView2Loader.dll was not found". The crate stages the
+# correct-arch DLL under its build OUT_DIR; copy it beside the exe so the release
+# workflow extracts both. Fail the build if it is not where we expect rather than
+# silently ship an exe that cannot run (the bug this fixes).
+RUN set -eux; \
+    dll="$(find /build/target/x86_64-pc-windows-gnu/release/build -name WebView2Loader.dll | head -n1)"; \
+    test -n "$dll"; \
+    cp "$dll" /build/target/x86_64-pc-windows-gnu/release/WebView2Loader.dll; \
+    ls -l /build/target/x86_64-pc-windows-gnu/release/WebView2Loader.dll

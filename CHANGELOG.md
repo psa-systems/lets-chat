@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Windows desktop app no longer fails to launch with "WebView2Loader.dll was not found" (LC-1176).** The Windows build is cross-compiled from Linux with the MinGW toolchain, which links the WebView2 loader dynamically, so the app needs `WebView2Loader.dll` next to its executable - and the installer and portable zip were not shipping it, so the app would not start. Both now include the DLL beside the executable (the installer writes it into the program folder; the portable zip extracts it alongside the exe). No separate download is needed, and the self-updater is unaffected (it replaces the exe in place next to the already-installed DLL). Windows builds remain unsigned for now, so SmartScreen will still warn until code signing lands.
+
 ### Added
 
 - **You can now expand any call tile to focus it, and pick which screen share to watch (LC-1174).** During a call, each participant tile has an expand button (shown on hover or keyboard focus): click it to blow that tile up to fill the call area on your screen and shrink the rest into a filmstrip, and minimize it to go back to the automatic layout. This also lets you choose which share to watch when more than one person is sharing at once - previously every share was enlarged with no way to pick one. The choice is yours alone and is not sent to anyone else, so each person can focus on whatever they want. Works in the room huddle, the voice-channel page, and the pop-out / floating call window.
