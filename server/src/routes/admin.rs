@@ -3920,6 +3920,7 @@ async fn render_bridges_page(
         .collect();
     let page = BridgesPage {
         user,
+        max_handle_len: crate::models::user::MAX_USERNAME_CHARS,
         sidebar_categories: &sidebar_categories,
         sidebar_starred_rooms: &sidebar_starred_rooms,
         sidebar_starred_peers: &sidebar_starred_peers,
