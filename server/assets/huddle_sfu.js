@@ -423,7 +423,12 @@
     var lp = session.room.localParticipant;
     var on = !session.sharing;
     try { await lp.setScreenShareEnabled(on); } catch (e) {
-      // User-cancel from the picker lands here too; nothing to undo.
+      // User-cancel from the picker (NotAllowedError/AbortError) is not a fault;
+      // swallow it and leave the state unchanged. LC-1166: anything else is a
+      // real failure (e.g. Linux missing GStreamer/PipeWire) and used to vanish
+      // here with no toast and no voice-log entry - rethrow so voice.js surfaces it.
+      var name = e && e.name ? e.name : '';
+      if (name !== 'NotAllowedError' && name !== 'AbortError') throw e;
       return session.sharing;
     }
     session.sharing = on;

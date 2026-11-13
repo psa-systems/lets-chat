@@ -31,6 +31,7 @@ js-call-no-mic = No se pudo acceder al micrófono.
 # LC-764: se muestra cuando un cambio de silencio no logra cambiar la pista del microfono.
 js-call-mic-toggle-failed = No se pudo cambiar tu micrófono. Intenta silenciar y activar de nuevo.
 js-call-no-screenshare = Tu navegador no admite compartir pantalla.
+js-call-no-screenshare-desktop = Compartir pantalla no está disponible en la aplicación de escritorio en esta versión de macOS (requiere macOS 13 o posterior). Abre Let’s Chat en un navegador web para compartir tu pantalla.
 # LC-1173: %error% es el nombre del error de getDisplayMedia. En Linux suele faltar GStreamer/PipeWire.
 js-call-screenshare-failed = Error al compartir pantalla (%error%). En Linux, instala los paquetes de GStreamer y PipeWire indicados en "Linux screen sharing prerequisites" de la documentacion de funciones.
 # LC-1138: se muestra cuando una pantalla compartida sigue en negro para este
