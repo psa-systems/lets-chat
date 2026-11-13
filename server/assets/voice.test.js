@@ -147,7 +147,9 @@ function load(opts) {
     window,
     document,
     navigator: {
-      mediaDevices: {
+      // LC-1166: `noScreenshare` drops getDisplayMedia entirely, as the macOS <= 12
+      // desktop webview does (it exposes no screen capture at all).
+      mediaDevices: opts.noScreenshare ? {} : {
         getDisplayMedia: opts.getDisplayMedia || (() => new Promise(() => {})),
       },
     },
@@ -803,4 +805,51 @@ test('LC-1155: a mesh peer stopping a screen share clears the tile, not re-adds 
   assert.equal(tile.hasAttribute('data-screen'), false, 'the share pin is cleared');
 
   h.voice.leave(); // stop the mesh speaking/quality intervals so the test process exits
+});
+
+// LC-1166: the macOS <= 12 desktop webview exposes no getDisplayMedia, so a
+// screen share cannot start. On the SFU path this failed with NO response at
+// all - huddle_sfu.toggleScreen swallowed the LiveKit error, so nothing was
+// shown and nothing was logged. The share control must now respond and log, and
+// must not fall through to the SFU toggle at all.
+test('LC-1166: screen share with no getDisplayMedia responds and logs on the SFU path', () => {
+  const h = load({ noScreenshare: true });
+  const dock = makeDock(7); // SFU
+  h.main.appendChild(dock);
+  h.fire('htmx:afterSettle');
+  h.join();
+  assert.equal(h.voice.isJoined(), true, 'setup: the SFU call is live');
+
+  // Without the guard this reaches the SFU toggleScreen (absent from the stub)
+  // and throws; with it, the control returns after responding.
+  h.screenClick();
+
+  assert.ok(h.toasts.some((t) => t[0] === 'err'), 'the user gets an error notification');
+  const diag = h.sent.filter((f) => f.type === 'voice_diag');
+  assert.ok(
+    diag.some((f) => /getDisplayMedia unavailable/.test(f.detail || '') && f.level === 'error'),
+    'the voice log records the unsupported screen share (the SFU path used to be silent)',
+  );
+  assert.equal(h.voice.isJoined(), true, 'the call is unharmed');
+
+  h.voice.leave();
+});
+
+// LC-1166: inside the desktop app the message is specific (macOS 13+ / use a browser),
+// not the bare "your browser does not support it".
+test('LC-1166: the desktop app shows a macOS-specific screen-share message', () => {
+  const h = load({ noScreenshare: true });
+  const dock = makeDock(7);
+  h.main.appendChild(dock);
+  h.fire('htmx:afterSettle');
+  h.join();
+  h.win.__lcDesktop = true; // the Tauri bridge sets this in the real app
+
+  h.screenClick();
+
+  const errs = h.toasts.filter((t) => t[0] === 'err');
+  assert.equal(errs.length, 1, 'exactly one error notification');
+  assert.match(errs[0][1], /macOS 13/);
+
+  h.voice.leave();
 });

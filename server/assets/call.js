@@ -778,7 +778,14 @@
     if (phase === 'idle' || !localStream) return;
     if (isSharingScreen()) { endScreenShare(); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      window.__lcNotify('err', window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
+      // LC-1166: the macOS <= 12 desktop webview exposes no getDisplayMedia
+      // (added to WKWebView in macOS 13). Give the same clear, desktop-aware
+      // response the huddle call does instead of a bare "not supported".
+      var onDesktop = false;
+      try { onDesktop = !!(window.__lcDesktop || window.__TAURI_INTERNALS__); } catch (e) {}
+      window.__lcNotify('err', onDesktop
+        ? window.__lcS('callNoScreenshareDesktop', 'Screen sharing is not available in the desktop app on this version of macOS (it needs macOS 13 or newer). Open Let’s Chat in a web browser to share your screen.')
+        : window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
       return;
     }
     if (!pc) return;

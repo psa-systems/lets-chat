@@ -1749,6 +1749,20 @@
 
   // Acquire screen capture and route it to every peer.
   function toggleScreen() {
+    // LC-1166: screen capture needs getDisplayMedia, which the macOS <= 12
+    // desktop webview does not expose at all (Apple added it to WKWebView in
+    // macOS 13). Starting a share there used to fail with no response - the SFU
+    // path swallowed the LiveKit error, and the mesh path toasted but logged
+    // nothing. Guard both engines up front (only when STARTING; a stop needs no
+    // capture): respond with a clear, desktop-aware message AND a voice-log entry.
+    if (!selfSharing && (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia)) {
+      var onDesktop = isDesktopShell();
+      window.__lcNotify('err', onDesktop
+        ? window.__lcS('callNoScreenshareDesktop', 'Screen sharing is not available in the desktop app on this version of macOS (it needs macOS 13 or newer). Open Let’s Chat in a web browser to share your screen.')
+        : window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
+      voiceDiag('screen: getDisplayMedia unavailable' + (onDesktop ? ' (desktop webview; needs macOS 13+)' : ''), 'error');
+      return;
+    }
     if (sfu) {
       window.LetsChatHuddleSfu.toggleScreen().then(function (on) {
         // LC-853: announce over the WS too, not only the LiveKit track. Peers
@@ -1762,10 +1776,6 @@
     }
     if (!joined || !localStream) return;
     if (isSharingScreen()) { endScreenShare(); return; }
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      window.__lcNotify('err', window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
-      return;
-    }
     navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }).then(function (dstream) {
       var dtrack = dstream.getVideoTracks()[0];
       if (!dtrack) return;
