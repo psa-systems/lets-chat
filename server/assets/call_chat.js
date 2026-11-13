@@ -54,6 +54,7 @@
     p.classList.remove('hidden');
     restorePos();
     var b = toggleBtn(); if (b) b.setAttribute('aria-pressed', 'true');
+    setUnread(false); // LC-1181: opening the drawer clears the unread cue
     var t = bodyEl(); if (t) t.focus();
     setMessagesBottom();
   }
@@ -108,5 +109,68 @@
   // Keep the log pinned to newest while open; close on call end (the toggle is
   // hidden on leave, so an open drawer would otherwise linger into the lobby).
   document.addEventListener('htmx:wsAfterMessage', function () { if (isOpen()) setMessagesBottom(); });
-  document.addEventListener('lc:rtc-session-ended', function () { close(); });
+  document.addEventListener('lc:rtc-session-ended', function () { close(); setUnread(false); });
+
+  // ---- LC-1181: new-message cue -----------------------------------------
+  // During a call the chat drawer is easy to miss (collapsed, or you are
+  // watching the video), so a new message gave no sign at all. Flash the row
+  // (your own send included - the confirmation the report asked for), and when
+  // the message arrives while you are NOT looking (drawer closed or the window
+  // unfocused) play a soft sound and badge the Chat button. All scoped to the
+  // in-call drawer: a MutationObserver is only attached when #lc-call-chat is on
+  // the page, so regular rooms are untouched.
+  var SEEN = Object.create(null); // msg id -> true; skip edit re-appends
+  var observed = null;            // the #messages node currently observed
+
+  function setUnread(on) {
+    var b = toggleBtn();
+    if (!b) return;
+    if (on) b.setAttribute('data-lc-chat-unread', '');
+    else b.removeAttribute('data-lc-chat-unread');
+  }
+
+  function flash(node) {
+    if (!node || !node.classList) return;
+    node.classList.add('lc-msg-flash'); // reduced-motion safe (main.css)
+    setTimeout(function () { node.classList.remove('lc-msg-flash'); }, 2000);
+  }
+
+  function onNewMessage(node) {
+    flash(node);
+    // "Not looking": drawer closed, tab hidden, or window unfocused.
+    var away = !isOpen() || document.hidden ||
+      (typeof document.hasFocus === 'function' && !document.hasFocus());
+    if (away && window.LetsChatSfx && window.LetsChatSfx.playMessage) {
+      window.LetsChatSfx.playMessage(); // self-gates on the sound preference
+    }
+    if (!isOpen()) setUnread(true);
+  }
+
+  function handleMutations(records) {
+    for (var i = 0; i < records.length; i++) {
+      var added = records[i].addedNodes;
+      for (var j = 0; j < added.length; j++) {
+        var n = added[j];
+        if (!n || n.nodeType !== 1 || !n.id || n.id.indexOf('msg-') !== 0) continue;
+        if (SEEN[n.id]) continue; // an edit re-appended the same id: not new
+        SEEN[n.id] = true;
+        onNewMessage(n);
+      }
+    }
+  }
+
+  function observeMessages() {
+    if (typeof MutationObserver === 'undefined') return;
+    if (!panel()) return; // in-call drawer only
+    var m = messagesEl();
+    if (!m || m === observed) return;
+    if (window.__lcCallChatObs) window.__lcCallChatObs.disconnect();
+    observed = m;
+    window.__lcCallChatObs = new MutationObserver(handleMutations);
+    window.__lcCallChatObs.observe(m, { childList: true });
+  }
+
+  observeMessages();
+  // #messages can be replaced by a boosted navigation into the voice room.
+  document.addEventListener('htmx:afterSettle', observeMessages);
 })();

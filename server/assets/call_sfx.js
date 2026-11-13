@@ -86,6 +86,14 @@
       beep(440.0, 0.12, 0.28, 0.2, 'triangle');
     }
   }
+  // LC-1181: a new in-call chat message arrived while you were not looking (chat
+  // drawer closed or window unfocused). One short, soft sine blip - quieter and
+  // shorter than the join/leave cues so it reads as a gentle "ping", not an event.
+  function playMessage() {
+    if (soundEnabled() && ac()) {
+      beep(783.99, 0, 0.09, 0.08, 'sine');
+    }
+  }
 
   // Incoming-call ringtone: a classic double-ring that repeats until stopRing.
   // Louder than the cues so an incoming call is unmistakable.
@@ -136,6 +144,7 @@
     soundEnabled: soundEnabled,
     playJoin: playJoin,
     playLeave: playLeave,
+    playMessage: playMessage,
     startRing: startRing,
     stopRing: stopRing,
   };

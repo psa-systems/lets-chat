@@ -2090,6 +2090,30 @@ math {
     .lc-msg-flash { animation: none; }
 }
 
+/* LC-1181: unread cue on the in-call Chat toggle - a small accent dot that
+   pulses when a chat message arrived while the drawer was closed. call_chat.js
+   sets [data-lc-chat-unread] on the button and clears it when the drawer opens. */
+[data-lc-chat-toggle] { position: relative; }
+[data-lc-chat-toggle][data-lc-chat-unread]::after {
+    content: '';
+    position: absolute;
+    top: 0.125rem;
+    right: 0.125rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--surface-elevated);
+    animation: lc-chat-unread-pulse 1.6s ease-in-out infinite;
+}
+@keyframes lc-chat-unread-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-lc-chat-toggle][data-lc-chat-unread]::after { animation: none; }
+}
+
 /* LC-256: long-message fold. `partials/auto_scroll.html` adds `.lc-collapsible`
    to a message body that overflows the threshold (and removes it on expand).
    The bottom fade hints that more content is hidden; it fades to `--surface`
