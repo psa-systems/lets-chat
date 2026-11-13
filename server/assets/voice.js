@@ -63,6 +63,9 @@
   // VoiceLeft / VoiceRoster events. The preview HTML is re-rendered from
   // this map so it never lies about who is on the line.
   var participants = {};  // user_id -> label
+  // LC-1175: viewer-local tile order (user ids, left-to-right). Arrival order by
+  // default; drag / arrow keys rearrange it. Ephemeral - reset when tiles rebuild.
+  var tileOrder = [];
   // LC-784: user_id -> avatar version token. Seeded from the server-rendered
   // preview chips and each VoiceJoined / VoiceRoster event so avatarUrl() can
   // build an immutable `/avatars/{id}?v={token}` instead of the bare, per-
@@ -296,12 +299,50 @@
       you.textContent = window.__lcS('voiceYou', 'You');
       name.appendChild(you);
     }
+    // LC-1174: viewer-local expand/minimize control. Clicking it makes this tile
+    // the stage on the local screen (and picks which share wins when several are
+    // live); clicking again restores the auto layout. Purely client-side - the
+    // choice is never sent to peers. Hidden until the tile is hovered/focused
+    // (and only while the grid carries video or a share; see main.css).
+    var focusBtn = document.createElement('button');
+    focusBtn.type = 'button';
+    focusBtn.className = 'lc-voice-focus-btn';
+    focusBtn.setAttribute('data-lc-voice-focus-btn', '');
+    focusBtn.setAttribute('aria-pressed', 'false');
+    focusBtn.setAttribute('aria-label', window.__lcS('voiceFocusTile', 'Expand tile'));
+    // Two glyphs toggled by the tile's [data-lc-focus] state (CSS): arrows out
+    // to expand, arrows in to minimize.
+    focusBtn.innerHTML =
+      '<svg class="lc-voice-focus-expand" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M4 4h5a1 1 0 010 2H6.41l3.3 3.29a1 1 0 11-1.42 1.42L5 7.41V10a1 1 0 11-2 0V5a1 1 0 011-1zm12 12h-5a1 1 0 010-2h2.59l-3.3-3.29a1 1 0 111.42-1.42L15 12.59V10a1 1 0 112 0v5a1 1 0 01-1 1z"/></svg>' +
+      '<svg class="lc-voice-focus-collapse" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M9 5v2.59L5.71 4.29A1 1 0 004.29 5.71L7.59 9H5a1 1 0 000 2h5a1 1 0 001-1V5a1 1 0 00-2 0zm2 10v-2.59l3.29 3.3a1 1 0 001.42-1.42L12.41 11H15a1 1 0 000-2h-5a1 1 0 00-1 1v5a1 1 0 002 0z"/></svg>';
+    focusBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (tile.hasAttribute('data-lc-focus')) setFocus(null);
+      else setFocus(userId);
+    });
+    // LC-1175: viewer-local drag-to-reorder handle. Dragging it (pointer: mouse,
+    // touch, Safari 15) rearranges the tiles on THIS viewer's screen; arrow keys
+    // move the tile one slot when the handle is focused (the keyboard path). The
+    // order is never sent to peers and resets when the tiles rebuild.
+    var dragHandle = document.createElement('button');
+    dragHandle.type = 'button';
+    dragHandle.className = 'lc-voice-reorder-handle';
+    dragHandle.setAttribute('data-lc-voice-reorder', '');
+    dragHandle.setAttribute('aria-label', window.__lcS('voiceReorderTile', 'Reorder tile'));
+    dragHandle.setAttribute('aria-keyshortcuts', 'ArrowLeft ArrowRight');
+    dragHandle.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M7 4a1.25 1.25 0 11-2.5 0A1.25 1.25 0 017 4zm0 6a1.25 1.25 0 11-2.5 0A1.25 1.25 0 017 10zm0 6a1.25 1.25 0 11-2.5 0A1.25 1.25 0 017 16zm8.5-12a1.25 1.25 0 11-2.5 0 1.25 1.25 0 012.5 0zM15.5 10a1.25 1.25 0 11-2.5 0 1.25 1.25 0 012.5 0zm0 6a1.25 1.25 0 11-2.5 0 1.25 1.25 0 012.5 0z"/></svg>';
+    dragHandle.addEventListener('pointerdown', function (e) { startTileDrag(e, userId); });
+    dragHandle.addEventListener('keydown', function (e) { onReorderKey(e, userId); });
     tile.appendChild(video);
     tile.appendChild(avatar);
     tile.appendChild(mute);
     tile.appendChild(screen);
     tile.appendChild(name);
+    tile.appendChild(focusBtn);
+    tile.appendChild(dragHandle);
     g.appendChild(tile);
+    pushOrder(userId); // LC-1175: track arrival order; applyOrder() keeps CSS in sync
     updateWaiting();
   }
 
@@ -428,9 +469,137 @@
     clearScreenRx(userId); // LC-1129: a leaving peer cancels its blackout check
     var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
     if (t) t.remove();
+    dropOrder(userId); // LC-1175: forget the leaver's slot in the viewer order
+    syncFocus(); // LC-1174: drop the stage class if the focused tile just left
     updateWaiting();
   }
   function cssEscape(s) { return String(s).replace(/["\\]/g, '\\$&'); }
+
+  // LC-1174: viewer-local tile focus. setFocus(uid) promotes one tile to the
+  // stage on THIS viewer's screen (overriding the sharer-driven data-screen auto
+  // layout so the viewer can pick which share, or camera, fills the dock);
+  // setFocus(null) restores the auto layout. The choice never leaves the client.
+  function setFocus(userId) {
+    var g = grid();
+    if (!g) return;
+    Array.prototype.forEach.call(g.querySelectorAll('[data-lc-focus]'), function (t) {
+      t.removeAttribute('data-lc-focus');
+    });
+    var target = userId && g.querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
+    if (target) target.setAttribute('data-lc-focus', '');
+    syncFocus();
+  }
+  // Toggle the grid stage class + each focus button's label/pressed state from
+  // the DOM, so removeTile / replaceChildren can leave the attributes authoritative.
+  function syncFocus() {
+    var g = grid();
+    if (!g) return;
+    var focused = g.querySelector('[data-lc-focus]');
+    g.classList.toggle('lc-voice-grid--focus', !!focused);
+    Array.prototype.forEach.call(g.querySelectorAll('[data-lc-voice-focus-btn]'), function (btn) {
+      var tile = btn.closest('[data-lc-voice-tile]');
+      var on = !!(tile && tile.hasAttribute('data-lc-focus'));
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.setAttribute('aria-label', on
+        ? window.__lcS('voiceUnfocusTile', 'Minimize tile')
+        : window.__lcS('voiceFocusTile', 'Expand tile'));
+    });
+    applyOrder(); // LC-1175: a focus change frees/claims the stage slot (order:-1)
+  }
+
+  // ---- LC-1175: viewer-local tile reorder --------------------------------
+  // Order lives in `tileOrder` (user ids); applyOrder() writes it to each tile's
+  // CSS `order` so the tile DOM - and its attached <video> - is never moved, only
+  // repositioned. The focused tile (LC-1174) is left to the stylesheet's order:-1
+  // so it always leads the stage; everyone else takes their slot in tileOrder.
+  function pushOrder(userId) {
+    if (userId && tileOrder.indexOf(userId) === -1) tileOrder.push(userId);
+    applyOrder();
+  }
+  function dropOrder(userId) {
+    var i = tileOrder.indexOf(userId);
+    if (i !== -1) tileOrder.splice(i, 1);
+    applyOrder();
+  }
+  function applyOrder() {
+    var g = grid();
+    if (!g) return;
+    tileOrder.forEach(function (uid, i) {
+      var t = g.querySelector('[data-lc-voice-tile="' + cssEscape(uid) + '"]');
+      if (!t) return;
+      // Clear the inline order on the focused tile so the CSS stage rule (order:-1)
+      // wins; an inline value would outrank it and knock the stage out of first.
+      t.style.order = t.hasAttribute('data-lc-focus') ? '' : String(i);
+    });
+  }
+  // Move a tile `delta` slots within the viewer order (keyboard + drag share this).
+  function moveTile(userId, delta) {
+    var from = tileOrder.indexOf(userId);
+    if (from === -1) return;
+    var to = Math.max(0, Math.min(tileOrder.length - 1, from + delta));
+    if (to === from) return;
+    tileOrder.splice(from, 1);
+    tileOrder.splice(to, 0, userId);
+    applyOrder();
+  }
+  // Place a tile immediately before `beforeUserId` (drag drops onto a target).
+  function moveTileBefore(userId, beforeUserId) {
+    if (userId === beforeUserId) return;
+    var from = tileOrder.indexOf(userId);
+    if (from === -1) return;
+    tileOrder.splice(from, 1);
+    var to = beforeUserId == null ? tileOrder.length : tileOrder.indexOf(beforeUserId);
+    if (to === -1) to = tileOrder.length;
+    tileOrder.splice(to, 0, userId);
+    applyOrder();
+  }
+  function onReorderKey(e, userId) {
+    var k = e.key;
+    if (k === 'ArrowLeft' || k === 'ArrowUp') { e.preventDefault(); moveTile(userId, -1); }
+    else if (k === 'ArrowRight' || k === 'ArrowDown') { e.preventDefault(); moveTile(userId, 1); }
+  }
+  // Pointer drag: follow the pointer, and whenever it is over another tile, drop
+  // the dragged tile into that slot live. Pointer events cover mouse + touch +
+  // Safari 15; elementFromPoint resolves the tile under the finger/cursor.
+  function startTileDrag(e, userId) {
+    if (e.button != null && e.button !== 0) return; // primary button / touch only
+    e.preventDefault();
+    var g = grid();
+    var tile = g && g.querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
+    if (!tile) return;
+    tile.classList.add('lc-voice-tile--dragging');
+    var handle = e.currentTarget;
+    try { if (handle.setPointerCapture) handle.setPointerCapture(e.pointerId); } catch (err) {}
+    function overUser(x, y) {
+      if (!document.elementFromPoint) return null;
+      var el = document.elementFromPoint(x, y);
+      var t = el && el.closest && el.closest('[data-lc-voice-tile]');
+      return t ? t.getAttribute('data-lc-voice-tile') : null;
+    }
+    function onMove(ev) {
+      var over = overUser(ev.clientX, ev.clientY);
+      if (!over || over === userId) return;
+      // Drop before `over` when dragging left/up past it, after it otherwise, by
+      // comparing current slots - keeps the swap stable as the pointer hovers.
+      var a = tileOrder.indexOf(userId), b = tileOrder.indexOf(over);
+      if (a === -1 || b === -1) return;
+      moveTileBefore(userId, a < b ? nextUser(over) : over);
+    }
+    function nextUser(uid) {
+      var i = tileOrder.indexOf(uid);
+      return i === -1 || i + 1 >= tileOrder.length ? null : tileOrder[i + 1];
+    }
+    function onUp(ev) {
+      tile.classList.remove('lc-voice-tile--dragging');
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onUp);
+      try { if (handle.releasePointerCapture) handle.releasePointerCapture(ev.pointerId); } catch (err) {}
+    }
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
+  }
 
   // LC-493: a huddle root ([data-lc-huddle]) stays hidden until the viewer is
   // on the line OR someone else is (so an idle group room shows nothing but the
@@ -1157,7 +1326,8 @@
       wsSend({ type: 'voice_leave', room_id: cfg.roomId });
       removeTile(cfg.selfId);
       var gs = grid();
-      if (gs) gs.replaceChildren();
+      if (gs) { gs.replaceChildren(); gs.classList.remove('lc-voice-grid--focus'); } // LC-1174
+      tileOrder = []; // LC-1175: the next call rebuilds tiles in arrival order
       joined = false;
       var sss = q('[data-lc-voice-screen]');
       if (sss) { setLabel(sss, window.__lcS('callShareScreen', 'Share screen')); sss.setAttribute('aria-pressed', 'false'); }
@@ -1182,7 +1352,8 @@
     }
     removeTile(cfg.selfId);
     var g = grid();
-    if (g) g.replaceChildren();
+    if (g) { g.replaceChildren(); g.classList.remove('lc-voice-grid--focus'); } // LC-1174
+    tileOrder = []; // LC-1175: the next call rebuilds tiles in arrival order
     joined = false;
     var ss = q('[data-lc-voice-screen]');
     if (ss) { setLabel(ss, window.__lcS('callShareScreen', 'Share screen')); ss.setAttribute('aria-pressed', 'false'); }
@@ -1405,8 +1576,28 @@
     else t.removeAttribute('data-screen');
     // LC-1129: receiver diagnostics, only for a REMOTE peer's share.
     if (cfg && userId !== cfg.selfId) {
-      if (sharing) screenStarted(userId);
-      else clearScreenRx(userId); // share stopped: drop the armed blackout check
+      if (sharing) {
+        screenStarted(userId);
+      } else {
+        clearScreenRx(userId); // share stopped: drop the armed blackout check
+        // LC-1172: a screen-only stop swaps the sender's video to null
+        // (replaceTrack), which some browsers leave as a live-but-frozen track
+        // on the receiver - so bindRemoteVideo keeps rendering the last screen
+        // frame and the tile stays frozen. The voice_screen=false signal is the
+        // authoritative "stopped" cue, so drop the video from the tile now (keep
+        // audio); the avatar shows. If the peer swapped back to a camera, that
+        // is a fresh track whose ontrack/onunmute re-binds and re-shows it.
+        var v = tileVideo(userId);
+        if (v && v.srcObject && v.srcObject.getAudioTracks && typeof MediaStream !== 'undefined') {
+          v.srcObject = new MediaStream(v.srcObject.getAudioTracks());
+          if (window.LetsChatDevices && window.LetsChatDevices.applySpeaker) {
+            window.LetsChatDevices.applySpeaker(v);
+          }
+        }
+        // Always re-evaluate the tile (an ended/muted track reverts to audio);
+        // the rebind above additionally drops a live-but-frozen screen track.
+        updateTileMedia(userId);
+      }
     }
   }
   // Mark our own tile and tell the channel so peers pin our share too.
@@ -1625,6 +1816,8 @@
       if (name !== 'NotAllowedError' && name !== 'AbortError') {
         console.warn('voice: getDisplayMedia failed', e);
         voiceDiag('getDisplayMedia failed: ' + name); // LC-1114
+        // LC-1173: a silent failure left Linux users with no clue (missing GStreamer/PipeWire).
+        window.__lcNotify('err', window.__lcS('callScreenshareFailed', 'Screen sharing failed (%error%).').replace('%error%', name));
       }
     });
   }
@@ -1769,12 +1962,24 @@
       // live screen share (the black-out bug); gate on identity directly since
       // the `sfu` flag is unreliable in this bus echo.
       if (!(cfg && userId === cfg.selfId)) {
-        // LC-1110: re-derive the mesh peer's bound stream so the screen track
-        // shows on start (bug C). bindRemoteVideo is a no-op without a peers[]
-        // entry (an SFU tile has none), so always run updateTileMedia too - it
-        // reverts a frozen last frame on stop (bug D) and covers SFU tiles.
-        bindRemoteVideo(userId);
-        updateTileMedia(userId);
+        if (payload === '1') {
+          // LC-1110: on START, re-derive the mesh peer's bound stream so a screen
+          // track that arrived on a renegotiation whose ontrack we already drained
+          // still shows (bug C). bindRemoteVideo ends in updateTileMedia.
+          bindRemoteVideo(userId);
+        } else {
+          // LC-1155: on STOP, do NOT re-derive. applyScreen() has already cleared
+          // this tile (LC-1172 force-clear). Re-deriving here would re-pick the
+          // peer's still-live-but-frozen screen track from remoteStream - the mesh
+          // keeps the SAME track object through a replaceTrack(null) stop, so the
+          // track is often live (and, on some engines, not even muted), and
+          // bindRemoteVideo would re-add that frozen frame, undoing the clear. This
+          // was the mesh-only freeze (SFU has no peers[] entry, so bindRemoteVideo
+          // was already a no-op there, which is why LC-1172 looked fixed on SFU). A
+          // camera the peer swaps back in returns via the track's own onunmute ->
+          // bindRemoteVideo. updateTileMedia keeps SFU tiles covered.
+          updateTileMedia(userId);
+        }
       }
       return;
     }
@@ -1941,6 +2146,17 @@
   window.LetsChatVoice = {
     leave: function () { if (joined) leave(); },
     isJoined: function () { return joined; },
+    // LC-1174: viewer-local tile focus (expand/minimize). Exposed so the per-tile
+    // button and unit tests can drive it; pass null to restore the auto layout.
+    setFocus: setFocus,
+    // LC-1175: viewer-local tile order. `ids()` reads it; `move(uid, delta)` and
+    // `moveBefore(uid, beforeUid)` rearrange it (the drag + keyboard paths, and
+    // unit tests, share these). The order never leaves the client.
+    reorder: {
+      ids: function () { return tileOrder.slice(); },
+      move: moveTile,
+      moveBefore: moveTileBefore,
+    },
     // LC-1154: pure guard + diagnostic summarizers, exported for unit testing.
     shouldAutoIceRestart: shouldAutoIceRestart,
     summarizeStats: summarizeStats,

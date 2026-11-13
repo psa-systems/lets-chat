@@ -31,6 +31,8 @@ js-call-no-mic = No se pudo acceder al micrófono.
 # LC-764: se muestra cuando un cambio de silencio no logra cambiar la pista del microfono.
 js-call-mic-toggle-failed = No se pudo cambiar tu micrófono. Intenta silenciar y activar de nuevo.
 js-call-no-screenshare = Tu navegador no admite compartir pantalla.
+# LC-1173: %error% es el nombre del error de getDisplayMedia. En Linux suele faltar GStreamer/PipeWire.
+js-call-screenshare-failed = Error al compartir pantalla (%error%). En Linux, instala los paquetes de GStreamer y PipeWire indicados en "Linux screen sharing prerequisites" de la documentacion de funciones.
 # LC-1138: se muestra cuando una pantalla compartida sigue en negro para este
 # espectador incluso tras los intentos de recuperacion automaticos.
 js-call-screen-blackout = Una pantalla compartida aparece en negro para ti. Sal y vuelve a entrar a la llamada para solucionarlo.
@@ -102,6 +104,9 @@ js-device-blur-slow = Se desactivó el desenfoque de fondo para mantener el víd
 js-voice-you = Tú
 js-voice-waiting = Esperando a que se unan otros...
 js-voice-presenting = Presentando
+js-voice-focus-tile = Ampliar mosaico
+js-voice-unfocus-tile = Minimizar mosaico
+js-voice-reorder-tile = Reordenar mosaico
 js-conn-good = Conexión: buena
 js-conn-degraded = Conexión: degradada
 js-conn-reconnecting = Reconectando...

@@ -31,6 +31,16 @@ surfaces is in [configuration.md](configuration.md).
 - Screen-share alongside the audio/video stream
 - Active voice rooms show a live in-call participant count in the sidebar
 
+### Linux screen sharing prerequisites
+
+The desktop app's screen share on Linux goes through WebKitGTK's `getDisplayMedia`, which needs GStreamer and PipeWire (via `xdg-desktop-portal`) to build the capture pipeline. The `.deb` package declares these as dependencies, so a `.deb` install gets them for free. The raw binary and the `.AppImage` do not bundle them, so install them yourself first:
+
+- Debian/Ubuntu: `gstreamer1.0-plugins-base`, `gstreamer1.0-plugins-good`, `gstreamer1.0-pipewire`, `pipewire`, `xdg-desktop-portal`
+- Fedora: `gstreamer1-plugins-base`, `gstreamer1-plugins-good`, `pipewire-gstreamer`, `pipewire`, `xdg-desktop-portal`
+- Arch: `gst-plugins-base`, `gst-plugins-good`, `gst-plugin-pipewire`, `pipewire`, `xdg-desktop-portal`
+
+A desktop-specific portal backend must also be installed and running, matching your desktop environment: `xdg-desktop-portal-gnome`, `xdg-desktop-portal-kde`, `xdg-desktop-portal-gtk`, or `xdg-desktop-portal-wlr`. Without it, sharing fails and the call UI shows an error toast naming the failure.
+
 ## Spaces and organization
 
 - Enclaves: grouped rooms/workspaces, each with a default room and settings gear

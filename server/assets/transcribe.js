@@ -86,6 +86,13 @@
   // cloud recognizer was unreachable/blocked) and we fell back to the server
   // engine, so we don't keep retrying the dead browser engine. Reset on stop.
   var serverFallback = false;
+  // LC-1172: back off the server-STT audio upload when the server rejects it,
+  // so a rate-limited (429) or gone (404) transcript is not hammered once per
+  // clip (the console filled with repeated 404/429). `audioBackoffUntil` pauses
+  // uploads after a 429; `audioNotFound` counts consecutive 404s and stops the
+  // server capture after a few (the transcript is gone, retrying is pointless).
+  var audioBackoffUntil = 0;
+  var audioNotFound = 0;
 
   // LC-1129: client transcription diagnostics onto the same voice_events log the
   // per-call voice log renders (/admin/voice-log). transcribe.js POSTs segments
@@ -575,7 +582,11 @@
     // LC-626: same submission-point guard as postSegment. A server-STT clip that
     // straddled the mute moment must not be shipped even if it finished decoding.
     if (micMuted) return;
-    fetch('/call/transcript/' + transcriptId + '/audio', {
+    // LC-1172: skip while backing off from a recent 429 so we stop hammering a
+    // rate-limited endpoint once per clip.
+    if (Date.now() < audioBackoffUntil) return;
+    var tid = transcriptId;
+    fetch('/call/transcript/' + tid + '/audio', {
       method: 'POST',
       headers: { 'Content-Type': blob.type || 'audio/webm' },
       body: blob,
@@ -584,11 +595,29 @@
       // A later clip succeeding clears the warning, so a one-off hiccup does
       // not leave a permanent scare message on the drawer.
       setClipFailed(!resp.ok);
+      if (resp.ok) { audioNotFound = 0; return; }
+      // LC-1172: the server rejected the clip - back off rather than retry every
+      // clip. 429 (rate-limited / transcription overloaded): pause uploads for a
+      // cooldown. 404 (transcript gone): give up on the server engine after a
+      // few in a row so we do not keep posting to a dead transcript.
+      if (resp.status === 429) {
+        audioBackoffUntil = Date.now() + 30000;
+        callDiag('transcribe: server rate-limited audio (429), backing off 30s', 'error', window.__lcSessionRoom);
+      } else if (resp.status === 404) {
+        audioNotFound += 1;
+        if (audioNotFound >= 3 && transcriptId === tid) {
+          callDiag('transcribe: transcript ' + tid + ' not found (404), stopping server capture', 'error', window.__lcSessionRoom);
+          stopServerCapture();
+        }
+      }
     }).catch(function () { setClipFailed(true); });
   }
   function stopServerCapture() {
     // LC-590: a stale failure line must not greet the next session.
     setClipFailed(false);
+    // LC-1172: clear the audio-upload backoff so the next session starts fresh.
+    audioBackoffUntil = 0;
+    audioNotFound = 0;
     if (sttTimer) { clearTimeout(sttTimer); sttTimer = null; }
     if (sttRecorder) { try { sttRecorder.onstop = null; sttRecorder.stop(); } catch (e) {} sttRecorder = null; }
     if (sttStream) { sttStream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} }); sttStream = null; }
