@@ -47,7 +47,7 @@
     </div>
     <div class="lc-set-field lc-set-field--narrow">
       <label class="lc-set-label" for="bot_username">{{ "admin-bridges-bot-username"|t }}{% include "partials/required_mark.html" %}</label>
-      <input id="bot_username" name="bot_username" type="text" required aria-required="true" maxlength="32" placeholder="matrix-bridge" class="input">
+      <input id="bot_username" name="bot_username" type="text" required aria-required="true" maxlength="{{ max_handle_len }}" placeholder="matrix-bridge" class="input">
     </div>
     <div class="lc-set-field lc-set-field--narrow">
       <label class="lc-set-label" for="bridge_kind">{{ "admin-bridges-kind"|t }}{% include "partials/required_mark.html" %}</label>

@@ -283,6 +283,67 @@ async fn create_bridge_rejects_reserved_bot_username() {
         .is_none());
 }
 
+// LC-1179: `/admin/bridges` runs the submitted bot_username through
+// validate_handle, the same as `/admin/bots`, so a space, an over-length
+// handle, or a Cyrillic lookalike character is rejected before any row
+// (bridge or user) is written.
+#[tokio::test]
+async fn create_bridge_rejects_handle_with_space() {
+    let t = app().await;
+    let form = format!(
+        "room_id={}&bot_username=matrix%20bridge&kind=matrix&config={}",
+        t.room, TEST_CONFIG
+    );
+    let (status, body) = post_form(&t.app, &t.admin_session, "/admin/bridges", &form).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("no spaces"), "body: {body}");
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bridges")
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn create_bridge_rejects_handle_over_max_length() {
+    let t = app().await;
+    let long = "a".repeat(lets_chat::models::user::MAX_USERNAME_CHARS + 1);
+    let form = format!(
+        "room_id={}&bot_username={long}&kind=matrix&config={}",
+        t.room, TEST_CONFIG
+    );
+    let (status, body) = post_form(&t.app, &t.admin_session, "/admin/bridges", &form).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("exceeds"), "body: {body}");
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bridges")
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn create_bridge_rejects_handle_with_cyrillic_lookalike() {
+    let t = app().await;
+    // U+0430 CYRILLIC SMALL LETTER A, visually indistinguishable from ASCII 'a'.
+    let handle = percent_encoding::utf8_percent_encode(
+        "m\u{0430}tridge",
+        percent_encoding::NON_ALPHANUMERIC,
+    );
+    let form = format!(
+        "room_id={}&bot_username={handle}&kind=matrix&config={}",
+        t.room, TEST_CONFIG
+    );
+    let (status, body) = post_form(&t.app, &t.admin_session, "/admin/bridges", &form).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("letters a-z"), "body: {body}");
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bridges")
+        .fetch_one(&t.chat)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
 #[tokio::test]
 async fn remove_bridge_preserves_historical_message_snapshot_via_admin_route() {
     let t = app().await;
