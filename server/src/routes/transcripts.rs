@@ -1268,13 +1268,17 @@ pub async fn show(
 
     // LC-679/LC-702: audience-scoped AI gate for the transcript "Summarize" action.
     let ai_flag_on = super::ai_gate::flag_on(&state).await;
-    let ai_llm = ai_flag_on
-        && state.llm_available()
-        && super::ai_gate::allowed_in_room(&state, room.id, &user).await?;
+    let ai_allowed = super::ai_gate::allowed_in_room(&state, room.id, &user).await?;
+    let ai_llm = ai_flag_on && state.llm_available() && ai_allowed;
     // LC-1135: the "Proposed issues" panel. Review is scoped by the AI gate (it
-    // uses the LLM); filing additionally needs the staff set.
-    let youtrack_can_review = crate::youtrack::can_review(&state, room.id, &user).await?;
-    let youtrack_can_file = crate::youtrack::can_file(&state, room.id, &user).await?;
+    // uses the LLM); filing additionally needs the staff set. LC-1170: inlined
+    // from `youtrack::can_review`/`can_file` to reuse `ai_allowed` and the single
+    // `flag_on` read below instead of each re-running its own `allowed_in_room`/
+    // `flag_on` chain.
+    let youtrack_flag = crate::youtrack::flag_on(&state).await;
+    let youtrack_can_review = youtrack_flag && ai_allowed;
+    let youtrack_can_file =
+        youtrack_flag && super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
     let youtrack_proposals = if youtrack_can_review {
         let base = crate::youtrack::load_config(&state)
             .await
@@ -1354,7 +1358,8 @@ pub async fn propose_issues(
         .ok_or(AppError::NotFound)?;
     let room = fetch_call_room(&state, session.room_id).await?;
     require_access(&state, &user, &room).await?;
-    if !crate::youtrack::flag_on(&state).await {
+    let youtrack_flag_on = crate::youtrack::flag_on(&state).await;
+    if !youtrack_flag_on {
         return Err(AppError::Forbidden);
     }
     // Review uses the LLM, so it is scoped by the AI gate (flag + room toggle +
@@ -1386,7 +1391,10 @@ pub async fn propose_issues(
         .await
         .map(|c| c.base_url);
     let rows = db::transcript_proposals::list_for_transcript(&state.chat, transcript_id).await?;
-    let can_file = crate::youtrack::can_file(&state, room.id, &user).await?;
+    // LC-1170: reuse the `youtrack_flag_on` already read above instead of
+    // `can_file` re-reading it.
+    let can_file =
+        youtrack_flag_on && super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
     html(&IssueProposalsFragment {
         transcript_id,
         proposals: build_proposal_views(rows, base.as_deref()),
@@ -1411,10 +1419,18 @@ pub async fn file_issues(
         .ok_or(AppError::NotFound)?;
     let room = fetch_call_room(&state, session.room_id).await?;
     require_access(&state, &user, &room).await?;
-    if !crate::youtrack::flag_on(&state).await {
+    let youtrack_flag_on = crate::youtrack::flag_on(&state).await;
+    if !youtrack_flag_on {
         return Err(AppError::Forbidden);
     }
-    crate::youtrack::require_file(&state, room.id, &user).await?;
+    // LC-1170: inlined from `youtrack::require_file`/`can_file` to reuse
+    // `youtrack_flag_on` and share this single `privileged_in_room` read with
+    // the fragment's `can_file` below instead of each re-reading both.
+    let can_file =
+        youtrack_flag_on && super::ai_gate::privileged_in_room(&state, room.id, &user).await?;
+    if !can_file {
+        return Err(AppError::Forbidden);
+    }
     let Some(cfg) = crate::youtrack::load_config(&state).await else {
         return Err(AppError::BadRequest("YouTrack is not configured".into()));
     };
@@ -1492,7 +1508,6 @@ pub async fn file_issues(
             p.error = Some(err.clone());
         }
     }
-    let can_file = crate::youtrack::can_file(&state, room.id, &user).await?;
     html(&IssueProposalsFragment {
         transcript_id,
         proposals,

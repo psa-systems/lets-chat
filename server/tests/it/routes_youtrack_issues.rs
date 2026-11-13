@@ -112,6 +112,24 @@ async fn post(app: &Router, sess: &str, uri: &str, body: &str) -> (StatusCode, S
     (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
+async fn get(app: &Router, sess: &str, uri: &str) -> (StatusCode, String) {
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(uri)
+                .header(header::COOKIE, format!("session={sess}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = res.status();
+    let bytes = to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
 /// Public room, owner owns the enclave, member is a plain member. Returns an
 /// open transcript id with one spoken segment.
 async fn seed_transcript(t: &TestApp) -> i64 {
@@ -379,4 +397,62 @@ async fn file_issues_passes_the_staff_gate_then_400s_when_unconfigured() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+/// LC-1170: pins the `show` page's `ai_llm`/`youtrack_can_review`/
+/// `youtrack_can_file` render-path booleans (the regression gate named by
+/// the issue's acceptance criteria) now that they are computed from a single
+/// `allowed_in_room`/`flag_on` read instead of each re-deriving its own.
+#[tokio::test]
+async fn show_renders_ai_llm_and_youtrack_review_and_file_gates() {
+    let t = app(Some("[]")).await;
+    let tid = seed_transcript(&t).await;
+    enable_ai_and_flag(&t, tid).await;
+    db::transcript_proposals::replace_unfiled(
+        &t.chat,
+        tid,
+        &[db::transcript_proposals::NewProposal {
+            summary: "Ship it".into(),
+            assignee_name: None,
+            source_lines: String::new(),
+        }],
+    )
+    .await
+    .unwrap();
+
+    // Owner is enclave Owner (staff): ai_llm, youtrack_can_review, and
+    // youtrack_can_file are all true, so both the summary panel and the file
+    // checkbox render.
+    let (status, page) = get(&t.app, &t.owner_session, &format!("/transcripts/{tid}")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        page.contains(r#"id="lc-transcript-summary""#),
+        "ai_llm renders the summary panel: {page}"
+    );
+    assert!(
+        page.contains(r#"id="lc-transcript-youtrack""#),
+        "youtrack_can_review renders the review panel: {page}"
+    );
+    assert!(
+        page.contains("accept_"),
+        "youtrack_can_file shows the staff-only file checkbox: {page}"
+    );
+
+    // Member is a plain enclave Member: audience is "everyone" by default, so
+    // ai_llm and youtrack_can_review are still true, but youtrack_can_file is
+    // false (not staff) - the review panel renders without the checkbox.
+    let (status, page) = get(&t.app, &t.member_session, &format!("/transcripts/{tid}")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        page.contains(r#"id="lc-transcript-summary""#),
+        "ai_llm renders for a non-staff member too: {page}"
+    );
+    assert!(
+        page.contains(r#"id="lc-transcript-youtrack""#),
+        "youtrack_can_review renders for a non-staff member: {page}"
+    );
+    assert!(
+        !page.contains("accept_"),
+        "youtrack_can_file hides the file checkbox from a non-staff member: {page}"
+    );
 }
