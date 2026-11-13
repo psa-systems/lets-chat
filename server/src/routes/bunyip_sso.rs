@@ -558,6 +558,12 @@ async fn mirror_bunyip_admin_role(
                     .hub
                     .unsubscribe_user_from_non_member_rooms(user_id, &state.chat)
                     .await;
+                // LC-1177: also drop every call_diag:{room} subscription on
+                // the SSO-driven demotion path, mirroring post_role's
+                // LC-1147 fix for the admin-UI demotion path.
+                state
+                    .hub
+                    .unsubscribe_user_from_topic_prefix(user_id, "call_diag:");
             }
         }
     }
@@ -1028,6 +1034,7 @@ mod tests {
         let (conn, mut rx, _) = state.hub.connect(&admin, "alice");
         state.hub.subscribe_topic(conn, "admin");
         state.hub.subscribe_topic(conn, "enclave:7");
+        state.hub.subscribe_topic(conn, "call_diag:7");
 
         let evt = ChatEvent::UserTyping {
             room_id: 1,
@@ -1053,6 +1060,19 @@ mod tests {
         assert!(
             rx.try_recv().is_err(),
             "demoted user must stop receiving the admin topic"
+        );
+        // LC-1177: the SSO-driven demotion path must also drop call_diag:*
+        // subscriptions, mirroring post_role's LC-1147 fix.
+        let call_diag_evt = ChatEvent::CallDiag {
+            room_id: 7,
+            user_label: "someone-else".into(),
+            kind: "connect".into(),
+            detail: None,
+        };
+        state.hub.broadcast_to_topic("call_diag:7", &call_diag_evt);
+        assert!(
+            rx.try_recv().is_err(),
+            "demoted user must stop receiving call_diag:* topic updates"
         );
     }
 }
