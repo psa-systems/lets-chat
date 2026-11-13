@@ -52,9 +52,10 @@ open for one release after the secrets are erased.
 | --- | --- | --- | --- |
 | `0029_bunyip_sub.sql` | cutover | Add `bunyip_sub TEXT NOT NULL DEFAULT ''`. | yes |
 | `0030_purge_local_users.sql` | cutover | Delete every still-unlinked (empty-`bunyip_sub`) row - the hard cut. | only from the pre-0030 snapshot (§5.2) |
-| `0031_bunyip_sub_unique.sql` | cutover | Add the unique index on `bunyip_sub`. | yes |
+| `0031_bunyip_sub_unique.sql` | cutover | Add the unique index on `bunyip_sub`. Superseded by `0043` below. | yes |
 | `0033_null_legacy_auth_columns.sql` | cutover | Erase password / TOTP / email-verification secrets; empty the legacy token tables. Columns remain. | only from the pre-cutover snapshot (§5.2) |
 | `0033_v2_drop_legacy_columns.sql` | cutover **+ 1** | Drop the now-empty legacy columns for good. **Not** written until one release after cutover, so the snapshot-restore path above is still meaningful for that release. | n/a (terminal) |
+| `0043_bunyip_sub_unique_partial.sql` | post-cutover, LC-698 | Narrows the `0031` unique index to `WHERE bunyip_sub <> ''`, allowing more than one unlinked row. See §3.4.1 of [`03-account-provisioning.md`](03-account-provisioning.md). | yes |
 
 The `_v2` follow-up is deliberately a separate, later migration rather than an
 edit to 0033: editing a shipped migration would change its checksum and make
