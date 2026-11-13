@@ -23,6 +23,8 @@ def parse_pin [lines: list<string>]: nothing -> string {
     | split row "@"
     | last
     | str trim
+    | split row " "
+    | first
 }
 
 # Self-test: a hollowed-out rule must fail before the real files are read.
@@ -31,6 +33,9 @@ if (parse_ls_tree "160000 commit 690a469ec3d4194a9e9b7ebfba03df936ac6c517\tcommo
 }
 if (parse_pin ["    uses: https://dev.a8n.run/psa-systems/common/.forgejo/workflows/create-release.yml@deadbeef"]) != "deadbeef" {
     error make {msg: "check-release-pin self-test failed: parse_pin"}
+}
+if (parse_pin ["    uses: https://dev.a8n.run/psa-systems/common/.forgejo/workflows/create-release.yml@deadbeef  # main"]) != "deadbeef" {
+    error make {msg: "check-release-pin self-test failed: parse_pin (trailing branch comment)"}
 }
 
 let expected = (parse_ls_tree (git ls-tree HEAD common | str trim))
