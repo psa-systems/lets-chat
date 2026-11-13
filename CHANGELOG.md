@@ -15,6 +15,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 ### Added
 
 - **You can now expand any call tile to focus it, and pick which screen share to watch (LC-1174).** During a call, each participant tile has an expand button (shown on hover or keyboard focus): click it to blow that tile up to fill the call area on your screen and shrink the rest into a filmstrip, and minimize it to go back to the automatic layout. This also lets you choose which share to watch when more than one person is sharing at once - previously every share was enlarged with no way to pick one. The choice is yours alone and is not sent to anyone else, so each person can focus on whatever they want. Works in the room huddle, the voice-channel page, and the pop-out / floating call window.
+- **The in-call diagnostics panel can now be dragged out of the way (LC-1180).** The admin-only live diagnostics panel on a voice-channel page was pinned in the corner and could sit on top of other UI (for example the profile at the foot of the nav rail) with no way to move it. Drag it by its header to reposition it; a plain click still expands/collapses it, and where you leave it is remembered in that browser. Admin-only and only on the voice-channel page, as before.
 
 ### Fixed
 
