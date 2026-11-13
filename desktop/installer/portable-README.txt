@@ -11,10 +11,17 @@ What's in this zip
 ------------------
 
   lets-chat-desktop.exe            The app. Double-click to run.
+  WebView2Loader.dll               Required. Must stay in the SAME folder as
+                                   lets-chat-desktop.exe - the app will not start
+                                   without it ("WebView2Loader.dll was not
+                                   found"). You never run this file yourself.
   MicrosoftEdgeWebview2Setup.exe   Microsoft's WebView2 runtime installer.
                                    Only needed if the app shows a blank window
                                    (see "WebView2 runtime" below).
   README.txt                       This file.
+
+Keep these files together. If you move the app, move the whole folder (or at
+least lets-chat-desktop.exe and WebView2Loader.dll together), not the exe alone.
 
 
 First run: SmartScreen / "Windows protected your PC"

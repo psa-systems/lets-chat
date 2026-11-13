@@ -156,6 +156,15 @@ jobs:
               $"($container):/build/target/x86_64-pc-windows-gnu/release/lets-chat-desktop.exe"
               "artifacts/"
           )
+          # LC-1176: the mingw build links WebView2Loader dynamically, so the exe
+          # needs WebView2Loader.dll beside it at runtime. The build Dockerfile
+          # staged it next to the exe; pull it into the context the installer
+          # image COPYs from (and the portable zip includes).
+          (
+            ^docker cp
+              $"($container):/build/target/x86_64-pc-windows-gnu/release/WebView2Loader.dll"
+              "artifacts/"
+          )
           ^docker rm $container
           # Keep the plain `lets-chat-desktop.exe` in place (the installer
           # Dockerfile COPYs it from the build context) AND make the versioned
@@ -186,8 +195,8 @@ jobs:
               $"artifacts/lets-chat-desktop-setup-($version)-windows-x86_64.exe"
           )
           # LC-180: the same image also emits the portable .zip fallback
-          # (raw exe + WebView2 bootstrapper + user README). Pull it from the
-          # same container before removing it.
+          # (raw exe + WebView2Loader.dll + WebView2 bootstrapper + user README).
+          # Pull it from the same container before removing it.
           (
             ^docker cp
               $"($container):/out/lets-chat-desktop-windows-x86_64.zip"

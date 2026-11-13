@@ -61,6 +61,15 @@ Section "Install"
   SetOutPath "$INSTDIR"
   File "/oname=${APP_EXE_NAME}" "${APP_EXE}"
 
+  ; LC-1176: the loader DLL the mingw-built exe links against dynamically. It
+  ; MUST sit next to the exe or the app dies at launch with "WebView2Loader.dll
+  ; was not found". (This is the loader stub, not the WebView2 runtime handled
+  ; below.) CI passes -DWEBVIEW2_LOADER; with no define (the standalone spike
+  ; build) it is skipped so the script still compiles.
+!ifdef WEBVIEW2_LOADER
+  File "/oname=WebView2Loader.dll" "${WEBVIEW2_LOADER}"
+!endif
+
   ; WebView2 runtime. Tauri's Windows webview requires the Evergreen runtime.
   ; Detect via the EdgeUpdate client key (per-machine, then per-user).
   ReadRegStr $0 HKLM "SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
@@ -110,6 +119,7 @@ SectionEnd
 ;--------------------------------- uninstall
 Section "Uninstall"
   Delete "$INSTDIR\${APP_EXE_NAME}"
+  Delete "$INSTDIR\WebView2Loader.dll" ; LC-1176
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"

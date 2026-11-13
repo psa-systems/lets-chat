@@ -11,6 +11,7 @@
 #
 # Expected build context layout (the workflow stages these before building):
 #   artifacts/lets-chat-desktop.exe     <- from Dockerfile.desktop-windows
+#   artifacts/WebView2Loader.dll        <- ditto (LC-1176; ships beside the exe)
 #   desktop/installer/lets-chat.nsi
 #
 # Build:
@@ -35,6 +36,9 @@ WORKDIR /pkg
 COPY desktop/installer/lets-chat.nsi ./
 COPY desktop/installer/portable-README.txt ./
 COPY artifacts/lets-chat-desktop.exe /out/lets-chat-desktop.exe
+# LC-1176: the loader DLL the mingw-built exe links against. The installer drops
+# it beside the exe in the install dir, and the portable zip includes it.
+COPY artifacts/WebView2Loader.dll /out/WebView2Loader.dll
 
 # Bundle the Microsoft Edge WebView2 Evergreen *bootstrapper* (~2 MB). It is
 # not the runtime itself - it fetches + installs the runtime online when the
@@ -48,6 +52,7 @@ RUN curl -fsSL -o /pkg/MicrosoftEdgeWebview2Setup.exe \
 RUN makensis -V2 \
       -DAPP_VERSION="${APP_VERSION}" \
       -DAPP_EXE=/out/lets-chat-desktop.exe \
+      -DWEBVIEW2_LOADER=/out/WebView2Loader.dll \
       -DWEBVIEW2_BOOTSTRAPPER=/pkg/MicrosoftEdgeWebview2Setup.exe \
       -DOUT_FILE=/out/lets-chat-desktop-setup-x86_64.exe \
       lets-chat.nsi \
@@ -56,19 +61,22 @@ RUN makensis -V2 \
 
 # LC-180: portable .zip fallback. A no-install first-delivery option for users
 # the NSIS installer does not suit (SmartScreen installer hostility, no admin
-# rights, locked-down boxes). Same cross-built exe, plus the bundled WebView2
-# Evergreen bootstrapper (run-once if the runtime is missing) and a user-facing
-# README that documents the unsigned-binary SmartScreen "Run anyway" flow. The
+# rights, locked-down boxes). Same cross-built exe, its required WebView2Loader.dll
+# (LC-1176), the bundled WebView2 Evergreen bootstrapper (run-once if the runtime
+# is missing) and a user-facing README that documents the unsigned-binary
+# SmartScreen "Run anyway" flow and that the DLL must stay beside the exe. The
 # self-updater consumes the raw exe, so updates are unaffected - this is only
 # the first-install path. Staged under /pkg/portable so the exe inside the zip
 # keeps its stable `lets-chat-desktop.exe` name (the /out copy is the same
 # bytes). `zip -j` flattens, so the archive has no nested directory.
 RUN mkdir -p /pkg/portable \
  && cp /out/lets-chat-desktop.exe /pkg/portable/lets-chat-desktop.exe \
+ && cp /out/WebView2Loader.dll /pkg/portable/WebView2Loader.dll \
  && cp /pkg/MicrosoftEdgeWebview2Setup.exe /pkg/portable/MicrosoftEdgeWebview2Setup.exe \
  && cp /pkg/portable-README.txt /pkg/portable/README.txt \
  && zip -j -9 /out/lets-chat-desktop-windows-x86_64.zip \
       /pkg/portable/lets-chat-desktop.exe \
+      /pkg/portable/WebView2Loader.dll \
       /pkg/portable/MicrosoftEdgeWebview2Setup.exe \
       /pkg/portable/README.txt \
  && test -s /out/lets-chat-desktop-windows-x86_64.zip \
