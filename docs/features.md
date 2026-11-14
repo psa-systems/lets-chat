@@ -63,6 +63,7 @@ A desktop-specific portal backend must also be installed and running, matching y
 - Web push notifications
 - Email digest of missed mentions and DMs, off by default per user (see [email-digests.md](email-digests.md))
 - Per-mention and per-DM notification emails (off by default per user); reply to one of those emails to post that reply to chat as yourself
+- Running in the desktop app: a mention, DM, or incoming call raises a native OS notification instead of a browser one (same mute / do-not-disturb gating), the dock/taskbar icon shows your unread count, and `lets-chat://room/<id>` (or `/dm/...`, `#msg-...`) links open and focus the app at that destination
 
 ## Integrations and API
 
