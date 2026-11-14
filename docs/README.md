@@ -16,6 +16,8 @@ Everything that is not the one-page introduction in the repository
 - [email-digests.md](email-digests.md) - the missed-mentions digest: setup, opt-in, delivery rules
 - [email-ingress.md](email-ingress.md) - per-room IMAP inboxes and reply-by-email
 - [protocol-bridges.md](protocol-bridges.md) - bridging foreign networks into rooms
+- [lets-chat/sso/bunyip-only/README.md](lets-chat/sso/bunyip-only/README.md) - the LC-22 cutover to bunyip-api OIDC as the sole sign-in path
+- [runbooks/lc-1008-purge-stale-pull-refs.md](runbooks/lc-1008-purge-stale-pull-refs.md) - purge stale Forgejo pull refs serving old secrets
 
 ## Building on it
 
