@@ -26,7 +26,7 @@ surfaces is in [configuration.md](configuration.md).
 - Huddles: multi-party enclave voice channels, with a ring notification to room members who are not already viewing the room
 - Per-room stage mode: speaker roles and request-to-speak, with audio carried by a self-hosted LiveKit SFU when `LETS_CHAT_LIVEKIT_*` is configured (the mesh path caps at a handful of peers)
 - Call transcription, either in the speaker's browser (Web Speech) or server-side against a transcription endpoint you run
-- Consent-gated remote control: during a 1:1 call, request keyboard/mouse control of a peer's screen (desktop app; verified-email gated, revocable at any time). Off by default; an admin must enable it at `/admin/remote-control` before users can request control, and can review the consent history on a dedicated audit page.
+- Consent-gated remote control: during a 1:1 call, request keyboard/mouse control of a peer's screen (desktop app, Windows only; verified-email gated, revocable at any time). Off by default; an admin must enable it at `/admin/remote-control` before users can request control, and can review the consent history on a dedicated audit page.
 - In-call text chat: a Chat control in the voice call bar opens a draggable panel where anyone in the call can send and read messages live during the call, posted to the voice room's own message channel
 - Screen-share alongside the audio/video stream
 - Active voice rooms show a live in-call participant count in the sidebar
