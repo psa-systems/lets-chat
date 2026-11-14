@@ -87,7 +87,8 @@ Every one of these is off until an operator points it at an endpoint they run, a
 ## Administration
 
 - Admin panel: user management, room management, settings
-- Feature flags: Off / Admins only / On rollout control for AI surfaces, remote control, server-side transcription, and in-call diagnostics (admin-only), at `/admin/feature-flags`
+- Feature flags: Off / Admins only / On rollout control for AI surfaces, remote control, server-side transcription, in-call diagnostics (admin-only), and YouTrack issue filing (admin-only), at `/admin/feature-flags`
+- An admin can file a call transcript's action items into an org-wide YouTrack: configure the base URL, an API token, and a default project at `/admin/settings`; the token is sealed at rest
 - Analytics dashboard: DAU/MAU, messages, rooms, signups, retention
 - Branding: custom logo, colors, login text, and favicon
 - Anti-spam: rate limits, link filter, and honeypot
