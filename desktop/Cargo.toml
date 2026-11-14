@@ -8,7 +8,7 @@ name = "lets-chat-desktop"
 path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.7.4", features = [] }
 
 [dependencies]
 ip-policy = { path = "../ip-policy" }
@@ -18,55 +18,55 @@ ip-policy = { path = "../ip-policy" }
 # .dmg / .msi / .AppImage / .deb plus Android (.apk/.aab) and iOS (.ipa).
 # The migration is scoped to the framework swap; mobile targets, plugins,
 # system tray, and OS-native notifications land in follow-ups.
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri = { version = "2.12.5", features = ["tray-icon", "image-png"] }
 # Bring focus back to the existing window if the binary is launched while
 # already running. Cheap to wire up now; saves a "second window appeared"
 # bug report later.
-tauri-plugin-single-instance = "2"
+tauri-plugin-single-instance = "2.5.5"
 # Deep links (audit Phase 2): register the `lets-chat://` URL scheme so a link
 # opens/focuses the app and navigates to the room/DM/message. Handles the
 # Windows registry entry and the Linux `.desktop` MimeType registration from
 # the scheme declared in tauri.conf.json. macOS registration/verification is a
 # separate ticket (needs a Mac runner); only Windows + Linux are built today.
-tauri-plugin-deep-link = "2"
+tauri-plugin-deep-link = "2.6.3"
 # OS-native notifications. The server pages call
 # invoke('plugin:notification|notify', { title, body }) once the
 # server-side integration lands; the plugin and capability are wired
 # here so the desktop binary is ready ahead of that work.
-tauri-plugin-notification = "2"
+tauri-plugin-notification = "2.8.1"
 # LC-186: OS-level kill-switch for remote control. A global shortcut severs an
 # active control session even when the controlling peer holds the input focus
 # (the on-banner button can be hard to click while a remote cursor is moving).
-tauri-plugin-global-shortcut = "2"
+tauri-plugin-global-shortcut = "2.4.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 # Default features ("tls") give us rustls + webpki-roots so HTTPS works on
 # both Linux and the windows-gnu cross-compile without dragging in system
 # OpenSSL / Schannel build dependencies.
-ureq = { version = "2", features = ["json"] }
+ureq = { version = "2.12.1", features = ["json"] }
 # LC-210: relative-Location resolution + host parsing in the self-updater's
 # manual redirect loop (net_guard.rs). Already in the workspace tree (server).
-url = "2"
+url = "2.5.8"
 # LC-709: SHA-256 of the downloaded binary is checked against the update
 # manifest before self-replace (the manifest signature this used to sit
 # alongside is gone). Versions match the ones already pinned in server/.
-sha2 = "0.10"
-hex = "0.4"
+sha2 = "0.11.1"
+hex = "0.4.3"
 # Atomic in-place replace of the currently running executable. Handles the
 # Windows-cant-delete-running-exe restriction by renaming the live binary
 # aside before writing the new one.
-self-replace = "1"
+self-replace = "1.5.1"
 # Cross-platform user config / data dir resolution. Used by config.rs to
 # pick the right path for the persisted LETS_CHAT_SERVER_URL choice:
 # $XDG_CONFIG_HOME on Linux, ~/Library/Application Support on macOS,
 # %APPDATA% on Windows.
-dirs = "5"
+dirs = "5.0.1"
 # LC-1159: hand off-origin / new-window ("open in new tab") links to the OS
 # default browser from the webview's on_new_window handler (main.rs). Shells
 # out to `open` / `xdg-open` / `cmd start`; called directly from Rust, so it
 # needs no Tauri command, permission or capability. First-party links are kept
 # in-app instead (navigated in the existing window).
-open = "5"
+open = "5.4.5"
 
 # Linux-only: gives access to the WebKit2GTK `permission-request` signal
 # that wry exposes via PlatformWebview::inner(). Required because the
@@ -75,7 +75,7 @@ open = "5"
 # signal. Pinned to "2" (= libwebkit2gtk-4.1) to match the system .so
 # that wry links against.
 [target.'cfg(target_os = "linux")'.dependencies]
-webkit2gtk = "2"
+webkit2gtk = "2.0.2"
 
 # Windows-only: WebView2 surfaces media-stream consent through the
 # CoreWebView2 PermissionRequested COM event. webview2-com + the
@@ -84,8 +84,8 @@ webkit2gtk = "2"
 # PlatformWebview::controller(). Default WebView2 behaviour cancels
 # the event (= silent deny) unless the host sets state to Allow.
 [target.'cfg(target_os = "windows")'.dependencies]
-webview2-com = "0.38"
+webview2-com = "0.39.1"
 # Win32_UI_Input_KeyboardAndMouse: SendInput + INPUT/MOUSEINPUT/KEYBDINPUT and
 # the MOUSEEVENTF_*/KEYEVENTF_* flags used by the remote-control injector
 # (src/inject.rs, LC-185).
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Input_KeyboardAndMouse"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Input_KeyboardAndMouse"] }

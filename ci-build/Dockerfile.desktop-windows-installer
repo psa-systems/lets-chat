@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.6
+# syntax=docker/dockerfile:1.29
 
 # LC-131 spike: build the Windows installer (.exe) FROM LINUX with makensis.
 #

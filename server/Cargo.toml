@@ -42,48 +42,48 @@ tokio = { workspace = true }
 futures = { workspace = true }
 tracing = { workspace = true }
 
-axum = { version = "0.8", features = ["ws", "macros", "multipart"] }
-axum-extra = { version = "0.10", features = ["cookie"] }
-tower = "0.5"
-tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip", "compression-br"] }
-http = "1"
-askama = "0.12"
+axum = { version = "0.8.9", features = ["ws", "macros", "multipart"] }
+axum-extra = { version = "0.12.6", features = ["cookie"] }
+tower = "0.5.3"
+tower-http = { version = "0.7.1", features = ["fs", "trace", "compression-gzip", "compression-br"] }
+http = "1.5.0"
+askama = "0.16.1"
 # LC-100: i18n. fluent-templates embeds server/locales/**/*.ftl at compile time
 # (single-binary) and resolves Fluent messages incl. plural selectors.
-fluent-templates = "0.9"
-unic-langid = { version = "0.9", features = ["macros"] }
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate", "chrono"] }
+fluent-templates = "0.15.1"
+unic-langid = { version = "0.9.6", features = ["macros"] }
+sqlx = { version = "0.9.0", features = ["runtime-tokio", "sqlite", "migrate", "chrono"] }
 # IP -> country lookup for login-location alerts (LC-580); reads the same
 # IP2Location LITE .BIN the ecosystem already deploys.
-ip2location = "0.6"
-argon2 = "0.5"
-rand = "0.8"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-dashmap = "6"
-time = "0.3"
-mime_guess = "2"
-percent-encoding = "2"
-async-trait = "0.1"
-thiserror = "1"
-infer = "0.16"
-tokio-util = { version = "0.7", features = ["io"] }
-sha2 = "0.10"
-linkify = "0.10"
+ip2location = "0.6.1"
+argon2 = "0.6.0"
+rand = "0.10.3"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+dashmap = "6.2.1"
+time = "0.3.55"
+mime_guess = "2.0.5"
+percent-encoding = "2.3.2"
+async-trait = "0.1.92"
+thiserror = "1.0.69"
+infer = "0.22.0"
+tokio-util = { version = "0.7.20", features = ["io"] }
+sha2 = "0.11.1"
+linkify = "0.11.0"
 # LC-296: Unicode emoji dataset (shortcodes + names) for the composer's
 # :shortcode: autocomplete. Embeds the gemoji set; no runtime fetch.
-emojis = "0.6"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "stream", "json", "multipart"] }
-scraper = "0.20"
-url = "2"
-regex = "1"
-unicode-normalization = "0.1"
-totp-rs = { version = "5", features = ["qr", "otpauth", "gen_secret"] }
-aes-gcm = "0.10"
-web-push-native = "0.4"
-p256 = { version = "0.13", features = ["pkcs8", "pem", "ecdh"] }
-bytes = "1"
-base64 = "0.22"
-pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
+emojis = "0.9.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-tls", "gzip", "stream", "json", "multipart"] }
+scraper = "0.29.0"
+url = "2.5.8"
+regex = "1.13.1"
+unicode-normalization = "0.1.26"
+totp-rs = { version = "5.7.2", features = ["qr", "otpauth", "gen_secret"] }
+aes-gcm = "0.11.1"
+web-push-native = "0.5.0"
+p256 = { version = "0.14.0", features = ["pkcs8", "pem", "ecdh"] }
+bytes = "1.12.1"
+base64 = "0.23.1"
+pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
 # LC-59: server-side LaTeX -> MathML rendering for inline `$...$` and
 # display `$$...$$` math in message bodies. Pure Rust, no JS engine.
 #
@@ -94,9 +94,9 @@ pulldown-cmark = { version = "0.12", default-features = false, features = ["html
 # blocklist misses, silently re-opening the process-abort vector via
 # `\def`-family stack overflow (uncatchable by `catch_unwind`).
 # Re-run the LC-59 spike before merging any version bump.
-pulldown-latex = "=0.7.1"
-syntect = { version = "5", default-features = false, features = ["default-fancy", "html"] }
-lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls", "rustls-tls", "hostname"] }
+pulldown-latex = "=0.8.0"
+syntect = { version = "5.3.0", default-features = false, features = ["default-fancy", "html"] }
+lettre = { version = "0.11.23", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls", "rustls-tls", "hostname"] }
 # LC-77: MIME parser for IMAP-polled message bodies.
 #
 # Pinned EXACTLY to 0.10.2 with `=`. mail-parser parses hostile input from
@@ -107,7 +107,7 @@ lettre = { version = "0.11", default-features = false, features = ["smtp-transpo
 # change parsing tolerance or surface a regression: re-run the LC-77
 # mail-parser corpus spike under spike/lc-77-mail-parser-corpus before
 # any version bump.
-mail-parser = "=0.10.2"
+mail-parser = "=0.11.9"
 # LC-77: async IMAP client for the email-ingress poll loop.
 #
 # Pinned EXACTLY to 0.10.4 with `=`. The LC-77 spike B drove the 7-step
@@ -116,26 +116,26 @@ mail-parser = "=0.10.2"
 # server with this version. A minor bump could change error variants
 # we depend on for the failure-log taxonomy (Io / No / ConnectionLost)
 # or the TLS feature pin: re-run spike B before bumping.
-async-imap = { version = "=0.10.4", default-features = false, features = ["runtime-tokio"] }
+async-imap = { version = "=0.12.0", default-features = false, features = ["runtime-tokio"] }
 # LC-77: TLS for async-imap. ring crypto provider (no aws-lc-rs, no
 # OpenSSL). Pinned to the same line tokio-rustls uses elsewhere; minor
 # bumps within 0.23 are accepted.
-rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
-tokio-rustls = "0.26"
+rustls = { version = "0.23.46", default-features = false, features = ["std", "ring"] }
+tokio-rustls = "0.26.6"
 # LC-77: Mozilla root CA list for verifying the IMAP server's TLS cert.
 # Pinned ranges, not exact, because the root list is rotated by Mozilla
 # periodically and we want to pick up new CAs on a routine cargo update
 # without re-running the spike. The data is the root list itself, not
 # code: it cannot regress in a way the spike would catch.
-webpki-roots = "0.26"
-hmac = { version = "0.12" }
-hex = { version = "0.4" }
+webpki-roots = "0.26.11"
+hmac = { version = "0.13.0" }
+hex = { version = "0.4.3" }
 # LC-22: used by `bunyip_sso` to verify EdDSA `id_token` signatures against
 # bunyip-api's JWKS, and (when the `saas` feature is on) by `saas_auth.rs` for
 # its existing JWT path. Non-feature-gated so the standalone build that runs
 # SSO has access without re-shuffling features.
-jsonwebtoken = { version = "10", default-features = false, features = ["use_pem", "aws_lc_rs"] }
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
+jsonwebtoken = { version = "10.4.0", default-features = false, features = ["use_pem", "aws_lc_rs"] }
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 # Pinned to v2 deliberately. v3+ reshuffled the SimpleFileOptions /
 # ZipWriter API and our backup module is intentionally feature-light
 # (deflate only, no encryption). Revisit if/when LC-95 grows into
@@ -147,10 +147,10 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 # LC-629: name async_trait in an integration test to implement a correcting
 # LlmClient double (input-dependent, unlike the crate's fixed MockLlmClient).
 # Already a normal dependency; this only makes it visible to the test crates.
-async-trait = "0.1"
-kamadak-exif = "0.5"
+async-trait = "0.1.92"
+kamadak-exif = "0.6.2"
 # LC-206-IMAGE-LIMITS (#284): craft a valid PNG decompression-bomb fixture
 # (tiny file, huge decoded dimensions) by streaming zero scanlines through a
 # real zlib encoder, to prove the decode Limits reject it. Already in the tree
 # transitively (image -> png -> flate2), so this adds no new download.
-flate2 = "1"
+flate2 = "1.1.11"

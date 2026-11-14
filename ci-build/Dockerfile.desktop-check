@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.6
+# syntax=docker/dockerfile:1.29
 
 # LC-997: pre-merge gate for the desktop crate (fmt, clippy, tests).
 #
