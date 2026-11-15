@@ -9,6 +9,10 @@ The project ships two ways:
 - **Server**: the `latest` OCI image, built off `main` (`build-oci-image.yml`). Operators run it directly. There is **no per-commit version**; `main` is the release.
 - **Desktop**: a self-updating Tauri 2 app. `publish-release.yml` fires on a `v*` tag push, cross-builds the Linux/Windows binaries, uploads them plus a `latest.json` manifest to Forgejo Generic Packages (the hand-download path), and pushes each binary to the container registry as an OCI artifact (the path the app's self-updater pulls). The only credential the release needs is the packages PAT, used for both.
 
+### macOS (manual)
+
+macOS has no CI runner today, so it is not part of `publish-release.yml`. The `.app`/`.dmg` is built by hand on a Mac with `just build-desktop-mac-release` (`justfile:351`), which bakes the same production server URL (`https://chat.psa.systems`) the CI builds bake into the Windows/Linux installers. The resulting `.dmg` is then uploaded by hand to the same private Generic Packages registry the Windows/Linux installers use, at `generic/lets-chat/<version>/lets-chat-desktop-macos-<arch>.dmg`, with the upload command currently recorded in `LC-1164`'s description. `LC-1164` tracks automating this once a macOS CI runner exists; this paragraph should be replaced by that automation when it lands.
+
 ### Desktop distribution is membership-gated (LC-733)
 
 The desktop binaries are **not public**. They live under a private org, so an anonymous download answers 401, and the updater has to prove the user's membership to fetch one.
