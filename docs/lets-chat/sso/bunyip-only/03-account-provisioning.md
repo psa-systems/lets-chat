@@ -3,10 +3,10 @@
 How a `users` row is resolved or created for a verified Bunyip identity after
 the LC-22 cutover, and how that identity is stored.
 
-The authoritative implementation is `resolve_or_provision_user` and
-`create_user_from_bunyip` in `server/src/routes/bunyip_sso.rs`; this document
-records the decisions those functions encode and the storage model migrations
-0029 / 0030 / 0031 / 0043 establish.
+The authoritative implementation is `resolve_or_provision_user` in
+`server/src/routes/bunyip_sso.rs`, which calls `create_user_from_bunyip` in
+`server/src/db/auth.rs`; this document records the decisions those functions
+encode and the storage model migrations 0029 / 0030 / 0031 / 0043 establish.
 
 ## 3.1 Resolve-or-provision decision tree
 
