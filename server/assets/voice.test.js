@@ -705,6 +705,59 @@ test('LC-1174: a focused peer leaving drops the grid out of focus mode', () => {
   assert.equal(grid.querySelectorAll('[data-lc-focus]').length, 0);
 });
 
+// LC-1193: the equal-gallery state. The per-tile button shows Shrink on whichever
+// tile is currently big (a focused tile, or - in the auto layout - the data-screen
+// sharer) and Expand on the rest; Shrink collapses the grid to an equal gallery so
+// the big tile can be made small. Viewer-local, never sent to peers.
+test('LC-1193: setGallery collapses the grid to an equal gallery and clears focus', () => {
+  const h = joined();
+  const grid = h.dock.querySelector('[data-lc-voice-grid]');
+  h.sfuHooks().addTile('u2', 'Bob');
+
+  h.voice.setFocus('u2');
+  const u2 = grid.querySelector('[data-lc-voice-tile="u2"]');
+  assert.equal(u2.hasAttribute('data-lc-staged'), true, 'the focused tile is the staged tile');
+  const u2btn = u2.querySelector('[data-lc-voice-focus-btn]');
+  assert.equal(u2btn.getAttribute('aria-pressed'), 'true', 'its button offers Shrink');
+
+  h.voice.setGallery(true);
+  assert.equal(grid.classList.contains('lc-voice-grid--gallery'), true, 'gallery mode on');
+  assert.equal(grid.classList.contains('lc-voice-grid--focus'), false, 'focus cleared by gallery');
+  assert.equal(grid.querySelectorAll('[data-lc-staged]').length, 0, 'no tile is the stage in gallery');
+  assert.equal(u2btn.getAttribute('aria-pressed'), 'false', 'its button now offers Expand');
+
+  h.voice.setFocus('u2');
+  assert.equal(grid.classList.contains('lc-voice-grid--gallery'), false, 'focusing a tile leaves gallery');
+  assert.equal(u2.hasAttribute('data-lc-staged'), true, 'u2 is the stage again');
+
+  assert.equal(h.sent.filter((f) => /gallery|focus/i.test(f.type || '')).length, 0, 'never sent to peers');
+});
+
+test('LC-1193: the auto-staged sharer is the staged tile, and gallery shrinks it', () => {
+  const h = joined();
+  h.win.__lcScreenBlackoutMs = 1000000; // keep the one-shot blackout check out of the test window
+  const grid = h.dock.querySelector('[data-lc-voice-grid]');
+  h.sfuHooks().addTile('u2', 'Bob');
+
+  // u2 starts sharing: the sharer auto-takes the stage, so - with NO explicit focus
+  // - its tile is the staged one and its button offers Shrink.
+  h.event({ 'data-room-id': 7, 'data-kind': 'screen', 'data-user-id': 'u2', 'data-payload': '1' });
+  const u2 = grid.querySelector('[data-lc-voice-tile="u2"]');
+  assert.equal(u2.getAttribute('data-screen'), 'true', 'precondition: u2 is sharing');
+  assert.equal(grid.classList.contains('lc-voice-grid--focus'), false, 'no explicit focus');
+  assert.equal(u2.hasAttribute('data-lc-staged'), true, 'the sharer is the auto-staged tile');
+  assert.equal(u2.querySelector('[data-lc-voice-focus-btn]').getAttribute('aria-pressed'), 'true');
+
+  // Shrink the sharer -> equal gallery; it is no longer the stage.
+  h.voice.setGallery(true);
+  assert.equal(grid.classList.contains('lc-voice-grid--gallery'), true);
+  assert.equal(u2.hasAttribute('data-lc-staged'), false, 'the sharing tile is shrunk to the gallery');
+
+  // Stopping the share while in gallery leaves gallery untouched.
+  h.event({ 'data-room-id': 7, 'data-kind': 'screen', 'data-user-id': 'u2', 'data-payload': '0' });
+  assert.equal(grid.classList.contains('lc-voice-grid--gallery'), true, 'gallery survives a sharing change');
+});
+
 // LC-1175: viewer-local tile reorder. The drag + keyboard paths both funnel
 // through moveTile / moveTileBefore (exposed as reorder.move / reorder.moveBefore);
 // the pointer drag itself is not exercised here (the DOM stub has no pointer
