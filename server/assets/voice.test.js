@@ -914,6 +914,66 @@ test('LC-1166: the desktop app shows a macOS-specific screen-share message', () 
 // used to be swallowed in huddle_sfu.toggleScreen with no toast and no voice-log
 // entry - the Linux "missing GStreamer/PipeWire" case reported as "does nothing".
 // voice.js now surfaces an SFU toggle rejection the way the mesh path does.
+// LC-1196: detect talking-while-muted and nudge to unmute. The decision core is
+// pure (a running state + a fresh mic level + the clock), so it runs here
+// without Web Audio: a nudge fires only after sustained muted speech, holds off
+// for the cooldown, tolerates word-length gaps, and resets after real silence.
+test('LC-1196: muteNudgeStep fires after sustained muted speech, then respects the cooldown and word gaps', () => {
+  const step = load().voice.muteNudgeStep;
+  const LOUD = 200, QUIET = 5; // around the internal level threshold (20)
+  let s = { speakSince: 0, lastLoud: 0, lastNudgeAt: 0 };
+
+  // Unmuted speech never nudges and keeps the sustain window clear.
+  let r = step(s, LOUD, 1000, false);
+  assert.equal(r.fire, false);
+  assert.equal(r.active, false);
+  s = r.state;
+
+  // Muted + loud starts the window but does not fire on the first frame.
+  r = step(s, LOUD, 2000, true);
+  assert.equal(r.fire, false, 'no nudge on the first loud frame');
+  assert.equal(r.active, true, 'speech is now tracked');
+  s = r.state;
+
+  // Under the sustain threshold (1500ms): still no fire.
+  r = step(s, LOUD, 3000, true);
+  assert.equal(r.fire, false, 'under the sustain threshold');
+  s = r.state;
+
+  // Past 1500ms of sustained speech: fire once.
+  r = step(s, LOUD, 3600, true);
+  assert.equal(r.fire, true, 'fires after sustained muted speech');
+  s = r.state;
+
+  // Right after: the cooldown suppresses a second nudge while still talking.
+  r = step(s, LOUD, 4000, true);
+  assert.equal(r.fire, false, 'cooldown holds the next nudge');
+  s = r.state;
+
+  // A short word gap (<600ms silence) does NOT reset the window.
+  r = step(s, QUIET, 4300, true);
+  assert.equal(r.active, true, 'a short word gap keeps the window');
+  s = r.state;
+  r = step(s, LOUD, 4500, true); // speech resumes within the gap
+  assert.equal(r.active, true);
+  s = r.state;
+
+  // A long silence (>600ms) resets the sustain window.
+  r = step(s, QUIET, 6000, true);
+  assert.equal(r.active, false, 'a long silence clears the window');
+  s = r.state;
+
+  // Unmuting clears any tracked speech immediately.
+  r = step(s, LOUD, 6100, false);
+  assert.equal(r.active, false);
+  s = r.state;
+
+  // Past the 12s cooldown, fresh sustained muted speech nudges again.
+  r = step(s, LOUD, 18000, true); s = r.state;       // window restarts
+  r = step(s, LOUD, 20000, true);                    // 2s sustained, >12s since last nudge
+  assert.equal(r.fire, true, 'nudges again after the cooldown');
+});
+
 test('LC-1166: an SFU screen-share failure surfaces a toast and a voice-log entry', async () => {
   const err = Object.assign(new Error('no portal'), { name: 'NotFoundError' });
   const h = load({ sfuScreenError: err }); // getDisplayMedia present; the LiveKit toggle fails

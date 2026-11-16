@@ -825,6 +825,7 @@
       // echoCancellation constraint, so its level reflects us, not the bleed.
       if (isSelf && speaking) window.__lcLastLocalSpeechAt = Date.now();
     }
+    checkMutedSpeech(); // LC-1196: nudge us if we are talking while muted
   }
   function startSpeaking() {
     var ctx = ensureAudioCtx();
@@ -849,6 +850,112 @@
     if (g) Array.prototype.forEach.call(g.querySelectorAll('[data-lc-voice-tile]'), function (t) {
       t.removeAttribute('data-speaking');
     });
+  }
+
+  // ---- muted-speech nudge (LC-1196) ----------------------------------
+  // Detect that WE are talking while muted and nudge us to unmute. Mute sets the
+  // mic track's `enabled = false`, which silences it to the active-speaker
+  // analyser above and to peers - but leaves the track (and the mic hardware)
+  // live. A clone of that track keeps an INDEPENDENT `enabled` flag while
+  // sharing the same capture, so it stays audible to a dedicated analyser when
+  // the real track is muted, adding no extra mic/hardware footprint. That
+  // analyser is a tap only (never added to a peer connection or transmitted), so
+  // this is purely on-device: when muted + sustained speech, we pulse the Mute
+  // button, reveal a hint, and play an attention cue. Mesh only (the SFU owns
+  // its own mic in huddle_sfu.js and localStream is null there).
+  var MUTE_NUDGE_LEVEL = 20;          // 0..255 analyser average that counts as speech
+  var MUTE_NUDGE_SUSTAIN_MS = 1500;   // sustained speech before the first nudge
+  var MUTE_NUDGE_GAP_MS = 600;        // silence this long resets the sustain window (word gaps tolerated)
+  var MUTE_NUDGE_COOLDOWN_MS = 12000; // minimum spacing between nudges
+  var MUTE_NUDGE_HIDE_MS = 4000;      // how long the visual lingers after a nudge
+  var muteMon = null;                 // { stream, track, an, data, src, speakSince, lastLoud, lastNudgeAt }
+  var muteNudgeHideTimer = 0;
+
+  // Pure decision: given the running state, a fresh level, the clock, and
+  // whether we are muted, return the next state, whether to FIRE a nudge now,
+  // and whether speech is currently sustained. No DOM / Web Audio, so it is
+  // unit-tested directly (LC-1196).
+  function muteNudgeStep(state, lvl, now, muted) {
+    var s = {
+      speakSince: state.speakSince || 0,
+      lastLoud: state.lastLoud || 0,
+      lastNudgeAt: state.lastNudgeAt || 0,
+    };
+    if (!muted) { s.speakSince = 0; s.lastLoud = 0; return { state: s, fire: false, active: false }; }
+    if (lvl > MUTE_NUDGE_LEVEL) {
+      if (!s.speakSince) s.speakSince = now;
+      s.lastLoud = now;
+    } else if (s.speakSince && now - s.lastLoud > MUTE_NUDGE_GAP_MS) {
+      s.speakSince = 0;
+    }
+    var fire = false;
+    if (s.speakSince && now - s.speakSince >= MUTE_NUDGE_SUSTAIN_MS
+        && (!s.lastNudgeAt || now - s.lastNudgeAt >= MUTE_NUDGE_COOLDOWN_MS)) {
+      s.lastNudgeAt = now;
+      fire = true;
+    }
+    return { state: s, fire: fire, active: !!s.speakSince };
+  }
+
+  function startMuteMonitor() {
+    if (sfu || muteMon || !localStream) return;
+    var track = localStream.getAudioTracks()[0];
+    if (!track || typeof track.clone !== 'function' || typeof MediaStream === 'undefined') return;
+    var ctx = ensureAudioCtx();
+    if (!ctx) return;
+    try {
+      var clone = track.clone(); // independent `enabled`; stays live while the real track is muted
+      var stream = new MediaStream([clone]);
+      var src = ctx.createMediaStreamSource(stream);
+      var an = ctx.createAnalyser();
+      an.fftSize = 512;
+      src.connect(an); // tap only - never connected to destination, so no echo and nothing transmitted
+      muteMon = {
+        stream: stream, track: clone, an: an, data: new Uint8Array(an.frequencyBinCount),
+        src: src, speakSince: 0, lastLoud: 0, lastNudgeAt: 0,
+      };
+    } catch (e) { muteMon = null; }
+  }
+  function monLevel() {
+    if (!muteMon) return 0;
+    muteMon.an.getByteFrequencyData(muteMon.data);
+    var sum = 0;
+    for (var i = 0; i < muteMon.data.length; i++) sum += muteMon.data[i];
+    return sum / muteMon.data.length; // 0..255
+  }
+  function checkMutedSpeech() {
+    if (!muteMon) return;
+    var r = muteNudgeStep(muteMon, monLevel(), Date.now(), selfMuted);
+    muteMon.speakSince = r.state.speakSince;
+    muteMon.lastLoud = r.state.lastLoud;
+    muteMon.lastNudgeAt = r.state.lastNudgeAt;
+    if (r.fire) fireMutedNudge();
+    else if (!selfMuted) clearMutedNudge();
+  }
+  function fireMutedNudge() {
+    var btn = q('[data-lc-voice-mute]');
+    if (btn) btn.classList.add('lc-cbtn--nudge');
+    var pill = q('[data-lc-mute-nudge]');
+    var live = q('[data-lc-mute-live]');
+    if (live && pill) live.textContent = pill.textContent; // announce (pill itself is aria-hidden)
+    if (window.LetsChatSfx && window.LetsChatSfx.playMutedNudge) window.LetsChatSfx.playMutedNudge();
+    if (muteNudgeHideTimer) clearTimeout(muteNudgeHideTimer);
+    muteNudgeHideTimer = setTimeout(clearMutedNudge, MUTE_NUDGE_HIDE_MS);
+  }
+  function clearMutedNudge() {
+    if (muteNudgeHideTimer) { clearTimeout(muteNudgeHideTimer); muteNudgeHideTimer = 0; }
+    var btn = q('[data-lc-voice-mute]');
+    if (btn) btn.classList.remove('lc-cbtn--nudge');
+    var live = q('[data-lc-mute-live]');
+    if (live) live.textContent = '';
+  }
+  function stopMuteMonitor() {
+    clearMutedNudge();
+    if (muteMon) {
+      try { muteMon.src.disconnect(); } catch (e) {}
+      try { muteMon.track.stop(); } catch (e) {}
+      muteMon = null;
+    }
   }
 
   // ---- connection-quality monitor (LC-410) ---------------------------
@@ -1196,6 +1303,7 @@
       showJoinedUi(true);
       createTile(cfg.selfId, cfg.selfName, true);
       startSpeaking();
+      startMuteMonitor(); // LC-1196: watch for talking-while-muted (mesh only)
       startQuality();
       var sv = tileVideo(cfg.selfId);
       // Re-assign (null first) so the <video> re-renders with the changed
@@ -1371,6 +1479,7 @@
     selfMuted = false;
     selfSharing = false;
     stopSpeaking();
+    stopMuteMonitor(); // LC-1196
     stopQuality();
     wsSend({ type: 'voice_leave', room_id: cfg.roomId });
     Object.keys(peers).forEach(removePeer);
@@ -1433,6 +1542,7 @@
     var muted = !on;
     dbg('toggle: after', audioTrackStates());
     selfMuted = muted;
+    if (!muted) clearMutedNudge(); // LC-1196: unmuting resolves the nudge at once
     var btn = q('[data-lc-voice-mute]');
     if (btn) {
       setLabel(btn, on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute'));
@@ -2213,6 +2323,8 @@
     },
     // LC-1154: pure guard + diagnostic summarizers, exported for unit testing.
     shouldAutoIceRestart: shouldAutoIceRestart,
+    // LC-1196: pure muted-speech nudge decision, exported for unit testing.
+    muteNudgeStep: muteNudgeStep,
     summarizeStats: summarizeStats,
     iceOkLabel: iceOkLabel,
     iceFailLabel: iceFailLabel,

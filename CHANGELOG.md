@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Added
+
+- **A nudge when you talk while muted (LC-1196).** In a voice channel or huddle, if you start speaking while your mic is muted, the Mute button now pulses amber, a "You're muted" hint appears beside it, and a short attention sound plays (when call sounds are on), so you notice before saying much to no one. Detection is entirely on-device: a local clone of your mic track keeps listening for the reminder while the real track stays muted and silent to everyone else. It fires only after about a second and a half of sustained speech (so a cough or a passing noise does not trigger it), re-reminds at most every few seconds, and clears the instant you unmute or stop. It is announced to screen readers and respects reduced-motion.
+
 ### Fixed
 
 - **Call tiles can now be shrunk back to an even grid, including the big screen-share tile (LC-1193).** The expand control made one tile the full stage, but the tile that is already big - whoever is sharing their screen - couldn't be shrunk, so its button appeared to do nothing. Each tile's button now reads "Expand" to make that tile the stage and "Shrink" on whichever tile is currently big (a tile you expanded, or the auto-staged screen share) to collapse everyone back into an equal gallery. So you can drop the shared screen down to the same size as everyone else when you want to, then expand any tile again. Still your own view only - it is never sent to anyone else.
