@@ -11,6 +11,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 ### Fixed
 
 - **In-call chat now shows everyone's messages, not just your own (LC-1192).** During a call, a participant who was in the call but not a formal member of the room - most often a site admin who dropped into a room they reach through god-mode - saw only the messages they sent themselves; other people's messages never arrived. Room messages are now delivered to everyone currently in the call for that room (they are already authorized occupants), so the in-call chat is complete for every participant. This is the receiving-side counterpart to the earlier fix that made the author see their own message.
+- **The in-call chat no longer hides behind the transcript panel (LC-1194).** On a voice-channel page, opening the transcript (a full-height right sidebar) covered the in-call chat drawer pinned in the bottom-right corner. The chat now slides left of the transcript so the two sit side by side, and returns to the corner when the transcript closes (a chat you have dragged elsewhere stays where you put it). The chat's header also gets a visible drag handle and a "drag to move" hint, so repositioning it is discoverable instead of a hidden hover-only cursor.
 
 ## [v0.13.0] - 2026-11-16
 
