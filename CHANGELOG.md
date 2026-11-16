@@ -10,6 +10,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ### Fixed
 
+- **Call tiles can now be shrunk back to an even grid, including the big screen-share tile (LC-1193).** The expand control made one tile the full stage, but the tile that is already big - whoever is sharing their screen - couldn't be shrunk, so its button appeared to do nothing. Each tile's button now reads "Expand" to make that tile the stage and "Shrink" on whichever tile is currently big (a tile you expanded, or the auto-staged screen share) to collapse everyone back into an equal gallery. So you can drop the shared screen down to the same size as everyone else when you want to, then expand any tile again. Still your own view only - it is never sent to anyone else.
 - **In-call chat now shows everyone's messages, not just your own (LC-1192).** During a call, a participant who was in the call but not a formal member of the room - most often a site admin who dropped into a room they reach through god-mode - saw only the messages they sent themselves; other people's messages never arrived. Room messages are now delivered to everyone currently in the call for that room (they are already authorized occupants), so the in-call chat is complete for every participant. This is the receiving-side counterpart to the earlier fix that made the author see their own message.
 
 ## [v0.13.0] - 2026-11-16
