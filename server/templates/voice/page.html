@@ -241,8 +241,15 @@
      uses for flex/grid containers. #}
   <aside id="lc-call-chat" data-lc-call-chat aria-label="{{ "voice-chat-label"|t }}"
          class="hidden fixed bottom-4 right-4 z-40 flex w-80 max-w-[calc(100vw-2rem)] flex-col rounded-lg border border-border bg-surface-elevated shadow-lg" style="max-height: 70vh;">
-    <header data-lc-chat-drag class="flex cursor-move select-none items-center justify-between border-b border-border px-3 py-2">
-      <span class="text-sm font-semibold">{{ "voice-chat-label"|t }}</span>
+    {# LC-1194: the header is the drag handle. A visible grip + a tooltip make that
+       discoverable - the old cursor:move cue only appeared on hover and new users
+       never found it. #}
+    <header data-lc-chat-drag data-lc-tip="{{ "voice-chat-move-hint"|t }}" data-lc-tip-pos="top"
+            class="flex cursor-move select-none items-center justify-between gap-2 border-b border-border px-3 py-2">
+      <span class="flex min-w-0 items-center gap-1.5">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 shrink-0 text-content-muted" aria-hidden="true"><path d="M7 4.5a1.25 1.25 0 11-2.5 0 1.25 1.25 0 012.5 0zm0 5.5a1.25 1.25 0 11-2.5 0 1.25 1.25 0 012.5 0zm0 5.5a1.25 1.25 0 11-2.5 0 1.25 1.25 0 012.5 0zM15.5 4.5a1.25 1.25 0 11-2.5 0 1.25 1.25 0 012.5 0zM15.5 10a1.25 1.25 0 11-2.5 0 1.25 1.25 0 012.5 0zm0 5.5a1.25 1.25 0 11-2.5 0 1.25 1.25 0 012.5 0z"/></svg>
+        <span class="truncate text-sm font-semibold">{{ "voice-chat-label"|t }}</span>
+      </span>
       <button type="button" data-lc-chat-close class="lc-header-action" aria-label="{{ "voice-chat-close"|t }}">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
       </button>

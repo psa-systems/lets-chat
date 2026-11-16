@@ -189,6 +189,7 @@ voice-transcript-matches = matches
 voice-chat-label = Chat
 voice-chat-tip = Open chat
 voice-chat-close = Close chat
+voice-chat-move-hint = Drag to move
 voice-chat-send = Send
 voice-chat-placeholder = Message the call
 voice-chat-input-label = Chat message
