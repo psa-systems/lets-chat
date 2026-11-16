@@ -23,7 +23,8 @@
 // handler, not listened for here) is the JS side's own signal to end the
 // session locally regardless of which surface granted it.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Mutex;
 
 use serde::Deserialize;
@@ -73,6 +74,51 @@ impl ControlState {
         let mut inner = self.0.lock().unwrap();
         release_all(&mut inner);
         inner.active = false;
+    }
+}
+
+/// LC-1158: maps a native notification's integer id to the in-app path a click
+/// on it should open. `desktop_notify` reserves an id and stashes the target
+/// here; the global `on_action` handler in main.rs drains it on a "tap" and
+/// routes it through `navigate_to_path`. The plugin's desktop click report
+/// (tauri-plugin-notification >= 2.6.0) carries only the integer id back - its
+/// `tag` is Android-only - so the target has to live here, not on the
+/// notification. Bounded: the map is pruned so an un-clicked notification cannot
+/// leak memory over a long session.
+#[derive(Default)]
+pub struct NotifyTargets {
+    map: Mutex<HashMap<i32, String>>,
+    next_id: AtomicI32,
+}
+
+impl NotifyTargets {
+    /// Highest number of pending (shown-but-unclicked) targets to retain. When
+    /// exceeded, the oldest (lowest-id) half is dropped - those notifications are
+    /// old enough that a click is no longer expected.
+    const CAP: usize = 128;
+
+    /// Reserve a fresh notification id, remembering `target` for it when present.
+    pub fn allot(&self, target: Option<String>) -> i32 {
+        // Monotonic, starting at 1 (0 is avoided so it never reads as "unset").
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+        if let Some(t) = target {
+            if let Ok(mut m) = self.map.lock() {
+                if m.len() >= Self::CAP {
+                    let mut ids: Vec<i32> = m.keys().copied().collect();
+                    ids.sort_unstable();
+                    for old in ids.iter().take(ids.len() - Self::CAP / 2) {
+                        m.remove(old);
+                    }
+                }
+                m.insert(id, t);
+            }
+        }
+        id
+    }
+
+    /// Take (and forget) the target for a clicked notification id, if any.
+    pub fn take(&self, id: i32) -> Option<String> {
+        self.map.lock().ok().and_then(|mut m| m.remove(&id))
     }
 }
 
@@ -305,23 +351,27 @@ fn scan_code(code: &str) -> Option<(u16, bool)> {
 /// notification refers to - carried through for the click-to-navigate handoff
 /// to the deep-link ticket, not acted on here.
 #[tauri::command]
-pub fn desktop_notify(app: tauri::AppHandle, title: String, body: String, target: Option<String>) {
+pub fn desktop_notify(
+    app: tauri::AppHandle,
+    targets: State<NotifyTargets>,
+    title: String,
+    body: String,
+    target: Option<String>,
+) {
     use tauri_plugin_notification::NotificationExt;
-    // `target` is the room/DM path a click should open. The shared navigation
-    // sink now exists (`navigate_to_path` in main.rs, used by deep links), but
-    // tauri-plugin-notification 2.3.3's desktop `show()` is fire-and-forget -
-    // it surfaces no click/activation callback (action types are mobile-only) -
-    // so there is nothing to route a click through yet. Kept so the wiring is a
-    // one-liner once a click-capable notification path lands (notify-rust
-    // actions / toast activation, or a newer plugin). Focus-on-click, where the
-    // OS provides it, still works.
-    let _ = target;
+    // LC-1158: `target` is the room/DM path a click should open. Reserve an id
+    // for this notification and stash the target under it; the global `on_action`
+    // handler (main.rs, registered in setup) looks the target up by id when the
+    // notification is clicked and routes it through `navigate_to_path`. The
+    // plugin (>= 2.6.0) reports only the id back on a desktop click. Focus-on-
+    // click, where the OS provides it, still works regardless.
+    let id = targets.allot(target);
     let title = if title.trim().is_empty() {
         "Let's Chat".to_string()
     } else {
         title
     };
-    let mut builder = app.notification().builder().title(title);
+    let mut builder = app.notification().builder().id(id).title(title);
     if !body.is_empty() {
         builder = builder.body(body);
     }
@@ -470,10 +520,10 @@ pub const BRIDGE_JS: &str = r#"
   //  - Incoming calls do not go through Notification today (only an in-page ring
   //    dialog), yet they are the highest-value case (do not miss a huddle while
   //    backgrounded), so we watch the incoming-call dialog and fire natively.
-  // Click-to-focus/navigate: the OS-notification click has to be routed back
-  // into the window with the target path; that plumbing is shared with the
-  // deep-link scheme and is handed off to that ticket. `target` is passed
-  // through now so the handoff has it.
+  // Click-to-focus/navigate: `target` rides through to `desktop_notify`, which
+  // stashes it by notification id; a click is routed back into the window and
+  // navigated there by the native on_action handler (LC-1158), sharing the
+  // deep-link scheme's `navigate_to_path` sink. Focus-on-click is OS-provided.
   function nativeNotify(title, body, target) {
     try { inv('desktop_notify', { title: String(title || ''), body: String(body || ''), target: target || null }); } catch (e) {}
   }
