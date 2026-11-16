@@ -310,15 +310,18 @@
     focusBtn.setAttribute('data-lc-voice-focus-btn', '');
     focusBtn.setAttribute('aria-pressed', 'false');
     focusBtn.setAttribute('aria-label', window.__lcS('voiceFocusTile', 'Expand tile'));
-    // Two glyphs toggled by the tile's [data-lc-focus] state (CSS): arrows out
-    // to expand, arrows in to minimize.
+    // Two glyphs toggled by the tile's [data-lc-staged] state (CSS): arrows out
+    // to expand (make this tile the stage), arrows in to shrink (LC-1193: collapse
+    // the big tile - focused or the auto-staged sharer - to an equal gallery).
     focusBtn.innerHTML =
       '<svg class="lc-voice-focus-expand" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M4 4h5a1 1 0 010 2H6.41l3.3 3.29a1 1 0 11-1.42 1.42L5 7.41V10a1 1 0 11-2 0V5a1 1 0 011-1zm12 12h-5a1 1 0 010-2h2.59l-3.3-3.29a1 1 0 111.42-1.42L15 12.59V10a1 1 0 112 0v5a1 1 0 01-1 1z"/></svg>' +
       '<svg class="lc-voice-focus-collapse" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M9 5v2.59L5.71 4.29A1 1 0 004.29 5.71L7.59 9H5a1 1 0 000 2h5a1 1 0 001-1V5a1 1 0 00-2 0zm2 10v-2.59l3.29 3.3a1 1 0 001.42-1.42L12.41 11H15a1 1 0 000-2h-5a1 1 0 00-1 1v5a1 1 0 002 0z"/></svg>';
     focusBtn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      if (tile.hasAttribute('data-lc-focus')) setFocus(null);
+      // LC-1193: the big (staged) tile's button shrinks the whole grid to an equal
+      // gallery; any other tile's button expands it to the stage.
+      if (tile.hasAttribute('data-lc-staged')) setGallery(true);
       else setFocus(userId);
     });
     // LC-1175: viewer-local drag-to-reorder handle. Dragging it (pointer: mouse,
@@ -470,7 +473,7 @@
     var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
     if (t) t.remove();
     dropOrder(userId); // LC-1175: forget the leaver's slot in the viewer order
-    syncFocus(); // LC-1174: drop the stage class if the focused tile just left
+    syncStage(); // LC-1174: drop the stage class if the focused/staged tile just left
     updateWaiting();
   }
   function cssEscape(s) { return String(s).replace(/["\\]/g, '\\$&'); }
@@ -482,26 +485,52 @@
   function setFocus(userId) {
     var g = grid();
     if (!g) return;
+    g.classList.remove('lc-voice-grid--gallery'); // LC-1193: focusing a tile leaves gallery
     Array.prototype.forEach.call(g.querySelectorAll('[data-lc-focus]'), function (t) {
       t.removeAttribute('data-lc-focus');
     });
     var target = userId && g.querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
     if (target) target.setAttribute('data-lc-focus', '');
-    syncFocus();
+    syncStage();
   }
-  // Toggle the grid stage class + each focus button's label/pressed state from
-  // the DOM, so removeTile / replaceChildren can leave the attributes authoritative.
-  function syncFocus() {
+  // LC-1193: collapse the grid to an equal gallery, so the big tile (the sharer's
+  // auto-stage or a focused tile) can be shrunk. Clears any focus; while gallery is
+  // on, a new share no longer auto-takes the stage. setGallery(false) returns to the
+  // auto layout. Viewer-local, never sent to peers.
+  function setGallery(on) {
+    var g = grid();
+    if (!g) return;
+    if (on) {
+      Array.prototype.forEach.call(g.querySelectorAll('[data-lc-focus]'), function (t) {
+        t.removeAttribute('data-lc-focus');
+      });
+    }
+    g.classList.toggle('lc-voice-grid--gallery', !!on);
+    syncStage();
+  }
+  // Re-derive the stage from the DOM: mark the currently-big tile [data-lc-staged]
+  // (the focused tile, or - in the auto layout only - the data-screen sharer; none
+  // in gallery), toggle the grid's focus class, and set each button's label/glyph
+  // (Shrink on the staged tile, Expand elsewhere). Idempotent, so removeTile /
+  // replaceChildren / a sharing change can leave the attributes authoritative.
+  function syncStage() {
     var g = grid();
     if (!g) return;
     var focused = g.querySelector('[data-lc-focus]');
     g.classList.toggle('lc-voice-grid--focus', !!focused);
+    var gallery = g.classList.contains('lc-voice-grid--gallery');
+    // The big tile: the focused one, else (auto layout only) the sharer. None in gallery.
+    var staged = focused || (gallery ? null : g.querySelector('.lc-voice-tile[data-screen]'));
+    Array.prototype.forEach.call(g.querySelectorAll('[data-lc-voice-tile]'), function (t) {
+      if (t === staged) t.setAttribute('data-lc-staged', '');
+      else t.removeAttribute('data-lc-staged');
+    });
     Array.prototype.forEach.call(g.querySelectorAll('[data-lc-voice-focus-btn]'), function (btn) {
       var tile = btn.closest('[data-lc-voice-tile]');
-      var on = !!(tile && tile.hasAttribute('data-lc-focus'));
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-      btn.setAttribute('aria-label', on
-        ? window.__lcS('voiceUnfocusTile', 'Minimize tile')
+      var isStaged = !!(tile && tile.hasAttribute('data-lc-staged'));
+      btn.setAttribute('aria-pressed', isStaged ? 'true' : 'false');
+      btn.setAttribute('aria-label', isStaged
+        ? window.__lcS('voiceUnfocusTile', 'Shrink tile')
         : window.__lcS('voiceFocusTile', 'Expand tile'));
     });
     applyOrder(); // LC-1175: a focus change frees/claims the stage slot (order:-1)
@@ -1326,7 +1355,7 @@
       wsSend({ type: 'voice_leave', room_id: cfg.roomId });
       removeTile(cfg.selfId);
       var gs = grid();
-      if (gs) { gs.replaceChildren(); gs.classList.remove('lc-voice-grid--focus'); } // LC-1174
+      if (gs) { gs.replaceChildren(); gs.classList.remove('lc-voice-grid--focus'); gs.classList.remove('lc-voice-grid--gallery'); } // LC-1174/1193
       tileOrder = []; // LC-1175: the next call rebuilds tiles in arrival order
       joined = false;
       var sss = q('[data-lc-voice-screen]');
@@ -1352,7 +1381,7 @@
     }
     removeTile(cfg.selfId);
     var g = grid();
-    if (g) { g.replaceChildren(); g.classList.remove('lc-voice-grid--focus'); } // LC-1174
+    if (g) { g.replaceChildren(); g.classList.remove('lc-voice-grid--focus'); g.classList.remove('lc-voice-grid--gallery'); } // LC-1174/1193
     tileOrder = []; // LC-1175: the next call rebuilds tiles in arrival order
     joined = false;
     var ss = q('[data-lc-voice-screen]');
@@ -1574,6 +1603,9 @@
     if (!t) return;
     if (sharing) t.setAttribute('data-screen', 'true');
     else t.removeAttribute('data-screen');
+    // LC-1193: the sharer is the auto-staged tile, so a sharing change moves the
+    // big tile - re-sync so [data-lc-staged] and the Expand/Shrink buttons follow.
+    syncStage();
     // LC-1129: receiver diagnostics, only for a REMOTE peer's share.
     if (cfg && userId !== cfg.selfId) {
       if (sharing) {
@@ -2168,6 +2200,9 @@
     // LC-1174: viewer-local tile focus (expand/minimize). Exposed so the per-tile
     // button and unit tests can drive it; pass null to restore the auto layout.
     setFocus: setFocus,
+    // LC-1193: collapse the grid to an equal gallery (shrink the big tile) /
+    // setGallery(false) to restore the auto layout. Exposed for tests.
+    setGallery: setGallery,
     // LC-1175: viewer-local tile order. `ids()` reads it; `move(uid, delta)` and
     // `moveBefore(uid, beforeUid)` rearrange it (the drag + keyboard paths, and
     // unit tests, share these). The order never leaves the client.
