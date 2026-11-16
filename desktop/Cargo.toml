@@ -7,6 +7,14 @@ edition.workspace = true
 name = "lets-chat-desktop"
 path = "src/main.rs"
 
+# LC-1168: opt-in Web Inspector. `cargo tauri build` is a release build, where
+# WKWebView/WebView2 devtools are off by default, so the shipped installers are
+# NOT inspectable. Build with `--features devtools` (see `just
+# build-desktop-mac-devtools`) to get an inspectable webview for profiling the
+# room/enclave navigation (Safari Web Inspector -> Timeline) on real hardware.
+[features]
+devtools = ["tauri/devtools"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
