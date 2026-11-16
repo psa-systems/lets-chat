@@ -5248,6 +5248,20 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 /* Off-canvas + non-interactive when closed (was display:none, which could not
    animate). visibility transitions discretely so the slide-out still shows. */
 .lc-transcript.hidden { transform: translateX(100%); visibility: hidden; }
+
+/* LC-1194: the transcript is a fixed full-height right sidebar (z-62); the in-call
+   chat is a fixed bottom-right pin (z-40), so an open transcript sat on top of it.
+   When the transcript is open (body.lc-transcript-open, set by transcribe.js),
+   slide the chat left of the sidebar so the two sit side by side. Only the DEFAULT
+   pin moves: a chat the user has dragged carries an inline `left`, which the
+   `:not([style*="left"])` guard leaves alone. The width cap keeps it on-screen
+   beside the 20rem sidebar. On mobile the transcript is a bottom sheet, not a
+   right sidebar (see the max-width:640px block), so the offset is undone there. */
+#lc-call-chat { transition: right 0.2s ease; }
+body.lc-transcript-open #lc-call-chat:not([style*="left"]) {
+    right: calc(20rem + 1rem);
+    max-width: calc(100vw - 20rem - 2rem);
+}
 #main { transition: padding-right 0.2s ease; }
 body.lc-transcript-open #main { padding-right: 20rem; }
 /* LC-883: the transcript drawer sits on top of the fixed support launcher's
@@ -5510,6 +5524,12 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
        bottom, so it never covers the controls and respects the home-bar inset.
        (The right-padding reservation on #main is dropped here.) */
     body.lc-transcript-open #main { padding-right: 0; }
+    /* LC-1194: the transcript is a bottom sheet here, not a right sidebar, so undo
+       the desktop chat offset (the chat stays in its bottom-right pin). */
+    body.lc-transcript-open #lc-call-chat:not([style*="left"]) {
+        right: 1rem;
+        max-width: calc(100vw - 2rem);
+    }
     /* LC-883: below the bottom-sheet breakpoint the drawer no longer reserves
        side space, so undo the desktop launcher shift too. */
     body.lc-transcript-open .lc-support-root { right: 1.25rem; }
