@@ -8,6 +8,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.13.0] - 2026-11-16
+
 ### Fixed
 
 - **Room and enclave switching does less work per navigation (LC-1168).** After every live swap the page re-ran the code-copy enhancer over the whole document; a room/enclave change fires several of those swaps at once, so the entire page was re-walked several times per navigation. That pass now only looks at the part of the page that actually changed (matching the other post-swap passes). It is a small win in a fast browser and a more noticeable one in the macOS desktop app's older webview, where the switch felt laggy. No visible change otherwise.
