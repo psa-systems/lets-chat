@@ -10,6 +10,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ### Fixed
 
+- **Room and enclave switching does less work per navigation (LC-1168).** After every live swap the page re-ran the code-copy enhancer over the whole document; a room/enclave change fires several of those swaps at once, so the entire page was re-walked several times per navigation. That pass now only looks at the part of the page that actually changed (matching the other post-swap passes). It is a small win in a fast browser and a more noticeable one in the macOS desktop app's older webview, where the switch felt laggy. No visible change otherwise.
 - **The Windows desktop app no longer fails to launch with "WebView2Loader.dll was not found" (LC-1176).** The Windows build is cross-compiled from Linux with the MinGW toolchain, which links the WebView2 loader dynamically, so the app needs `WebView2Loader.dll` next to its executable - and the installer and portable zip were not shipping it, so the app would not start. Both now include the DLL beside the executable (the installer writes it into the program folder; the portable zip extracts it alongside the exe). No separate download is needed, and the self-updater is unaffected (it replaces the exe in place next to the already-installed DLL). Windows builds remain unsigned for now, so SmartScreen will still warn until code signing lands.
 
 ### Added
