@@ -148,6 +148,7 @@ fn main() {
                 .build(),
         )
         .manage(inject::ControlState::default())
+        .manage(inject::NotifyTargets::default())
         .invoke_handler(tauri::generate_handler![
             set_server_url,
             inject::rc_session,
@@ -237,6 +238,31 @@ fn main() {
                         open_deep_link(&handle, url.as_str());
                     }
                 });
+            }
+            // LC-1158: route a clicked native notification to the room/DM it
+            // names. The desktop click report (tauri-plugin-notification >= 2.6.0)
+            // reaches this one global handler with the notification's integer id;
+            // look up the target `desktop_notify` stashed under that id and open
+            // it through the same `navigate_to_path` sink deep links use. A plain
+            // body click is action_id "tap" (we register no action buttons). The
+            // handler runs on a background thread, which is fine - `navigate_to_path`
+            // only needs the AppHandle.
+            {
+                use tauri::Manager;
+                use tauri_plugin_notification::NotificationExt;
+                let handle = app.handle().clone();
+                if let Err(e) = app.notification().on_action(move |action| {
+                    if action.action_id() != "tap" {
+                        return;
+                    }
+                    if let Some(n) = action.notification() {
+                        if let Some(target) = handle.state::<inject::NotifyTargets>().take(n.id()) {
+                            navigate_to_path(&handle, &target);
+                        }
+                    }
+                }) {
+                    eprintln!("lets-chat-desktop: notification click handler not registered: {e}");
+                }
             }
             // LC-710: started here, not before the builder, because the check
             // needs an AppHandle to raise its native "update available"
@@ -407,8 +433,8 @@ fn deep_link_to_path(raw: &str) -> Option<String> {
 }
 
 // The ONE navigation sink, shared by every "open to this room" trigger (deep
-// links today; a click-capable notification once one exists - see the note in
-// inject::desktop_notify). Focuses the window and navigates the webview to the
+// links and, since LC-1158, a clicked native notification via the on_action
+// handler in setup()). Focuses the window and navigates the webview to the
 // configured server origin + `path`, reusing the app's existing routes. Using
 // the absolute server URL means it also recovers from the offline welcome page.
 fn navigate_to_path(app: &tauri::AppHandle, path: &str) {
