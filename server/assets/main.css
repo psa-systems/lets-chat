@@ -4272,6 +4272,54 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     animation: lc-rec-pulse 1.6s ease-in-out infinite;
 }
 
+/* LC-1196: muted-speech nudge. voice.js adds .lc-cbtn--nudge to the Mute button
+   when it detects we are talking while muted: the button pulses amber and the
+   "You're muted" hint drops in below it. The [data-lc-voice-mute] qualifier
+   lifts specificity above the aria-pressed="true" on-state (both 0,2,0) so the
+   amber wins while the button is in its muted/pressed state; placed after it in
+   source order to carry the tie. The glow uses a fixed amber rgba (not
+   color-mix / a token alpha) so it renders on the macOS-12 WebKit webview. */
+[data-lc-voice-mute] { position: relative; }
+[data-lc-voice-mute].lc-cbtn--nudge {
+    background: var(--warning-surface);
+    border-color: var(--warning);
+    color: var(--warning-surface-content);
+    animation: lc-mute-nudge-pulse 1.4s ease-out infinite;
+}
+@keyframes lc-mute-nudge-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.5); }
+    70%  { box-shadow: 0 0 0 8px rgba(217, 119, 6, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0); }
+}
+.lc-mute-nudge {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 70;
+    white-space: nowrap;
+    pointer-events: none;
+    background: var(--warning);
+    color: var(--warning-content);
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+/* The huddle dock bar sits at the bottom of the screen, so its hint opens
+   upward instead of dropping below the control bar. */
+.lc-mute-nudge--up { top: auto; bottom: calc(100% + 8px); }
+[data-lc-voice-mute].lc-cbtn--nudge .lc-mute-nudge {
+    display: block;
+    animation: lc-fade-in 0.15s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-lc-voice-mute].lc-cbtn--nudge { animation: none; }
+    [data-lc-voice-mute].lc-cbtn--nudge .lc-mute-nudge { animation: none; }
+}
+
 /* ---- Participant grid --------------------------------------------------- */
 /* LC-416 follow-up: cap each cell to a bounded max (not 1fr) and centre the
    row. With a 1fr max the 2-up case ballooned to two huge edge-to-edge tiles

@@ -164,6 +164,8 @@ activity-mentioned = te mencionó
 voice-badge = voz
 voice-join = Unirse a la voz
 voice-mute = Silenciar
+# LC-1196: shown (and announced) when you are talking while your mic is muted.
+voice-muted-nudge = Tienes el micrófono silenciado
 voice-start-video = Iniciar vídeo
 voice-share-screen = Compartir pantalla
 voice-leave = Salir

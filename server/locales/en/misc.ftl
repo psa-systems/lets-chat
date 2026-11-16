@@ -166,6 +166,8 @@ activity-mentioned = mentioned you
 voice-badge = voice
 voice-join = Join voice
 voice-mute = Mute
+# LC-1196: shown (and announced) when you are talking while your mic is muted.
+voice-muted-nudge = You're muted
 voice-start-video = Start video
 voice-share-screen = Share screen
 voice-leave = Leave

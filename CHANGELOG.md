@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Added
+
+- **A nudge when you talk while muted (LC-1196).** In a voice channel or huddle, if you start speaking while your mic is muted, the Mute button now pulses amber, a "You're muted" hint appears beside it, and a short attention sound plays (when call sounds are on), so you notice before saying much to no one. Detection is entirely on-device: a local clone of your mic track keeps listening for the reminder while the real track stays muted and silent to everyone else. It fires only after about a second and a half of sustained speech (so a cough or a passing noise does not trigger it), re-reminds at most every few seconds, and clears the instant you unmute or stop. It is announced to screen readers and respects reduced-motion.
+
 ### Fixed
 
 - **In-call chat now shows everyone's messages, not just your own (LC-1192).** During a call, a participant who was in the call but not a formal member of the room - most often a site admin who dropped into a room they reach through god-mode - saw only the messages they sent themselves; other people's messages never arrived. Room messages are now delivered to everyone currently in the call for that room (they are already authorized occupants), so the in-call chat is complete for every participant. This is the receiving-side counterpart to the earlier fix that made the author see their own message.
