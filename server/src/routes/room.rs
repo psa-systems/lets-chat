@@ -1565,6 +1565,19 @@ pub(crate) async fn finalize_message_send(
     state.hub.stop_typing(room.id, &author.id);
     super::broadcast_room_message(state, room, &event).await?;
 
+    // LC-1198: if this is a person typing in the in-call chat during a transcribed
+    // call, mirror the text into the running transcript so the meeting record is
+    // complete. Skips system / bridge / webhook / empty-body messages; the helper
+    // itself gates on an open transcript + the author being in the call, and is
+    // best-effort (never fails the post, which has already broadcast above).
+    if !message.is_system
+        && message.webhook_id.is_none()
+        && message.bridge_id.is_none()
+        && !message.body.trim().is_empty()
+    {
+        super::transcripts::record_typed_chat_line(state, room, &author.id, &message.body).await;
+    }
+
     // LC-75: publish to outgoing webhooks (best-effort, never blocks the post).
     // LC-78: include the `actor` block so bridge daemons can self-filter.
     crate::outgoing::enqueue(
