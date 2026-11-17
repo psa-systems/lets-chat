@@ -89,6 +89,23 @@
   // Keep a handle on the chat socket wrapper regardless of page type.
   document.body.addEventListener('htmx:wsOpen', function (e) {
     if (e.detail && e.detail.socketWrapper) window.__lcWS = e.detail.socketWrapper;
+    // LC-1201: a reconnect gives us a NEW server connection; the old one was
+    // dropped from the voice roster on disconnect, so the server now undercounts
+    // us (the "room shows 3 not 4" report) and we have fallen out of the room
+    // fan-out ("doesn't catch him in the chat"). If we are still in a call,
+    // re-assert our presence. The initial open fires before join() (joined is
+    // false) and is skipped. voice_join re-registers us in the roster, which
+    // also makes every peer re-announce THEIR mic/screen state to us via the
+    // fresh-joiner path below (LC-402/408), so first drop our stale view of
+    // other tiles' screen/mute - a share or mute that ENDED during the gap sent
+    // no event we received, which is why a teammate's stopped share could leave
+    // our tile stuck big - and let those re-announcements re-apply whatever is
+    // still active. Then re-announce our OWN state for peers who stayed up.
+    if (!joined || !cfg) return;
+    resetRemoteCallState();
+    wsSend({ type: 'voice_join', room_id: cfg.roomId });
+    if (selfMuted) wsSend({ type: 'voice_mute', room_id: cfg.roomId, muted: true });
+    if (selfSharing) wsSend({ type: 'voice_screen', room_id: cfg.roomId, sharing: true });
   });
 
   function wsSend(obj) {
@@ -534,6 +551,24 @@
         : window.__lcS('voiceFocusTile', 'Expand tile'));
     });
     applyOrder(); // LC-1175: a focus change frees/claims the stage slot (order:-1)
+  }
+
+  // LC-1201: on reconnect, drop our stale view of OTHER participants' screen /
+  // mute state (never our own tile - our own re-announce restores that). Called
+  // before peers re-announce their current state: a share or mute that ENDED
+  // during the gap left no event to clear it, so without this the tile would
+  // stay staged / the mute dot stuck. syncStage() then collapses any tile that
+  // is no longer the auto-staged sharer back into the gallery; the subsequent
+  // re-announcements re-pin / re-mark whatever is still active.
+  function resetRemoteCallState() {
+    var g = grid();
+    if (!g || !cfg) return;
+    Array.prototype.forEach.call(g.querySelectorAll('[data-lc-voice-tile]'), function (t) {
+      if (t.getAttribute('data-lc-voice-tile') === cfg.selfId) return;
+      t.removeAttribute('data-screen');
+      t.removeAttribute('data-muted');
+    });
+    syncStage();
   }
 
   // ---- LC-1175: viewer-local tile reorder --------------------------------

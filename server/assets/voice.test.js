@@ -996,3 +996,56 @@ test('LC-1166: an SFU screen-share failure surfaces a toast and a voice-log entr
 
   h.voice.leave();
 });
+
+// LC-1201: a flaky connection that drops and reconnects used to silently fall
+// out of the server voice roster (the "room counts 3 not 4" report) because
+// voice.js never re-asserted its presence, and a teammate's screen share that
+// stopped during the gap left the viewer's tile stuck big (the stop event was
+// missed). On reconnect voice.js now re-sends voice_join (re-registering the
+// roster) and resets its stale view of other tiles' screen state so a share
+// that ended during the gap is dropped.
+test('LC-1201: a reconnect re-asserts voice presence and clears a stale remote screen pin', async () => {
+  const h = load();
+  const page = makeVoicePage(7);
+  const grid = new El('div');
+  grid.setAttribute('data-lc-voice-grid', ''); // makeVoicePage omits it; tiles need it
+  page.appendChild(grid);
+  h.main.appendChild(page);
+  h.fire('htmx:afterSettle');
+  h.join();
+  await Promise.resolve(); // getUserMedia resolves
+  await Promise.resolve();
+  const wasJoined = h.voice.isJoined();
+
+  // A remote peer is screen-sharing, so their tile is the staged big tile.
+  const peer = new El('div');
+  peer.setAttribute('data-lc-voice-tile', 'u2');
+  peer.setAttribute('data-screen', 'true');
+  grid.appendChild(peer);
+
+  const before = h.sent.filter((f) => f.type === 'voice_join').length;
+  // The socket drops and reopens (reconnect). The peer stopped sharing during
+  // the gap, so no screen=0 event is delivered here.
+  h.fire('htmx:wsOpen', { socketWrapper: { send: (s) => h.sent.push(JSON.parse(s)) } });
+  const after = h.sent.filter((f) => f.type === 'voice_join').length;
+  const stillStaged = peer.hasAttribute('data-screen');
+
+  h.voice.leave(); // stop the speak-poll interval before any assertion can throw
+
+  assert.equal(wasJoined, true, 'setup: the mesh call is live');
+  assert.equal(after, before + 1, 'reconnect re-sends voice_join so the server re-counts us');
+  assert.equal(stillStaged, false,
+    'a share that ended during the gap no longer leaves the tile stuck staged');
+});
+
+// LC-1201: the initial socket open (before the user has joined a call) must NOT
+// send a spurious voice_join - only a reconnect while already in a call does.
+test('LC-1201: the first socket open before joining does not re-assert presence', () => {
+  const h = load();
+  h.main.appendChild(makeVoicePage(7));
+  h.fire('htmx:afterSettle');
+  // Not joined yet: a socket (re)open must not send voice_join.
+  h.fire('htmx:wsOpen', { socketWrapper: { send: (s) => h.sent.push(JSON.parse(s)) } });
+  assert.equal(h.sent.filter((f) => f.type === 'voice_join').length, 0,
+    'no voice_join until the user actually joins the call');
+});
