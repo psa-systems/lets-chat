@@ -5300,21 +5300,95 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
    animate). visibility transitions discretely so the slide-out still shows. */
 .lc-transcript.hidden { transform: translateX(100%); visibility: hidden; }
 
-/* LC-1194: the transcript is a fixed full-height right sidebar (z-62); the in-call
-   chat is a fixed bottom-right pin (z-40), so an open transcript sat on top of it.
-   When the transcript is open (body.lc-transcript-open, set by transcribe.js),
-   slide the chat left of the sidebar so the two sit side by side. Only the DEFAULT
-   pin moves: a chat the user has dragged carries an inline `left`, which the
-   `:not([style*="left"])` guard leaves alone. The width cap keeps it on-screen
-   beside the 20rem sidebar. On mobile the transcript is a bottom sheet, not a
-   right sidebar (see the max-width:640px block), so the offset is undone there. */
-#lc-call-chat { transition: right 0.2s ease; }
-body.lc-transcript-open #lc-call-chat:not([style*="left"]) {
-    right: calc(20rem + 1rem);
-    max-width: calc(100vw - 20rem - 2rem);
-}
 #main { transition: padding-right 0.2s ease; }
 body.lc-transcript-open #main { padding-right: 20rem; }
+
+/* ---- LC-1195: unified call dock (voice page) --------------------------- */
+/* One right-edge container with a tab strip (Chat / Transcript / Diagnostics),
+   replacing the three separate floating panels so they can never overlap. The
+   chat + diagnostics bodies live inside it; the Transcript tab shows the SHARED
+   transcript drawer (layout.html) aligned to this same column (the
+   body.lc-has-call-dock rules under .lc-transcript below), so the drawer the 1:1
+   call uses is never moved or duplicated. */
+:root { --lc-dock-w: 20rem; --lc-dock-tabs-h: 2.75rem; --lc-dock-sheet-h: 62vh; }
+.lc-call-dock {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 62;
+    display: flex;
+    flex-direction: column;
+    width: var(--lc-dock-w);
+    max-width: 85vw;
+    border-left: 1px solid var(--border);
+    background: var(--surface-elevated);
+    color: var(--content);
+    box-shadow: -8px 0 24px -12px rgba(0, 0, 0, 0.35);
+}
+.lc-call-dock.hidden { display: none; }
+.lc-call-dock-tabs {
+    display: flex;
+    align-items: stretch;
+    flex: none;
+    height: var(--lc-dock-tabs-h);
+    border-bottom: 1px solid var(--border);
+    padding: 0 0.25rem;
+}
+.lc-call-dock-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0 0.55rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--content-muted);
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.lc-call-dock-tab:hover { color: var(--content); }
+.lc-call-dock-tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.lc-call-dock-tab:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); border-radius: 0.25rem; }
+.lc-call-dock-tab-ico { display: inline-flex; }
+.lc-call-dock-tab-ico svg { height: 1rem; width: 1rem; }
+.lc-call-dock-unread { height: 0.5rem; width: 0.5rem; border-radius: 9999px; background: var(--accent); }
+.lc-call-dock-unread[hidden] { display: none; }
+.lc-call-dock-collapse {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.35rem;
+    color: var(--content-muted);
+    cursor: pointer;
+}
+.lc-call-dock-collapse:hover { color: var(--content); }
+.lc-call-dock-collapse:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); border-radius: 0.25rem; }
+.lc-call-dock-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+/* Transcript tab active: the shared drawer (z-63 below) covers this column, so
+   the dock's own body is hidden out of the way. */
+.lc-call-dock.lc-dock--transcript .lc-call-dock-body { display: none; }
+.lc-call-dock-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.lc-call-dock-panel.hidden { display: none; }
+.lc-call-dock-panel--diag { overflow-y: auto; }
+/* Chat: the message log scrolls, the composer pins to the bottom. */
+.lc-call-dock-panel--chat #messages { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* Reserve the dock column so the call stage is not covered while the dock is open. */
+body.lc-has-call-dock.lc-dock-open #main { padding-right: var(--lc-dock-w); }
+
+/* The shared transcript, on the voice page, aligns to the dock column: it starts
+   below the tab strip and matches the dock width (and sits above the dock so it
+   covers the empty body), so the strip stays visible and the two read as one. */
+body.lc-has-call-dock .lc-transcript {
+    top: var(--lc-dock-tabs-h);
+    width: var(--lc-dock-w);
+    z-index: 63;
+    box-shadow: none;
+}
+body.lc-has-call-dock .lc-transcript-head { display: none; } /* the tab strip is the header */
 /* LC-883: the transcript drawer sits on top of the fixed support launcher's
    right/bottom-right corner at desktop widths. Shift the launcher left by the
    drawer's width so it stays reachable while the transcript is open. */
@@ -5575,12 +5649,6 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
        bottom, so it never covers the controls and respects the home-bar inset.
        (The right-padding reservation on #main is dropped here.) */
     body.lc-transcript-open #main { padding-right: 0; }
-    /* LC-1194: the transcript is a bottom sheet here, not a right sidebar, so undo
-       the desktop chat offset (the chat stays in its bottom-right pin). */
-    body.lc-transcript-open #lc-call-chat:not([style*="left"]) {
-        right: 1rem;
-        max-width: calc(100vw - 2rem);
-    }
     /* LC-883: below the bottom-sheet breakpoint the drawer no longer reserves
        side space, so undo the desktop launcher shift too. */
     body.lc-transcript-open .lc-support-root { right: 1.25rem; }
@@ -5600,6 +5668,34 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
     }
     .lc-transcript-body {
         padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    }
+
+    /* LC-1195: the call dock is a bottom sheet too, so it never covers the call
+       controls; the right-column reservation on #main is dropped. */
+    body.lc-has-call-dock.lc-dock-open #main { padding-right: 0; }
+    .lc-call-dock {
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 100%;
+        height: var(--lc-dock-sheet-h);
+        max-height: 80vh;
+        border-left: none;
+        border-top: 1px solid var(--border);
+        border-radius: 0.875rem 0.875rem 0 0;
+        box-shadow: 0 -10px 28px -14px rgba(0, 0, 0, 0.5);
+    }
+    /* The shared transcript, in dock mode, is a bottom sheet shortened by the tab
+       strip's height so the dock's tabs peek above it and stay reachable (equal
+       specificity to the desktop alignment rule, placed later so it wins here). */
+    body.lc-has-call-dock .lc-transcript {
+        top: auto;
+        bottom: 0;
+        height: calc(var(--lc-dock-sheet-h) - var(--lc-dock-tabs-h));
+        width: 100%;
+        z-index: 63;
     }
 }
 
