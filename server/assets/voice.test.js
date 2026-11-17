@@ -298,6 +298,25 @@ test('LC-832: the floated dock survives further swaps, and its own room shows th
   assert.equal(h.voice.isJoined(), true);
 });
 
+// LC-1199: clicking the voice channel you are ALREADY in (a boosted nav back to
+// the same room, with the call live and NOT yet floated) used to leave the call -
+// bindRoot saw a fresh dock element and ended the session. It must preserve the
+// call by floating it out, exactly like navigating to a text room or another
+// enclave, leaving a bring-back placeholder in the page.
+test('LC-1199: re-entering the voice room you are in floats the call instead of leaving it', () => {
+  const h = joined();                   // live on room 7's dock, in the page (not floated)
+
+  const fresh = makeDock(7);            // a boosted nav re-renders room 7's dock as a NEW element
+  h.swap(fresh);
+
+  assert.equal(h.voice.isJoined(), true, 'the call is NOT left when re-entering its own room');
+  assert.equal(h.popout.isPopped(), true, 'the live call floated (popped out)');
+  assert.equal(h.sent.filter((f) => f.type === 'voice_leave').length, 0, 'no voice_leave was sent');
+  assert.equal(fresh.parentNode, null, 'the fresh same-room dock is not kept as a second dock');
+  assert.ok(h.body.querySelector('[data-lc-huddle-placeholder][data-room-id="7"]'),
+    'the page shows a bring-back placeholder for the room');
+});
+
 test('LC-832: leaving from the floating dock tears the call down and removes the panel', () => {
   const h = joined();
   h.swap(null);
