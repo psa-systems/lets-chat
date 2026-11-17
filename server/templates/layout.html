@@ -1528,6 +1528,76 @@ if (window.__lcSyncSidebarToggles) {
     }, GRACE_MS);
   }
 
+  // LC-318 / LC-1200: re-fetch #main from the current URL to recover live content
+  // missed during a gap. Two callers: the reconnect path (enterConnected, after a
+  // genuine outage), and the resync a server `<!-- resync -->` frame requests when
+  // THIS connection lagged and dropped live events without ever disconnecting.
+  // The server never replays missed events, so this is the only recovery path.
+  // select:'#main' extracts just the <main> from the full-page response (without
+  // it the layout would nest into #main). Debounced so a burst of resync frames,
+  // or a resync landing right after a reconnect, runs at most one refresh.
+  var lastSoftRefreshAt = 0;
+  function softRefresh() {
+    if (!window.htmx || !document.getElementById('main')) return;
+    var now = Date.now();
+    if (now - lastSoftRefreshAt < 1500) return;
+    lastSoftRefreshAt = now;
+    // LC-346: the swap re-renders the composer from the server-side draft, which
+    // lags continuous typing (the draft PUT is debounced and never settles mid-
+    // typing). Snapshot the live composer and restore it after the swap so an
+    // in-progress message - plus caret/focus, a staged attachment, and an active
+    // quote/reply bar - survives. This is the only path that replaces a mounted
+    // composer, so the capture/restore lives here (hx-preserve would re-run the
+    // composer scripts and double-bind their listeners). DM and room composers
+    // share the same ids, so one snapshot covers both.
+    var snap = null;
+    var cForm = document.getElementById('composer');
+    if (cForm) {
+      var ta = cForm.querySelector('textarea[name=body]');
+      var fileInput = cForm.querySelector('input[name=file_id]');
+      var stagedEl = document.getElementById('lc-staged');
+      var quoteEl = document.getElementById('composer-quote-bar');
+      snap = {
+        body: ta ? ta.value : '',
+        selStart: ta ? ta.selectionStart : 0,
+        selEnd: ta ? ta.selectionEnd : 0,
+        focused: !!ta && document.activeElement === ta,
+        fileId: fileInput ? fileInput.value : '',
+        staged: stagedEl ? stagedEl.innerHTML : '',
+        quote: quoteEl ? quoteEl.innerHTML : ''
+      };
+    }
+    function restoreComposer() {
+      // Nothing in progress: let the server-rendered draft (LC-64) stand.
+      if (!snap || (!snap.body && !snap.fileId && !snap.quote)) return;
+      var c = document.getElementById('composer');
+      if (!c) return;
+      var ta2 = c.querySelector('textarea[name=body]');
+      if (ta2 && snap.body) {
+        ta2.value = snap.body;
+        try { ta2.setSelectionRange(snap.selStart, snap.selEnd); } catch (e) {}
+        if (snap.focused) ta2.focus();
+        // Re-measure the auto-resize and char counter against the restored text.
+        ta2.dispatchEvent(new Event('input'));
+      }
+      var f2 = c.querySelector('input[name=file_id]');
+      if (f2 && snap.fileId) f2.value = snap.fileId;
+      var s2 = document.getElementById('lc-staged');
+      if (s2 && snap.staged) s2.innerHTML = snap.staged;
+      var q2 = document.getElementById('composer-quote-bar');
+      if (q2 && snap.quote) q2.innerHTML = snap.quote;
+      if (window.__lcRefreshSend) window.__lcRefreshSend();
+    }
+    try {
+      htmx.ajax('GET', location.pathname + location.search, {
+        target: '#main',
+        swap: 'outerHTML',
+        select: '#main'
+      }).then(restoreComposer, function () { /* swap failed; nothing to restore onto */ });
+    } catch (e) { /* navigation away is fine */ }
+  }
+  window.__lcSoftRefresh = softRefresh;
+
   function enterConnected() {
     var prev = state;
     state = 'connected';
@@ -1561,65 +1631,7 @@ if (window.__lcSyncSidebarToggles) {
     // #main.
     var needsRefresh = bannerWasShown || abnormalClose;
     abnormalClose = false;
-    if (needsRefresh && window.htmx && document.getElementById('main')) {
-      // LC-346: the #main soft-refresh re-renders the composer from the
-      // server-side draft, which lags continuous typing (the draft PUT is
-      // debounced on a 1s idle gap and never settles mid-typing). Snapshot
-      // the live composer just before the swap and restore it afterwards so
-      // an in-progress message - plus caret/focus, a staged-but-unsent
-      // attachment, and an active quote/reply bar - survives the refresh.
-      // This is the only path that replaces a mounted composer, so the
-      // capture/restore lives here rather than on the composer itself
-      // (hx-preserve would re-run the sibling composer scripts and double-
-      // bind their document-level listeners). DM and room composers share
-      // the same ids, so one snapshot covers both.
-      var snap = null;
-      var cForm = document.getElementById('composer');
-      if (cForm) {
-        var ta = cForm.querySelector('textarea[name=body]');
-        var fileInput = cForm.querySelector('input[name=file_id]');
-        var stagedEl = document.getElementById('lc-staged');
-        var quoteEl = document.getElementById('composer-quote-bar');
-        snap = {
-          body: ta ? ta.value : '',
-          selStart: ta ? ta.selectionStart : 0,
-          selEnd: ta ? ta.selectionEnd : 0,
-          focused: !!ta && document.activeElement === ta,
-          fileId: fileInput ? fileInput.value : '',
-          staged: stagedEl ? stagedEl.innerHTML : '',
-          quote: quoteEl ? quoteEl.innerHTML : ''
-        };
-      }
-      function restoreComposer() {
-        // Nothing in progress: let the server-rendered draft (LC-64) stand.
-        if (!snap || (!snap.body && !snap.fileId && !snap.quote)) return;
-        var c = document.getElementById('composer');
-        if (!c) return;
-        var ta2 = c.querySelector('textarea[name=body]');
-        if (ta2 && snap.body) {
-          ta2.value = snap.body;
-          try { ta2.setSelectionRange(snap.selStart, snap.selEnd); } catch (e) {}
-          if (snap.focused) ta2.focus();
-          // Re-measure the auto-resize and char counter against the restored
-          // text (their listeners key on `input`).
-          ta2.dispatchEvent(new Event('input'));
-        }
-        var f2 = c.querySelector('input[name=file_id]');
-        if (f2 && snap.fileId) f2.value = snap.fileId;
-        var s2 = document.getElementById('lc-staged');
-        if (s2 && snap.staged) s2.innerHTML = snap.staged;
-        var q2 = document.getElementById('composer-quote-bar');
-        if (q2 && snap.quote) q2.innerHTML = snap.quote;
-        if (window.__lcRefreshSend) window.__lcRefreshSend();
-      }
-      try {
-        htmx.ajax('GET', location.pathname + location.search, {
-          target: '#main',
-          swap: 'outerHTML',
-          select: '#main'
-        }).then(restoreComposer, function () { /* swap failed; nothing to restore onto */ });
-      } catch (e) { /* navigation away is fine */ }
-    }
+    if (needsRefresh) softRefresh();
   }
 
   document.body.addEventListener('htmx:wsOpen', function(evt){
@@ -1632,11 +1644,17 @@ if (window.__lcSyncSidebarToggles) {
     startWatchdog();
   });
 
-  document.body.addEventListener('htmx:wsAfterMessage', function(){
+  document.body.addEventListener('htmx:wsAfterMessage', function(evt){
     // Any inbound text frame (real OOB swap or `<!-- ping -->`)
     // counts as proof of life.
     if (state !== 'connected') enterConnected();
     startWatchdog();
+    // LC-1200: the server sends `<!-- resync -->` (a no-op comment swap, like the
+    // ping) when THIS connection lagged and dropped live events without
+    // disconnecting. Recover the missed content with the same soft-refresh the
+    // reconnect path uses (debounced inside softRefresh).
+    var msg = evt && evt.detail && evt.detail.message;
+    if (typeof msg === 'string' && msg.indexOf('<!-- resync -->') !== -1) softRefresh();
   });
 
   document.body.addEventListener('htmx:wsClose', function(evt){
