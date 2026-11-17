@@ -2053,4 +2053,7 @@ if (window.__lcSyncSidebarToggles) {
   <script src="/assets/huddle_ring.js?v={{ asset_version }}" defer></script>
   <script src="/assets/stage_media.js?v={{ asset_version }}" defer></script>
   <script src="/assets/transcribe.js?v={{ asset_version }}" defer></script>
+  {# LC-1195: the voice-page call dock (tabbed chat / transcript / diagnostics).
+     Loaded after transcribe.js so it can drive the shared transcript drawer. #}
+  <script src="/assets/voice_dock.js?v={{ asset_version }}" defer></script>
 {% endblock %}

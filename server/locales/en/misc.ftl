@@ -190,11 +190,12 @@ voice-transcript-matches = matches
 # LC-1123: in-call text chat.
 voice-chat-label = Chat
 voice-chat-tip = Open chat
-voice-chat-close = Close chat
-voice-chat-move-hint = Drag to move
 voice-chat-send = Send
 voice-chat-placeholder = Message the call
 voice-chat-input-label = Chat message
+# LC-1195: the unified call dock (tabbed chat / transcript / diagnostics).
+voice-dock-label = Call panels
+voice-dock-collapse = Collapse panel
 voice-transcript-empty-title = No transcript yet
 voice-transcript-empty-sub = Spoken audio will appear here once transcription is on.
 # LC-590: shown in the drawer when a clip fails server-side transcription.

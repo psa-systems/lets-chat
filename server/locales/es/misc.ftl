@@ -188,11 +188,12 @@ voice-transcript-matches = coincidencias
 # LC-1123: chat de texto dentro de la llamada.
 voice-chat-label = Chat
 voice-chat-tip = Abrir chat
-voice-chat-close = Cerrar chat
-voice-chat-move-hint = Arrastra para mover
 voice-chat-send = Enviar
 voice-chat-placeholder = Escribe a la llamada
 voice-chat-input-label = Mensaje de chat
+# LC-1195: the unified call dock (tabbed chat / transcript / diagnostics).
+voice-dock-label = Paneles de llamada
+voice-dock-collapse = Contraer panel
 voice-transcript-empty-title = Aún no hay transcripción
 voice-transcript-empty-sub = El audio hablado aparecerá aquí cuando la transcripción esté activa.
 # LC-590: shown in the drawer when a clip fails server-side transcription.
