@@ -431,6 +431,13 @@ impl Hub {
         self.open_transcripts.insert(room_id, Some(transcript_id));
     }
 
+    /// LC-1198: the transcript session currently open for `room_id`, if any.
+    /// `None` when transcription is not running for the room's call. Used to
+    /// mirror typed in-call chat into the running transcript.
+    pub fn open_transcript(&self, room_id: i64) -> Option<i64> {
+        self.open_transcripts.get(&room_id).and_then(|o| *o)
+    }
+
     /// LC-1033: mark `room_id` as having no open transcript, but only if
     /// `transcript_id` is still the one on record. Called on finalize; the
     /// guard means a finalize call for a session that has already been
