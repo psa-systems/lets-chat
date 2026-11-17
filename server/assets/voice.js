@@ -2234,15 +2234,18 @@
       if (el && el !== root) pop.adoptPageDock(el);
       return;
     }
-    // LC-870: a swap landed on a DIFFERENT room's dock while a call is live in
-    // this one (an enclave switch during the call). Preserve the call instead of
-    // letting bindRoot() leave: float the live dock out of #main - exactly as the
-    // swap-left-no-dock path below does - and hand the page's fresh dock to the
-    // controller for the "in a huddle in another room" busy note (one session per
-    // tab). Fall through to bindRoot only if the float did not take (a live mic
-    // with no UI is how people stay accidentally unmuted).
-    if (el && root && joined && el !== root
-        && el.getAttribute('data-room-id') !== String(cfg && cfg.roomId)) {
+    // LC-870/LC-1199: a swap landed on a fresh voice dock while a call is live.
+    // The fresh dock is a NEW element even when it is the SAME room re-rendered -
+    // a boosted navigation back to the voice channel you are already in - so
+    // without this, bindRoot() below sees `el !== root` and LEAVES, ending the
+    // call (LC-1199: "clicking the voice room I'm already in kicks me out of the
+    // meeting"). Preserve the call instead: float the live dock out of #main and
+    // hand the fresh dock to the controller, which brings it back as a "pop out"
+    // placeholder for the SAME room (LC-1199) or a "you are in a call in another
+    // room" busy note for a DIFFERENT one (LC-870; one session per tab). Fall
+    // through to bindRoot only if the float did not take (a live mic with no UI
+    // is how people stay accidentally unmuted).
+    if (el && root && joined && el !== root) {
       if (pop && pop.floatOut) {
         pop.floatOut(root);
         if (pop.isPopped()) { pop.adoptPageDock(el); return; }
