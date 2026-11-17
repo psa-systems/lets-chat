@@ -8,6 +8,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.14.0] - 2026-11-17
+
 ### Added
 
 - **One tabbed dock for in-call chat, transcript, and diagnostics (LC-1195).** On a voice-channel page the chat, the live transcript, and the admin diagnostics panel used to be three separate floating panels that fought for the same corners and overlapped. They now share a single right-side dock with a tab strip (Chat / Transcript / Diagnostics), so there is one predictable home for all call side-content and overlap is structurally impossible. The chat and diagnostics live inside the dock; the Transcript tab shows the same shared transcript drawer in place (so 1:1 calls are unchanged). The Diagnostics tab is admin-only and appears only when the call-diagnostics feature flag is on, exactly as the old panel was gated. On a narrow screen the dock becomes a bottom sheet. This supersedes the earlier chat/transcript side-by-side offset (LC-1194).
