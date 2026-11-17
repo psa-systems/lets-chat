@@ -633,7 +633,14 @@ impl Hub {
         username: &str,
     ) -> (ConnId, broadcast::Receiver<ChatEvent>, bool) {
         let id = next_conn_id();
-        let (tx, rx) = broadcast::channel(64);
+        // LC-1200: per-connection live-event queue. A receiver that falls more
+        // than this many events behind gets `Lagged` and loses the skipped events;
+        // the send task then asks the client to resync (ws.rs). 64 was small
+        // enough that an ordinary burst (a busy room, a reaction/typing flurry, a
+        // slow per-event render, or a briefly slow client) overflowed it and
+        // silently dropped messages, so it is raised to make lag rare. The resync
+        // path is the correctness backstop; this just lowers how often it fires.
+        let (tx, rx) = broadcast::channel(256);
         self.connections.insert(
             id,
             Connection {

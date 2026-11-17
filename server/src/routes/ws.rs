@@ -999,7 +999,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 }
                             }
                         }
-                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
                             // LC-1021: the skipped events may have included this
                             // user's UserBanned close signal, which the match
                             // above would never see. Check directly rather than
@@ -1009,9 +1009,37 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 let _ = tx.send(Message::Close(None)).await;
                                 break;
                             }
+                            // LC-1200: this connection fell behind and `skipped`
+                            // live events were dropped from its queue - the cause
+                            // of a teammate's message silently not arriving. Log it
+                            // (previously invisible), then ask the client to resync:
+                            // a `<!-- resync -->` comment frame is a no-op swap (like
+                            // the ping) that layout.html recognises and answers with
+                            // the same soft-refresh of #main it runs on reconnect,
+                            // so the dropped messages are caught up instead of lost.
+                            tracing::warn!(
+                                user = %send_user.id,
+                                skipped,
+                                "ws connection lagged; events dropped, requesting client resync"
+                            );
+                            if tx
+                                .send(Message::Text("<!-- resync -->".into()))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
                             continue;
                         }
-                        Err(_) => break,
+                        Err(_) => {
+                            // LC-1200: the sender was dropped (hub teardown / server
+                            // shutdown); the loop is ending for this connection.
+                            tracing::debug!(
+                                user = %send_account.lock().unwrap().id,
+                                "ws send loop: broadcast channel closed"
+                            );
+                            break;
+                        }
                     }
                 }
                 _ = ping.tick() => {
@@ -1036,7 +1064,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     while let Some(Ok(msg)) = tokio::select! {
         _ = &mut send => None,
         m = tokio::time::timeout(READ_TIMEOUT, rx_ws.next()) => m.unwrap_or_else(|_| {
-            tracing::debug!(conn_id, "ws read timeout; closing");
+            // LC-1057: half-open / abandoned. LC-1200: info-level (was debug) with
+            // the user, so the "kicked out" disconnects show up in production logs.
+            tracing::info!(
+                conn_id,
+                user = %account.lock().unwrap().id,
+                "ws read timeout (no inbound for 90s); closing connection"
+            );
             None
         }),
     } {
