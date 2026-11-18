@@ -115,15 +115,46 @@ pub async fn get(pool: &SqlitePool, id: i64) -> sqlx::Result<Option<IssueProposa
 /// so two concurrent filers of the same proposal cannot both POST to YouTrack
 /// (LC-1135 review #1: duplicate-on-race). On a lost claim, skip the row; on a
 /// create failure, [`release_claim`] it back to `proposed`.
+///
+/// Also records the claim time. If the owning process is instead
+/// interrupted before either of those runs, the claim is recovered later by
+/// [`sweep_stale_filing_claims`] once it is older than
+/// [`FILING_CLAIM_TIMEOUT_MINUTES`].
 pub async fn claim_for_filing(pool: &SqlitePool, id: i64) -> sqlx::Result<bool> {
     let res = sqlx::query(
-        "UPDATE transcript_issue_proposals SET status = 'filing' \
+        "UPDATE transcript_issue_proposals SET status = 'filing', claimed_at = datetime('now') \
          WHERE id = ? AND status = 'proposed'",
     )
     .bind(id)
     .execute(pool)
     .await?;
     Ok(res.rows_affected() == 1)
+}
+
+/// How long a `filing` claim may sit unresolved before
+/// [`sweep_stale_filing_claims`] treats it as abandoned (an interrupted
+/// create, e.g. a server restart mid-request) and releases it back to
+/// `proposed`. Matches `create_issue`'s own YouTrack request timeout
+/// (`youtrack/mod.rs`): a legitimate in-flight filing can never need longer
+/// than that to resolve one way or the other.
+pub const FILING_CLAIM_TIMEOUT_MINUTES: i64 = 5;
+
+/// Sweep: reclaim any `filing` row whose claim is older than
+/// [`FILING_CLAIM_TIMEOUT_MINUTES`], returning it to `proposed` so it can be
+/// claimed and filed again. Intended to run on the scheduled dispatcher's
+/// existing cadence, mirroring `retention::sweep`'s periodic best-effort
+/// cleanups. Returns the number of rows reclaimed.
+pub async fn sweep_stale_filing_claims(pool: &SqlitePool) -> sqlx::Result<u64> {
+    let res = sqlx::query(
+        "UPDATE transcript_issue_proposals SET status = 'proposed' \
+         WHERE status = 'filing' \
+           AND claimed_at IS NOT NULL \
+           AND claimed_at < datetime('now', '-' || ? || ' minutes')",
+    )
+    .bind(FILING_CLAIM_TIMEOUT_MINUTES)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
 }
 
 /// Finalize a claimed (`filing`) row as `filed` with the created issue key and
@@ -242,6 +273,46 @@ mod tests {
         assert_eq!(row.youtrack_issue_id.as_deref(), Some("LC-42"));
         assert_eq!(row.filed_by.as_deref(), Some("alice"));
         assert!(row.filed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn sweep_reclaims_a_stale_filing_claim() {
+        let pool = chat_pool().await;
+        replace_unfiled(&pool, 7, &[np("Stuck", None, "")])
+            .await
+            .unwrap();
+        let id = list_for_transcript(&pool, 7).await.unwrap()[0].id;
+        assert!(claim_for_filing(&pool, id).await.unwrap());
+        // Simulate an interrupted request: backdate the claim past the
+        // timeout, as if the server was killed mid-`create_issue` long ago.
+        sqlx::query(
+            "UPDATE transcript_issue_proposals SET claimed_at = datetime('now', ? || ' minutes') \
+             WHERE id = ?",
+        )
+        .bind(-(FILING_CLAIM_TIMEOUT_MINUTES + 1))
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(sweep_stale_filing_claims(&pool).await.unwrap(), 1);
+        assert_eq!(get(&pool, id).await.unwrap().unwrap().status, "proposed");
+        // Reclaimed row can be claimed and filed again.
+        assert!(claim_for_filing(&pool, id).await.unwrap());
+        assert!(finalize_filed(&pool, id, "DEMO-1", "u1").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn sweep_leaves_a_fresh_filing_claim_alone() {
+        let pool = chat_pool().await;
+        replace_unfiled(&pool, 7, &[np("In flight", None, "")])
+            .await
+            .unwrap();
+        let id = list_for_transcript(&pool, 7).await.unwrap()[0].id;
+        assert!(claim_for_filing(&pool, id).await.unwrap());
+
+        assert_eq!(sweep_stale_filing_claims(&pool).await.unwrap(), 0);
+        assert_eq!(get(&pool, id).await.unwrap().unwrap().status, "filing");
     }
 
     #[tokio::test]

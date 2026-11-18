@@ -816,6 +816,20 @@ fn spawn_scheduled_dispatcher(state: AppState) {
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "scheduled dispatch tick failed"),
             }
+
+            // Piggyback the stale-filing-claim sweep on this existing
+            // 30-second tick rather than spawning a dedicated task. A
+            // `transcript_issue_proposals` row stuck at `filing` (its
+            // claimer was interrupted before resolving it to `filed` or
+            // back to `proposed`) has no other recovery path.
+            match lets_chat::db::transcript_proposals::sweep_stale_filing_claims(&state.chat).await
+            {
+                Ok(0) => {}
+                Ok(reclaimed) => {
+                    tracing::info!(reclaimed, "stale filing-claim sweep reclaimed rows");
+                }
+                Err(e) => tracing::warn!(error = %e, "stale filing-claim sweep failed"),
+            }
         }
     });
 }
