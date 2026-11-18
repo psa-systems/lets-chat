@@ -1493,6 +1493,20 @@ pub(crate) async fn broadcast_room_message(
             recipients.push(message.user_id.clone());
         }
     }
+    // LC-1192: everyone currently IN the call for this room must also receive the
+    // room's live events, even if they are not in its membership set. The in-call
+    // chat (voice/page.html) is the room's own message stream, so a participant
+    // who dropped into the voice channel / huddle without a room_members (or
+    // enclave_members) row would see only their OWN echo (delivered by the author
+    // branch above) and none of the other participants' messages - the receiver
+    // side of the same gap LC-1137 fixed for the author. voice_room_users are
+    // already authorized occupants of the call, so delivering the room's events
+    // to them is correct; `contains` keeps a member participant from a double send.
+    for uid in state.hub.voice_room_users(room.id) {
+        if !recipients.contains(&uid) {
+            recipients.push(uid);
+        }
+    }
     for uid in recipients {
         // OOB DOM updates always deliver - DND only suppresses attention-
         // grabbing notifications (push/toast/sound). When that delivery path

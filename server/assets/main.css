@@ -4272,6 +4272,54 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
     animation: lc-rec-pulse 1.6s ease-in-out infinite;
 }
 
+/* LC-1196: muted-speech nudge. voice.js adds .lc-cbtn--nudge to the Mute button
+   when it detects we are talking while muted: the button pulses amber and the
+   "You're muted" hint drops in below it. The [data-lc-voice-mute] qualifier
+   lifts specificity above the aria-pressed="true" on-state (both 0,2,0) so the
+   amber wins while the button is in its muted/pressed state; placed after it in
+   source order to carry the tie. The glow uses a fixed amber rgba (not
+   color-mix / a token alpha) so it renders on the macOS-12 WebKit webview. */
+[data-lc-voice-mute] { position: relative; }
+[data-lc-voice-mute].lc-cbtn--nudge {
+    background: var(--warning-surface);
+    border-color: var(--warning);
+    color: var(--warning-surface-content);
+    animation: lc-mute-nudge-pulse 1.4s ease-out infinite;
+}
+@keyframes lc-mute-nudge-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.5); }
+    70%  { box-shadow: 0 0 0 8px rgba(217, 119, 6, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0); }
+}
+.lc-mute-nudge {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 70;
+    white-space: nowrap;
+    pointer-events: none;
+    background: var(--warning);
+    color: var(--warning-content);
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+/* The huddle dock bar sits at the bottom of the screen, so its hint opens
+   upward instead of dropping below the control bar. */
+.lc-mute-nudge--up { top: auto; bottom: calc(100% + 8px); }
+[data-lc-voice-mute].lc-cbtn--nudge .lc-mute-nudge {
+    display: block;
+    animation: lc-fade-in 0.15s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-lc-voice-mute].lc-cbtn--nudge { animation: none; }
+    [data-lc-voice-mute].lc-cbtn--nudge .lc-mute-nudge { animation: none; }
+}
+
 /* ---- Participant grid --------------------------------------------------- */
 /* LC-416 follow-up: cap each cell to a bounded max (not 1fr) and centre the
    row. With a 1fr max the 2-up case ballooned to two huge edge-to-edge tiles
@@ -4518,7 +4566,7 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-huddle [data-lc-voice-grid]:has(.lc-voice-waiting):not(:has(.lc-voice-tile[data-screen])) {
     grid-template-columns: minmax(0, calc((var(--lc-huddle-h, 14rem) - 0.75rem) * 16 / 9));
 }
-.lc-huddle [data-lc-voice-grid]:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
+.lc-huddle [data-lc-voice-grid]:not(.lc-voice-grid--focus):not(.lc-voice-grid--gallery):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
     max-height: calc(var(--lc-huddle-h, 14rem) - 0.75rem);
 }
 /* The handle straddles the dock's top border: a thin hit area with a centered
@@ -4746,8 +4794,8 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-huddle.lc-huddle--float [data-lc-voice-grid]:has(.lc-voice-waiting):not(:has(.lc-voice-tile[data-screen])) {
     grid-template-columns: minmax(0, calc((100cqh - 4.5rem) * 16 / 9));
 }
-.lc-huddle.lc-huddle--popout [data-lc-voice-grid]:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen],
-.lc-huddle.lc-huddle--float [data-lc-voice-grid]:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
+.lc-huddle.lc-huddle--popout [data-lc-voice-grid]:not(.lc-voice-grid--focus):not(.lc-voice-grid--gallery):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen],
+.lc-huddle.lc-huddle--float [data-lc-voice-grid]:not(.lc-voice-grid--focus):not(.lc-voice-grid--gallery):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
     max-height: calc(100cqh - 4.5rem);
 }
 /* LC-1110: when a pop-out/float also has non-screen participants, cap the shared
@@ -5041,29 +5089,29 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
    the sharing tile spans the full width (forcing a wrap) and the rest flow
    below as a centered filmstrip of small tiles. Placed after the grid rules so
    it wins; the :has() toggles automatically when voice.js sets data-screen. */
-.lc-voice-grid:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) {
+.lc-voice-grid:not(.lc-voice-grid--focus):not(.lc-voice-grid--gallery):has(.lc-voice-tile[data-screen]) {
     display: flex;
     flex-wrap: wrap;
     gap: 1rem;
     align-content: flex-start;
     justify-content: center;
 }
-.lc-voice-grid:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
+.lc-voice-grid:not(.lc-voice-grid--focus):not(.lc-voice-grid--gallery):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] {
     flex: 1 1 100%;
     aspect-ratio: 16 / 9;
     max-height: 70vh;
     background: #0b0c0f; /* shared screens read best on a neutral-dark stage */
 }
 /* Don't crop the shared screen - letterbox it instead. */
-.lc-voice-grid:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] video {
+.lc-voice-grid:not(.lc-voice-grid--focus):not(.lc-voice-grid--gallery):has(.lc-voice-tile[data-screen]) .lc-voice-tile[data-screen] video {
     object-fit: contain;
 }
-.lc-voice-grid:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-tile:not([data-screen]) {
+.lc-voice-grid:not(.lc-voice-grid--focus):not(.lc-voice-grid--gallery):has(.lc-voice-tile[data-screen]) .lc-voice-tile:not([data-screen]) {
     flex: 0 0 clamp(120px, 16vw, 196px);
     aspect-ratio: 16 / 9;
     min-height: 0;
 }
-.lc-voice-grid:not(.lc-voice-grid--focus):has(.lc-voice-tile[data-screen]) .lc-voice-waiting { display: none; }
+.lc-voice-grid:not(.lc-voice-grid--focus):not(.lc-voice-grid--gallery):has(.lc-voice-tile[data-screen]) .lc-voice-waiting { display: none; }
 
 /* ---- LC-1174: viewer-local tile focus ----------------------------------- */
 /* A viewer can expand any tile to the stage on their own screen with the
@@ -5137,18 +5185,21 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-voice-focus-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .lc-voice-focus-btn svg { width: 1rem; height: 1rem; }
 .lc-voice-focus-btn .lc-voice-focus-collapse { display: none; }
-.lc-voice-tile[data-lc-focus] .lc-voice-focus-btn .lc-voice-focus-expand { display: none; }
-.lc-voice-tile[data-lc-focus] .lc-voice-focus-btn .lc-voice-focus-collapse { display: block; }
+/* LC-1193: the staged (big) tile - focused OR the auto-staged sharer - shows the
+   collapse/Shrink glyph; everyone else shows expand. */
+.lc-voice-tile[data-lc-staged] .lc-voice-focus-btn .lc-voice-focus-expand { display: none; }
+.lc-voice-tile[data-lc-staged] .lc-voice-focus-btn .lc-voice-focus-collapse { display: block; }
 /* Join the layout (tabbable) once the grid shows video or a share, or in focus
    mode; opacity from the base rule keeps it invisible until revealed below. */
 .lc-voice-grid:has(.lc-voice-tile[data-media="video"], .lc-voice-tile[data-screen]) .lc-voice-focus-btn,
 .lc-voice-grid--focus .lc-voice-focus-btn { display: grid; }
-/* Reveal on hover / keyboard focus, and permanently on the focused tile. These
-   outrank the base opacity:0 (lower specificity), never the display toggle. */
+/* Reveal on hover / keyboard focus, and permanently on the staged (big) tile so
+   the Shrink control is always reachable. These outrank the base opacity:0 (lower
+   specificity), never the display toggle. */
 .lc-voice-tile:hover .lc-voice-focus-btn,
 .lc-voice-tile:focus-within .lc-voice-focus-btn,
 .lc-voice-focus-btn:focus-visible,
-.lc-voice-grid--focus .lc-voice-tile[data-lc-focus] .lc-voice-focus-btn {
+.lc-voice-tile[data-lc-staged] .lc-voice-focus-btn {
     opacity: 1;
     pointer-events: auto;
 }
@@ -5248,8 +5299,96 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 /* Off-canvas + non-interactive when closed (was display:none, which could not
    animate). visibility transitions discretely so the slide-out still shows. */
 .lc-transcript.hidden { transform: translateX(100%); visibility: hidden; }
+
 #main { transition: padding-right 0.2s ease; }
 body.lc-transcript-open #main { padding-right: 20rem; }
+
+/* ---- LC-1195: unified call dock (voice page) --------------------------- */
+/* One right-edge container with a tab strip (Chat / Transcript / Diagnostics),
+   replacing the three separate floating panels so they can never overlap. The
+   chat + diagnostics bodies live inside it; the Transcript tab shows the SHARED
+   transcript drawer (layout.html) aligned to this same column (the
+   body.lc-has-call-dock rules under .lc-transcript below), so the drawer the 1:1
+   call uses is never moved or duplicated. */
+:root { --lc-dock-w: 20rem; --lc-dock-tabs-h: 2.75rem; --lc-dock-sheet-h: 62vh; }
+.lc-call-dock {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 62;
+    display: flex;
+    flex-direction: column;
+    width: var(--lc-dock-w);
+    max-width: 85vw;
+    border-left: 1px solid var(--border);
+    background: var(--surface-elevated);
+    color: var(--content);
+    box-shadow: -8px 0 24px -12px rgba(0, 0, 0, 0.35);
+}
+.lc-call-dock.hidden { display: none; }
+.lc-call-dock-tabs {
+    display: flex;
+    align-items: stretch;
+    flex: none;
+    height: var(--lc-dock-tabs-h);
+    border-bottom: 1px solid var(--border);
+    padding: 0 0.25rem;
+}
+.lc-call-dock-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0 0.55rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--content-muted);
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.lc-call-dock-tab:hover { color: var(--content); }
+.lc-call-dock-tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.lc-call-dock-tab:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); border-radius: 0.25rem; }
+.lc-call-dock-tab-ico { display: inline-flex; }
+.lc-call-dock-tab-ico svg { height: 1rem; width: 1rem; }
+.lc-call-dock-unread { height: 0.5rem; width: 0.5rem; border-radius: 9999px; background: var(--accent); }
+.lc-call-dock-unread[hidden] { display: none; }
+.lc-call-dock-collapse {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.35rem;
+    color: var(--content-muted);
+    cursor: pointer;
+}
+.lc-call-dock-collapse:hover { color: var(--content); }
+.lc-call-dock-collapse:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); border-radius: 0.25rem; }
+.lc-call-dock-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+/* Transcript tab active: the shared drawer (z-63 below) covers this column, so
+   the dock's own body is hidden out of the way. */
+.lc-call-dock.lc-dock--transcript .lc-call-dock-body { display: none; }
+.lc-call-dock-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.lc-call-dock-panel.hidden { display: none; }
+.lc-call-dock-panel--diag { overflow-y: auto; }
+/* Chat: the message log scrolls, the composer pins to the bottom. */
+.lc-call-dock-panel--chat #messages { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* Reserve the dock column so the call stage is not covered while the dock is open. */
+body.lc-has-call-dock.lc-dock-open #main { padding-right: var(--lc-dock-w); }
+
+/* The shared transcript, on the voice page, aligns to the dock column: it starts
+   below the tab strip and matches the dock width (and sits above the dock so it
+   covers the empty body), so the strip stays visible and the two read as one. */
+body.lc-has-call-dock .lc-transcript {
+    top: var(--lc-dock-tabs-h);
+    width: var(--lc-dock-w);
+    z-index: 63;
+    box-shadow: none;
+}
+body.lc-has-call-dock .lc-transcript-head { display: none; } /* the tab strip is the header */
 /* LC-883: the transcript drawer sits on top of the fixed support launcher's
    right/bottom-right corner at desktop widths. Shift the launcher left by the
    drawer's width so it stays reachable while the transcript is open. */
@@ -5529,6 +5668,34 @@ body.lc-transcript-scrolled .lc-transcript-jump { display: flex; }
     }
     .lc-transcript-body {
         padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    }
+
+    /* LC-1195: the call dock is a bottom sheet too, so it never covers the call
+       controls; the right-column reservation on #main is dropped. */
+    body.lc-has-call-dock.lc-dock-open #main { padding-right: 0; }
+    .lc-call-dock {
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 100%;
+        height: var(--lc-dock-sheet-h);
+        max-height: 80vh;
+        border-left: none;
+        border-top: 1px solid var(--border);
+        border-radius: 0.875rem 0.875rem 0 0;
+        box-shadow: 0 -10px 28px -14px rgba(0, 0, 0, 0.5);
+    }
+    /* The shared transcript, in dock mode, is a bottom sheet shortened by the tab
+       strip's height so the dock's tabs peek above it and stay reachable (equal
+       specificity to the desktop alignment rule, placed later so it wins here). */
+    body.lc-has-call-dock .lc-transcript {
+        top: auto;
+        bottom: 0;
+        height: calc(var(--lc-dock-sheet-h) - var(--lc-dock-tabs-h));
+        width: 100%;
+        z-index: 63;
     }
 }
 

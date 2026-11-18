@@ -431,6 +431,13 @@ impl Hub {
         self.open_transcripts.insert(room_id, Some(transcript_id));
     }
 
+    /// LC-1198: the transcript session currently open for `room_id`, if any.
+    /// `None` when transcription is not running for the room's call. Used to
+    /// mirror typed in-call chat into the running transcript.
+    pub fn open_transcript(&self, room_id: i64) -> Option<i64> {
+        self.open_transcripts.get(&room_id).and_then(|o| *o)
+    }
+
     /// LC-1033: mark `room_id` as having no open transcript, but only if
     /// `transcript_id` is still the one on record. Called on finalize; the
     /// guard means a finalize call for a session that has already been
@@ -633,7 +640,14 @@ impl Hub {
         username: &str,
     ) -> (ConnId, broadcast::Receiver<ChatEvent>, bool) {
         let id = next_conn_id();
-        let (tx, rx) = broadcast::channel(64);
+        // LC-1200: per-connection live-event queue. A receiver that falls more
+        // than this many events behind gets `Lagged` and loses the skipped events;
+        // the send task then asks the client to resync (ws.rs). 64 was small
+        // enough that an ordinary burst (a busy room, a reaction/typing flurry, a
+        // slow per-event render, or a briefly slow client) overflowed it and
+        // silently dropped messages, so it is raised to make lag rare. The resync
+        // path is the correctness backstop; this just lowers how often it fires.
+        let (tx, rx) = broadcast::channel(256);
         self.connections.insert(
             id,
             Connection {

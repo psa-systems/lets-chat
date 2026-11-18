@@ -980,6 +980,16 @@
     return now - (lastSpeechAt || 0) > windowMs;
   }
 
+  // LC-1195: the unified call dock (voice_dock.js) drives the shared transcript
+  // drawer as its Transcript tab, so expose a deterministic open/close + a read
+  // of the current open state. The drawer markup stays shared (layout.html), used
+  // by 1:1 calls and huddles unchanged; this is just a programmatic handle on the
+  // same showPanel() the toggle/close clicks already use.
+  function isPanelOpen() {
+    var w = q('[data-lc-caption-wrap]');
+    return !!w && !w.classList.contains('hidden');
+  }
+
   // LC-843/LC-1131: the pure decisions, exported for transcribe.test.js.
   window.LetsChatTranscribe = {
     chooseEngine: chooseEngine,
@@ -987,6 +997,9 @@
     bleedGateDrops: bleedGateDrops,
     capLineMatches: capLineMatches,
     highlightHtml: highlightHtml,
+    // LC-1195: container controls for the call dock.
+    showPanel: showPanel,
+    isPanelOpen: isPanelOpen,
   };
 
   // Learn the engine (browser vs server STT) up front, then keep toggles in step.
