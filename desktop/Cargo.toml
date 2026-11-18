@@ -7,6 +7,14 @@ edition.workspace = true
 name = "lets-chat-desktop"
 path = "src/main.rs"
 
+# LC-1168: opt-in Web Inspector. `cargo tauri build` is a release build, where
+# WKWebView/WebView2 devtools are off by default, so the shipped installers are
+# NOT inspectable. Build with `--features devtools` (see `just
+# build-desktop-mac-devtools`) to get an inspectable webview for profiling the
+# room/enclave navigation (Safari Web Inspector -> Timeline) on real hardware.
+[features]
+devtools = ["tauri/devtools"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -84,8 +92,13 @@ webkit2gtk = "2"
 # PlatformWebview::controller(). Default WebView2 behaviour cancels
 # the event (= silent deny) unless the host sets state to Allow.
 [target.'cfg(target_os = "windows")'.dependencies]
-webview2-com = "0.38"
+# LC-1190: kept in lockstep with the webview2-com-sys / windows-core that the
+# tauri 2.12 + wry 0.57 stack pulls (windows-core 0.62). The PermissionRequested
+# handler is built from this webview2-com and then handed to add_PermissionRequested
+# on the CoreWebView2 that wry returns; if the two use different windows-core
+# majors the handler fails the Param<...> bound on the Windows cross-build.
+webview2-com = "0.39"
 # Win32_UI_Input_KeyboardAndMouse: SendInput + INPUT/MOUSEINPUT/KEYBDINPUT and
 # the MOUSEEVENTF_*/KEYEVENTF_* flags used by the remote-control injector
 # (src/inject.rs, LC-185).
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Input_KeyboardAndMouse"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Input_KeyboardAndMouse"] }

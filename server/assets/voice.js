@@ -89,6 +89,23 @@
   // Keep a handle on the chat socket wrapper regardless of page type.
   document.body.addEventListener('htmx:wsOpen', function (e) {
     if (e.detail && e.detail.socketWrapper) window.__lcWS = e.detail.socketWrapper;
+    // LC-1201: a reconnect gives us a NEW server connection; the old one was
+    // dropped from the voice roster on disconnect, so the server now undercounts
+    // us (the "room shows 3 not 4" report) and we have fallen out of the room
+    // fan-out ("doesn't catch him in the chat"). If we are still in a call,
+    // re-assert our presence. The initial open fires before join() (joined is
+    // false) and is skipped. voice_join re-registers us in the roster, which
+    // also makes every peer re-announce THEIR mic/screen state to us via the
+    // fresh-joiner path below (LC-402/408), so first drop our stale view of
+    // other tiles' screen/mute - a share or mute that ENDED during the gap sent
+    // no event we received, which is why a teammate's stopped share could leave
+    // our tile stuck big - and let those re-announcements re-apply whatever is
+    // still active. Then re-announce our OWN state for peers who stayed up.
+    if (!joined || !cfg) return;
+    resetRemoteCallState();
+    wsSend({ type: 'voice_join', room_id: cfg.roomId });
+    if (selfMuted) wsSend({ type: 'voice_mute', room_id: cfg.roomId, muted: true });
+    if (selfSharing) wsSend({ type: 'voice_screen', room_id: cfg.roomId, sharing: true });
   });
 
   function wsSend(obj) {
@@ -310,15 +327,18 @@
     focusBtn.setAttribute('data-lc-voice-focus-btn', '');
     focusBtn.setAttribute('aria-pressed', 'false');
     focusBtn.setAttribute('aria-label', window.__lcS('voiceFocusTile', 'Expand tile'));
-    // Two glyphs toggled by the tile's [data-lc-focus] state (CSS): arrows out
-    // to expand, arrows in to minimize.
+    // Two glyphs toggled by the tile's [data-lc-staged] state (CSS): arrows out
+    // to expand (make this tile the stage), arrows in to shrink (LC-1193: collapse
+    // the big tile - focused or the auto-staged sharer - to an equal gallery).
     focusBtn.innerHTML =
       '<svg class="lc-voice-focus-expand" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M4 4h5a1 1 0 010 2H6.41l3.3 3.29a1 1 0 11-1.42 1.42L5 7.41V10a1 1 0 11-2 0V5a1 1 0 011-1zm12 12h-5a1 1 0 010-2h2.59l-3.3-3.29a1 1 0 111.42-1.42L15 12.59V10a1 1 0 112 0v5a1 1 0 01-1 1z"/></svg>' +
       '<svg class="lc-voice-focus-collapse" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M9 5v2.59L5.71 4.29A1 1 0 004.29 5.71L7.59 9H5a1 1 0 000 2h5a1 1 0 001-1V5a1 1 0 00-2 0zm2 10v-2.59l3.29 3.3a1 1 0 001.42-1.42L12.41 11H15a1 1 0 000-2h-5a1 1 0 00-1 1v5a1 1 0 002 0z"/></svg>';
     focusBtn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      if (tile.hasAttribute('data-lc-focus')) setFocus(null);
+      // LC-1193: the big (staged) tile's button shrinks the whole grid to an equal
+      // gallery; any other tile's button expands it to the stage.
+      if (tile.hasAttribute('data-lc-staged')) setGallery(true);
       else setFocus(userId);
     });
     // LC-1175: viewer-local drag-to-reorder handle. Dragging it (pointer: mouse,
@@ -470,7 +490,7 @@
     var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
     if (t) t.remove();
     dropOrder(userId); // LC-1175: forget the leaver's slot in the viewer order
-    syncFocus(); // LC-1174: drop the stage class if the focused tile just left
+    syncStage(); // LC-1174: drop the stage class if the focused/staged tile just left
     updateWaiting();
   }
   function cssEscape(s) { return String(s).replace(/["\\]/g, '\\$&'); }
@@ -482,29 +502,73 @@
   function setFocus(userId) {
     var g = grid();
     if (!g) return;
+    g.classList.remove('lc-voice-grid--gallery'); // LC-1193: focusing a tile leaves gallery
     Array.prototype.forEach.call(g.querySelectorAll('[data-lc-focus]'), function (t) {
       t.removeAttribute('data-lc-focus');
     });
     var target = userId && g.querySelector('[data-lc-voice-tile="' + cssEscape(userId) + '"]');
     if (target) target.setAttribute('data-lc-focus', '');
-    syncFocus();
+    syncStage();
   }
-  // Toggle the grid stage class + each focus button's label/pressed state from
-  // the DOM, so removeTile / replaceChildren can leave the attributes authoritative.
-  function syncFocus() {
+  // LC-1193: collapse the grid to an equal gallery, so the big tile (the sharer's
+  // auto-stage or a focused tile) can be shrunk. Clears any focus; while gallery is
+  // on, a new share no longer auto-takes the stage. setGallery(false) returns to the
+  // auto layout. Viewer-local, never sent to peers.
+  function setGallery(on) {
+    var g = grid();
+    if (!g) return;
+    if (on) {
+      Array.prototype.forEach.call(g.querySelectorAll('[data-lc-focus]'), function (t) {
+        t.removeAttribute('data-lc-focus');
+      });
+    }
+    g.classList.toggle('lc-voice-grid--gallery', !!on);
+    syncStage();
+  }
+  // Re-derive the stage from the DOM: mark the currently-big tile [data-lc-staged]
+  // (the focused tile, or - in the auto layout only - the data-screen sharer; none
+  // in gallery), toggle the grid's focus class, and set each button's label/glyph
+  // (Shrink on the staged tile, Expand elsewhere). Idempotent, so removeTile /
+  // replaceChildren / a sharing change can leave the attributes authoritative.
+  function syncStage() {
     var g = grid();
     if (!g) return;
     var focused = g.querySelector('[data-lc-focus]');
     g.classList.toggle('lc-voice-grid--focus', !!focused);
+    var gallery = g.classList.contains('lc-voice-grid--gallery');
+    // The big tile: the focused one, else (auto layout only) the sharer. None in gallery.
+    var staged = focused || (gallery ? null : g.querySelector('.lc-voice-tile[data-screen]'));
+    Array.prototype.forEach.call(g.querySelectorAll('[data-lc-voice-tile]'), function (t) {
+      if (t === staged) t.setAttribute('data-lc-staged', '');
+      else t.removeAttribute('data-lc-staged');
+    });
     Array.prototype.forEach.call(g.querySelectorAll('[data-lc-voice-focus-btn]'), function (btn) {
       var tile = btn.closest('[data-lc-voice-tile]');
-      var on = !!(tile && tile.hasAttribute('data-lc-focus'));
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-      btn.setAttribute('aria-label', on
-        ? window.__lcS('voiceUnfocusTile', 'Minimize tile')
+      var isStaged = !!(tile && tile.hasAttribute('data-lc-staged'));
+      btn.setAttribute('aria-pressed', isStaged ? 'true' : 'false');
+      btn.setAttribute('aria-label', isStaged
+        ? window.__lcS('voiceUnfocusTile', 'Shrink tile')
         : window.__lcS('voiceFocusTile', 'Expand tile'));
     });
     applyOrder(); // LC-1175: a focus change frees/claims the stage slot (order:-1)
+  }
+
+  // LC-1201: on reconnect, drop our stale view of OTHER participants' screen /
+  // mute state (never our own tile - our own re-announce restores that). Called
+  // before peers re-announce their current state: a share or mute that ENDED
+  // during the gap left no event to clear it, so without this the tile would
+  // stay staged / the mute dot stuck. syncStage() then collapses any tile that
+  // is no longer the auto-staged sharer back into the gallery; the subsequent
+  // re-announcements re-pin / re-mark whatever is still active.
+  function resetRemoteCallState() {
+    var g = grid();
+    if (!g || !cfg) return;
+    Array.prototype.forEach.call(g.querySelectorAll('[data-lc-voice-tile]'), function (t) {
+      if (t.getAttribute('data-lc-voice-tile') === cfg.selfId) return;
+      t.removeAttribute('data-screen');
+      t.removeAttribute('data-muted');
+    });
+    syncStage();
   }
 
   // ---- LC-1175: viewer-local tile reorder --------------------------------
@@ -796,6 +860,7 @@
       // echoCancellation constraint, so its level reflects us, not the bleed.
       if (isSelf && speaking) window.__lcLastLocalSpeechAt = Date.now();
     }
+    checkMutedSpeech(); // LC-1196: nudge us if we are talking while muted
   }
   function startSpeaking() {
     var ctx = ensureAudioCtx();
@@ -820,6 +885,112 @@
     if (g) Array.prototype.forEach.call(g.querySelectorAll('[data-lc-voice-tile]'), function (t) {
       t.removeAttribute('data-speaking');
     });
+  }
+
+  // ---- muted-speech nudge (LC-1196) ----------------------------------
+  // Detect that WE are talking while muted and nudge us to unmute. Mute sets the
+  // mic track's `enabled = false`, which silences it to the active-speaker
+  // analyser above and to peers - but leaves the track (and the mic hardware)
+  // live. A clone of that track keeps an INDEPENDENT `enabled` flag while
+  // sharing the same capture, so it stays audible to a dedicated analyser when
+  // the real track is muted, adding no extra mic/hardware footprint. That
+  // analyser is a tap only (never added to a peer connection or transmitted), so
+  // this is purely on-device: when muted + sustained speech, we pulse the Mute
+  // button, reveal a hint, and play an attention cue. Mesh only (the SFU owns
+  // its own mic in huddle_sfu.js and localStream is null there).
+  var MUTE_NUDGE_LEVEL = 20;          // 0..255 analyser average that counts as speech
+  var MUTE_NUDGE_SUSTAIN_MS = 1500;   // sustained speech before the first nudge
+  var MUTE_NUDGE_GAP_MS = 600;        // silence this long resets the sustain window (word gaps tolerated)
+  var MUTE_NUDGE_COOLDOWN_MS = 12000; // minimum spacing between nudges
+  var MUTE_NUDGE_HIDE_MS = 4000;      // how long the visual lingers after a nudge
+  var muteMon = null;                 // { stream, track, an, data, src, speakSince, lastLoud, lastNudgeAt }
+  var muteNudgeHideTimer = 0;
+
+  // Pure decision: given the running state, a fresh level, the clock, and
+  // whether we are muted, return the next state, whether to FIRE a nudge now,
+  // and whether speech is currently sustained. No DOM / Web Audio, so it is
+  // unit-tested directly (LC-1196).
+  function muteNudgeStep(state, lvl, now, muted) {
+    var s = {
+      speakSince: state.speakSince || 0,
+      lastLoud: state.lastLoud || 0,
+      lastNudgeAt: state.lastNudgeAt || 0,
+    };
+    if (!muted) { s.speakSince = 0; s.lastLoud = 0; return { state: s, fire: false, active: false }; }
+    if (lvl > MUTE_NUDGE_LEVEL) {
+      if (!s.speakSince) s.speakSince = now;
+      s.lastLoud = now;
+    } else if (s.speakSince && now - s.lastLoud > MUTE_NUDGE_GAP_MS) {
+      s.speakSince = 0;
+    }
+    var fire = false;
+    if (s.speakSince && now - s.speakSince >= MUTE_NUDGE_SUSTAIN_MS
+        && (!s.lastNudgeAt || now - s.lastNudgeAt >= MUTE_NUDGE_COOLDOWN_MS)) {
+      s.lastNudgeAt = now;
+      fire = true;
+    }
+    return { state: s, fire: fire, active: !!s.speakSince };
+  }
+
+  function startMuteMonitor() {
+    if (sfu || muteMon || !localStream) return;
+    var track = localStream.getAudioTracks()[0];
+    if (!track || typeof track.clone !== 'function' || typeof MediaStream === 'undefined') return;
+    var ctx = ensureAudioCtx();
+    if (!ctx) return;
+    try {
+      var clone = track.clone(); // independent `enabled`; stays live while the real track is muted
+      var stream = new MediaStream([clone]);
+      var src = ctx.createMediaStreamSource(stream);
+      var an = ctx.createAnalyser();
+      an.fftSize = 512;
+      src.connect(an); // tap only - never connected to destination, so no echo and nothing transmitted
+      muteMon = {
+        stream: stream, track: clone, an: an, data: new Uint8Array(an.frequencyBinCount),
+        src: src, speakSince: 0, lastLoud: 0, lastNudgeAt: 0,
+      };
+    } catch (e) { muteMon = null; }
+  }
+  function monLevel() {
+    if (!muteMon) return 0;
+    muteMon.an.getByteFrequencyData(muteMon.data);
+    var sum = 0;
+    for (var i = 0; i < muteMon.data.length; i++) sum += muteMon.data[i];
+    return sum / muteMon.data.length; // 0..255
+  }
+  function checkMutedSpeech() {
+    if (!muteMon) return;
+    var r = muteNudgeStep(muteMon, monLevel(), Date.now(), selfMuted);
+    muteMon.speakSince = r.state.speakSince;
+    muteMon.lastLoud = r.state.lastLoud;
+    muteMon.lastNudgeAt = r.state.lastNudgeAt;
+    if (r.fire) fireMutedNudge();
+    else if (!selfMuted) clearMutedNudge();
+  }
+  function fireMutedNudge() {
+    var btn = q('[data-lc-voice-mute]');
+    if (btn) btn.classList.add('lc-cbtn--nudge');
+    var pill = q('[data-lc-mute-nudge]');
+    var live = q('[data-lc-mute-live]');
+    if (live && pill) live.textContent = pill.textContent; // announce (pill itself is aria-hidden)
+    if (window.LetsChatSfx && window.LetsChatSfx.playMutedNudge) window.LetsChatSfx.playMutedNudge();
+    if (muteNudgeHideTimer) clearTimeout(muteNudgeHideTimer);
+    muteNudgeHideTimer = setTimeout(clearMutedNudge, MUTE_NUDGE_HIDE_MS);
+  }
+  function clearMutedNudge() {
+    if (muteNudgeHideTimer) { clearTimeout(muteNudgeHideTimer); muteNudgeHideTimer = 0; }
+    var btn = q('[data-lc-voice-mute]');
+    if (btn) btn.classList.remove('lc-cbtn--nudge');
+    var live = q('[data-lc-mute-live]');
+    if (live) live.textContent = '';
+  }
+  function stopMuteMonitor() {
+    clearMutedNudge();
+    if (muteMon) {
+      try { muteMon.src.disconnect(); } catch (e) {}
+      try { muteMon.track.stop(); } catch (e) {}
+      muteMon = null;
+    }
   }
 
   // ---- connection-quality monitor (LC-410) ---------------------------
@@ -1167,6 +1338,7 @@
       showJoinedUi(true);
       createTile(cfg.selfId, cfg.selfName, true);
       startSpeaking();
+      startMuteMonitor(); // LC-1196: watch for talking-while-muted (mesh only)
       startQuality();
       var sv = tileVideo(cfg.selfId);
       // Re-assign (null first) so the <video> re-renders with the changed
@@ -1326,7 +1498,7 @@
       wsSend({ type: 'voice_leave', room_id: cfg.roomId });
       removeTile(cfg.selfId);
       var gs = grid();
-      if (gs) { gs.replaceChildren(); gs.classList.remove('lc-voice-grid--focus'); } // LC-1174
+      if (gs) { gs.replaceChildren(); gs.classList.remove('lc-voice-grid--focus'); gs.classList.remove('lc-voice-grid--gallery'); } // LC-1174/1193
       tileOrder = []; // LC-1175: the next call rebuilds tiles in arrival order
       joined = false;
       var sss = q('[data-lc-voice-screen]');
@@ -1342,6 +1514,7 @@
     selfMuted = false;
     selfSharing = false;
     stopSpeaking();
+    stopMuteMonitor(); // LC-1196
     stopQuality();
     wsSend({ type: 'voice_leave', room_id: cfg.roomId });
     Object.keys(peers).forEach(removePeer);
@@ -1352,7 +1525,7 @@
     }
     removeTile(cfg.selfId);
     var g = grid();
-    if (g) { g.replaceChildren(); g.classList.remove('lc-voice-grid--focus'); } // LC-1174
+    if (g) { g.replaceChildren(); g.classList.remove('lc-voice-grid--focus'); g.classList.remove('lc-voice-grid--gallery'); } // LC-1174/1193
     tileOrder = []; // LC-1175: the next call rebuilds tiles in arrival order
     joined = false;
     var ss = q('[data-lc-voice-screen]');
@@ -1404,6 +1577,7 @@
     var muted = !on;
     dbg('toggle: after', audioTrackStates());
     selfMuted = muted;
+    if (!muted) clearMutedNudge(); // LC-1196: unmuting resolves the nudge at once
     var btn = q('[data-lc-voice-mute]');
     if (btn) {
       setLabel(btn, on ? window.__lcS('callMute', 'Mute') : window.__lcS('callUnmute', 'Unmute'));
@@ -1574,6 +1748,9 @@
     if (!t) return;
     if (sharing) t.setAttribute('data-screen', 'true');
     else t.removeAttribute('data-screen');
+    // LC-1193: the sharer is the auto-staged tile, so a sharing change moves the
+    // big tile - re-sync so [data-lc-staged] and the Expand/Shrink buttons follow.
+    syncStage();
     // LC-1129: receiver diagnostics, only for a REMOTE peer's share.
     if (cfg && userId !== cfg.selfId) {
       if (sharing) {
@@ -2057,15 +2234,18 @@
       if (el && el !== root) pop.adoptPageDock(el);
       return;
     }
-    // LC-870: a swap landed on a DIFFERENT room's dock while a call is live in
-    // this one (an enclave switch during the call). Preserve the call instead of
-    // letting bindRoot() leave: float the live dock out of #main - exactly as the
-    // swap-left-no-dock path below does - and hand the page's fresh dock to the
-    // controller for the "in a huddle in another room" busy note (one session per
-    // tab). Fall through to bindRoot only if the float did not take (a live mic
-    // with no UI is how people stay accidentally unmuted).
-    if (el && root && joined && el !== root
-        && el.getAttribute('data-room-id') !== String(cfg && cfg.roomId)) {
+    // LC-870/LC-1199: a swap landed on a fresh voice dock while a call is live.
+    // The fresh dock is a NEW element even when it is the SAME room re-rendered -
+    // a boosted navigation back to the voice channel you are already in - so
+    // without this, bindRoot() below sees `el !== root` and LEAVES, ending the
+    // call (LC-1199: "clicking the voice room I'm already in kicks me out of the
+    // meeting"). Preserve the call instead: float the live dock out of #main and
+    // hand the fresh dock to the controller, which brings it back as a "pop out"
+    // placeholder for the SAME room (LC-1199) or a "you are in a call in another
+    // room" busy note for a DIFFERENT one (LC-870; one session per tab). Fall
+    // through to bindRoot only if the float did not take (a live mic with no UI
+    // is how people stay accidentally unmuted).
+    if (el && root && joined && el !== root) {
       if (pop && pop.floatOut) {
         pop.floatOut(root);
         if (pop.isPopped()) { pop.adoptPageDock(el); return; }
@@ -2168,6 +2348,9 @@
     // LC-1174: viewer-local tile focus (expand/minimize). Exposed so the per-tile
     // button and unit tests can drive it; pass null to restore the auto layout.
     setFocus: setFocus,
+    // LC-1193: collapse the grid to an equal gallery (shrink the big tile) /
+    // setGallery(false) to restore the auto layout. Exposed for tests.
+    setGallery: setGallery,
     // LC-1175: viewer-local tile order. `ids()` reads it; `move(uid, delta)` and
     // `moveBefore(uid, beforeUid)` rearrange it (the drag + keyboard paths, and
     // unit tests, share these). The order never leaves the client.
@@ -2178,6 +2361,8 @@
     },
     // LC-1154: pure guard + diagnostic summarizers, exported for unit testing.
     shouldAutoIceRestart: shouldAutoIceRestart,
+    // LC-1196: pure muted-speech nudge decision, exported for unit testing.
+    muteNudgeStep: muteNudgeStep,
     summarizeStats: summarizeStats,
     iceOkLabel: iceOkLabel,
     iceFailLabel: iceFailLabel,

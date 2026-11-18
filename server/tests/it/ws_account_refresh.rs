@@ -321,16 +321,17 @@ async fn a_banned_account_ends_the_refresh_so_the_socket_closes() {
 /// LC-1021: a lagged receiver's `RecvError::Lagged` arm cannot see what events
 /// it skipped, so a `UserBanned` broadcast dropped in the gap would otherwise
 /// go unnoticed until the next `page_context` frame's `refresh_account`
-/// backstop. Force a lag well past the connection's 64-slot buffer (LC-979's
-/// ban broadcast could be anywhere in that dropped run), ban the user
-/// directly, and assert the `Lagged` arm's own check sees the ban without
-/// ever having received the `UserBanned` event.
+/// backstop. Force a lag well past the connection's buffer (LC-979's ban
+/// broadcast could be anywhere in that dropped run), ban the user directly, and
+/// assert the `Lagged` arm's own check sees the ban without ever having received
+/// the `UserBanned` event. LC-1200: the buffer was raised 64 -> 256, so the flood
+/// is sized to overflow the larger buffer.
 #[tokio::test]
 async fn a_lagged_receiver_still_sees_a_ban_without_receiving_the_event() {
     let fx = fixture().await;
     let (_conn_id, mut rx, _account) = connect(&fx).await;
 
-    for _ in 0..100 {
+    for _ in 0..400 {
         fx.hub.broadcast_global(&ChatEvent::UserStatusChanged {
             user_id: fx.peer_id.clone(),
             status: "online".to_string(),
@@ -344,7 +345,7 @@ async fn a_lagged_receiver_still_sees_a_ban_without_receiving_the_event() {
     let err = rx
         .recv()
         .await
-        .expect_err("a 100-event flood past the 64-slot buffer must lag, not just drain");
+        .expect_err("a 400-event flood past the 256-slot buffer must lag, not just drain");
     assert!(
         matches!(err, tokio::sync::broadcast::error::RecvError::Lagged(_)),
         "expected Lagged, got {err:?}"
