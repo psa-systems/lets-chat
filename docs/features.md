@@ -26,7 +26,7 @@ surfaces is in [configuration.md](configuration.md).
 - Huddles: multi-party enclave voice channels, with a ring notification to room members who are not already viewing the room
 - Per-room stage mode: speaker roles and request-to-speak, with audio carried by a self-hosted LiveKit SFU when `LETS_CHAT_LIVEKIT_*` is configured (the mesh path caps at a handful of peers)
 - Call transcription, either in the speaker's browser (Web Speech) or server-side against a transcription endpoint you run
-- Consent-gated remote control: during a 1:1 call, request keyboard/mouse control of a peer's screen (desktop app; verified-email gated, revocable at any time). Off by default; an admin must enable it at `/admin/remote-control` before users can request control, and can review the consent history on a dedicated audit page.
+- Consent-gated remote control: during a 1:1 call, request keyboard/mouse control of a peer's screen (desktop app, Windows only; verified-email gated, revocable at any time). Off by default; an admin must enable it at `/admin/remote-control` before users can request control, and can review the consent history on a dedicated audit page.
 - In-call text chat: a Chat control in the voice call bar opens a draggable panel where anyone in the call can send and read messages live during the call, posted to the voice room's own message channel
 - Screen-share alongside the audio/video stream
 - Active voice rooms show a live in-call participant count in the sidebar
@@ -63,6 +63,7 @@ A desktop-specific portal backend must also be installed and running, matching y
 - Web push notifications
 - Email digest of missed mentions and DMs, off by default per user (see [email-digests.md](email-digests.md))
 - Per-mention and per-DM notification emails (off by default per user); reply to one of those emails to post that reply to chat as yourself
+- Running in the desktop app: a mention, DM, or incoming call raises a native OS notification instead of a browser one (same mute / do-not-disturb gating), the dock/taskbar icon shows your unread count, and `lets-chat://room/<id>` (or `/dm/...`, `#msg-...`) links open and focus the app at that destination
 
 ## Integrations and API
 

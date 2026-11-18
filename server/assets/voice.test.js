@@ -298,6 +298,25 @@ test('LC-832: the floated dock survives further swaps, and its own room shows th
   assert.equal(h.voice.isJoined(), true);
 });
 
+// LC-1199: clicking the voice channel you are ALREADY in (a boosted nav back to
+// the same room, with the call live and NOT yet floated) used to leave the call -
+// bindRoot saw a fresh dock element and ended the session. It must preserve the
+// call by floating it out, exactly like navigating to a text room or another
+// enclave, leaving a bring-back placeholder in the page.
+test('LC-1199: re-entering the voice room you are in floats the call instead of leaving it', () => {
+  const h = joined();                   // live on room 7's dock, in the page (not floated)
+
+  const fresh = makeDock(7);            // a boosted nav re-renders room 7's dock as a NEW element
+  h.swap(fresh);
+
+  assert.equal(h.voice.isJoined(), true, 'the call is NOT left when re-entering its own room');
+  assert.equal(h.popout.isPopped(), true, 'the live call floated (popped out)');
+  assert.equal(h.sent.filter((f) => f.type === 'voice_leave').length, 0, 'no voice_leave was sent');
+  assert.equal(fresh.parentNode, null, 'the fresh same-room dock is not kept as a second dock');
+  assert.ok(h.body.querySelector('[data-lc-huddle-placeholder][data-room-id="7"]'),
+    'the page shows a bring-back placeholder for the room');
+});
+
 test('LC-832: leaving from the floating dock tears the call down and removes the panel', () => {
   const h = joined();
   h.swap(null);
@@ -705,6 +724,59 @@ test('LC-1174: a focused peer leaving drops the grid out of focus mode', () => {
   assert.equal(grid.querySelectorAll('[data-lc-focus]').length, 0);
 });
 
+// LC-1193: the equal-gallery state. The per-tile button shows Shrink on whichever
+// tile is currently big (a focused tile, or - in the auto layout - the data-screen
+// sharer) and Expand on the rest; Shrink collapses the grid to an equal gallery so
+// the big tile can be made small. Viewer-local, never sent to peers.
+test('LC-1193: setGallery collapses the grid to an equal gallery and clears focus', () => {
+  const h = joined();
+  const grid = h.dock.querySelector('[data-lc-voice-grid]');
+  h.sfuHooks().addTile('u2', 'Bob');
+
+  h.voice.setFocus('u2');
+  const u2 = grid.querySelector('[data-lc-voice-tile="u2"]');
+  assert.equal(u2.hasAttribute('data-lc-staged'), true, 'the focused tile is the staged tile');
+  const u2btn = u2.querySelector('[data-lc-voice-focus-btn]');
+  assert.equal(u2btn.getAttribute('aria-pressed'), 'true', 'its button offers Shrink');
+
+  h.voice.setGallery(true);
+  assert.equal(grid.classList.contains('lc-voice-grid--gallery'), true, 'gallery mode on');
+  assert.equal(grid.classList.contains('lc-voice-grid--focus'), false, 'focus cleared by gallery');
+  assert.equal(grid.querySelectorAll('[data-lc-staged]').length, 0, 'no tile is the stage in gallery');
+  assert.equal(u2btn.getAttribute('aria-pressed'), 'false', 'its button now offers Expand');
+
+  h.voice.setFocus('u2');
+  assert.equal(grid.classList.contains('lc-voice-grid--gallery'), false, 'focusing a tile leaves gallery');
+  assert.equal(u2.hasAttribute('data-lc-staged'), true, 'u2 is the stage again');
+
+  assert.equal(h.sent.filter((f) => /gallery|focus/i.test(f.type || '')).length, 0, 'never sent to peers');
+});
+
+test('LC-1193: the auto-staged sharer is the staged tile, and gallery shrinks it', () => {
+  const h = joined();
+  h.win.__lcScreenBlackoutMs = 1000000; // keep the one-shot blackout check out of the test window
+  const grid = h.dock.querySelector('[data-lc-voice-grid]');
+  h.sfuHooks().addTile('u2', 'Bob');
+
+  // u2 starts sharing: the sharer auto-takes the stage, so - with NO explicit focus
+  // - its tile is the staged one and its button offers Shrink.
+  h.event({ 'data-room-id': 7, 'data-kind': 'screen', 'data-user-id': 'u2', 'data-payload': '1' });
+  const u2 = grid.querySelector('[data-lc-voice-tile="u2"]');
+  assert.equal(u2.getAttribute('data-screen'), 'true', 'precondition: u2 is sharing');
+  assert.equal(grid.classList.contains('lc-voice-grid--focus'), false, 'no explicit focus');
+  assert.equal(u2.hasAttribute('data-lc-staged'), true, 'the sharer is the auto-staged tile');
+  assert.equal(u2.querySelector('[data-lc-voice-focus-btn]').getAttribute('aria-pressed'), 'true');
+
+  // Shrink the sharer -> equal gallery; it is no longer the stage.
+  h.voice.setGallery(true);
+  assert.equal(grid.classList.contains('lc-voice-grid--gallery'), true);
+  assert.equal(u2.hasAttribute('data-lc-staged'), false, 'the sharing tile is shrunk to the gallery');
+
+  // Stopping the share while in gallery leaves gallery untouched.
+  h.event({ 'data-room-id': 7, 'data-kind': 'screen', 'data-user-id': 'u2', 'data-payload': '0' });
+  assert.equal(grid.classList.contains('lc-voice-grid--gallery'), true, 'gallery survives a sharing change');
+});
+
 // LC-1175: viewer-local tile reorder. The drag + keyboard paths both funnel
 // through moveTile / moveTileBefore (exposed as reorder.move / reorder.moveBefore);
 // the pointer drag itself is not exercised here (the DOM stub has no pointer
@@ -861,6 +933,66 @@ test('LC-1166: the desktop app shows a macOS-specific screen-share message', () 
 // used to be swallowed in huddle_sfu.toggleScreen with no toast and no voice-log
 // entry - the Linux "missing GStreamer/PipeWire" case reported as "does nothing".
 // voice.js now surfaces an SFU toggle rejection the way the mesh path does.
+// LC-1196: detect talking-while-muted and nudge to unmute. The decision core is
+// pure (a running state + a fresh mic level + the clock), so it runs here
+// without Web Audio: a nudge fires only after sustained muted speech, holds off
+// for the cooldown, tolerates word-length gaps, and resets after real silence.
+test('LC-1196: muteNudgeStep fires after sustained muted speech, then respects the cooldown and word gaps', () => {
+  const step = load().voice.muteNudgeStep;
+  const LOUD = 200, QUIET = 5; // around the internal level threshold (20)
+  let s = { speakSince: 0, lastLoud: 0, lastNudgeAt: 0 };
+
+  // Unmuted speech never nudges and keeps the sustain window clear.
+  let r = step(s, LOUD, 1000, false);
+  assert.equal(r.fire, false);
+  assert.equal(r.active, false);
+  s = r.state;
+
+  // Muted + loud starts the window but does not fire on the first frame.
+  r = step(s, LOUD, 2000, true);
+  assert.equal(r.fire, false, 'no nudge on the first loud frame');
+  assert.equal(r.active, true, 'speech is now tracked');
+  s = r.state;
+
+  // Under the sustain threshold (1500ms): still no fire.
+  r = step(s, LOUD, 3000, true);
+  assert.equal(r.fire, false, 'under the sustain threshold');
+  s = r.state;
+
+  // Past 1500ms of sustained speech: fire once.
+  r = step(s, LOUD, 3600, true);
+  assert.equal(r.fire, true, 'fires after sustained muted speech');
+  s = r.state;
+
+  // Right after: the cooldown suppresses a second nudge while still talking.
+  r = step(s, LOUD, 4000, true);
+  assert.equal(r.fire, false, 'cooldown holds the next nudge');
+  s = r.state;
+
+  // A short word gap (<600ms silence) does NOT reset the window.
+  r = step(s, QUIET, 4300, true);
+  assert.equal(r.active, true, 'a short word gap keeps the window');
+  s = r.state;
+  r = step(s, LOUD, 4500, true); // speech resumes within the gap
+  assert.equal(r.active, true);
+  s = r.state;
+
+  // A long silence (>600ms) resets the sustain window.
+  r = step(s, QUIET, 6000, true);
+  assert.equal(r.active, false, 'a long silence clears the window');
+  s = r.state;
+
+  // Unmuting clears any tracked speech immediately.
+  r = step(s, LOUD, 6100, false);
+  assert.equal(r.active, false);
+  s = r.state;
+
+  // Past the 12s cooldown, fresh sustained muted speech nudges again.
+  r = step(s, LOUD, 18000, true); s = r.state;       // window restarts
+  r = step(s, LOUD, 20000, true);                    // 2s sustained, >12s since last nudge
+  assert.equal(r.fire, true, 'nudges again after the cooldown');
+});
+
 test('LC-1166: an SFU screen-share failure surfaces a toast and a voice-log entry', async () => {
   const err = Object.assign(new Error('no portal'), { name: 'NotFoundError' });
   const h = load({ sfuScreenError: err }); // getDisplayMedia present; the LiveKit toggle fails
@@ -882,4 +1014,57 @@ test('LC-1166: an SFU screen-share failure surfaces a toast and a voice-log entr
     'the failure is recorded in the voice log');
 
   h.voice.leave();
+});
+
+// LC-1201: a flaky connection that drops and reconnects used to silently fall
+// out of the server voice roster (the "room counts 3 not 4" report) because
+// voice.js never re-asserted its presence, and a teammate's screen share that
+// stopped during the gap left the viewer's tile stuck big (the stop event was
+// missed). On reconnect voice.js now re-sends voice_join (re-registering the
+// roster) and resets its stale view of other tiles' screen state so a share
+// that ended during the gap is dropped.
+test('LC-1201: a reconnect re-asserts voice presence and clears a stale remote screen pin', async () => {
+  const h = load();
+  const page = makeVoicePage(7);
+  const grid = new El('div');
+  grid.setAttribute('data-lc-voice-grid', ''); // makeVoicePage omits it; tiles need it
+  page.appendChild(grid);
+  h.main.appendChild(page);
+  h.fire('htmx:afterSettle');
+  h.join();
+  await Promise.resolve(); // getUserMedia resolves
+  await Promise.resolve();
+  const wasJoined = h.voice.isJoined();
+
+  // A remote peer is screen-sharing, so their tile is the staged big tile.
+  const peer = new El('div');
+  peer.setAttribute('data-lc-voice-tile', 'u2');
+  peer.setAttribute('data-screen', 'true');
+  grid.appendChild(peer);
+
+  const before = h.sent.filter((f) => f.type === 'voice_join').length;
+  // The socket drops and reopens (reconnect). The peer stopped sharing during
+  // the gap, so no screen=0 event is delivered here.
+  h.fire('htmx:wsOpen', { socketWrapper: { send: (s) => h.sent.push(JSON.parse(s)) } });
+  const after = h.sent.filter((f) => f.type === 'voice_join').length;
+  const stillStaged = peer.hasAttribute('data-screen');
+
+  h.voice.leave(); // stop the speak-poll interval before any assertion can throw
+
+  assert.equal(wasJoined, true, 'setup: the mesh call is live');
+  assert.equal(after, before + 1, 'reconnect re-sends voice_join so the server re-counts us');
+  assert.equal(stillStaged, false,
+    'a share that ended during the gap no longer leaves the tile stuck staged');
+});
+
+// LC-1201: the initial socket open (before the user has joined a call) must NOT
+// send a spurious voice_join - only a reconnect while already in a call does.
+test('LC-1201: the first socket open before joining does not re-assert presence', () => {
+  const h = load();
+  h.main.appendChild(makeVoicePage(7));
+  h.fire('htmx:afterSettle');
+  // Not joined yet: a socket (re)open must not send voice_join.
+  h.fire('htmx:wsOpen', { socketWrapper: { send: (s) => h.sent.push(JSON.parse(s)) } });
+  assert.equal(h.sent.filter((f) => f.type === 'voice_join').length, 0,
+    'no voice_join until the user actually joins the call');
 });

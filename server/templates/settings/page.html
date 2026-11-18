@@ -502,7 +502,7 @@
             <div class="lc-set-field">
               <span class="lc-set-label">{{ "settings-dnd-pause-heading"|t }}</span>
               {% if dnd_paused_until != "" %}
-              <p class="lc-set-help">{{ "settings-dnd-paused-until-prefix"|t }} <time datetime="{{ dnd_paused_until }}">{{ dnd_paused_until }}</time> {{ "settings-dnd-paused-until-suffix"|t }}</p>
+              <p class="lc-set-help">{{ "settings-dnd-paused-until-prefix"|t }} <time datetime="{{ dnd_paused_until }}" title="{{ dnd_paused_until }}">{{ dnd_paused_until }}</time> {{ "settings-dnd-paused-until-suffix"|t }}</p>
               <form method="post" action="/settings/dnd/resume">
                 <button type="submit" class="btn btn-secondary btn-sm">{{ "settings-dnd-resume"|t }}</button>
               </form>

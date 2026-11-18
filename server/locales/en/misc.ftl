@@ -166,6 +166,8 @@ activity-mentioned = mentioned you
 voice-badge = voice
 voice-join = Join voice
 voice-mute = Mute
+# LC-1196: shown (and announced) when you are talking while your mic is muted.
+voice-muted-nudge = You're muted
 voice-start-video = Start video
 voice-share-screen = Share screen
 voice-leave = Leave
@@ -188,10 +190,12 @@ voice-transcript-matches = matches
 # LC-1123: in-call text chat.
 voice-chat-label = Chat
 voice-chat-tip = Open chat
-voice-chat-close = Close chat
 voice-chat-send = Send
 voice-chat-placeholder = Message the call
 voice-chat-input-label = Chat message
+# LC-1195: the unified call dock (tabbed chat / transcript / diagnostics).
+voice-dock-label = Call panels
+voice-dock-collapse = Collapse panel
 voice-transcript-empty-title = No transcript yet
 voice-transcript-empty-sub = Spoken audio will appear here once transcription is on.
 # LC-590: shown in the drawer when a clip fails server-side transcription.

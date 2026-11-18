@@ -336,6 +336,15 @@ build-desktop-windows:
 build-desktop-mac:
     cd desktop && cargo tauri build --bundles app,dmg
 
+# LC-1168: a profileable macOS build - identical to build-desktop-mac but with
+# the Web Inspector compiled in (the `devtools` feature), so the room/enclave
+# navigation can be profiled on real hardware: launch the .app, right-click ->
+# Inspect Element (or Develop menu), then the Timeline tab. NOT for distribution
+# (keep the shipped installers non-inspectable); use the plain recipes for those.
+[group('build')]
+build-desktop-mac-devtools:
+    cd desktop && cargo tauri build --bundles app --features devtools
+
 # LC-1163/LC-1171: identical to build-desktop-mac but bakes the production server
 # (https://chat.psa.systems) as the installed app's default via
 # LETS_CHAT_DEFAULT_SERVER_URL (config.rs reads it through option_env!), matching

@@ -366,6 +366,58 @@ async fn record_and_broadcast(
     Ok(())
 }
 
+/// LC-1198: mirror a typed in-call chat message into the room's running
+/// transcript. A message sent in the in-call chat by someone in the call is part
+/// of the meeting, so - when a transcript session is open for the room AND the
+/// author is a live call participant - record it as an attributed segment and fan
+/// it out as a live caption line, exactly where the spoken captions go. Unlike
+/// speech, typed text is unique authoritative content: it is ALWAYS persisted (no
+/// echo de-dupe, and recorded even while a server STT agent covers the audio,
+/// since the agent transcribes audio only). Best-effort - a failure is logged and
+/// never fails the chat post the caller already completed.
+pub(crate) async fn record_typed_chat_line(
+    state: &AppState,
+    room: &Room,
+    author_id: &str,
+    text: &str,
+) {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    // Only while transcription is running for this room's call...
+    let Some(transcript_id) = state.hub.open_transcript(room.id) else {
+        return;
+    };
+    // ...and only for someone actually in the call, so a stray room message from
+    // a non-participant never lands in the meeting record.
+    if !state
+        .hub
+        .voice_room_users(room.id)
+        .iter()
+        .any(|u| u == author_id)
+    {
+        return;
+    }
+    if let Err(e) =
+        db::transcripts::append_segment(&state.chat, transcript_id, author_id, trimmed, None, 0)
+            .await
+    {
+        tracing::warn!(transcript_id, user = %author_id, error = %e, "failed to record typed chat into transcript");
+        return;
+    }
+    let speaker = cached_label_for(state, transcript_id, author_id).await;
+    broadcast_to_members(state, room, |to| ChatEvent::TranscriptSegment {
+        room_id: room.id,
+        to_user_id: to,
+        transcript_id,
+        speaker_id: author_id.to_string(),
+        speaker_name: speaker.clone(),
+        text: trimmed.to_string(),
+    })
+    .await;
+}
+
 /// LC-813: the shared core of the two clip-ingest paths - the browser's own-mic
 /// `audio` route and the trusted server-capture `agent_clip` route. Runs one
 /// audio clip through STT under the existing load caps and records the result as
@@ -2422,5 +2474,98 @@ mod huddle_recipients_and_label_cache_tests {
         let other_session_id = session.id + 1;
         let fourth = cached_label_for(&state, other_session_id, &user_id).await;
         assert_eq!(fourth, "renamed");
+    }
+
+    /// LC-1198: a call participant typing in the in-call chat during a transcribed
+    /// call has their text recorded into the open transcript (trimmed, attributed).
+    #[tokio::test]
+    async fn typed_chat_is_mirrored_into_the_open_transcript_for_a_participant() {
+        let state = test_state().await;
+        let room_id = db::chat::create_room(&state.chat, "voice", None, "public", None, None)
+            .await
+            .unwrap();
+        let (session, _) = db::transcripts::start_session(&state.chat, room_id, "u-alice")
+            .await
+            .unwrap();
+        state.hub.set_open_transcript(room_id, session.id);
+        let (conn_id, _rx, _) = state.hub.connect("u-alice", "Alice");
+        state.hub.voice_join(conn_id, room_id);
+        let room = db::chat::get_room(&state.chat, room_id)
+            .await
+            .unwrap()
+            .unwrap();
+
+        record_typed_chat_line(&state, &room, "u-alice", "  the budget is 5000  ").await;
+
+        let segs = db::transcripts::list_segments(&state.chat, session.id)
+            .await
+            .unwrap();
+        assert_eq!(
+            segs.len(),
+            1,
+            "the typed line should be one transcript segment"
+        );
+        assert_eq!(
+            segs[0].text, "the budget is 5000",
+            "stored trimmed, verbatim"
+        );
+        assert_eq!(segs[0].user_id, "u-alice", "attributed to the sender");
+    }
+
+    /// LC-1198: with no transcript session open for the room there is nothing to
+    /// record into, so a typed message is not captured.
+    #[tokio::test]
+    async fn typed_chat_is_not_recorded_without_an_open_transcript() {
+        let state = test_state().await;
+        let room_id = db::chat::create_room(&state.chat, "voice", None, "public", None, None)
+            .await
+            .unwrap();
+        let (session, _) = db::transcripts::start_session(&state.chat, room_id, "u-alice")
+            .await
+            .unwrap();
+        // Deliberately NOT set_open_transcript: the hub has no open transcript.
+        let (conn_id, _rx, _) = state.hub.connect("u-alice", "Alice");
+        state.hub.voice_join(conn_id, room_id);
+        let room = db::chat::get_room(&state.chat, room_id)
+            .await
+            .unwrap()
+            .unwrap();
+
+        record_typed_chat_line(&state, &room, "u-alice", "hello team").await;
+
+        let segs = db::transcripts::list_segments(&state.chat, session.id)
+            .await
+            .unwrap();
+        assert!(segs.is_empty(), "no open transcript -> nothing recorded");
+    }
+
+    /// LC-1198: a message from someone who is NOT in the call never enters the
+    /// meeting record, even while a transcript is open.
+    #[tokio::test]
+    async fn typed_chat_from_a_non_participant_is_not_recorded() {
+        let state = test_state().await;
+        let room_id = db::chat::create_room(&state.chat, "voice", None, "public", None, None)
+            .await
+            .unwrap();
+        let (session, _) = db::transcripts::start_session(&state.chat, room_id, "u-alice")
+            .await
+            .unwrap();
+        state.hub.set_open_transcript(room_id, session.id);
+        // bob is connected but never joins the call's voice mesh.
+        let (_conn, _rx, _) = state.hub.connect("u-bob", "Bob");
+        let room = db::chat::get_room(&state.chat, room_id)
+            .await
+            .unwrap()
+            .unwrap();
+
+        record_typed_chat_line(&state, &room, "u-bob", "i am not in the call").await;
+
+        let segs = db::transcripts::list_segments(&state.chat, session.id)
+            .await
+            .unwrap();
+        assert!(
+            segs.is_empty(),
+            "a non-participant's message must not enter the transcript"
+        );
     }
 }

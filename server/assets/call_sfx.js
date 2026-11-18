@@ -94,6 +94,16 @@
       beep(783.99, 0, 0.09, 0.08, 'sine');
     }
   }
+  // LC-1196: you are talking while muted. A short two-note rising nudge (soft
+  // triangle) - bright enough to catch your attention over your own speech, but
+  // quieter and shorter than the join cue so it reads as a gentle reminder, not
+  // an alarm. Self-gates on the sound preference like every other cue.
+  function playMutedNudge() {
+    if (soundEnabled() && ac()) {
+      beep(587.33, 0, 0.11, 0.18, 'triangle');   // D5
+      beep(880.0, 0.12, 0.17, 0.2, 'triangle');  // A5
+    }
+  }
 
   // Incoming-call ringtone: a classic double-ring that repeats until stopRing.
   // Louder than the cues so an incoming call is unmistakable.
@@ -145,6 +155,7 @@
     playJoin: playJoin,
     playLeave: playLeave,
     playMessage: playMessage,
+    playMutedNudge: playMutedNudge,
     startRing: startRing,
     stopRing: stopRing,
   };

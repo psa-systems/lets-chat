@@ -269,6 +269,63 @@ async fn admin_non_member_gets_own_echo() {
 }
 
 #[tokio::test]
+async fn call_participant_non_member_gets_others_messages() {
+    // LC-1192: the receiver side of LC-1137. A participant who is IN THE CALL for a
+    // room but is not a formal member (a site admin reaching it through god-mode)
+    // must receive OTHER participants' in-call chat messages, not only their own
+    // echo. broadcast_room_message fans a NewMessage to the room's members plus the
+    // author; a non-member, non-author participant was left out, so they saw just
+    // their own message. Including voice_room_users in the recipients fixes it.
+    let t = setup().await;
+
+    // david owns a private enclave + room and is a member; alice (the admin from
+    // setup) is a member of neither and reaches the room only through god-mode.
+    let david_id = db::auth::create_user(&t.state.auth, "david", "h")
+        .await
+        .unwrap();
+    let david_session = db::auth::create_session(&t.state.auth, &david_id)
+        .await
+        .unwrap();
+    let enclave_id = db::enclave::create_enclave(&t.state.chat, "davids-place", None, &david_id)
+        .await
+        .unwrap();
+    let room_id = db::chat::create_room(
+        &t.state.chat,
+        "secret-voice",
+        None,
+        "private",
+        None,
+        Some(enclave_id),
+    )
+    .await
+    .unwrap();
+    db::chat::add_room_member(&t.state.chat, room_id, &david_id)
+        .await
+        .unwrap();
+
+    let (alice_conn, mut alice_rx, _) = t.state.hub.connect(&t.alice_id, "alice");
+    let (_david_conn, mut david_rx, _) = t.state.hub.connect(&david_id, "david");
+
+    // alice joins the call for this room: a live participant, but not a member.
+    t.state.hub.voice_join(alice_conn, room_id);
+
+    // david (a member) posts to the in-call chat.
+    let status = post_form(&t.app, &david_session, room_id, "body=world").await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // david receives it (member + author).
+    let (david_body, _) = next_new_message(&mut david_rx).await;
+    assert_eq!(david_body, "world");
+
+    // alice - in the call, not a member, not the author - must ALSO receive it.
+    let (alice_body, _) = next_new_message(&mut alice_rx).await;
+    assert_eq!(
+        alice_body, "world",
+        "a non-member participant in the call must receive other participants' in-call chat messages"
+    );
+}
+
+#[tokio::test]
 async fn post_with_client_id_echoes_it_on_the_broadcast() {
     let t = setup().await;
     let (_conn, mut rx, _) = t.state.hub.connect(&t.alice_id, "alice");

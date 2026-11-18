@@ -44,7 +44,7 @@ jobs:
 
       - name: Classify diff
         id: classify-diff
-        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/classify-diff@ebf8abfad73f1cff915e78d0d4358c7dc815bffd # main
+        uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/classify-diff@3112139d5fa154e2c1c9c7e63d1c355cc85b3613 # main
 
   agent-test:
     name: transcription agent (bun test)
