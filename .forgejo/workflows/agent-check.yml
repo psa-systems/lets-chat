@@ -35,7 +35,7 @@ jobs:
   classify-diff:
     name: classify diff
     # MEDIUM: classify-diff runs `nu` against the diff, no compile.
-    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_MEDIUM }}
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_MEDIUM }}
     outputs:
       result: ${{ steps.classify-diff.outputs.result }}
     steps:
@@ -51,7 +51,7 @@ jobs:
     needs: classify-diff
     if: needs.classify-diff.outputs.result == 'code'
     # HEAVY: runs `docker buildx build` (bun test + typecheck stages).
-    runs-on: ${{ vars.RUNS_ON_OPENSUSE_BASE_HEAVY }}
+    runs-on: ${{ vars.RUNS_ON_OPENSUSE_HEAVY }}
 
     steps:
       - name: Clone the repository

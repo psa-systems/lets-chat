@@ -1,9 +1,9 @@
 #!/usr/bin/env nu
 
 # Guard the Forgejo runner-label split (LC-642 / LC-647, DEV-769).
-# Jobs that run cargo natively or `docker build` need RUNS_ON_OPENSUSE_BASE_HEAVY
+# Jobs that run cargo natively or `docker build` need RUNS_ON_OPENSUSE_HEAVY
 # (the dev image, with a C toolchain); everything else runs on
-# RUNS_ON_OPENSUSE_BASE_MEDIUM. Installing a toolchain at job time is the
+# RUNS_ON_OPENSUSE_MEDIUM. Installing a toolchain at job time is the
 # workaround this guard rejects.
 #
 # The compile-vs-label rule is judged PER JOB, not per file (LC-977). Judging a
@@ -66,9 +66,9 @@ def main [] {
         let lines = (open --raw $file | lines | where {|l| not (($l | str trim) | str starts-with "#") })
         let labels = ($lines | where {|l| $l =~ 'runs-on:' })
 
-        let unknown = ($labels | where {|l| not ($l =~ 'vars\.RUNS_ON_OPENSUSE_BASE_(HEAVY|MEDIUM)\b') })
+        let unknown = ($labels | where {|l| not ($l =~ 'vars\.RUNS_ON_OPENSUSE_(HEAVY|MEDIUM)\b') })
         if ($unknown | is-not-empty) {
-            $problems = ($problems | append $"($file): runs-on must use vars.RUNS_ON_OPENSUSE_BASE_HEAVY or vars.RUNS_ON_OPENSUSE_BASE_MEDIUM")
+            $problems = ($problems | append $"($file): runs-on must use vars.RUNS_ON_OPENSUSE_HEAVY or vars.RUNS_ON_OPENSUSE_MEDIUM")
         }
 
         # Per job: only the job that actually compiles has to be HEAVY.
@@ -77,16 +77,16 @@ def main [] {
             # No parsable jobs: fall back to the file-wide rule rather than
             # passing silently, so a shape this parser does not understand is
             # still judged instead of skipped.
-            let on_medium = ($labels | any {|l| $l =~ 'RUNS_ON_OPENSUSE_BASE_MEDIUM' })
+            let on_medium = ($labels | any {|l| $l =~ 'RUNS_ON_OPENSUSE_MEDIUM' })
             if ((compiles $lines) and $on_medium) {
-                $problems = ($problems | append $"($file): compiles \(cargo or docker build\) but requests MEDIUM; use vars.RUNS_ON_OPENSUSE_BASE_HEAVY")
+                $problems = ($problems | append $"($file): compiles \(cargo or docker build\) but requests MEDIUM; use vars.RUNS_ON_OPENSUSE_HEAVY")
             }
         } else {
             for job in $jobs {
                 let job_labels = ($job.lines | where {|l| $l =~ 'runs-on:' })
-                let on_medium = ($job_labels | any {|l| $l =~ 'RUNS_ON_OPENSUSE_BASE_MEDIUM' })
+                let on_medium = ($job_labels | any {|l| $l =~ 'RUNS_ON_OPENSUSE_MEDIUM' })
                 if ((compiles $job.lines) and $on_medium) {
-                    $problems = ($problems | append $"($file): job '($job.name)' compiles \(cargo or docker build\) but requests MEDIUM; use vars.RUNS_ON_OPENSUSE_BASE_HEAVY")
+                    $problems = ($problems | append $"($file): job '($job.name)' compiles \(cargo or docker build\) but requests MEDIUM; use vars.RUNS_ON_OPENSUSE_HEAVY")
                 }
             }
         }
