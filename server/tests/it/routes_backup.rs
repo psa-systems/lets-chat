@@ -11,7 +11,7 @@ use axum::body::{to_bytes, Body};
 #[cfg(feature = "standalone")]
 use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
-use lets_chat::{backup, db, routes, state::AppState, ws::hub::Hub};
+use lets_chat::{backup, db, error::AppError, routes, state::AppState, ws::hub::Hub};
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -233,22 +233,30 @@ async fn verify_archive_rejects_tampered_payload() {
     // payload region.
     let bytes = std::fs::read(&out).unwrap();
     let mut patched = bytes.clone();
-    // Pick an offset well past any header; flip one bit.
-    let off = patched.len() / 2;
-    patched[off] ^= 0xFF;
+    // Corrupt a span inside the first archived file's compressed payload - the
+    // early-to-middle of the archive, well before the central directory at the
+    // very end. A single flip at len/2 was flaky: the archive wraps live SQLite
+    // DBs whose byte length varies per run, so len/2 sometimes landed in the
+    // central directory and surfaced a structural zip parse error (no integrity
+    // keyword) instead of the CRC / sha256 mismatch this test asserts.
+    let start = patched.len() / 4;
+    let end = patched.len() / 2;
+    for b in &mut patched[start..end] {
+        *b ^= 0xFF;
+    }
     std::fs::write(&out, &patched).unwrap();
 
     let err = backup::verify_archive(&out).expect_err("tampered archive must be rejected");
-    let msg = format!("{err:?}").to_lowercase();
-    // Could be a CRC / checksum error from the zip reader OR a
-    // sha256 mismatch from our manifest gate; either is fine, both
-    // are "not the archive the manifest describes".
+    // Every integrity rejection in verify_archive is a BadRequest - a bad zip, a
+    // failed decompression / CRC, or a size / sha256 mismatch, all "not the
+    // archive the manifest describes"; only an unreadable file would be Internal,
+    // which cannot happen here. Assert the rejection CLASS, not the zip reader's
+    // free text: the old substring match ("crc" / "checksum" / "sha256") was
+    // flaky because the wording varies by where the corruption lands and by zip
+    // crate version (e.g. "file is larger than its declared uncompressed size").
     assert!(
-        msg.contains("sha256")
-            || msg.contains("mismatch")
-            || msg.contains("crc")
-            || msg.contains("checksum"),
-        "expected integrity rejection, got: {msg}"
+        matches!(err, AppError::BadRequest(_)),
+        "expected a BadRequest integrity rejection, got: {err:?}"
     );
     let _ = std::fs::remove_file(&out);
 }

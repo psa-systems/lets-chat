@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.6
+# syntax=docker/dockerfile:1.29
 
 # Build the lets-chat-desktop binary for Linux x86_64 AND the
 # accompanying .deb / .AppImage bundles via the Tauri 2 CLI bundler.
