@@ -8,6 +8,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.15.0] - 2026-11-19
+
 ### Added
 
 - **A heads-up that in-call chat is saved to the transcript (LC-1209).** When transcription is on during a call, the in-call chat now shows a short notice above the composer - "Transcription is on - messages you send are saved to the call transcript" - so people know their typed messages become part of the meeting record (that mirroring shipped in LC-1198). The notice appears only while transcription is actually recording, so it never implies messages are being saved when they are not.
