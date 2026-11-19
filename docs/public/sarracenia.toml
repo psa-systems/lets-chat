@@ -1,0 +1,13 @@
+# Publishes this repo's user-facing docs to docs.a8n.systems under /docs/lets-chat.
+# Walk root is this directory (the publish-docs workflow cd's here before
+# running sarracenia push), so the sidebar renders content directly under the
+# "Lets chat" top-level entry with no "Docs" or "Public" intermediate layers.
+source = "lets-chat"
+base_path = "/docs/lets-chat"
+title = "Lets chat"
+include = ["**/*.md"]
+exclude = []
+
+[storefront]
+url = "https://docs.a8n.systems"
+site = "docs"
