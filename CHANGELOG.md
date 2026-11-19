@@ -15,6 +15,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ### Fixed
 
+- **The in-call Chat button shows the unread dot again (LC-1210).** A new message in the in-call chat is meant to light an unread dot on the Chat (speech-bubble) button in the call toolbar so you notice it without the chat open. The dock rework had moved that cue onto the Chat tab inside the dock, which is hidden while the dock is collapsed - the usual state - so the dot never showed. The always-visible toolbar button lights up again on an unread message and clears when you open the chat.
 - **The call dock's tab strip no longer leaves a gap when diagnostics is off (LC-1210).** With the admin diagnostics tab hidden (its feature flag off), the dock's tab strip left a conspicuous empty gap where that tab would have been. The tabs now share the strip evenly, so it looks right with two tabs or three.
 
 ## [v0.14.0] - 2026-11-17

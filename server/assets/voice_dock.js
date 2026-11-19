@@ -135,10 +135,22 @@
   }
 
   function setUnread(on) {
+    // LC-1210: light the unread cue on the ALWAYS-VISIBLE callbar Chat toggle
+    // (the bubble button in the call toolbar), not only the dock's Chat tab. The
+    // tab dot lives inside the dock, which is hidden while the dock is collapsed -
+    // the common case - so before this, a new in-call message gave no visible
+    // sign (regression from the LC-1195 dock move of the LC-1181 cue). The
+    // [data-lc-chat-toggle][data-lc-chat-unread] dot (main.css) is always on screen.
+    var toggle = document.querySelector('[data-lc-chat-toggle]');
+    if (toggle) {
+      if (on) toggle.setAttribute('data-lc-chat-unread', '');
+      else toggle.removeAttribute('data-lc-chat-unread');
+    }
     var dot = document.querySelector('[data-lc-dock-unread]');
-    if (!dot) return;
-    if (on) dot.removeAttribute('hidden');
-    else dot.setAttribute('hidden', '');
+    if (dot) {
+      if (on) dot.removeAttribute('hidden');
+      else dot.setAttribute('hidden', '');
+    }
   }
 
   // ---- events -----------------------------------------------------------
