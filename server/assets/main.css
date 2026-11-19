@@ -3915,6 +3915,19 @@ html:not(.lc-no-tts) .lc-menu-group-tools:has(.lc-read-aloud) {
     display: inline-grid;
     place-items: center;
 }
+/* LC-1210: the live unread badge (ws/unread_badge.html) carries --pop so the
+   count visibly pops when a message bumps a background room's unread, making a
+   fresh unread noticeable. Only the live swap animates; the initial render does
+   not, so a page load / full sidebar refresh stays still. */
+@keyframes lc-count-pop {
+    0%   { transform: scale(0.5); }
+    55%  { transform: scale(1.25); }
+    100% { transform: scale(1); }
+}
+.lc-count-pill--pop { animation: lc-count-pop 0.3s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+    .lc-count-pill--pop { animation: none; }
+}
 
 /* LC-612: sidebar in-call indicator - a live green dot + participant count on a
    room row whose huddle is active. Uses the same pill metrics as the count pill

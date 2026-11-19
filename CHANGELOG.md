@@ -11,6 +11,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 ### Added
 
 - **A heads-up that in-call chat is saved to the transcript (LC-1209).** When transcription is on during a call, the in-call chat now shows a short notice above the composer - "Transcription is on - messages you send are saved to the call transcript" - so people know their typed messages become part of the meeting record (that mirroring shipped in LC-1198). The notice appears only while transcription is actually recording, so it never implies messages are being saved when they are not.
+- **The unread count pops when a new message lands (LC-1210).** A room's sidebar unread count already updated live, but the badge was static and easy to miss; it now briefly animates when a message bumps it, so a fresh unread is noticeable at a glance. Only the live update animates (a page load or sidebar refresh does not), and it respects reduced-motion.
 
 ## [v0.14.0] - 2026-11-17
 
