@@ -15,10 +15,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ### Fixed
 
+- **The in-call Chat button lights up with an unread count again (LC-1210).** A new message in the in-call chat is meant to flag the Chat (speech-bubble) button in the call toolbar so you notice it without the chat open. The dock rework had moved that cue onto the Chat tab inside the dock, which is hidden while the dock is collapsed - the usual state - so nothing ever showed. The always-visible toolbar button now lights up and shows how many messages are unread, counting each new one up and clearing when you open the chat.
 - **The call dock's tab strip no longer leaves a gap when diagnostics is off (LC-1210).** With the admin diagnostics tab hidden (its feature flag off), the dock's tab strip left a conspicuous empty gap where that tab would have been. The tabs now share the strip evenly, so it looks right with two tabs or three.
-
-### Fixed
-
 - **Active users no longer randomly dropped from chat, and a stalled render can no longer cascade the server into an overload (LC-1208).** The live connection's 30s keepalive ping was sent from the same loop that renders each incoming event, so when a render stalled (database contention) the ping was starved; clients only reply to that ping, so their replies stopped and the server dropped the "silent" connection after 90s - even though the person was right there. Worse, a stall hit every connection at once, so everyone reconnected and re-fetched together and piled load onto an already-struggling host. Each render is now time-bounded so the keepalive stays punctual: healthy connections are no longer dropped, and the reconnect storm that could take the server down is avoided. A render that does exceed the budget is skipped and recovered by the existing catch-up path.
 
 ## [v0.14.0] - 2026-11-17
