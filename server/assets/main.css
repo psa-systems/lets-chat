@@ -5350,8 +5350,13 @@ body.lc-transcript-open #main { padding-right: 20rem; }
 }
 .lc-call-dock-tab {
     position: relative;
+    /* LC-1210: tabs share the strip evenly (flex: 1) so there is no vacant gap
+       between the tabs and the collapse button, whatever the tab count - the
+       Diagnostics tab being absent (flag off) no longer leaves a hole. */
+    flex: 1 1 0;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.35rem;
     padding: 0 0.55rem;
     font-size: 0.8125rem;
@@ -5369,7 +5374,10 @@ body.lc-transcript-open #main { padding-right: 20rem; }
 .lc-call-dock-unread { height: 0.5rem; width: 0.5rem; border-radius: 9999px; background: var(--accent); }
 .lc-call-dock-unread[hidden] { display: none; }
 .lc-call-dock-collapse {
-    margin-left: auto;
+    /* LC-1210: no margin-left:auto - the flex:1 tabs already fill the strip, so
+       the collapse sits flush at the end with no gap before it. flex:none keeps
+       it its natural icon size rather than growing like a tab. */
+    flex: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
