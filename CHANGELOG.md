@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Fixed
+
+- **Active users no longer randomly dropped from chat, and a stalled render can no longer cascade the server into an overload (LC-1208).** The live connection's 30s keepalive ping was sent from the same loop that renders each incoming event, so when a render stalled (database contention) the ping was starved; clients only reply to that ping, so their replies stopped and the server dropped the "silent" connection after 90s - even though the person was right there. Worse, a stall hit every connection at once, so everyone reconnected and re-fetched together and piled load onto an already-struggling host. Each render is now time-bounded so the keepalive stays punctual: healthy connections are no longer dropped, and the reconnect storm that could take the server down is avoided. A render that does exceed the budget is skipped and recovered by the existing catch-up path.
+
 ## [v0.14.0] - 2026-11-17
 
 ### Added
