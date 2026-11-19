@@ -3242,7 +3242,7 @@ dependencies = [
 
 [[package]]
 name = "ip-policy"
-version = "0.14.0"
+version = "0.15.0"
 
 [[package]]
 name = "ip2location"
@@ -3558,7 +3558,7 @@ dependencies = [
 
 [[package]]
 name = "lets-chat-desktop"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "dirs 5.0.1",
  "hex",
@@ -3583,7 +3583,7 @@ dependencies = [
 
 [[package]]
 name = "lets-chat-server"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "aes-gcm 0.10.3",
  "argon2",
