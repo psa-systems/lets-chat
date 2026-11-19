@@ -278,6 +278,12 @@
   function setToggle(on) {
     var t = q('[data-lc-transcribe-toggle]');
     if (t) t.setAttribute('aria-pressed', on ? 'true' : 'false');
+    // LC-1209: a body-level flag for "transcription is recording for this call"
+    // (set on local start AND on the auto-activation when another participant
+    // turns it on, since both go through setToggle). CSS reveals the in-call chat
+    // "messages are saved to the transcript" notice only while this is set, which
+    // is exactly when LC-1198 mirrors a sent message into the transcript.
+    document.body.classList.toggle('lc-transcribing', !!on);
   }
 
   // ---- caption scroll / jump-to-live (LC-402 / LC-847) ------------------
