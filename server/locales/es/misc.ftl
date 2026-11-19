@@ -191,6 +191,8 @@ voice-chat-tip = Abrir chat
 voice-chat-send = Enviar
 voice-chat-placeholder = Escribe a la llamada
 voice-chat-input-label = Mensaje de chat
+# LC-1209: shown in the in-call chat only while transcription is recording.
+voice-chat-transcript-note = La transcripción está activa: los mensajes que envías se guardan en la transcripción de la llamada.
 # LC-1195: the unified call dock (tabbed chat / transcript / diagnostics).
 voice-dock-label = Paneles de llamada
 voice-dock-collapse = Contraer panel
