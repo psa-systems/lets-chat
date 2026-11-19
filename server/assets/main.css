@@ -5376,6 +5376,32 @@ body.lc-transcript-open #main { padding-right: 20rem; }
 /* Chat: the message log scrolls, the composer pins to the bottom. */
 .lc-call-dock-panel--chat #messages { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
+/* LC-1209: in-call chat -> transcript notice, pinned above the composer. Hidden
+   unless transcription is recording for the call (body.lc-transcribing, set by
+   transcribe.js), which is exactly when a sent message is mirrored into the
+   transcript (LC-1198), so it never over-claims when transcription is off. */
+.lc-chat-transcript-note {
+    display: none;
+    flex: none;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0.3rem 0.6rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.75rem;
+    line-height: 1.3;
+    color: var(--content-muted);
+}
+.lc-chat-transcript-note::before {
+    content: "";
+    flex: none;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 9999px;
+    background: var(--danger); /* same cue as the record/transcribe on-state */
+}
+body.lc-transcribing .lc-chat-transcript-note { display: flex; }
+
 /* Reserve the dock column so the call stage is not covered while the dock is open. */
 body.lc-has-call-dock.lc-dock-open #main { padding-right: var(--lc-dock-w); }
 
