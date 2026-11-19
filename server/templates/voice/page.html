@@ -247,6 +247,11 @@
            class="hidden lc-call-dock-panel lc-call-dock-panel--chat" aria-label="{{ "voice-chat-label"|t }}">
         {% include "room/messages.html" %}
         {% include "partials/auto_scroll.html" %}
+        {# LC-1209: short, discoverable notice that in-call chat is captured into the
+           transcript (LC-1198). Shown only while transcription is recording for the
+           call (body.lc-transcribing, set by transcribe.js), which is exactly when a
+           sent message is mirrored - so it never over-claims when transcription is off. #}
+        <p data-lc-chat-transcript-note class="lc-chat-transcript-note" role="note">{{ "voice-chat-transcript-note"|t }}</p>
         <form data-lc-call-chat-form hx-post="/room/{{ room.id }}/messages" hx-swap="none"
               hx-on::after-request="if (event.detail.successful) this.reset()"
               class="flex items-end gap-2 border-t border-border p-2">

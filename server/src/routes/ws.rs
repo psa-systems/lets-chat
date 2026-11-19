@@ -552,6 +552,16 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         // next bump is allowed in WS_BUMP_THROTTLE from now.
         const WS_BUMP_THROTTLE: Duration = Duration::from_secs(300);
         let mut last_ws_bump: std::time::Instant = std::time::Instant::now();
+        // LC-1208: cap how long a single event render may hold this select loop.
+        // Each render awaits DB + template work; under DB/pool contention one can
+        // stall, and because the 30s keepalive ping shares this loop, a stalled
+        // render starves the ping. Clients pong only in reply to that ping, so a
+        // starved ping stops their pongs and the 90s read timeout reaps the
+        // (healthy) connection - which, across a global stall, reaps many at once
+        // and triggers a reconnect/#main-refetch storm that overloads the host.
+        // Bounding the render keeps the ping punctual; a render over budget is
+        // skipped and the LC-1200 resync catches that connection up.
+        const RENDER_BUDGET: Duration = Duration::from_secs(10);
         loop {
             tokio::select! {
                 evt = rx.recv() => {
@@ -574,7 +584,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             // LC-836: same snapshot discipline for the page's
                             // room, which the sidebar renders as the active row.
                             let cur_room = send_page.lock().unwrap().and_then(|p| p.room_id);
-                            let rendered = match &e {
+                            let rendered = match tokio::time::timeout(RENDER_BUDGET, async { match &e {
                                 ChatEvent::NewMessage {
                                     message,
                                     client_id,
@@ -992,6 +1002,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 // topic by the time this fires.
                                 ChatEvent::CallDiag { .. } => render_call_diag(&e),
                                 _ => render_event(&e),
+                            } }).await {
+                                Ok(r) => r,
+                                // LC-1208: render stalled past the budget. Skip this
+                                // event (the LC-1200 resync recovers it) so the loop
+                                // returns to the select and the keepalive ping fires.
+                                Err(_) => {
+                                    tracing::warn!(user = %send_user.id, "ws event render exceeded budget; skipped to keep the keepalive ping punctual");
+                                    None
+                                }
                             };
                             if let Some(html) = rendered {
                                 if tx.send(Message::Text(html.into())).await.is_err() {

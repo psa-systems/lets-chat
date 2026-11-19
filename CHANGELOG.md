@@ -8,6 +8,19 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Added
+
+- **A heads-up that in-call chat is saved to the transcript (LC-1209).** When transcription is on during a call, the in-call chat now shows a short notice above the composer - "Transcription is on - messages you send are saved to the call transcript" - so people know their typed messages become part of the meeting record (that mirroring shipped in LC-1198). The notice appears only while transcription is actually recording, so it never implies messages are being saved when they are not.
+- **The unread count pops when a new message lands (LC-1210).** A room's sidebar unread count already updated live, but the badge was static and easy to miss; it now briefly animates when a message bumps it, so a fresh unread is noticeable at a glance. Only the live update animates (a page load or sidebar refresh does not), and it respects reduced-motion.
+
+### Fixed
+
+- **The call dock's tab strip no longer leaves a gap when diagnostics is off (LC-1210).** With the admin diagnostics tab hidden (its feature flag off), the dock's tab strip left a conspicuous empty gap where that tab would have been. The tabs now share the strip evenly, so it looks right with two tabs or three.
+
+### Fixed
+
+- **Active users no longer randomly dropped from chat, and a stalled render can no longer cascade the server into an overload (LC-1208).** The live connection's 30s keepalive ping was sent from the same loop that renders each incoming event, so when a render stalled (database contention) the ping was starved; clients only reply to that ping, so their replies stopped and the server dropped the "silent" connection after 90s - even though the person was right there. Worse, a stall hit every connection at once, so everyone reconnected and re-fetched together and piled load onto an already-struggling host. Each render is now time-bounded so the keepalive stays punctual: healthy connections are no longer dropped, and the reconnect storm that could take the server down is avoided. A render that does exceed the budget is skipped and recovered by the existing catch-up path.
+
 ## [v0.14.0] - 2026-11-17
 
 ### Added
