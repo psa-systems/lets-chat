@@ -33,6 +33,16 @@
     }
   }
 
+  // LC-1210: a new message while the chat is hidden bumps the unread COUNT on the
+  // Chat bubble (how many), rather than just lighting a dot.
+  function bumpUnread() {
+    if (window.LetsChatDock && typeof window.LetsChatDock.bumpUnread === 'function') {
+      window.LetsChatDock.bumpUnread();
+    } else {
+      setUnread(true);
+    }
+  }
+
   // Enter submits / Shift+Enter newline, scoped to the chat form's body.
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Enter' || e.shiftKey) return;
@@ -72,7 +82,7 @@
     if (away && window.LetsChatSfx && window.LetsChatSfx.playMessage) {
       window.LetsChatSfx.playMessage(); // self-gates on the sound preference
     }
-    if (!visible) setUnread(true);
+    if (!visible) bumpUnread();
   }
 
   function handleMutations(records) {

@@ -2090,28 +2090,39 @@ math {
     .lc-msg-flash { animation: none; }
 }
 
-/* LC-1181: unread cue on the in-call Chat toggle - a small accent dot that
-   pulses when a chat message arrived while the drawer was closed. call_chat.js
-   sets [data-lc-chat-unread] on the button and clears it when the drawer opens. */
+/* LC-1181/LC-1210: unread cue on the in-call Chat toggle. A new chat message
+   that arrives while the drawer is closed lights the button with a count pill
+   showing HOW MANY are unread (LC-1210; was a bare dot before). voice_dock.js
+   fills [data-lc-chat-unread-count] and sets [data-lc-chat-unread] on the
+   button, clearing both when the drawer opens. */
 [data-lc-chat-toggle] { position: relative; }
-[data-lc-chat-toggle][data-lc-chat-unread]::after {
-    content: '';
+.lc-chat-unread-count {
     position: absolute;
-    top: 0.125rem;
-    right: 0.125rem;
-    width: 0.5rem;
-    height: 0.5rem;
+    top: -0.25rem;
+    right: -0.25rem;
+    min-width: 1.05rem;
+    height: 1.05rem;
+    padding: 0 0.3rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
     border-radius: 9999px;
-    background: var(--accent);
+    background: var(--danger);
+    color: var(--danger-content);
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1;
     box-shadow: 0 0 0 2px var(--surface-elevated);
     animation: lc-chat-unread-pulse 1.6s ease-in-out infinite;
 }
+.lc-chat-unread-count[hidden] { display: none; }
 @keyframes lc-chat-unread-pulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.35; }
+    50% { opacity: 0.55; }
 }
 @media (prefers-reduced-motion: reduce) {
-    [data-lc-chat-toggle][data-lc-chat-unread]::after { animation: none; }
+    .lc-chat-unread-count { animation: none; }
 }
 
 /* LC-256: long-message fold. `partials/auto_scroll.html` adds `.lc-collapsible`
