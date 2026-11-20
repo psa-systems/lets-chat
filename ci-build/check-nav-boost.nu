@@ -32,6 +32,13 @@ const NAV_PARTIALS = [
     "server/templates/partials/sidebar_nav.html"
     "server/templates/partials/sidebar_room_row.html"
     "server/templates/partials/sidebar_peer_row.html"
+    # LC-1213: the Home dashboard is a navigation surface too - its room / DM /
+    # mention / draft rows and the stat and action links move you between pages.
+    # Unboosted they reload the page, which drops a live call exactly like a nav-
+    # panel link does (the ticket: opening a room from Home mid-call kicked the
+    # user out of the meeting). The one #msg-N deep link opts out (hx-boost=false)
+    # to keep its native fragment scroll.
+    "server/templates/home/welcome.html"
 ]
 const PARTIAL = "server/templates/partials/nav_boost.html"
 const LAYOUT = "server/templates/layout.html"
