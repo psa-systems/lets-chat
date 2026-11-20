@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use askama::Template;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -537,6 +538,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         page: page.clone(),
     };
     let (mut tx, mut rx_ws) = socket.split();
+    // LC-1208: when this connection started, and (in ms since then) when the send
+    // task last wrote a frame. The close log compares the latter with the last
+    // inbound frame, which tells a stalled server loop (nothing sent for a long
+    // time) from frames lost between server and browser (sent, never received).
+    let opened_at = Instant::now();
+    let last_out_ms = Arc::new(AtomicU64::new(0));
+    let send_last_out = last_out_ms.clone();
 
     let send_state = state.clone();
     let send_account = account.clone();
@@ -562,6 +570,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
         // Bounding the render keeps the ping punctual; a render over budget is
         // skipped and the LC-1200 resync catches that connection up.
         const RENDER_BUDGET: Duration = Duration::from_secs(10);
+        let mark_sent =
+            || send_last_out.store(opened_at.elapsed().as_millis() as u64, Ordering::Relaxed);
+        // LC-1208: the loop's value is why the send task ended, for the close log.
         loop {
             tokio::select! {
                 evt = rx.recv() => {
@@ -572,7 +583,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             // LC-979: a ban of this user ends the socket now.
                             if matches!(&e, ChatEvent::UserBanned { user_id } if user_id == &send_user.id) {
                                 let _ = tx.send(Message::Close(None)).await;
-                                break;
+                                break "user banned";
                             }
                             // LC-337: snapshot this connection's current enclave
                             // (Copy) so the guard is not held across the awaits
@@ -1014,8 +1025,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             };
                             if let Some(html) = rendered {
                                 if tx.send(Message::Text(html.into())).await.is_err() {
-                                    break;
+                                    break "event write failed";
                                 }
+                                mark_sent();
                             }
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
@@ -1026,7 +1038,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             let send_user: Arc<User> = send_account.lock().unwrap().clone();
                             if user_is_currently_banned(&send_state, &send_user.id).await {
                                 let _ = tx.send(Message::Close(None)).await;
-                                break;
+                                break "user banned";
                             }
                             // LC-1200: this connection fell behind and `skipped`
                             // live events were dropped from its queue - the cause
@@ -1046,8 +1058,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 .await
                                 .is_err()
                             {
-                                break;
+                                break "resync write failed";
                             }
+                            mark_sent();
                             continue;
                         }
                         Err(_) => {
@@ -1057,7 +1070,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                                 user = %send_account.lock().unwrap().id,
                                 "ws send loop: broadcast channel closed"
                             );
-                            break;
+                            break "broadcast channel closed";
                         }
                     }
                 }
@@ -1067,8 +1080,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                     // half-open watchdog. Comments are not `fragment.children`
                     // for `htmx-ext-ws`, so the swap path renders a no-op.
                     if tx.send(Message::Text("<!-- ping -->".into())).await.is_err() {
-                        break;
+                        break "ping write failed";
                     }
+                    mark_sent();
                 }
             }
         }
@@ -1080,19 +1094,47 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
     // counting as online. The send-side ping only notices a dead socket when
     // the kernel finally fails the write, which can take many minutes.
     const READ_TIMEOUT: Duration = Duration::from_secs(90);
-    while let Some(Ok(msg)) = tokio::select! {
-        _ = &mut send => None,
-        m = tokio::time::timeout(READ_TIMEOUT, rx_ws.next()) => m.unwrap_or_else(|_| {
-            // LC-1057: half-open / abandoned. LC-1200: info-level (was debug) with
-            // the user, so the "kicked out" disconnects show up in production logs.
-            tracing::info!(
-                conn_id,
-                user = %account.lock().unwrap().id,
-                "ws read timeout (no inbound for 90s); closing connection"
-            );
-            None
-        }),
-    } {
+    // LC-1208: why the read loop ended. Every exit sets it and the connection's
+    // close is logged once below, so a "kicked out" drop always leaves a line.
+    let mut close_code: Option<u16> = None;
+    let mut close_text = String::new();
+    let mut last_in = opened_at;
+    let mut frames_in: u64 = 0;
+    let mut send_finished = false;
+    let end_reason: String = loop {
+        let next = tokio::select! {
+            joined = &mut send => {
+                send_finished = true;
+                break match joined {
+                    Ok(why) => format!("send task ended: {why}"),
+                    Err(e) => format!("send task failed: {e}"),
+                };
+            }
+            m = tokio::time::timeout(READ_TIMEOUT, rx_ws.next()) => m,
+        };
+        let msg = match next {
+            Err(_) => {
+                // LC-1057: half-open / abandoned. LC-1200: info-level (was debug) with
+                // the user, so the "kicked out" disconnects show up in production logs.
+                tracing::info!(
+                    conn_id,
+                    user = %account.lock().unwrap().id,
+                    "ws read timeout (no inbound for 90s); closing connection"
+                );
+                break "read timeout".into();
+            }
+            // The peer or something between (a proxy, the network) dropped the
+            // TCP connection without a WebSocket close frame.
+            Ok(None) => {
+                break "stream ended without a close frame".into();
+            }
+            Ok(Some(Err(e))) => {
+                break format!("socket error: {e}");
+            }
+            Ok(Some(Ok(m))) => m,
+        };
+        last_in = Instant::now();
+        frames_in += 1;
         match msg {
             Message::Text(text) => {
                 if let Ok(frame) = serde_json::from_str::<ClientFrame>(text.as_str()) {
@@ -1153,7 +1195,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                             // A deleted account closes the socket.
                             let user = match refresh_account(&state, conn_id, &account).await {
                                 Some(u) => u,
-                                None => break,
+                                None => {
+                                    break "account no longer exists".into();
+                                }
                             };
                             let moved =
                                 apply_page_context(&state, &user, conn_id, &scope, ctx).await;
@@ -1366,10 +1410,38 @@ async fn handle_socket(socket: WebSocket, state: AppState, user: User) {
                     }
                 }
             }
-            Message::Close(_) => break,
+            Message::Close(frame) => {
+                // 4000 `lc-half-open` is layout.html's 60s watchdog; a navigation
+                // closes with no code, which arrives as no frame.
+                if let Some(f) = frame {
+                    close_code = Some(f.code);
+                    close_text = f.reason.to_string();
+                }
+                break "client sent close".into();
+            }
             _ => {}
         }
-    }
+    };
+
+    // LC-1208: one line per connection end. `last_out_s` against `last_in_s`
+    // separates a stalled send loop (both large) from frames sent but never
+    // received by the browser (`last_out_s` small when the client gives up).
+    let now_ms = opened_at.elapsed().as_millis() as u64;
+    let last_out = last_out_ms.load(Ordering::Relaxed);
+    tracing::info!(
+        conn_id,
+        user = %account.lock().unwrap().id,
+        reason = %end_reason,
+        close_code = ?close_code,
+        close_reason = %close_text,
+        age_s = now_ms / 1000,
+        last_in_s = last_in.elapsed().as_secs(),
+        // -1: the send task never wrote a frame on this connection.
+        last_out_s = if last_out == 0 { -1 } else { (now_ms.saturating_sub(last_out) / 1000) as i64 },
+        frames_in,
+        send_task_done = send_finished,
+        "ws connection closed"
+    );
 
     handle_voice_leave(&state, conn_id, "dropped");
     if let Some(uid) = state.hub.disconnect(conn_id) {
