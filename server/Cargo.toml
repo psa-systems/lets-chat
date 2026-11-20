@@ -144,6 +144,9 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
+# LC-1208: a real WebSocket client for the close-reason log test. Already in the
+# tree through axum's `ws` feature (same version), so this adds no new download.
+tokio-tungstenite = "0.29"
 # LC-629: name async_trait in an integration test to implement a correcting
 # LlmClient double (input-dependent, unlike the crate's fixed MockLlmClient).
 # Already a normal dependency; this only makes it visible to the test crates.
