@@ -127,6 +127,14 @@ jobs:
         # sidebar. See ci-build/check-locale-ellipsis.nu and LC-750.
         run: nu ci-build/check-locale-ellipsis.nu
 
+      - name: Config doc env var guard
+        # docs/public/configuration.md presents itself as the single source of
+        # truth for every server env var. Five fabricated LETS_CHAT_* names
+        # (plus a wrong default and a wrong behavioral claim) sat in it with
+        # no effect and no error for an operator who set them. See
+        # ci-build/check-config-doc-env-vars.nu and LC-1211.
+        run: nu ci-build/check-config-doc-env-vars.nu
+
       - name: Boolean-setting control guard
         # One control for "turn this on": the shared role="switch" partial, or a
         # .lc-toggle checkbox that carries role="switch" itself. A copy of the

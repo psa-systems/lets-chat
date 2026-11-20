@@ -19,29 +19,22 @@ A dev-only switch `LETS_CHAT_BUNYIP_SSO_INSECURE_TLS=1` disables issuer TLS veri
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LETS_CHAT_BIND` | `0.0.0.0:443` | Socket the server listens on. |
-| `LETS_CHAT_PUBLIC_URL` | derived | Public base URL used in redirect URIs and email links. |
-| `LETS_CHAT_TRUSTED_PROXIES` | empty | CIDRs the server treats as trusted reverse proxies for `X-Forwarded-*`. |
+| `BIND_ADDR` | `0.0.0.0:8080` | Socket the server listens on. |
+| `LETS_CHAT_BASE_URL` | `http://localhost:8080` | Public base URL used in redirect URIs and email links. |
+
+Trusting reverse-proxy headers (`X-Forwarded-For` / `X-Real-IP`) is an admin-panel toggle, `trust_proxy_headers`, stored in the database, not an environment variable.
 
 ## Data directories
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LETS_CHAT_DATA_DIR` | `/data` | Root under which the SQLite files and upload trees live. |
-| `LETS_CHAT_UPLOADS_DIR` | `${DATA_DIR}/uploads` | Where user-uploaded files are stored. |
+| `LETS_CHAT_DATA_DIR` | `/data` | Root under which the SQLite files and upload trees live. User-uploaded files are stored under `${LETS_CHAT_DATA_DIR}/uploads`; this is not independently configurable. |
 
-The data directory must exist and be writable at boot. A missing directory is a fatal error, not an auto-create.
+The data directory is created on demand if it does not already exist.
 
 ## Email ingress (optional)
 
-Mail-in replies and email-to-room ingestion live on an IMAP poll loop. See [operations/email-ingress.md](operations/email-ingress.md) for the full operator setup.
-
-| Variable | Purpose |
-|---|---|
-| `LETS_CHAT_EMAIL_INGRESS_IMAP_HOST` | IMAP server hostname. |
-| `LETS_CHAT_EMAIL_INGRESS_IMAP_USER` | Mailbox username. |
-| `LETS_CHAT_EMAIL_INGRESS_IMAP_PASSWORD` | Mailbox password. |
-| `LETS_CHAT_EMAIL_INGRESS_DOMAIN` | Hostname used in the `<token>@<domain>` recipient address. |
+Mail-in replies and email-to-room ingestion live on an IMAP poll loop. See [operations/email-ingress.md](operations/email-ingress.md) for the full operator setup. IMAP connection details (host, username, password, ingress domain) are admin-panel, database-backed settings, not environment variables.
 
 ## Outbound email (optional)
 
@@ -90,7 +83,7 @@ Register out-of-process bridge daemons. Each bridge gets a scoped API token and 
 
 ## Internationalization
 
-`LETS_CHAT_DEFAULT_LOCALE` sets the fallback locale. The in-app picker and the browser's Accept-Language header take precedence. English and Spanish ship today.
+The fallback locale is hardcoded to English; there is no environment variable to change it. The in-app picker and the browser's Accept-Language header take precedence over the fallback. English and Spanish ship today.
 
 ## Reference template
 

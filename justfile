@@ -69,7 +69,7 @@ docker_version_args := '--build-arg CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-defaul
 
 # Run every check: asset/template conventions, Rust compile, clippy, fmt, and JS, agent and saas tests.
 [group('check')]
-check: check-asset-color-tokens check-contrast check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-workflow-secrets check-ui-conventions check-update-injection check-changelog-section check-count-badge check-release-pin check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js test-agent test-saas
+check: check-asset-color-tokens check-contrast check-file-pickers check-avatar-cache check-table-scroll check-table-shape check-locale-ellipsis check-config-doc-env-vars check-boolean-settings check-single-tab-controller check-revoke-confirm check-confirm-apostrophe check-swap-safe-scripts check-nav-boost check-workflow-secrets check-ui-conventions check-update-injection check-changelog-section check-count-badge check-release-pin check-server check-server-saas check-desktop check-clippy check-clippy-saas check-fmt test-js test-agent test-saas
     # Note: LC-774: `test-js` runs the browser-asset node:test suites here too, so
     # `just pre-commit` (whose `pre_commit_prepare := "check"` runs this recipe)
     # covers them alongside the Rust checks.
@@ -111,6 +111,11 @@ check-table-shape:
 [group('check')]
 check-locale-ellipsis:
     nu ci-build/check-locale-ellipsis.nu
+
+# Every LETS_CHAT_* name docs/public/configuration.md claims must actually be read in server/src.
+[group('check')]
+check-config-doc-env-vars:
+    nu ci-build/check-config-doc-env-vars.nu
 
 # A boolean setting announces as a switch, and only partials/settings_toggle.html hand-rolls the switch markup (LC-747).
 [group('check')]
