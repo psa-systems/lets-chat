@@ -26,7 +26,7 @@ On Linux, screen share needs PipeWire and the right portal backend installed. Se
 
 ## In-call chat
 
-The Chat control inside the call bar opens a draggable panel where anyone in the call can send and read messages. Those messages post to the voice room's own message channel so they persist after the call ends.
+Chat is one tab in the call's unified dock, alongside Transcript and Diagnostics; selecting the Chat tab in the dock's tab strip shows the panel where anyone in the call can send and read messages. Those messages post to the voice room's own message channel so they persist after the call ends.
 
 ## Call transcription
 
