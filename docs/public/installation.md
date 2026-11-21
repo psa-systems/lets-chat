@@ -46,7 +46,7 @@ Boot requires that the data directory already exists and is writable. The server
 The desktop app is a thin shell around the same web UI. Each platform has an installer:
 
 - Windows: `.msi`
-- macOS: `.pkg`
+- macOS: `.dmg`
 - Linux: `.deb`, raw binary, or `.AppImage`
 
 Install flow is covered in [Desktop app](desktop-app.md). The desktop binary ships with an update check that fetches a signed release manifest from the operator's own update host.
