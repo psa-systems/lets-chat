@@ -1964,6 +1964,9 @@ async fn render_new_message(
     let mut out = render_template(&NewMessageFragment {
         message: &view,
         client_id: echo_client_id,
+        // LC-1214: voice rooms get a room-scoped list id so the call dock's OOB
+        // append never lands in another room's #messages (private-chat leak).
+        is_voice: ctx.room.is_voice,
     })
     .ok()?;
     // LC-489: a new message resets the room's "Seen by" bar (only the author is

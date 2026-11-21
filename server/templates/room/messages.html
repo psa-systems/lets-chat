@@ -1,4 +1,11 @@
-<div id="messages"
+{# LC-1214: a voice room's chat lives in the floating/pop-out call dock, which
+   survives navigation into OTHER rooms. The generic `id="messages"` then collides
+   with the room you navigate to (both would be #messages), and htmx fans an OOB
+   append into EVERY element with that id - so a private DM leaked into the call
+   chat and vice versa. Give a voice room's list a room-scoped id so the two
+   message streams can never cross. Non-voice rooms keep plain `messages`. #}
+<div id="{% if room.is_voice %}lc-call-messages-{{ room.id }}{% else %}messages{% endif %}"
+     data-lc-messages
      role="log"
      aria-live="polite"
      aria-relevant="additions"

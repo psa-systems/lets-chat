@@ -68,7 +68,9 @@
   }
 
   function scrollChatToBottom() {
-    var m = document.getElementById('messages');
+    // LC-1214: the in-call chat list is room-scoped (lc-call-messages-{room}),
+    // found by its stable attribute within the dock, not the generic #messages.
+    var m = document.querySelector('#lc-call-chat [data-lc-messages]');
     if (m) m.scrollTop = m.scrollHeight;
   }
 
