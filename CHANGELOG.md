@@ -8,6 +8,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.16.0] - 2026-11-22
+
 ### Fixed
 
 - **A private DM no longer leaks into a voice call's in-call chat (LC-1214).** The in-call chat reused the same page element id as every room's message list, and the call dock stays on screen when you browse to another conversation during a call. A private DM you opened mid-call could then have its messages appear inside the call's chat (and call messages appear in the DM), because the browser delivered each live message to both lists at once. The in-call chat now uses its own per-room element, so the two message streams can never cross. The server-side meeting transcript was never affected; this was a display leak.
