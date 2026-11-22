@@ -17,6 +17,12 @@ pub struct NewMessageFragment<'a> {
     /// it never reaches the persistent DOM - live.js reads it from the
     /// incoming fragment in `htmx:oobBeforeSwap` to remove the placeholder.
     pub client_id: Option<&'a str>,
+    /// LC-1214: a voice room's chat list carries a room-scoped id
+    /// (`lc-call-messages-{room}`) instead of the generic `messages`, so the
+    /// floating/pop-out call dock can never collide its OOB append with the
+    /// `#messages` of a room the user has navigated to. Mirrors the branch in
+    /// `room/messages.html`, keyed off the message's own room.
+    pub is_voice: bool,
 }
 
 #[derive(Template)]

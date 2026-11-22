@@ -15,7 +15,10 @@
   if (typeof document === 'undefined') return;
 
   function panel() { return document.getElementById('lc-call-chat'); }
-  function messagesEl() { return document.getElementById('messages'); }
+  // LC-1214: the in-call chat list is room-scoped (id lc-call-messages-{room}),
+  // not the generic #messages, so it never collides with the room you navigate
+  // to while the dock floats. Find it by its stable attribute within the dock.
+  function messagesEl() { return document.querySelector('#lc-call-chat [data-lc-messages]'); }
   function setMessagesBottom() { var m = messagesEl(); if (m) m.scrollTop = m.scrollHeight; }
 
   // "Is the chat actually showing?" The dock is the source of truth; fall back to
