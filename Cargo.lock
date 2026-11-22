@@ -3632,6 +3632,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-rustls",
+ "tokio-tungstenite",
  "tokio-util",
  "totp-rs",
  "tower",

@@ -8,6 +8,11 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Fixed
+
+- **A private DM no longer leaks into a voice call's in-call chat (LC-1214).** The in-call chat reused the same page element id as every room's message list, and the call dock stays on screen when you browse to another conversation during a call. A private DM you opened mid-call could then have its messages appear inside the call's chat (and call messages appear in the DM), because the browser delivered each live message to both lists at once. The in-call chat now uses its own per-room element, so the two message streams can never cross. The server-side meeting transcript was never affected; this was a display leak.
+- **Opening a room from the Home dashboard no longer drops a call you are in (LC-1213).** The Home dashboard's room, DM, mention and draft rows (and the stats / discover / invitations links) were plain links that did a full page reload, which tore down the whole page - including a live voice call that lives outside the main content area - so clicking one mid-call kicked you out of the meeting. They now navigate in place like the sidebar does, keeping the connection and the call alive. (The one "jump to a thread's message" row stays a full navigation so it still scrolls to that message.)
+
 ## [v0.15.0] - 2026-11-19
 
 ### Added

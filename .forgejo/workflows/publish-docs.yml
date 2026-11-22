@@ -10,10 +10,10 @@
 # no "Docs" / "Public" intermediate layers.
 #
 # The pushing binary is the `latest` artifact from psa-systems' Forgejo Generic
-# Packages. This repo lives at a8n-tools/lets-chat, so the
-# DOCS_A8N_SYSTEMS_SARRACENIA secret is read from the a8n-tools org scope
-# (the same-named secret is held in both psa-systems and a8n-tools org stores
-# with the same token value).
+# Packages. This repo lives at psa-systems/lets-chat, but the
+# DOCS_A8N_SYSTEMS_SARRACENIA secret is still read from the a8n-tools org
+# scope: the same-named secret is held in both psa-systems and a8n-tools org
+# stores with the same token value.
 name: Publish docs
 
 on:
