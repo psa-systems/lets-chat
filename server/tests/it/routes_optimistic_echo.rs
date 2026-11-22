@@ -518,6 +518,7 @@ async fn new_message_fragment_renders_dedupe_attribute_only_when_set() {
     let with_id = NewMessageFragment {
         message: &view,
         client_id: Some("test-cid-456"),
+        is_voice: false,
     }
     .render()
     .unwrap();
@@ -529,11 +530,57 @@ async fn new_message_fragment_renders_dedupe_attribute_only_when_set() {
     let without_id = NewMessageFragment {
         message: &view,
         client_id: None,
+        is_voice: false,
     }
     .render()
     .unwrap();
     assert!(
         !without_id.contains("data-lc-client-id"),
         "OOB wrapper must stay byte-identical to the pre-LC-230 shape when no client id is attached"
+    );
+}
+
+// LC-1214: a voice room's live message append must target the room-scoped list
+// id (lc-call-messages-{room}), never the generic #messages. The in-call chat
+// dock floats/pops out and survives navigation into OTHER rooms, so a generic
+// #messages would collide with the room you navigate to and htmx would fan the
+// OOB append into BOTH - leaking a private DM into the call chat and the call
+// chat into the DM. Non-voice rooms must keep the plain `messages` id so the
+// rest of the app is untouched.
+#[tokio::test]
+async fn voice_room_message_targets_a_room_scoped_list_id() {
+    let mut view = user_view("in the call");
+    view.room_id = 42;
+
+    let voice = NewMessageFragment {
+        message: &view,
+        client_id: None,
+        is_voice: true,
+    }
+    .render()
+    .unwrap();
+    assert!(
+        voice.contains(r#"id="lc-call-messages-42""#),
+        "a voice room's append must use the room-scoped list id, got: {voice}"
+    );
+    assert!(
+        !voice.contains(r#"id="messages""#),
+        "a voice room's append must NOT target the generic #messages (collision/leak): {voice}"
+    );
+
+    let plain = NewMessageFragment {
+        message: &view,
+        client_id: None,
+        is_voice: false,
+    }
+    .render()
+    .unwrap();
+    assert!(
+        plain.contains(r#"id="messages""#),
+        "a non-voice room must keep the generic #messages id, got: {plain}"
+    );
+    assert!(
+        !plain.contains("lc-call-messages-"),
+        "a non-voice room must not use the voice-scoped id: {plain}"
     );
 }
