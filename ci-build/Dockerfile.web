@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.6
+# syntax=docker/dockerfile:1.29
 
 # Multi-stage build:
 #   1. chef    - cargo-chef installer (planner + cacher share this base).

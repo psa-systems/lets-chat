@@ -19,7 +19,10 @@
     };
   }
 
-  var messages = document.getElementById('messages');
+  // LC-1214: a voice room's list is room-scoped (lc-call-messages-{id}); every
+  // other room keeps `messages`. See room/messages.html.
+  var MSG_ID = "{% if room.is_voice %}lc-call-messages-{{ room.id }}{% else %}messages{% endif %}";
+  var messages = document.getElementById(MSG_ID);
   if (!messages) return;
   var slack = 50;
   var wasAtBottom = true;
@@ -240,7 +243,7 @@
 
   function onOob(evt) {
     var tgt = (evt && evt.detail && evt.detail.target) || (evt && evt.target);
-    var isMsgAppend = tgt && tgt.id === 'messages';
+    var isMsgAppend = tgt && tgt.id === MSG_ID;
     if (isMsgAppend) maybeInsertDayDivider();
     // LC-256: fold a long live arrival before re-anchoring so a pinned viewer
     // lands at the clamped bottom, not below an un-clamped wall of text.
@@ -320,7 +323,9 @@
 // on/after it and flashes it. Today / Clear are real buttons.
 (function() {
   var root = document.querySelector('[data-lc-jumpdate-root]');
-  var messages = document.getElementById('messages');
+  // LC-1214: match the room-scoped list id (see room/messages.html).
+  var MSG_ID = "{% if room.is_voice %}lc-call-messages-{{ room.id }}{% else %}messages{% endif %}";
+  var messages = document.getElementById(MSG_ID);
   if (!root || !messages) return;
   var toggle = root.querySelector('[data-lc-jumpdate-toggle]');
   var pop = root.querySelector('[data-lc-jumpdate-popover]');

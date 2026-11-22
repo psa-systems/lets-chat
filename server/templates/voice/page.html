@@ -122,6 +122,10 @@
               class="hidden lc-cbtn">
         <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2c-4.418 0-8 3.134-8 7 0 1.76.743 3.37 1.97 4.6a6.6 6.6 0 01-1.07 2.26.75.75 0 00.75 1.17 8.5 8.5 0 003.08-.92A9.6 9.6 0 0010 16c4.418 0 8-3.134 8-7s-3.582-7-8-7zm-3 7a1 1 0 11-2 0 1 1 0 012 0zm4 0a1 1 0 11-2 0 1 1 0 012 0zm3 1a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg></span>
         <span class="lc-cbtn-label">{{ "voice-chat-label"|t }}</span>
+        {# LC-1210: live unread COUNT on the always-visible Chat bubble, so a new
+           in-call message lights the button with how many are unread even while
+           the dock is collapsed. voice_dock.js fills it; cleared when chat opens. #}
+        <span data-lc-chat-unread-count class="lc-chat-unread-count" hidden aria-hidden="true"></span>
       </button>
       {# LC-825/LC-880: floating reactions (partials/react_tray.html). #}
       {% let tip_pos = "bottom" %}
@@ -247,6 +251,11 @@
            class="hidden lc-call-dock-panel lc-call-dock-panel--chat" aria-label="{{ "voice-chat-label"|t }}">
         {% include "room/messages.html" %}
         {% include "partials/auto_scroll.html" %}
+        {# LC-1209: short, discoverable notice that in-call chat is captured into the
+           transcript (LC-1198). Shown only while transcription is recording for the
+           call (body.lc-transcribing, set by transcribe.js), which is exactly when a
+           sent message is mirrored - so it never over-claims when transcription is off. #}
+        <p data-lc-chat-transcript-note class="lc-chat-transcript-note" role="note">{{ "voice-chat-transcript-note"|t }}</p>
         <form data-lc-call-chat-form hx-post="/room/{{ room.id }}/messages" hx-swap="none"
               hx-on::after-request="if (event.detail.successful) this.reset()"
               class="flex items-end gap-2 border-t border-border p-2">

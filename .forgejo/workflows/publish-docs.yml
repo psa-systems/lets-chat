@@ -1,18 +1,19 @@
 ---
 
-# Publish this repo's docs to docs.a8n.systems/docs/lets-chat on every push to
-# main. Mirrors psa-systems/sarracenia's own publish-docs workflow.
+# Publish this repo's user-facing docs to docs.a8n.systems/docs/lets-chat on
+# every push to main. Mirrors the fleet pattern already in place on
+# psa-systems/sarracenia, drillmark, mokosh-apps, mokosh-server.
+#
+# Walk root: docs/public/. The workflow cd's into docs/public/ before running
+# `sarracenia push` so sarracenia walks from there. The sidebar on the
+# published site renders content directly under the "Lets chat" entry with
+# no "Docs" / "Public" intermediate layers.
 #
 # The pushing binary is the `latest` artifact from psa-systems' Forgejo Generic
-# Packages (NOT a8n-tools): sarracenia is published only to psa-systems, and
-# every consumer across both orgs pulls from there. The target site, base path
-# and include/exclude globs live in sarracenia.toml at the repo root; the only
-# values this workflow carries are the runner shape, the publisher binary's
-# registry location, and the secret mapping.
-#
-# This repo lives at a8n-tools/lets-chat, so `DOCS_A8N_SYSTEMS_SARRACENIA` is
-# read from the a8n-tools org secret scope (user maintains the same-named
-# secret with the same token value on both orgs).
+# Packages. This repo lives at psa-systems/lets-chat, but the
+# DOCS_A8N_SYSTEMS_SARRACENIA secret is still read from the a8n-tools org
+# scope: the same-named secret is held in both psa-systems and a8n-tools org
+# stores with the same token value.
 name: Publish docs
 
 on:
@@ -52,8 +53,8 @@ jobs:
       - name: Clone the repository
         uses: https://code.forgejo.org/actions/checkout@v5
         with:
-          # provenance.rs in sarracenia reads git log for the push provenance
-          # object; a shallow clone makes it fall back to a sparse record.
+          # sarracenia reads git log for the push provenance object; a shallow
+          # clone makes it fall back to a sparse record.
           fetch-depth: 0
           persist-credentials: false
 
@@ -64,8 +65,7 @@ jobs:
         shell: nu {0}
         env:
           # Step-scoped: a job-scoped secret resolves to an empty string inside
-          # a nu step on this runner. FORGEJO_PAT must have read access to
-          # psa-systems' generic packages registry; the a8n-tools PAT does.
+          # a nu step on this runner.
           FORGEJO_TOKEN: ${{ secrets.FORGEJO_PAT }}
         run: |
           let auth = [Authorization $"token ($env.FORGEJO_TOKEN)"]
@@ -80,7 +80,7 @@ jobs:
             | url join
           )
           print $"Downloading ($url)"
-          let dest = $"./($env.BINARY_FILE)"
+          let dest = $"($env.GITHUB_WORKSPACE)/($env.BINARY_FILE)"
           http get --headers $auth $url | save $dest
           chmod +x $dest
           ^$dest --version
@@ -88,12 +88,33 @@ jobs:
       - name: Publish docs
         shell: nu {0}
         env:
-          # Step-scoped for the same reason FORGEJO_TOKEN is above. Also keeps
-          # the token's env lifetime to this one step.
+          # Step-scoped: keeps the token's env lifetime to this one step.
           SARRACENIA_TOKEN: ${{ secrets.DOCS_A8N_SYSTEMS_SARRACENIA }}
         run: |
-          let bin = $"./($env.BINARY_FILE)"
-          ^$bin push
+          # sarracenia walks from cwd (see sarracenia src/lib.rs current_dir()).
+          # cd into docs/public/ so that directory is the walk root. Published
+          # sidebar paths start directly under the base_path, no intermediate
+          # "docs" or "public" layers.
+          #
+          # --no-media: sarracenia derives the Storefront media library path
+          # from base_path (lowercase `docs/lets-chat`); Storefront's
+          # normalize_media_library_path requires the first segment to match
+          # one of ["Images","Videos","Docs","Logos","Audio","Other"] case-
+          # sensitively, so the lowercase `docs` is refused 400. Drop this
+          # flag once either sarracenia maps base_path to the canonical root
+          # or Storefront's validator calls its own canonical_root_name helper.
+          let bin = $"($env.GITHUB_WORKSPACE)/($env.BINARY_FILE)"
+          cd docs/public
+          # Belt-and-suspenders: the include glob `**/*.md` is relative to
+          # sarracenia's walk root (cwd). If a future edit drops the `cd`
+          # above, cwd would be the repo root and the walk would match every
+          # markdown file in the repo. Fail loudly instead of pushing
+          # hundreds of pages to Storefront.
+          if not ($env.PWD | str ends-with "/docs/public") {
+            print --stderr $"guard: publish-docs expects cwd to end in /docs/public, got ($env.PWD)"
+            exit 1
+          }
+          ^$bin push --no-media
 
       - name: Report job metrics
         if: always()

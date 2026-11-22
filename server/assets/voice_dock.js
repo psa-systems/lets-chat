@@ -68,7 +68,9 @@
   }
 
   function scrollChatToBottom() {
-    var m = document.getElementById('messages');
+    // LC-1214: the in-call chat list is room-scoped (lc-call-messages-{room}),
+    // found by its stable attribute within the dock, not the generic #messages.
+    var m = document.querySelector('#lc-call-chat [data-lc-messages]');
     if (m) m.scrollTop = m.scrollHeight;
   }
 
@@ -94,7 +96,7 @@
     });
     // CSS hides the dock body + aligns the shared transcript to the column.
     d.classList.toggle('lc-dock--transcript', transcript);
-    if (!transcript && active === 'chat') { setUnread(false); scrollChatToBottom(); }
+    if (!transcript && active === 'chat') { clearUnread(); scrollChatToBottom(); }
   }
 
   function ensureOpen() {
@@ -134,12 +136,46 @@
     else openTo(tab);
   }
 
-  function setUnread(on) {
+  // LC-1210: the unread cue on the ALWAYS-VISIBLE callbar Chat toggle (the bubble
+  // button in the call toolbar), not only the dock's Chat tab. The tab lives
+  // inside the dock, which is hidden while the dock is collapsed - the common
+  // case - so before this a new in-call message gave no visible sign (regression
+  // from the LC-1195 dock move of the LC-1181 cue). Now the bubble lights up and
+  // shows HOW MANY messages are unread: each one bumps the count, opening the
+  // chat clears it.
+  var unreadCount = 0;
+
+  function renderUnread() {
+    var on = unreadCount > 0;
+    var toggle = document.querySelector('[data-lc-chat-toggle]');
+    if (toggle) {
+      if (on) toggle.setAttribute('data-lc-chat-unread', '');
+      else toggle.removeAttribute('data-lc-chat-unread');
+    }
+    var count = document.querySelector('[data-lc-chat-unread-count]');
+    if (count) {
+      // Cap the display so a long absence doesn't widen the pill off the button.
+      count.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+      if (on) {
+        count.removeAttribute('hidden');
+        count.setAttribute('aria-hidden', 'false');
+      } else {
+        count.setAttribute('hidden', '');
+        count.setAttribute('aria-hidden', 'true');
+      }
+    }
+    // Keep the in-dock tab dot in step for when the dock is open.
     var dot = document.querySelector('[data-lc-dock-unread]');
-    if (!dot) return;
-    if (on) dot.removeAttribute('hidden');
-    else dot.setAttribute('hidden', '');
+    if (dot) {
+      if (on) dot.removeAttribute('hidden');
+      else dot.setAttribute('hidden', '');
+    }
   }
+
+  function bumpUnread() { unreadCount += 1; renderUnread(); }
+  function clearUnread() { unreadCount = 0; renderUnread(); }
+  // Back-compat shim: on(true) counts as a single new message, on(false) clears.
+  function setUnread(on) { if (on) bumpUnread(); else clearUnread(); }
 
   // ---- events -----------------------------------------------------------
 
@@ -177,7 +213,7 @@
 
   // Call teardown: a left call collapses the dock (the toggles hide on leave, so an
   // open dock would otherwise linger into the lobby).
-  document.addEventListener('lc:rtc-session-ended', function () { collapse(); setUnread(false); });
+  document.addEventListener('lc:rtc-session-ended', function () { collapse(); clearUnread(); });
 
   // Mark the page so CSS can align the shared transcript to the dock column, and
   // set the initial (closed) state. Re-run after boosted navigation swaps #main.
@@ -200,6 +236,8 @@
     activeTab: activeTab,
     isChatVisible: function () { return isDockOpen() && !isTranscriptOpen() && activeTab() === 'chat'; },
     setUnread: setUnread,
+    bumpUnread: bumpUnread,
+    clearUnread: clearUnread,
     // LC-1195: pure tab resolver, exported for unit tests.
     resolveTab: function (transcriptOpen, bodyTab, diagPresent) {
       if (transcriptOpen) return 'transcript';

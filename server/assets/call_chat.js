@@ -15,7 +15,10 @@
   if (typeof document === 'undefined') return;
 
   function panel() { return document.getElementById('lc-call-chat'); }
-  function messagesEl() { return document.getElementById('messages'); }
+  // LC-1214: the in-call chat list is room-scoped (id lc-call-messages-{room}),
+  // not the generic #messages, so it never collides with the room you navigate
+  // to while the dock floats. Find it by its stable attribute within the dock.
+  function messagesEl() { return document.querySelector('#lc-call-chat [data-lc-messages]'); }
   function setMessagesBottom() { var m = messagesEl(); if (m) m.scrollTop = m.scrollHeight; }
 
   // "Is the chat actually showing?" The dock is the source of truth; fall back to
@@ -30,6 +33,16 @@
   function setUnread(on) {
     if (window.LetsChatDock && typeof window.LetsChatDock.setUnread === 'function') {
       window.LetsChatDock.setUnread(on);
+    }
+  }
+
+  // LC-1210: a new message while the chat is hidden bumps the unread COUNT on the
+  // Chat bubble (how many), rather than just lighting a dot.
+  function bumpUnread() {
+    if (window.LetsChatDock && typeof window.LetsChatDock.bumpUnread === 'function') {
+      window.LetsChatDock.bumpUnread();
+    } else {
+      setUnread(true);
     }
   }
 
@@ -72,7 +85,7 @@
     if (away && window.LetsChatSfx && window.LetsChatSfx.playMessage) {
       window.LetsChatSfx.playMessage(); // self-gates on the sound preference
     }
-    if (!visible) setUnread(true);
+    if (!visible) bumpUnread();
   }
 
   function handleMutations(records) {

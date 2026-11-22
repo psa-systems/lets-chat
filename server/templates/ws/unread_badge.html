@@ -2,7 +2,11 @@
    the ad hoc classes this used to carry) so a live badge update never flashes
    a different pill style than the initial page render. #}
 {% if unread > 0 && mute_mode == "none" %}
-<span id="unread-{{ kind }}-{{ id }}" data-lc-unread hx-swap-oob="outerHTML" class="lc-count-pill" aria-label="{{ unread }} {{ "home-dash-unread-aria"|t }}">{{ unread }}</span>
+{# LC-1210: this is the LIVE badge, swapped in exactly when a new message bumps a
+   background room's unread count, so the `--pop` class animates the count to make
+   a fresh unread noticeable. The initial server render (partials/unread_badge.html)
+   deliberately omits it, so a page load / full sidebar refresh does not animate. #}
+<span id="unread-{{ kind }}-{{ id }}" data-lc-unread hx-swap-oob="outerHTML" class="lc-count-pill lc-count-pill--pop" aria-label="{{ unread }} {{ "home-dash-unread-aria"|t }}">{{ unread }}</span>
 {% else %}
 <span id="unread-{{ kind }}-{{ id }}" data-lc-unread hx-swap-oob="outerHTML"></span>
 {% endif %}

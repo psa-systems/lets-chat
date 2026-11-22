@@ -94,6 +94,7 @@ fn render_fragment(view: &MessageView) -> String {
     NewMessageFragment {
         message: view,
         client_id: None,
+        is_voice: false,
     }
     .render()
     .expect("template render must succeed under fixture conditions")
