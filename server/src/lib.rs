@@ -46,6 +46,7 @@ pub mod ssrf;
 pub mod state;
 pub mod stt;
 pub mod stt_load;
+pub mod turn;
 pub mod uploads;
 pub mod version;
 pub mod views;

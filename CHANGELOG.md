@@ -10,6 +10,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ### Added
 
+- **TURN relay support for calls, with per-user credentials (LC-1219).** Calls could drop audio for people behind a strict NAT or firewall: a mesh call can only connect peers that can reach each other directly, and with STUN only there was no fallback, so one participant could be unable to hear another while everyone else was fine. You can now configure a TURN relay (`LETS_CHAT_TURN_URLS` / `LETS_CHAT_TURN_SECRET` / `LETS_CHAT_TURN_TTL_SECS`, coturn's shared-secret scheme) to give those peers a relay path. The relay credential handed to each browser is short-lived and unique per user, so it can't be harvested and abused. Requires deploying a TURN server (e.g. coturn); see `docs/configuration.md`. No change to deployments that don't set it.
 - **Your own call tile now shows a connection-quality signal (LC-1218).** The signal-bars indicator used to appear only on other people's tiles, so you could not tell how your own connection was doing. Your tile now shows one too, worked out from your links to everyone else - including the loss others report on the audio you send (the usual "can they hear me?" case). It only turns yellow/red when the trouble is shared across most people (a sign it is your link), so one person's bad connection never makes your own indicator look bad. It applies to mesh calls, the same ones where the other tiles' indicators appear.
 
 ## [v0.16.0] - 2026-11-22
