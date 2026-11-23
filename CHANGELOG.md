@@ -8,6 +8,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+## [v0.17.0] - 2026-11-23
+
 ### Added
 
 - **TURN relay support for calls, with per-user credentials (LC-1219).** Calls could drop audio for people behind a strict NAT or firewall: a mesh call can only connect peers that can reach each other directly, and with STUN only there was no fallback, so one participant could be unable to hear another while everyone else was fine. You can now configure a TURN relay (`LETS_CHAT_TURN_URLS` / `LETS_CHAT_TURN_SECRET` / `LETS_CHAT_TURN_TTL_SECS`, coturn's shared-secret scheme) to give those peers a relay path. The relay credential handed to each browser is short-lived and unique per user, so it can't be harvested and abused. Requires deploying a TURN server (e.g. coturn); see `docs/configuration.md`. No change to deployments that don't set it.
