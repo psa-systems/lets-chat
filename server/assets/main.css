@@ -4511,8 +4511,9 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-voice-mute-badge svg { height: 0.875rem; width: 0.875rem; }
 .lc-voice-tile[data-muted="true"] .lc-voice-mute-badge { display: inline-flex; }
 /* LC-410: per-peer connection-quality glyph, inside the name pill. Hidden
-   until the tile gets a data-quality (never on the self tile). Recoloured per
-   state; "reconnecting" pulses. */
+   until the tile gets a data-quality. LC-1218: the self tile gets one too, from
+   an aggregate of the peer connections (voice.js updateSelfQuality). Recoloured
+   per state; "reconnecting" pulses. */
 .lc-voice-quality { display: none; line-height: 0; flex: none; }
 .lc-voice-tile[data-quality] .lc-voice-quality { display: inline-flex; }
 .lc-voice-quality svg { height: 0.875rem; width: 0.875rem; }

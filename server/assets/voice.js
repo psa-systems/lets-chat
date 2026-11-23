@@ -295,8 +295,10 @@
     var name = document.createElement('span');
     name.className = 'lc-voice-name';
     // LC-410: per-peer connection-quality glyph. Hidden until the tile gets a
-    // data-quality (set by the quality monitor); never set on the self tile,
-    // which has no peer connection. Signal bars, recoloured by CSS per state.
+    // data-quality (set by the quality monitor). Signal bars, recoloured by CSS
+    // per state. LC-1218: the self tile gets one too, driven by an aggregate of
+    // the peer connections (your own link has no single pc to measure, but a bad
+    // local uplink/downlink shows up across every peer - see updateSelfQuality).
     var quality = document.createElement('span');
     quality.className = 'lc-voice-quality';
     quality.setAttribute('data-lc-voice-quality', '');
@@ -1014,6 +1016,46 @@
       el.setAttribute('aria-label', label);
     }
   }
+  // LC-1218: the self tile has no RTCPeerConnection of its own to measure, so
+  // derive its signal from the peer connections. Each peer records `selfSignal`
+  // - what that path says about MY link: my receive loss/RTT from them PLUS the
+  // loss the far end reports on the stream I SEND (remote-inbound-rtp = my
+  // uplink, the "can they hear me" signal). We flag the self tile only when the
+  // trouble is SHARED across at least half the peers; a single struggling remote
+  // peer is their problem, not yours, so one bad path never reddens your own
+  // indicator. Alone in the call there is nothing to measure, so it stays hidden.
+  var SELF_SEV = { good: 0, degraded: 1, reconnecting: 2, failed: 3 };
+  function setSelfQuality(q) {
+    if (!cfg || !cfg.selfId) return;
+    if (!q) {
+      var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(cfg.selfId) + '"]');
+      if (t) t.removeAttribute('data-quality'); // nothing to measure -> hide
+      return;
+    }
+    setQuality(cfg.selfId, q); // same tile setter + tooltip as the remote tiles
+  }
+  // Pure aggregation (exported for unit testing): given each peer's selfSignal
+  // vote, decide the self tile's bucket - null when there is nothing to show
+  // (alone, or no measurement yet). Flagged only when at least half the peers
+  // agree the path is bad, so one struggling remote peer can never redden your
+  // own indicator; when flagged it shows the worst bucket seen.
+  function selfQualityBucket(vals) {
+    if (!vals || !vals.length) return null;
+    var bad = 0, worst = 'good';
+    vals.forEach(function (q) {
+      if (SELF_SEV[q] > 0) bad += 1;
+      if (SELF_SEV[q] > SELF_SEV[worst]) worst = q;
+    });
+    return bad * 2 >= vals.length ? worst : 'good';
+  }
+  function updateSelfQuality() {
+    var vals = [];
+    Object.keys(peers).forEach(function (uid) {
+      var q = peers[uid] && peers[uid].selfSignal;
+      if (q) vals.push(q);
+    });
+    setSelfQuality(selfQualityBucket(vals));
+  }
   // Map a non-connected RTCPeerConnection state to a quality bucket.
   function stateQuality(state) {
     if (state === 'failed') return 'failed';
@@ -1030,13 +1072,26 @@
       var p = peers[uid];
       if (!p || !p.pc) return;
       var state = p.pc.connectionState;
-      if (state !== 'connected') { applyConnectionState(uid, state); return; }
+      if (state !== 'connected') {
+        applyConnectionState(uid, state);
+        // LC-1218: a non-connected peer also feeds the self aggregate.
+        var sq = stateQuality(state);
+        if (sq) { p.selfSignal = sq; updateSelfQuality(); }
+        return;
+      }
       p.pc.getStats().then(function (report) {
         var lost = 0, recv = 0, rtt = null;
+        // LC-1218: uplink as the far end sees it (my send path = "can they hear me").
+        var upLost = 0, sent = 0, upRtt = null;
         report.forEach(function (s) {
           if (s.type === 'inbound-rtp') {
             if (typeof s.packetsLost === 'number') lost += s.packetsLost;
             if (typeof s.packetsReceived === 'number') recv += s.packetsReceived;
+          } else if (s.type === 'remote-inbound-rtp') {
+            if (typeof s.packetsLost === 'number') upLost += s.packetsLost;
+            if (typeof s.roundTripTime === 'number') upRtt = s.roundTripTime;
+          } else if (s.type === 'outbound-rtp') {
+            if (typeof s.packetsSent === 'number') sent += s.packetsSent;
           } else if (s.type === 'candidate-pair' && s.nominated &&
                      typeof s.currentRoundTripTime === 'number') {
             rtt = s.currentRoundTripTime;
@@ -1049,6 +1104,16 @@
         var lossRatio = (dLost + dRecv) > 0 ? dLost / (dLost + dRecv) : 0;
         var degraded = lossRatio > 0.03 || (rtt != null && rtt > 0.35);
         setQuality(uid, degraded ? 'degraded' : 'good');
+        // LC-1218: fold in the uplink loss the peer reports for my stream, then
+        // let this peer vote on the self tile's aggregate signal.
+        var uprev = p.upstats || { lost: 0, sent: 0 };
+        var dUpLost = Math.max(0, upLost - uprev.lost);
+        var dSent = Math.max(0, sent - uprev.sent);
+        p.upstats = { lost: upLost, sent: sent };
+        var upRatio = (dUpLost + dSent) > 0 ? dUpLost / (dUpLost + dSent) : 0;
+        var upDegraded = upRatio > 0.03 || (upRtt != null && upRtt > 0.35);
+        p.selfSignal = (degraded || upDegraded) ? 'degraded' : 'good';
+        updateSelfQuality();
       }).catch(function (e) {
         // getStats failed on this poll: the quality dot freezes at its last
         // value, so log rather than let it look like a steady connection.
@@ -1242,6 +1307,7 @@
     }
     delete peers[userId];
     removeTile(userId);
+    updateSelfQuality(); // LC-1218: a departed peer no longer votes on my signal
   }
 
   // LC-1138: tear down and rebuild one peer's RTCPeerConnection WITHOUT removing
@@ -2363,6 +2429,8 @@
     shouldAutoIceRestart: shouldAutoIceRestart,
     // LC-1196: pure muted-speech nudge decision, exported for unit testing.
     muteNudgeStep: muteNudgeStep,
+    // LC-1218: pure self-tile connection-quality aggregation, for unit testing.
+    selfQualityBucket: selfQualityBucket,
     summarizeStats: summarizeStats,
     iceOkLabel: iceOkLabel,
     iceFailLabel: iceFailLabel,

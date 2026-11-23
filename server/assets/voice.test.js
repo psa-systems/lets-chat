@@ -630,6 +630,22 @@ test('LC-1129: a remote screen that renders no frames logs a blackout error once
 // LC-1154: a failed mesh connection auto-restarts ICE instead of waiting for
 // the user to rejoin - but only on the offerer (impolite) side, once per
 // failure edge, and only while actually 'failed'. This pins that guard.
+test('LC-1218: selfQualityBucket flags the self tile only on shared trouble', () => {
+  const b = load().voice.selfQualityBucket;
+  // Nothing to measure (alone, or no stats yet) -> hidden.
+  assert.equal(b([]), null, 'no peers -> no self signal');
+  assert.equal(b(undefined), null, 'undefined -> no self signal');
+  // All good -> good.
+  assert.equal(b(['good', 'good', 'good']), 'good');
+  // One bad of three is that peer's problem, not yours.
+  assert.equal(b(['good', 'good', 'degraded']), 'good', 'a single bad peer does not redden self');
+  // A majority bad means the trouble is shared (your link) -> worst bucket.
+  assert.equal(b(['good', 'degraded', 'degraded']), 'degraded', 'majority degraded flags self');
+  assert.equal(b(['failed', 'degraded', 'reconnecting']), 'failed', 'shows the worst shared bucket');
+  // Your only peer path being bad is, by definition, your shared path.
+  assert.equal(b(['degraded']), 'degraded', 'a lone bad peer path flags self');
+});
+
 test('LC-1154: shouldAutoIceRestart gates the connection-failed auto-recovery', () => {
   const g = load().voice.shouldAutoIceRestart;
   // Offerer (impolite => polite=false), first failure: restart.

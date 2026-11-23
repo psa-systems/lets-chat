@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Added
+
+- **Your own call tile now shows a connection-quality signal (LC-1218).** The signal-bars indicator used to appear only on other people's tiles, so you could not tell how your own connection was doing. Your tile now shows one too, worked out from your links to everyone else - including the loss others report on the audio you send (the usual "can they hear me?" case). It only turns yellow/red when the trouble is shared across most people (a sign it is your link), so one person's bad connection never makes your own indicator look bad. It applies to mesh calls, the same ones where the other tiles' indicators appear.
+
 ## [v0.16.0] - 2026-11-22
 
 ### Fixed
