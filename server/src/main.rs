@@ -117,6 +117,9 @@ async fn main() {
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| r#"[{"urls":"stun:stun.l.google.com:19302"}]"#.to_string());
+    // LC-1219: load the optional TURN relay (ephemeral coturn credentials) once.
+    // No-op unless LETS_CHAT_TURN_URLS + LETS_CHAT_TURN_SECRET are set.
+    lets_chat::turn::init();
 
     // LC-22 pure-RP cutover: load and initialize the Bunyip SSO client at
     // startup. The four `LETS_CHAT_BUNYIP_SSO_*` env vars are mandatory;

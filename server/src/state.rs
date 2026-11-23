@@ -123,6 +123,13 @@ impl AppState {
     pub fn llm_available(&self) -> bool {
         self.llm_client.is_some()
     }
+    /// LC-1219: the ice-servers JSON to hand this user's browser - the base STUN
+    /// list plus, when a TURN relay is configured (`crate::turn::init` at
+    /// startup), a freshly-minted ephemeral `turn:` entry for `user_id`.
+    /// Identical to `ice_servers` when TURN is off.
+    pub fn ice_servers_for(&self, user_id: &str) -> String {
+        crate::turn::ice_servers_with_turn(&self.ice_servers, crate::turn::configured(), user_id)
+    }
     /// LC-549: true when a text-embeddings endpoint is configured, so the
     /// "Find related" action and semantic search mode are available (search
     /// otherwise degrades to FTS keyword matching).
