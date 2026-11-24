@@ -346,3 +346,7 @@ maintenance mode and similar settings are stored in the `settings` database and 
   reachable.
 - Live updates are in-process: a restart drops WebSocket connections, sessions persist in the auth database, and
   presence is recomputed from new connections.
+
+## 11. Adopted profiles
+
+- `common/docs/profile-specification.md`, chapter 1, Rust test build profile.
