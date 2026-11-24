@@ -261,9 +261,28 @@
   // open dock would otherwise linger into the lobby).
   document.addEventListener('lc:rtc-session-ended', function () { collapse(); clearUnread(); });
 
+  // The shared transcript drawer (layout.html) only has a dock tab to pair
+  // with on pages that render one; elsewhere (1:1 call, huddle) pairing it
+  // would leave a dangling aria-labelledby and an orphaned tabpanel role, so
+  // this module - the only script that knows whether a dock is on the page -
+  // adds and removes both attributes itself instead of layout.html setting
+  // them unconditionally.
+  function syncTranscriptPanelRole() {
+    var drawer = document.getElementById('lc-transcript-drawer');
+    if (!drawer) return;
+    if (dock() && hasTab('transcript')) {
+      drawer.setAttribute('role', 'tabpanel');
+      drawer.setAttribute('aria-labelledby', 'lc-dock-tab-transcript');
+    } else {
+      drawer.removeAttribute('role');
+      drawer.removeAttribute('aria-labelledby');
+    }
+  }
+
   // Mark the page so CSS can align the shared transcript to the dock column, and
   // set the initial (closed) state. Re-run after boosted navigation swaps #main.
   function sync() {
+    syncTranscriptPanelRole();
     if (dock()) {
       document.body.classList.add('lc-has-call-dock');
       if (isDockOpen()) render();

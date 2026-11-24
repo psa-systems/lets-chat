@@ -61,6 +61,56 @@ test('LC-1195: resolveTab picks the active tab, and a flag-off (absent) diag tab
   assert.equal(r(false, 'chat', false), 'chat');
 });
 
+// Sandbox variant with a dock, a transcript tab button and the shared
+// transcript drawer present, so sync() (run at load) can pair them.
+function loadWithDock(hasTranscriptTab) {
+  const body = new El('body');
+  const dock = new El('div');
+  dock.setAttribute('data-lc-call-dock', '');
+  dock.classList.add('hidden');
+  const drawer = new El('div');
+  drawer.setAttribute('id', 'lc-transcript-drawer');
+  const byId = new Map([['lc-transcript-drawer', drawer]]);
+  if (hasTranscriptTab) {
+    const tab = new El('button');
+    tab.setAttribute('id', 'lc-dock-tab-transcript');
+    byId.set('lc-dock-tab-transcript', tab);
+  }
+  const document = {
+    body,
+    addEventListener: () => {},
+    getElementById: (id) => byId.get(id) || null,
+    querySelector: (sel) => (sel === '[data-lc-call-dock]' ? dock : null),
+    querySelectorAll: () => [],
+  };
+  const window = {};
+  const sandbox = {
+    window,
+    document,
+    localStorage: { getItem: () => null, setItem: () => {} },
+    MutationObserver: class { observe() {} disconnect() {} },
+    setTimeout,
+    clearTimeout,
+    console: { warn() {}, log() {}, error() {} },
+  };
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, 'voice_dock.js'), 'utf8'), sandbox);
+  return { window, document, drawer };
+}
+
+test('a dock with a transcript tab pairs the shared drawer as its tabpanel', () => {
+  const { drawer } = loadWithDock(true);
+  assert.equal(drawer.getAttribute('role'), 'tabpanel');
+  assert.equal(drawer.getAttribute('aria-labelledby'), 'lc-dock-tab-transcript');
+});
+
+test('a dock with no transcript tab leaves the shared drawer unpaired', () => {
+  const { drawer } = loadWithDock(false);
+  assert.equal(drawer.hasAttribute('role'), false);
+  assert.equal(drawer.hasAttribute('aria-labelledby'), false);
+});
+
 test('LC-1195: with no dock on the page the module is an inert no-op', () => {
   const { window, body } = load();
   // It still exports the API (loaded globally), but touching it does nothing and
