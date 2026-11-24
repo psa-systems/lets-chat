@@ -5404,7 +5404,11 @@ body.lc-transcript-open #main { padding-right: 20rem; }
    the dock's own body is hidden out of the way. */
 .lc-call-dock.lc-dock--transcript .lc-call-dock-body { display: none; }
 .lc-call-dock-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.lc-call-dock-panel.hidden { display: none; }
+/* The shared tablist controller drives the panels via the native [hidden]
+   attribute, not a class; the display:flex above has equal specificity to the
+   UA [hidden] rule and wins by cascade order, so it must be re-asserted here
+   (same fix as .lc-set-panel[hidden]). */
+.lc-call-dock-panel[hidden] { display: none; }
 .lc-call-dock-panel--diag { overflow-y: auto; }
 /* Chat: the message log scrolls, the composer pins to the bottom. */
 .lc-call-dock-panel--chat #messages { flex: 1 1 auto; min-height: 0; overflow-y: auto; }

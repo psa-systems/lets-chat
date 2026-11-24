@@ -29,10 +29,24 @@
 
   var TAB_KEY = 'lc-call-dock-tab'; // remembers the last chat/diag body tab
 
+  // The strip's markup follows the shared tablist controller's contract, but
+  // those markup attributes are reserved to that controller's own script
+  // alone (check-single-tab-controller.nu); every button also carries a
+  // stable id, so this module finds and orders them by id instead of ever
+  // touching the attributes itself.
+  var TAB_ORDER = ['chat', 'transcript', 'diag'];
+
   function dock() { return document.querySelector('[data-lc-call-dock]'); }
-  function tabBtn(name) { return document.querySelector('[data-lc-dock-tab="' + name + '"]'); }
-  function panel(name) { return document.querySelector('[data-lc-dock-panel="' + name + '"]'); }
+  function tabBtn(name) { return document.getElementById('lc-dock-tab-' + name); }
   function hasTab(name) { return !!tabBtn(name); }
+
+  // The tabs currently present (diag only when the flag/admin gate rendered
+  // it), in strip order, each paired with its name for the keyboard/click
+  // handlers below.
+  function dockTabs() {
+    return TAB_ORDER.map(function (name) { return { name: name, el: tabBtn(name) }; })
+      .filter(function (t) { return !!t.el; });
+  }
 
   // The transcript is owned by transcribe.js; read/drive it through its API, with
   // a body-class fallback so a missing API never wedges the dock.
@@ -75,25 +89,23 @@
   }
 
   // Reflect the current state onto the dock UI. Pure mirror: safe to call from
-  // either a user action or the transcript observer, and idempotent.
-  function render() {
+  // either a user action or the transcript observer, and idempotent. `focus`
+  // only matters for the tab strip's own aria-selected/roving-tabindex
+  // bookkeeping (driven through the shared controller's exported
+  // lcSelectTab): true moves the browser focus onto the newly active tab
+  // button, for arrow-key navigation across the strip.
+  function render(focus) {
     var d = dock();
     if (!d) return;
     var transcript = isTranscriptOpen();
     // The transcript opening on its own (a session starting) must reveal the dock.
     if (transcript && d.classList.contains('hidden')) ensureOpen();
     var active = activeTab();
-    // Tab buttons.
-    ['chat', 'transcript', 'diag'].forEach(function (name) {
-      var b = tabBtn(name);
-      if (b) b.setAttribute('aria-selected', name === active ? 'true' : 'false');
-    });
-    // Body panels: visible only when their tab is active AND the transcript (which
-    // overlays the dock body via CSS) is not showing.
-    ['chat', 'diag'].forEach(function (name) {
-      var p = panel(name);
-      if (p) p.classList.toggle('hidden', transcript || name !== active);
-    });
+    // Tab buttons (aria-selected + roving tabindex) and the chat/diag body
+    // panels (visible only when their tab is active; "transcript" never
+    // matches either panel's key, so both are hidden together while it shows,
+    // same as the explicit transcript check this replaced).
+    window.lcSelectTab(d, active, focus);
     // CSS hides the dock body + aligns the shared transcript to the column.
     d.classList.toggle('lc-dock--transcript', transcript);
     if (!transcript && active === 'chat') { clearUnread(); scrollChatToBottom(); }
@@ -106,19 +118,24 @@
     document.body.classList.add('lc-dock-open'); // CSS reserves the column on #main
   }
 
-  function openTo(tab) {
+  // `focus` is set only by the tab strip's own arrow-key navigation below: it
+  // moves the browser focus onto the newly active tab button (the roving-
+  // tabindex contract every other tablist in the app follows), and for that
+  // reason must NOT also steal focus into the chat composer, which a plain
+  // click/toolbar-toggle activation still does.
+  function openTo(tab, focus) {
     if (!dock()) return;
     ensureOpen();
     if (tab === 'transcript') {
       showTranscript(true); // observer -> render; call render now for immediacy
-      render();
+      render(focus);
       return;
     }
     if (tab === 'diag' && !hasTab('diag')) tab = 'chat';
     setLastBodyTab(tab);
     if (isTranscriptOpen()) showTranscript(false); // leaving the transcript tab closes the drawer
-    render();
-    if (tab === 'chat') { var t = document.querySelector('#lc-call-chat textarea[name="body"]'); if (t) try { t.focus(); } catch (e) {} }
+    render(focus);
+    if (tab === 'chat' && !focus) { var t = document.querySelector('#lc-call-chat textarea[name="body"]'); if (t) try { t.focus(); } catch (e) {} }
   }
 
   function collapse() {
@@ -179,15 +196,44 @@
 
   // ---- events -----------------------------------------------------------
 
-  // Tab strip + collapse (inside the dock).
+  // Tab strip + collapse (inside the dock). Tab buttons are found by role and
+  // id, never by the shared tablist markup attributes (reserved to tabs.js).
   document.addEventListener('click', function (e) {
     if (!e.target || !e.target.closest) return;
-    if (!dock()) return;
-    var tab = e.target.closest('[data-lc-dock-tab]');
-    if (tab) { openTo(tab.getAttribute('data-lc-dock-tab')); return; }
+    var d = dock();
+    if (!d) return;
+    var tabEl = e.target.closest('[role="tab"]');
+    var tab = tabEl && d.contains(tabEl) && dockTabs().filter(function (t) { return t.el === tabEl; })[0];
+    if (tab) { openTo(tab.name); return; }
     if (e.target.closest('[data-lc-dock-collapse]')) { collapse(); return; }
     var chatToggle = e.target.closest('[data-lc-chat-toggle]');
     if (chatToggle) { e.preventDefault(); toggleTab('chat'); return; }
+  });
+
+  // Roving-tabindex arrow-key navigation across the strip, matching the
+  // contract used by settings/enclave/room-info - the dock can't call
+  // window.lcInitTabs itself (its selection has to route through
+  // showTranscript/diag-fallback/unread, which the shared controller has no
+  // concept of), so this reimplements only the key-to-next-tab mapping, then
+  // drives the actual activation through the same openTo() a click uses.
+  document.addEventListener('keydown', function (e) {
+    if (!e.target || !e.target.closest) return;
+    var d = dock();
+    if (!d) return;
+    var current = e.target.closest('[role="tab"]');
+    if (!current || !d.contains(current)) return;
+    var tabs = dockTabs();
+    var idx = -1;
+    for (var i = 0; i < tabs.length; i++) { if (tabs[i].el === current) { idx = i; break; } }
+    if (idx < 0) return;
+    var nextIdx = null;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') nextIdx = (idx + 1) % tabs.length;
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') nextIdx = (idx - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = tabs.length - 1;
+    if (nextIdx === null) return;
+    e.preventDefault();
+    openTo(tabs[nextIdx].name, true);
   });
 
   // The transcript toolbar toggle is also handled by transcribe.js (it toggles
