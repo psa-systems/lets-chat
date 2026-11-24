@@ -1871,6 +1871,11 @@
     var on = sfu ? selfSharing : isSharingScreen();
     setLabel(btn, on ? window.__lcS('callStopSharing', 'Stop sharing') : window.__lcS('callShareScreen', 'Share screen'));
     btn.setAttribute('aria-pressed', on ? 'true' : 'false'); // LC-402 on/off state
+    // LC-1226: the "Change source" control shows only while a share is live, and
+    // only where the native picker exists (so it never appears on a webview with
+    // no getDisplayMedia - which also cannot start a share in the first place).
+    var sw = q('[data-lc-voice-screen-switch]');
+    if (sw) toggle(sw, on && !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia));
   }
 
   // Camera on/off mid-call: acquire or release the video track and add it to
@@ -2079,6 +2084,82 @@
         console.warn('voice: getDisplayMedia failed', e);
         voiceDiag('getDisplayMedia failed: ' + name); // LC-1114
         // LC-1173: a silent failure left Linux users with no clue (missing GStreamer/PipeWire).
+        window.__lcNotify('err', window.__lcS('callScreenshareFailed', 'Screen sharing failed (%error%).').replace('%error%', name));
+      }
+    });
+  }
+
+  // LC-1226: change what's being shared mid-share without stopping. Re-invokes
+  // the native OS/webview picker and swaps the shared track via replaceTrack, so
+  // viewers see the new source without the share dropping. Screen track ONLY: the
+  // camera is never touched here, so this never hits the WKWebView
+  // camera-reacquire bug (LC-1165). The old track is stopped only AFTER the swaps
+  // settle, reusing toggleScreen's ordering so no black frame is sent. The picker
+  // offers whatever the environment has (screen/window, plus a tab in a Chromium
+  // browser; screen/window only in the native webviews) - we never render our own
+  // source list, so we never promise a source the environment cannot capture.
+  function switchScreenSource() {
+    // Gate identically to starting a share: no getDisplayMedia -> nothing to pick
+    // (e.g. the macOS <=12 desktop webview, LC-1166 - which cannot share at all).
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      var onDesktop = isDesktopShell();
+      window.__lcNotify('err', onDesktop
+        ? window.__lcS('callNoScreenshareDesktop', 'Screen sharing is not available in the desktop app on this version of macOS (it needs macOS 13 or newer). Open Let’s Chat in a web browser to share your screen.')
+        : window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
+      return;
+    }
+    if (sfu) {
+      if (!selfSharing) return;
+      window.LetsChatHuddleSfu.switchScreen().then(function () {
+        setScreenBtn();
+        voiceDiag('screen: switched source', 'diag');
+      }).catch(function (e) {
+        var name = e && e.name ? e.name : 'error';
+        console.warn('voice: SFU switch screen failed', e);
+        voiceDiag('switch screen failed: ' + name, 'error');
+        window.__lcNotify('err', window.__lcS('callScreenshareFailed', 'Screen sharing failed (%error%).').replace('%error%', name));
+      });
+      return;
+    }
+    if (!joined || !localStream || !isSharingScreen()) return;
+    var oldTrack = screenTrack;
+    navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }).then(function (dstream) {
+      var dtrack = dstream.getVideoTracks()[0];
+      if (!dtrack) return;
+      // Share ended while the picker was open: discard the new pick, change nothing.
+      if (!joined || !localStream || !isSharingScreen()) { try { dtrack.stop(); } catch (e) {} return; }
+      try { dtrack.contentHint = 'detail'; } catch (e) {}
+      // Detach the OLD track's auto-end handler first, so stopping it below is not
+      // read as the user clicking the browser's "Stop sharing".
+      if (oldTrack) oldTrack.onended = null;
+      localStream.addTrack(dtrack);
+      screenTrack = dtrack;
+      dtrack.onended = function () { endScreenShare(); };
+      var sv = tileVideo(cfg.selfId);
+      if (sv) { sv.srcObject = null; sv.srcObject = localStream; }
+      updateTileMedia(cfg.selfId);
+      // Swap every peer's outgoing video slot to the new track (replaceTrack, no
+      // renegotiation) while the old track is still live, then drop the old one.
+      var swaps = Object.keys(peers).map(function (uid) {
+        return swapPeerVideo(peers[uid].pc, dtrack);
+      });
+      Promise.all(swaps).then(function () {
+        if (oldTrack) {
+          try { oldTrack.stop(); } catch (e) {}
+          try { if (localStream) localStream.removeTrack(oldTrack); } catch (e) {}
+        }
+        if (!localStream) return;
+        var sv2 = tileVideo(cfg.selfId);
+        if (sv2) { sv2.srcObject = null; sv2.srcObject = localStream; }
+        updateTileMedia(cfg.selfId);
+      });
+      voiceDiag('screen: switched source', 'diag');
+    }).catch(function (e) {
+      // User-cancel from the picker: keep the current share unchanged.
+      var name = e && e.name ? e.name : 'error';
+      if (name !== 'NotAllowedError' && name !== 'AbortError') {
+        console.warn('voice: switch getDisplayMedia failed', e);
+        voiceDiag('switch screen failed: ' + name, 'error');
         window.__lcNotify('err', window.__lcS('callScreenshareFailed', 'Screen sharing failed (%error%).').replace('%error%', name));
       }
     });
@@ -2359,6 +2440,7 @@
     '[data-lc-voice-mute]': function () { toggleMute(); },
     '[data-lc-voice-camera]': function () { toggleCamera(); },
     '[data-lc-voice-screen]': function () { toggleScreen(); },
+    '[data-lc-voice-screen-switch]': function () { switchScreenSource(); },
   });
 
   function onReady(fn) {
