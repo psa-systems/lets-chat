@@ -131,6 +131,9 @@ function load(opts) {
       // LC-1166: the SFU screen toggle. `sfuScreenError` makes it reject (a real
       // failure, e.g. Linux missing GStreamer/PipeWire); otherwise it resolves.
       toggleScreen: () => (opts.sfuScreenError ? Promise.reject(opts.sfuScreenError) : Promise.resolve(true)),
+      // LC-1226: mid-share source switch. Records the call so a test can assert the
+      // Change-source control delegates to it; `sfuSwitchError` makes it reject.
+      switchScreen: () => { sfuCalls.push('switch-screen'); return opts.sfuSwitchError ? Promise.reject(opts.sfuSwitchError) : Promise.resolve(true); },
     },
     __lcToast: (kind, msg) => { toasts.push([kind, msg]); },
     __lcNotify: (kind, msg) => { toasts.push([kind, msg]); },
@@ -223,6 +226,7 @@ function load(opts) {
     popout: window.LetsChatHuddlePopout,
     join: () => controls['[data-lc-voice-join]'](),
     screenClick: () => controls['[data-lc-voice-screen]'](),
+    switchClick: () => controls['[data-lc-voice-screen-switch]'](), // LC-1226
     toasts,
     sfuHooks: () => sfuHooks,
     // Deliver one inbound server frame as a bus node (data-* attributes), the
@@ -245,8 +249,8 @@ function load(opts) {
 }
 
 // A joined call on room 7's dock, as the page it was joined from.
-function joined() {
-  const h = load();
+function joined(opts) {
+  const h = load(opts);
   const dock = makeDock(7);
   h.main.appendChild(dock);
   h.fire('htmx:afterSettle');           // scan() binds the page's dock
@@ -422,6 +426,47 @@ test('LC-1173: cancelling the screen picker does not notify', async () => {
   await Promise.resolve();
 
   assert.equal(h.toasts.length, 0, 'a user cancel is not a fault');
+  h.leaveClick();
+});
+
+// LC-1226: the "Change source" control swaps the shared source mid-share. On the
+// SFU path it delegates to LetsChatHuddleSfu.switchScreen (which replaceTracks the
+// published screen track). Here we assert the dispatch + the while-sharing gate.
+test('LC-1226: Change source delegates to the SFU switch, but only while sharing', async () => {
+  const h = joined(); // SFU call live
+  await Promise.resolve();
+
+  // Not sharing yet: the control is a no-op (no switch, no error toast).
+  h.switchClick();
+  await Promise.resolve();
+  assert.ok(!h.sfuCalls.includes('switch-screen'), 'no switch when nothing is shared');
+  assert.equal(h.toasts.length, 0, 'the no-op path never toasts');
+
+  // Start a share, then switch: it delegates to the SFU switch.
+  h.screenClick();
+  await Promise.resolve();
+  await Promise.resolve();
+  h.switchClick();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.ok(h.sfuCalls.includes('switch-screen'), 'Change source delegates to the SFU switch while sharing');
+
+  h.leaveClick();
+});
+
+test('LC-1226: a Change-source failure (not a user cancel) notifies the call UI', async () => {
+  const err = Object.assign(new Error('switch failed'), { name: 'NotFoundError' });
+  const h = joined({ sfuSwitchError: err });
+  await Promise.resolve();
+  h.screenClick();
+  await Promise.resolve();
+  await Promise.resolve();
+  h.switchClick();
+  await Promise.resolve();
+  await Promise.resolve();
+  const errs = h.toasts.filter((t) => t[0] === 'err');
+  assert.equal(errs.length, 1, 'exactly one error notification');
+  assert.match(errs[0][1], /Screen sharing failed/);
   h.leaveClick();
 });
 
