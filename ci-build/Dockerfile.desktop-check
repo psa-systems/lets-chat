@@ -10,6 +10,10 @@ FROM ghcr.io/niceguyit/rust-builder-glibc:v1.2.0-rust1.98.1-trixie
 
 ARG CARGO_BUILD_JOBS=default
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
+# Workflow-level profile env from desktop-check.yml; defaults match it for local builds.
+ARG CARGO_PROFILE_DEV_DEBUG=line-tables-only
+ARG CARGO_INCREMENTAL=0
+ENV CARGO_PROFILE_DEV_DEBUG=${CARGO_PROFILE_DEV_DEBUG} CARGO_INCREMENTAL=${CARGO_INCREMENTAL}
 
 WORKDIR /build
 COPY . .

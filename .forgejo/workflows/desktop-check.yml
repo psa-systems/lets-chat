@@ -29,6 +29,11 @@ on:
     branches:
       - main
 
+# Profile chapter 1: same dev-profile artifacts for every job; forwarded into the Docker build below.
+env:
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_INCREMENTAL: "0"
+
 jobs:
   classify-diff:
     name: classify diff
@@ -62,7 +67,7 @@ jobs:
         uses: https://dev.a8n.run/psa-systems/common/.forgejo/actions/build-parallelism@main
 
       - name: fmt, clippy and tests (in the Dockerfile)
-        run: docker buildx build --build-arg CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-default}" -f ci-build/Dockerfile.desktop-check .
+        run: docker buildx build --build-arg CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-default}" --build-arg CARGO_PROFILE_DEV_DEBUG="$CARGO_PROFILE_DEV_DEBUG" --build-arg CARGO_INCREMENTAL="$CARGO_INCREMENTAL" -f ci-build/Dockerfile.desktop-check .
 
       - name: Report job metrics
         if: always()

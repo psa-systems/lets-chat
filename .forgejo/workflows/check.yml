@@ -23,6 +23,11 @@ on:
     branches:
       - main
 
+# Profile chapter 1: same dev-profile artifacts and cache key for every job of the workflow.
+env:
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_INCREMENTAL: "0"
+
 jobs:
   check:
     name: clippy + fmt + tests
