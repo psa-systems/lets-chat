@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Fixed
+
+- **The call diagnostics log no longer flags normal transcription as errors (LC-1227).** The per-call voice log (Admin > Voice log) was marking expected transcription conditions as errors - the server-side speech-to-text hitting its rate limit and backing off (which is the load limit working as designed), a live mic with no captions (usually just a quiet moment), and the browser recognizer falling back to the server engine. A healthy call could show dozens of "errors" with nothing actually wrong. These are now recorded as informational entries, so the error view reflects real faults (a blocked microphone, a failed connection) and a genuinely bad call stands out instead of drowning in noise.
+
 ## [v0.17.0] - 2026-11-23
 
 ### Added
