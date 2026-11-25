@@ -439,6 +439,50 @@
     return on;
   }
 
+  // LC-1226: change the shared source mid-share without stopping. Prefer
+  // LiveKit's LocalVideoTrack.replaceTrack on the published screen track - no
+  // unpublish/republish, so viewers see the new source seamlessly. If the
+  // publication or replaceTrack is not available (older SDK), fall back to
+  // off->on, which re-opens the picker once and briefly drops the share. No-op
+  // when not currently sharing. Returns a promise; voice.js surfaces failures.
+  async function switchScreen() {
+    if (!session || !session.sharing) return false;
+    var lp = session.room.localParticipant;
+    var pub = (LK && LK.Track && lp.getTrackPublication)
+      ? lp.getTrackPublication(LK.Track.Source.ScreenShare)
+      : null;
+    var track = pub && pub.track;
+    if (track && typeof track.replaceTrack === 'function') {
+      var dstream;
+      try {
+        dstream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      } catch (e) {
+        // User-cancel from the picker: keep the current share unchanged.
+        var name = e && e.name ? e.name : '';
+        if (name === 'NotAllowedError' || name === 'AbortError') return true;
+        throw e;
+      }
+      var newTrack = dstream.getVideoTracks()[0];
+      if (!newTrack) return true;
+      try { newTrack.contentHint = 'detail'; } catch (e) {}
+      try {
+        await track.replaceTrack(newTrack);
+        attachSelfVideo(session);
+        return true;
+      } catch (e) {
+        dbg('screen switch replaceTrack failed; falling back to off/on', e);
+        try { newTrack.stop(); } catch (ee) {}
+        // fall through to the off->on path below
+      }
+    }
+    // Fallback: stop then restart. setScreenShareEnabled(true) opens the picker
+    // itself, so this path prompts exactly once (never double-prompts).
+    await lp.setScreenShareEnabled(false);
+    await lp.setScreenShareEnabled(true);
+    attachSelfVideo(session);
+    return true;
+  }
+
   // LC-854: send one remote-control frame to a single peer over the data
   // channel. `text` is the JSON frame; `toIdentity` the sharer's user id;
   // `reliable` false for movement (drop-old is fine), true for clicks/keys.
@@ -466,6 +510,7 @@
     toggleMute: toggleMute,
     toggleCamera: toggleCamera,
     toggleScreen: toggleScreen,
+    switchScreen: switchScreen,
     sendControl: sendControl,
     onControlData: onControlData,
   };

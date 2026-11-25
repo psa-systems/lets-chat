@@ -170,6 +170,7 @@ voice-mute = Mute
 voice-muted-nudge = You're muted
 voice-start-video = Start video
 voice-share-screen = Share screen
+voice-switch-share = Change source
 voice-leave = Leave
 voice-devices = Call devices
 voice-choose-devices = Choose call devices

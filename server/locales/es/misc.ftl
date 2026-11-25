@@ -168,6 +168,7 @@ voice-mute = Silenciar
 voice-muted-nudge = Tienes el micrófono silenciado
 voice-start-video = Iniciar vídeo
 voice-share-screen = Compartir pantalla
+voice-switch-share = Cambiar fuente
 voice-leave = Salir
 voice-devices = Dispositivos de llamada
 voice-choose-devices = Elegir dispositivos de llamada

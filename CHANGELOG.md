@@ -8,6 +8,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Added
+
+- **Change what you're sharing mid-share, without stopping (LC-1226).** While you're sharing your screen in a call, a "Change source" button now lets you pick a different screen or window (or, in a Chromium browser, a different tab) and swap to it in place - viewers keep seeing your share with no drop or restart. The picker is the browser/OS one, so it only ever offers sources that environment can actually capture: in a web browser that includes a specific tab, but in the desktop app it is screens and windows only (the native webview can't capture a browser tab). The control appears only while you're sharing, and only where screen sharing is available in the first place.
+
 ### Fixed
 
 - **The call diagnostics log no longer flags normal transcription as errors (LC-1227).** The per-call voice log (Admin > Voice log) was marking expected transcription conditions as errors - the server-side speech-to-text hitting its rate limit and backing off (which is the load limit working as designed), a live mic with no captions (usually just a quiet moment), and the browser recognizer falling back to the server engine. A healthy call could show dozens of "errors" with nothing actually wrong. These are now recorded as informational entries, so the error view reflects real faults (a blocked microphone, a failed connection) and a genuinely bad call stands out instead of drowning in noise.
