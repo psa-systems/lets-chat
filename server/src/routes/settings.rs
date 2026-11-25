@@ -1050,36 +1050,38 @@ pub async fn post_profile(
     // LC-766: apply a handle change first, so a refusal (taken / reserved /
     // cooldown / malformed) returns before any other field is written. An
     // unchanged handle is a no-op that never burns the cooldown.
-    if let Some(raw) = username_field {
+    // Check for "unchanged" against the raw submission BEFORE validate_handle
+    // runs, so a resubmission of the user's own pre-cap handle (grandfathered
+    // above MAX_USERNAME_CHARS) never gets rejected by a cap that only
+    // applies to an actual change.
+    if let Some(raw) = username_field.filter(|raw| raw.trim() != user.username) {
         let handle = match crate::models::user::validate_handle(&raw) {
             Ok(h) => h,
             Err(msg) => return Ok(settings_error(&headers, &msg)),
         };
-        if handle != user.username {
-            let admin = user.role == "admin";
-            match db::auth::change_username(&state.auth, &user.id, &handle, true, !admin).await {
-                Ok(change) => emit_handle_changed(&state, &user.id, &change),
-                Err(db::auth::ChangeHandleError::Taken) => {
-                    return Ok(settings_error(
-                        &headers,
-                        &format!("The handle @{handle} is already taken."),
-                    ));
-                }
-                Err(db::auth::ChangeHandleError::Reserved) => {
-                    return Ok(settings_error(
-                        &headers,
-                        &format!("The handle @{handle} is reserved right now. Choose another."),
-                    ));
-                }
-                Err(db::auth::ChangeHandleError::Cooldown { available_on }) => {
-                    let date = available_on.split(' ').next().unwrap_or(&available_on);
-                    return Ok(settings_error(
-                        &headers,
-                        &format!("You can change your handle again on {date}."),
-                    ));
-                }
-                Err(db::auth::ChangeHandleError::Db(e)) => return Err(e.into()),
+        let admin = user.role == "admin";
+        match db::auth::change_username(&state.auth, &user.id, &handle, true, !admin).await {
+            Ok(change) => emit_handle_changed(&state, &user.id, &change),
+            Err(db::auth::ChangeHandleError::Taken) => {
+                return Ok(settings_error(
+                    &headers,
+                    &format!("The handle @{handle} is already taken."),
+                ));
             }
+            Err(db::auth::ChangeHandleError::Reserved) => {
+                return Ok(settings_error(
+                    &headers,
+                    &format!("The handle @{handle} is reserved right now. Choose another."),
+                ));
+            }
+            Err(db::auth::ChangeHandleError::Cooldown { available_on }) => {
+                let date = available_on.split(' ').next().unwrap_or(&available_on);
+                return Ok(settings_error(
+                    &headers,
+                    &format!("You can change your handle again on {date}."),
+                ));
+            }
+            Err(db::auth::ChangeHandleError::Db(e)) => return Err(e.into()),
         }
     }
 
