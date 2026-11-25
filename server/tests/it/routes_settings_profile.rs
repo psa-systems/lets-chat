@@ -343,7 +343,11 @@ fn multipart_username_and_display_name(username: &str, display_name: &str) -> Ve
     body
 }
 
-async fn post_profile_multipart(app: &Router, sess: &str, body: Vec<u8>) -> axum::response::Response {
+async fn post_profile_multipart(
+    app: &Router,
+    sess: &str,
+    body: Vec<u8>,
+) -> axum::response::Response {
     let req = Request::builder()
         .method(Method::POST)
         .uri("/settings/profile")
