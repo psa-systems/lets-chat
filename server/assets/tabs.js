@@ -12,10 +12,31 @@
 (function () {
   'use strict';
 
+  // The aria-selected/roving-tabindex/panel-hidden bookkeeping, split out so a
+  // controller with its own richer selection rules (the call dock's tab vs.
+  // transcript-drawer routing) can drive the standard contract through this
+  // instead of hand-rolling it, rather than only through the click/keydown/
+  // hash/storage wiring below.
+  function selectTab(root, key, focus) {
+    if (!root) return;
+    var tabs = Array.prototype.slice.call(root.querySelectorAll('[data-lc-tab]'));
+    tabs.forEach(function (t) {
+      var on = t.getAttribute('data-lc-tab') === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      // A focus() that throws (detached or hidden tab) is not a failure worth
+      // reporting: the selection below still applies, only the caret moves.
+      if (on && focus) { try { t.focus(); } catch (e) {} }
+    });
+    var panels = Array.prototype.slice.call(root.querySelectorAll('[data-lc-tabpanel]'));
+    panels.forEach(function (p) {
+      p.hidden = p.getAttribute('data-lc-tabpanel') !== key;
+    });
+  }
+
   function initTabs(root, storageKey) {
     if (!root) return;
     var tabs = Array.prototype.slice.call(root.querySelectorAll('[data-lc-tab]'));
-    var panels = Array.prototype.slice.call(root.querySelectorAll('[data-lc-tabpanel]'));
     if (!tabs.length) return;
 
     function valid(key) {
@@ -23,17 +44,7 @@
     }
 
     function select(key, focus) {
-      tabs.forEach(function (t) {
-        var on = t.getAttribute('data-lc-tab') === key;
-        t.setAttribute('aria-selected', on ? 'true' : 'false');
-        t.tabIndex = on ? 0 : -1;
-        // A focus() that throws (detached or hidden tab) is not a failure worth
-        // reporting: the selection below still applies, only the caret moves.
-        if (on && focus) { try { t.focus(); } catch (e) {} }
-      });
-      panels.forEach(function (p) {
-        p.hidden = p.getAttribute('data-lc-tabpanel') !== key;
-      });
+      selectTab(root, key, focus);
       // Remember the tab so a full-page reload (a no-JS fallback redirect, or a
       // form that redirects) returns to it instead of resetting to the first.
       // Storage being disabled or full only costs that memory, and nothing
@@ -102,4 +113,5 @@
   }
 
   window.lcInitTabs = initTabs;
+  window.lcSelectTab = selectTab;
 })();

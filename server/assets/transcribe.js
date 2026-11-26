@@ -115,10 +115,13 @@
 
   // LC-1129: "talking but not picked up" watchdog for the browser (Web Speech)
   // engine. While capturing with a LIVE mic, if no caption (recog.onresult) has
-  // arrived for the window, emit ONE error; re-arm only once the next caption
+  // arrived for the window, emit ONE line; re-arm only once the next caption
   // lands, so a continuously-silent room logs a single line, not a stream. The
   // server engine does not use this (its captions come back as server-rendered
   // OOB swaps, and its clip path has its own upload-failure signals).
+  // LC-1227: logged at 'diag', not 'error' - a live mic with no captions is
+  // usually just a quiet participant, not a fault, so it does not belong in the
+  // error view; it stays as a breadcrumb for "why were there no captions".
   var SILENCE_MS = 60000;
   var silenceTimer = null;
   var silenceFired = false;
@@ -135,7 +138,7 @@
       silenceTimer = null;
       if (!capturing || micMuted || silenceFired) return;
       silenceFired = true;
-      callDiag('transcribe: no captions in 60s (mic live)', 'error');
+      callDiag('transcribe: no captions in 60s (mic live)', 'diag');
     }, silenceMs());
   }
   // A caption arrived: clear any fired latch and re-arm for the next gap.
@@ -477,12 +480,17 @@
     // server engine when the operator has one, rather than capture nothing.
     recog.onerror = function (ev) {
       var err = ev && ev.error;
-      // LC-1129: surface the speech errors that explain missing captions (the
-      // recognizer's cloud is unreachable/disabled, or the mic is blocked). This
-      // is in addition to - and does not change - the server-engine fallback.
-      if (err === 'network' || err === 'service-not-allowed' ||
-          err === 'not-allowed' || err === 'audio-capture') {
+      // LC-1129/LC-1227: surface the speech errors that explain missing captions.
+      // A blocked / unavailable mic ('not-allowed', 'audio-capture') is a genuine
+      // fault - no engine can transcribe this user - so it stays an error. The
+      // browser cloud recognizer being unreachable ('network', 'service-not-allowed')
+      // is recovered below by the server-engine fallback when one is configured, so
+      // log it as a diag there (not a scary error for a condition we auto-handle);
+      // only when there is no server engine to fall back to is it a real error.
+      if (err === 'not-allowed' || err === 'audio-capture') {
         callDiag('transcribe: speech error ' + err, 'error');
+      } else if (err === 'network' || err === 'service-not-allowed') {
+        callDiag('transcribe: speech error ' + err, sttServer ? 'diag' : 'error');
       }
       if ((err === 'network' || err === 'service-not-allowed') && sttServer && MR && !serverFallback) {
         serverFallback = true;
@@ -608,7 +616,11 @@
       // few in a row so we do not keep posting to a dead transcript.
       if (resp.status === 429) {
         audioBackoffUntil = Date.now() + 30000;
-        callDiag('transcribe: server rate-limited audio (429), backing off 30s', 'error', window.__lcSessionRoom);
+        // LC-1227: a 429 is the server-side STT rate caps (LETS_CHAT_STT_RATE_*)
+        // doing their job - expected load-shedding under concurrent speakers, not
+        // a fault. The client just backs off and resumes, so log it as a diag
+        // (still visible for capacity tuning) rather than an error.
+        callDiag('transcribe: server rate-limited audio (429), backing off 30s', 'diag', window.__lcSessionRoom);
       } else if (resp.status === 404) {
         audioNotFound += 1;
         if (audioNotFound >= 3 && transcriptId === tid) {

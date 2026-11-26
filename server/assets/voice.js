@@ -295,8 +295,10 @@
     var name = document.createElement('span');
     name.className = 'lc-voice-name';
     // LC-410: per-peer connection-quality glyph. Hidden until the tile gets a
-    // data-quality (set by the quality monitor); never set on the self tile,
-    // which has no peer connection. Signal bars, recoloured by CSS per state.
+    // data-quality (set by the quality monitor). Signal bars, recoloured by CSS
+    // per state. LC-1218: the self tile gets one too, driven by an aggregate of
+    // the peer connections (your own link has no single pc to measure, but a bad
+    // local uplink/downlink shows up across every peer - see updateSelfQuality).
     var quality = document.createElement('span');
     quality.className = 'lc-voice-quality';
     quality.setAttribute('data-lc-voice-quality', '');
@@ -1014,6 +1016,46 @@
       el.setAttribute('aria-label', label);
     }
   }
+  // LC-1218: the self tile has no RTCPeerConnection of its own to measure, so
+  // derive its signal from the peer connections. Each peer records `selfSignal`
+  // - what that path says about MY link: my receive loss/RTT from them PLUS the
+  // loss the far end reports on the stream I SEND (remote-inbound-rtp = my
+  // uplink, the "can they hear me" signal). We flag the self tile only when the
+  // trouble is SHARED across at least half the peers; a single struggling remote
+  // peer is their problem, not yours, so one bad path never reddens your own
+  // indicator. Alone in the call there is nothing to measure, so it stays hidden.
+  var SELF_SEV = { good: 0, degraded: 1, reconnecting: 2, failed: 3 };
+  function setSelfQuality(q) {
+    if (!cfg || !cfg.selfId) return;
+    if (!q) {
+      var t = grid() && grid().querySelector('[data-lc-voice-tile="' + cssEscape(cfg.selfId) + '"]');
+      if (t) t.removeAttribute('data-quality'); // nothing to measure -> hide
+      return;
+    }
+    setQuality(cfg.selfId, q); // same tile setter + tooltip as the remote tiles
+  }
+  // Pure aggregation (exported for unit testing): given each peer's selfSignal
+  // vote, decide the self tile's bucket - null when there is nothing to show
+  // (alone, or no measurement yet). Flagged only when at least half the peers
+  // agree the path is bad, so one struggling remote peer can never redden your
+  // own indicator; when flagged it shows the worst bucket seen.
+  function selfQualityBucket(vals) {
+    if (!vals || !vals.length) return null;
+    var bad = 0, worst = 'good';
+    vals.forEach(function (q) {
+      if (SELF_SEV[q] > 0) bad += 1;
+      if (SELF_SEV[q] > SELF_SEV[worst]) worst = q;
+    });
+    return bad * 2 >= vals.length ? worst : 'good';
+  }
+  function updateSelfQuality() {
+    var vals = [];
+    Object.keys(peers).forEach(function (uid) {
+      var q = peers[uid] && peers[uid].selfSignal;
+      if (q) vals.push(q);
+    });
+    setSelfQuality(selfQualityBucket(vals));
+  }
   // Map a non-connected RTCPeerConnection state to a quality bucket.
   function stateQuality(state) {
     if (state === 'failed') return 'failed';
@@ -1030,13 +1072,26 @@
       var p = peers[uid];
       if (!p || !p.pc) return;
       var state = p.pc.connectionState;
-      if (state !== 'connected') { applyConnectionState(uid, state); return; }
+      if (state !== 'connected') {
+        applyConnectionState(uid, state);
+        // LC-1218: a non-connected peer also feeds the self aggregate.
+        var sq = stateQuality(state);
+        if (sq) { p.selfSignal = sq; updateSelfQuality(); }
+        return;
+      }
       p.pc.getStats().then(function (report) {
         var lost = 0, recv = 0, rtt = null;
+        // LC-1218: uplink as the far end sees it (my send path = "can they hear me").
+        var upLost = 0, sent = 0, upRtt = null;
         report.forEach(function (s) {
           if (s.type === 'inbound-rtp') {
             if (typeof s.packetsLost === 'number') lost += s.packetsLost;
             if (typeof s.packetsReceived === 'number') recv += s.packetsReceived;
+          } else if (s.type === 'remote-inbound-rtp') {
+            if (typeof s.packetsLost === 'number') upLost += s.packetsLost;
+            if (typeof s.roundTripTime === 'number') upRtt = s.roundTripTime;
+          } else if (s.type === 'outbound-rtp') {
+            if (typeof s.packetsSent === 'number') sent += s.packetsSent;
           } else if (s.type === 'candidate-pair' && s.nominated &&
                      typeof s.currentRoundTripTime === 'number') {
             rtt = s.currentRoundTripTime;
@@ -1049,6 +1104,16 @@
         var lossRatio = (dLost + dRecv) > 0 ? dLost / (dLost + dRecv) : 0;
         var degraded = lossRatio > 0.03 || (rtt != null && rtt > 0.35);
         setQuality(uid, degraded ? 'degraded' : 'good');
+        // LC-1218: fold in the uplink loss the peer reports for my stream, then
+        // let this peer vote on the self tile's aggregate signal.
+        var uprev = p.upstats || { lost: 0, sent: 0 };
+        var dUpLost = Math.max(0, upLost - uprev.lost);
+        var dSent = Math.max(0, sent - uprev.sent);
+        p.upstats = { lost: upLost, sent: sent };
+        var upRatio = (dUpLost + dSent) > 0 ? dUpLost / (dUpLost + dSent) : 0;
+        var upDegraded = upRatio > 0.03 || (upRtt != null && upRtt > 0.35);
+        p.selfSignal = (degraded || upDegraded) ? 'degraded' : 'good';
+        updateSelfQuality();
       }).catch(function (e) {
         // getStats failed on this poll: the quality dot freezes at its last
         // value, so log rather than let it look like a steady connection.
@@ -1242,6 +1307,7 @@
     }
     delete peers[userId];
     removeTile(userId);
+    updateSelfQuality(); // LC-1218: a departed peer no longer votes on my signal
   }
 
   // LC-1138: tear down and rebuild one peer's RTCPeerConnection WITHOUT removing
@@ -1805,6 +1871,11 @@
     var on = sfu ? selfSharing : isSharingScreen();
     setLabel(btn, on ? window.__lcS('callStopSharing', 'Stop sharing') : window.__lcS('callShareScreen', 'Share screen'));
     btn.setAttribute('aria-pressed', on ? 'true' : 'false'); // LC-402 on/off state
+    // LC-1226: the "Change source" control shows only while a share is live, and
+    // only where the native picker exists (so it never appears on a webview with
+    // no getDisplayMedia - which also cannot start a share in the first place).
+    var sw = q('[data-lc-voice-screen-switch]');
+    if (sw) toggle(sw, on && !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia));
   }
 
   // Camera on/off mid-call: acquire or release the video track and add it to
@@ -2013,6 +2084,82 @@
         console.warn('voice: getDisplayMedia failed', e);
         voiceDiag('getDisplayMedia failed: ' + name); // LC-1114
         // LC-1173: a silent failure left Linux users with no clue (missing GStreamer/PipeWire).
+        window.__lcNotify('err', window.__lcS('callScreenshareFailed', 'Screen sharing failed (%error%).').replace('%error%', name));
+      }
+    });
+  }
+
+  // LC-1226: change what's being shared mid-share without stopping. Re-invokes
+  // the native OS/webview picker and swaps the shared track via replaceTrack, so
+  // viewers see the new source without the share dropping. Screen track ONLY: the
+  // camera is never touched here, so this never hits the WKWebView
+  // camera-reacquire bug (LC-1165). The old track is stopped only AFTER the swaps
+  // settle, reusing toggleScreen's ordering so no black frame is sent. The picker
+  // offers whatever the environment has (screen/window, plus a tab in a Chromium
+  // browser; screen/window only in the native webviews) - we never render our own
+  // source list, so we never promise a source the environment cannot capture.
+  function switchScreenSource() {
+    // Gate identically to starting a share: no getDisplayMedia -> nothing to pick
+    // (e.g. the macOS <=12 desktop webview, LC-1166 - which cannot share at all).
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      var onDesktop = isDesktopShell();
+      window.__lcNotify('err', onDesktop
+        ? window.__lcS('callNoScreenshareDesktop', 'Screen sharing is not available in the desktop app on this version of macOS (it needs macOS 13 or newer). Open Let’s Chat in a web browser to share your screen.')
+        : window.__lcS('callNoScreenshare', 'Screen sharing is not supported by your browser.'));
+      return;
+    }
+    if (sfu) {
+      if (!selfSharing) return;
+      window.LetsChatHuddleSfu.switchScreen().then(function () {
+        setScreenBtn();
+        voiceDiag('screen: switched source', 'diag');
+      }).catch(function (e) {
+        var name = e && e.name ? e.name : 'error';
+        console.warn('voice: SFU switch screen failed', e);
+        voiceDiag('switch screen failed: ' + name, 'error');
+        window.__lcNotify('err', window.__lcS('callScreenshareFailed', 'Screen sharing failed (%error%).').replace('%error%', name));
+      });
+      return;
+    }
+    if (!joined || !localStream || !isSharingScreen()) return;
+    var oldTrack = screenTrack;
+    navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }).then(function (dstream) {
+      var dtrack = dstream.getVideoTracks()[0];
+      if (!dtrack) return;
+      // Share ended while the picker was open: discard the new pick, change nothing.
+      if (!joined || !localStream || !isSharingScreen()) { try { dtrack.stop(); } catch (e) {} return; }
+      try { dtrack.contentHint = 'detail'; } catch (e) {}
+      // Detach the OLD track's auto-end handler first, so stopping it below is not
+      // read as the user clicking the browser's "Stop sharing".
+      if (oldTrack) oldTrack.onended = null;
+      localStream.addTrack(dtrack);
+      screenTrack = dtrack;
+      dtrack.onended = function () { endScreenShare(); };
+      var sv = tileVideo(cfg.selfId);
+      if (sv) { sv.srcObject = null; sv.srcObject = localStream; }
+      updateTileMedia(cfg.selfId);
+      // Swap every peer's outgoing video slot to the new track (replaceTrack, no
+      // renegotiation) while the old track is still live, then drop the old one.
+      var swaps = Object.keys(peers).map(function (uid) {
+        return swapPeerVideo(peers[uid].pc, dtrack);
+      });
+      Promise.all(swaps).then(function () {
+        if (oldTrack) {
+          try { oldTrack.stop(); } catch (e) {}
+          try { if (localStream) localStream.removeTrack(oldTrack); } catch (e) {}
+        }
+        if (!localStream) return;
+        var sv2 = tileVideo(cfg.selfId);
+        if (sv2) { sv2.srcObject = null; sv2.srcObject = localStream; }
+        updateTileMedia(cfg.selfId);
+      });
+      voiceDiag('screen: switched source', 'diag');
+    }).catch(function (e) {
+      // User-cancel from the picker: keep the current share unchanged.
+      var name = e && e.name ? e.name : 'error';
+      if (name !== 'NotAllowedError' && name !== 'AbortError') {
+        console.warn('voice: switch getDisplayMedia failed', e);
+        voiceDiag('switch screen failed: ' + name, 'error');
         window.__lcNotify('err', window.__lcS('callScreenshareFailed', 'Screen sharing failed (%error%).').replace('%error%', name));
       }
     });
@@ -2293,6 +2440,7 @@
     '[data-lc-voice-mute]': function () { toggleMute(); },
     '[data-lc-voice-camera]': function () { toggleCamera(); },
     '[data-lc-voice-screen]': function () { toggleScreen(); },
+    '[data-lc-voice-screen-switch]': function () { switchScreenSource(); },
   });
 
   function onReady(fn) {
@@ -2363,6 +2511,8 @@
     shouldAutoIceRestart: shouldAutoIceRestart,
     // LC-1196: pure muted-speech nudge decision, exported for unit testing.
     muteNudgeStep: muteNudgeStep,
+    // LC-1218: pure self-tile connection-quality aggregation, for unit testing.
+    selfQualityBucket: selfQualityBucket,
     summarizeStats: summarizeStats,
     iceOkLabel: iceOkLabel,
     iceFailLabel: iceFailLabel,

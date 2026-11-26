@@ -117,6 +117,9 @@ async fn main() {
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| r#"[{"urls":"stun:stun.l.google.com:19302"}]"#.to_string());
+    // LC-1219: load the optional TURN relay (ephemeral coturn credentials) once.
+    // No-op unless LETS_CHAT_TURN_URLS + LETS_CHAT_TURN_SECRET are set.
+    lets_chat::turn::init();
 
     // LC-22 pure-RP cutover: load and initialize the Bunyip SSO client at
     // startup. The four `LETS_CHAT_BUNYIP_SSO_*` env vars are mandatory;
@@ -815,6 +818,20 @@ fn spawn_scheduled_dispatcher(state: AppState) {
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "scheduled dispatch tick failed"),
+            }
+
+            // Piggyback the stale-filing-claim sweep on this existing
+            // 30-second tick rather than spawning a dedicated task. A
+            // `transcript_issue_proposals` row stuck at `filing` (its
+            // claimer was interrupted before resolving it to `filed` or
+            // back to `proposed`) has no other recovery path.
+            match lets_chat::db::transcript_proposals::sweep_stale_filing_claims(&state.chat).await
+            {
+                Ok(0) => {}
+                Ok(reclaimed) => {
+                    tracing::info!(reclaimed, "stale filing-claim sweep reclaimed rows");
+                }
+                Err(e) => tracing::warn!(error = %e, "stale filing-claim sweep failed"),
             }
         }
     });

@@ -4511,8 +4511,9 @@ html[data-lc-collapsed-groups~="dms"] [data-lc-sb-group="dms"] [data-lc-group-ch
 .lc-voice-mute-badge svg { height: 0.875rem; width: 0.875rem; }
 .lc-voice-tile[data-muted="true"] .lc-voice-mute-badge { display: inline-flex; }
 /* LC-410: per-peer connection-quality glyph, inside the name pill. Hidden
-   until the tile gets a data-quality (never on the self tile). Recoloured per
-   state; "reconnecting" pulses. */
+   until the tile gets a data-quality. LC-1218: the self tile gets one too, from
+   an aggregate of the peer connections (voice.js updateSelfQuality). Recoloured
+   per state; "reconnecting" pulses. */
 .lc-voice-quality { display: none; line-height: 0; flex: none; }
 .lc-voice-tile[data-quality] .lc-voice-quality { display: inline-flex; }
 .lc-voice-quality svg { height: 0.875rem; width: 0.875rem; }
@@ -5403,7 +5404,11 @@ body.lc-transcript-open #main { padding-right: 20rem; }
    the dock's own body is hidden out of the way. */
 .lc-call-dock.lc-dock--transcript .lc-call-dock-body { display: none; }
 .lc-call-dock-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.lc-call-dock-panel.hidden { display: none; }
+/* The shared tablist controller drives the panels via the native [hidden]
+   attribute, not a class; the display:flex above has equal specificity to the
+   UA [hidden] rule and wins by cascade order, so it must be re-asserted here
+   (same fix as .lc-set-panel[hidden]). */
+.lc-call-dock-panel[hidden] { display: none; }
 .lc-call-dock-panel--diag { overflow-y: auto; }
 /* Chat: the message log scrolls, the composer pins to the bottom. */
 .lc-call-dock-panel--chat #messages { flex: 1 1 auto; min-height: 0; overflow-y: auto; }

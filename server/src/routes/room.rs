@@ -253,6 +253,9 @@ async fn get_voice_room(
     } else {
         Vec::new()
     };
+    // LC-1219: STUN list + an ephemeral TURN credential for this user, if TURN
+    // is configured. Bound here so the &str field can borrow it.
+    let ice_servers = state.ice_servers_for(&user.id);
     let page = crate::views::voice::VoicePage {
         user,
         room,
@@ -267,7 +270,7 @@ async fn get_voice_room(
         sidebar_peers: &sidebar_peers,
         switcher: &switcher,
         asset_version: &state.asset_version,
-        ice_servers: &state.ice_servers,
+        ice_servers: &ice_servers,
         participants: &participants,
         remote_control_enabled,
         show_call_diag,
@@ -723,6 +726,9 @@ pub async fn get_room(
     // LC-1065: one GIF-availability read feeds both the picker gate and the
     // admin-only "not configured" teaser.
     let gif_available = crate::gif::available(&state).await;
+    // LC-1219: STUN list + an ephemeral TURN credential for this user, if TURN
+    // is configured. Bound here so the &str field can borrow it.
+    let ice_servers = state.ice_servers_for(&user.id);
     let page = RoomPage {
         user: &user,
         room: &room,
@@ -755,7 +761,7 @@ pub async fn get_room(
         room_seen_bar_html,
         huddle_enabled,
         remote_control_enabled,
-        ice_servers: &state.ice_servers,
+        ice_servers: &ice_servers,
         huddle_sfu: crate::livekit::available(),
         huddle_participants,
         stage_enabled,

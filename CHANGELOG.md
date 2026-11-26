@@ -8,8 +8,26 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Sections:
 
 ## [Unreleased]
 
+### Added
+
+- **Change what you're sharing mid-share, without stopping (LC-1226).** While you're sharing your screen in a call, a "Change source" button now lets you pick a different screen or window (or, in a Chromium browser, a different tab) and swap to it in place - viewers keep seeing your share with no drop or restart. The picker is the browser/OS one, so it only ever offers sources that environment can actually capture: in a web browser that includes a specific tab, but in the desktop app it is screens and windows only (the native webview can't capture a browser tab). The control appears only while you're sharing, and only where screen sharing is available in the first place.
+
 ### Fixed
 
+- **The call diagnostics log no longer flags normal transcription as errors (LC-1227).** The per-call voice log (Admin > Voice log) was marking expected transcription conditions as errors - the server-side speech-to-text hitting its rate limit and backing off (which is the load limit working as designed), a live mic with no captions (usually just a quiet moment), and the browser recognizer falling back to the server engine. A healthy call could show dozens of "errors" with nothing actually wrong. These are now recorded as informational entries, so the error view reflects real faults (a blocked microphone, a failed connection) and a genuinely bad call stands out instead of drowning in noise.
+
+## [v0.17.0] - 2026-11-23
+
+### Added
+
+- **TURN relay support for calls, with per-user credentials (LC-1219).** Calls could drop audio for people behind a strict NAT or firewall: a mesh call can only connect peers that can reach each other directly, and with STUN only there was no fallback, so one participant could be unable to hear another while everyone else was fine. You can now configure a TURN relay (`LETS_CHAT_TURN_URLS` / `LETS_CHAT_TURN_SECRET` / `LETS_CHAT_TURN_TTL_SECS`, coturn's shared-secret scheme) to give those peers a relay path. The relay credential handed to each browser is short-lived and unique per user, so it can't be harvested and abused. Requires deploying a TURN server (e.g. coturn); see `docs/configuration.md`. No change to deployments that don't set it.
+- **Your own call tile now shows a connection-quality signal (LC-1218).** The signal-bars indicator used to appear only on other people's tiles, so you could not tell how your own connection was doing. Your tile now shows one too, worked out from your links to everyone else - including the loss others report on the audio you send (the usual "can they hear me?" case). It only turns yellow/red when the trouble is shared across most people (a sign it is your link), so one person's bad connection never makes your own indicator look bad. It applies to mesh calls, the same ones where the other tiles' indicators appear.
+
+## [v0.16.0] - 2026-11-22
+
+### Fixed
+
+- **A private DM no longer leaks into a voice call's in-call chat (LC-1214).** The in-call chat reused the same page element id as every room's message list, and the call dock stays on screen when you browse to another conversation during a call. A private DM you opened mid-call could then have its messages appear inside the call's chat (and call messages appear in the DM), because the browser delivered each live message to both lists at once. The in-call chat now uses its own per-room element, so the two message streams can never cross. The server-side meeting transcript was never affected; this was a display leak.
 - **Opening a room from the Home dashboard no longer drops a call you are in (LC-1213).** The Home dashboard's room, DM, mention and draft rows (and the stats / discover / invitations links) were plain links that did a full page reload, which tore down the whole page - including a live voice call that lives outside the main content area - so clicking one mid-call kicked you out of the meeting. They now navigate in place like the sidebar does, keeping the connection and the call alive. (The one "jump to a thread's message" row stays a full navigation so it still scrolls to that message.)
 
 ## [v0.15.0] - 2026-11-19
