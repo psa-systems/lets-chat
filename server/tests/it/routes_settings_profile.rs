@@ -330,3 +330,112 @@ async fn settings_handle_help_explains_bunyip_independence() {
     // LC-1011: the help text now states the 18-char cap + the real charset.
     assert!(body.contains("18 characters: letters, numbers, and _ only."));
 }
+
+fn multipart_username_and_display_name(username: &str, display_name: &str) -> Vec<u8> {
+    let mut body = Vec::new();
+    body.extend_from_slice(format!("--{BOUNDARY}\r\n").as_bytes());
+    body.extend_from_slice(b"Content-Disposition: form-data; name=\"username\"\r\n\r\n");
+    body.extend_from_slice(username.as_bytes());
+    body.extend_from_slice(format!("\r\n--{BOUNDARY}\r\n").as_bytes());
+    body.extend_from_slice(b"Content-Disposition: form-data; name=\"display_name\"\r\n\r\n");
+    body.extend_from_slice(display_name.as_bytes());
+    body.extend_from_slice(format!("\r\n--{BOUNDARY}--\r\n").as_bytes());
+    body
+}
+
+async fn post_profile_multipart(
+    app: &Router,
+    sess: &str,
+    body: Vec<u8>,
+) -> axum::response::Response {
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/settings/profile")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={BOUNDARY}"),
+        )
+        .header(header::COOKIE, format!("session={sess}"))
+        .body(Body::from(body))
+        .unwrap();
+    app.clone().oneshot(req).await.unwrap()
+}
+
+/// A user whose existing confirmed handle is grandfathered above the 18-char
+/// cap must still be able to save unrelated settings (here, display name) as
+/// long as the submitted `username` field is unchanged. `validate_handle`
+/// must never run against an unchanged, over-length handle.
+#[tokio::test]
+async fn unchanged_overlength_handle_does_not_block_other_saves() {
+    let s = setup().await;
+    let long_handle = "alice_longtime_user"; // 19 chars, over MAX_USERNAME_CHARS (18)
+    assert_eq!(long_handle.chars().count(), 19);
+    sqlx::query("UPDATE users SET username = ? WHERE id = ?")
+        .bind(long_handle)
+        .bind(&s.user_id)
+        .execute(&s.auth)
+        .await
+        .unwrap();
+
+    let body = multipart_username_and_display_name(long_handle, "Alice New Name");
+    let resp = post_profile_multipart(&s.app, &s.session, body).await;
+
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        resp.headers().get(header::LOCATION).unwrap(),
+        "/settings?saved=1"
+    );
+
+    let user = db::auth::find_user_by_id(&s.auth, &s.user_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(user.username, long_handle, "handle must stay unchanged");
+    assert_eq!(user.display_name.as_deref(), Some("Alice New Name"));
+}
+
+/// A deliberate CHANGE of the handle to an over-length value must
+/// still be rejected with the length error, even though an unchanged
+/// over-length handle (above) is now allowed through.
+#[tokio::test]
+async fn changing_handle_to_overlength_value_is_still_rejected() {
+    let s = setup().await;
+    let long_handle = "alice_longtime_user"; // 19 chars, pre-existing / grandfathered
+    sqlx::query("UPDATE users SET username = ? WHERE id = ?")
+        .bind(long_handle)
+        .bind(&s.user_id)
+        .execute(&s.auth)
+        .await
+        .unwrap();
+
+    let new_overlength = "alice_longtime_user_x"; // different value, still over the cap
+    let body = multipart_username_and_display_name(new_overlength, "Alice New Name");
+    let resp = post_profile_multipart(&s.app, &s.session, body).await;
+
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let loc = resp
+        .headers()
+        .get(header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    assert!(
+        loc.starts_with("/settings?error="),
+        "expected inline error flash, got loc: {loc}"
+    );
+    let decoded: String = url::form_urlencoded::parse(loc.split_once('?').unwrap().1.as_bytes())
+        .find(|(k, _)| k == "error")
+        .map(|(_, v)| v.into_owned())
+        .unwrap_or_default();
+    assert_eq!(decoded, "Handle exceeds 18 characters.");
+
+    let user = db::auth::find_user_by_id(&s.auth, &s.user_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(user.username, long_handle, "handle must not have changed");
+    assert_ne!(
+        user.display_name.as_deref(),
+        Some("Alice New Name"),
+        "display name must not be saved when handle validation fails"
+    );
+}
