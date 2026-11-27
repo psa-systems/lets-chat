@@ -278,10 +278,12 @@ test('LC-866: a mic that stays busy surfaces a toast instead of stopping silentl
   assert.match(t.toasts[0][1], /transcription/i);
 });
 
-// LC-1129: a browser-engine speech error (the recognizer's cloud is unreachable
-// or the mic is blocked) is logged to the voice_events log as an error frame, in
-// addition to the unchanged server-engine fallback.
-test('LC-1129: a browser speech error sends an error diag', async () => {
+// LC-1129/LC-1227: a browser-engine 'network' speech error (the recognizer's
+// cloud is unreachable) is logged to the voice_events log, in addition to the
+// unchanged server-engine fallback. Since a server engine IS configured here, the
+// fallback recovers it, so it is a diag - not a scary error for a condition we
+// auto-handle.
+test('LC-1227: a recoverable browser speech error (network, with a server engine) is a diag', async () => {
   const t = loadRich({ agentActive: false, withSR: true });
   await t.flush(); // loadConfig -> sttServer=true
   t.fireDoc('lc:rtc-session-started', { room: 7 });
@@ -292,12 +294,28 @@ test('LC-1129: a browser speech error sends an error diag', async () => {
 
   const errs = t.frames.filter((f) => f.type === 'voice_diag' && f.detail === 'transcribe: speech error network');
   assert.equal(errs.length, 1, 'the speech error is logged once');
-  assert.equal(errs[0].level, 'error', 'logged as an error, not a diag');
+  assert.equal(errs[0].level, 'diag', 'recovered by the server fallback, so a diag, not an error');
 });
 
-// LC-1129: the "talking but not picked up" watchdog. With the browser engine
-// capturing and the mic live, a window with no caption logs exactly one error,
-// and does not re-arm until the next caption arrives.
+// LC-1227: a blocked / unavailable mic IS a genuine fault - no engine can
+// transcribe this user - so it stays an error even with a server engine present.
+test('LC-1227: a mic-blocked speech error (not-allowed) stays an error', async () => {
+  const t = loadRich({ agentActive: false, withSR: true });
+  await t.flush();
+  t.fireDoc('lc:rtc-session-started', { room: 7 });
+  await t.flush();
+  assert.ok(t.recogInstances.length >= 1, 'the browser recognizer started');
+
+  t.recogInstances[0].onerror({ error: 'not-allowed' });
+
+  const errs = t.frames.filter((f) => f.type === 'voice_diag' && f.detail === 'transcribe: speech error not-allowed');
+  assert.equal(errs.length, 1, 'the mic-blocked error is logged once');
+  assert.equal(errs[0].level, 'error', 'a blocked mic is a genuine fault');
+});
+
+// LC-1129/LC-1227: the "talking but not picked up" watchdog. With the browser
+// engine capturing and the mic live, a window with no caption logs exactly one
+// diag line, and does not re-arm until the next caption arrives.
 test('LC-1129: the silence watchdog fires once while the mic is live, then waits for a caption', async () => {
   const t = loadRich({ agentActive: false, withSR: true });
   await t.flush();
@@ -307,8 +325,8 @@ test('LC-1129: the silence watchdog fires once while the mic is live, then waits
   t.runTimers(); // the no-caption window elapses
   await t.flush();
   const silence = t.frames.filter((f) => f.detail === 'transcribe: no captions in 60s (mic live)');
-  assert.equal(silence.length, 1, 'one silence error');
-  assert.equal(silence[0].level, 'error');
+  assert.equal(silence.length, 1, 'one silence line');
+  assert.equal(silence[0].level, 'diag', 'LC-1227: a quiet mic is a diag breadcrumb, not an error');
 
   // No caption yet, so it must NOT re-arm: another elapse logs nothing more.
   t.runTimers();
