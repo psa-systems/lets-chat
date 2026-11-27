@@ -64,6 +64,16 @@
         <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.25A2.25 2.25 0 014.25 2h11.5A2.25 2.25 0 0118 4.25v8.5A2.25 2.25 0 0115.75 15h-3.105l.347 1.736.94.313a.75.75 0 01-.237 1.461H6.305a.75.75 0 01-.237-1.461l.94-.313L7.355 15H4.25A2.25 2.25 0 012 12.75v-8.5zm8.75.75a.75.75 0 00-1.5 0v2.69L8.03 6.22a.75.75 0 00-1.06 1.06l2.5 2.5a.75.75 0 001.06 0l2.5-2.5a.75.75 0 10-1.06-1.06L10.75 7.69V5z" clip-rule="evenodd"/></svg></span>
         <span class="lc-cbtn-label">{{ "voice-share-screen"|t }}</span>
       </button>
+      {# Change what you're sharing mid-share without stopping, the same control
+         the 1:1 call bar carries. Hidden until a share is live (voice.js
+         setScreenBtn reveals it) and only where getDisplayMedia exists; voice.js's
+         existing dispatch and gating pick this up with no JS change. #}
+      <button type="button" data-lc-voice-screen-switch
+              aria-label="{{ "voice-switch-share"|t }}" data-lc-tip="{{ "voice-switch-share"|t }}" data-lc-tip-pos="top"
+              class="hidden lc-cbtn">
+        <span class="lc-cbtn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.389zm1.23-3.723a.75.75 0 00.219-.53V2.929a.75.75 0 00-1.5 0V5.36l-.31-.31A7 7 0 003.239 8.188a.75.75 0 101.448.389A5.5 5.5 0 0113.89 6.11l.311.31h-2.432a.75.75 0 000 1.5h4.243a.75.75 0 00.53-.219z" clip-rule="evenodd"/></svg></span>
+        <span class="lc-cbtn-label">{{ "voice-switch-share"|t }}</span>
+      </button>
       {# LC-553: transcription in huddles. A huddle is the same mesh + same mic
          capture as an enclave voice channel, so it gets the same controls; they
          were omitted here purely "to keep the bar light", which left captions
