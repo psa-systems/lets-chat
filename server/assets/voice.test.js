@@ -141,9 +141,14 @@ function load(opts) {
     LetsChatDevices: {
       getUserMedia: () => Promise.resolve({
         id: 'stream-1',
-        getTracks: () => tracks,
-        getAudioTracks: () => tracks,
-        getVideoTracks: () => [],
+        getTracks: () => tracks.slice(),
+        getAudioTracks: () => tracks.filter((t) => t.kind === 'audio'),
+        // A mesh screen share adds/removes its video track on this same local
+        // stream (toggleScreen/switchScreenSource), so the mock needs to track
+        // that, not just the fixed audio track the mic tests use.
+        getVideoTracks: () => tracks.filter((t) => t.kind === 'video'),
+        addTrack: (t) => { if (tracks.indexOf(t) === -1) tracks.push(t); },
+        removeTrack: (t) => { const i = tracks.indexOf(t); if (i >= 0) tracks.splice(i, 1); },
       }),
       applySpeaker: () => {},
     },
@@ -467,6 +472,49 @@ test('LC-1226: a Change-source failure (not a user cancel) notifies the call UI'
   const errs = h.toasts.filter((t) => t[0] === 'err');
   assert.equal(errs.length, 1, 'exactly one error notification');
   assert.match(errs[0][1], /Screen sharing failed/);
+  h.leaveClick();
+});
+
+// The huddle's mesh transport (no SFU) gets the same Change-source control as
+// the SFU path above. Here the picker re-invoke swaps localStream's screen
+// track via addTrack/removeTrack (this harness's RTCPeerConnection stub has no
+// getTransceivers, so swapPeerVideo falls to its addTrack fallback rather than
+// replaceTrack - the local-stream/self-tile swap under test is transport-
+// agnostic either way); the old source is stopped only once the swap settles,
+// never before, so the share never drops in between.
+test('a huddle screen-share session on the mesh path can switch source without dropping', async () => {
+  const sources = [];
+  function newSource() {
+    const t = { kind: 'video', readyState: 'live', stopped: false, onended: null, stop() { this.stopped = true; } };
+    sources.push(t);
+    return t;
+  }
+  const h = load({ getDisplayMedia: () => Promise.resolve({ getVideoTracks: () => [newSource()] }) });
+  const dock = makeDock(7, false); // sfu=false -> the mesh path
+  h.main.appendChild(dock);
+  h.fire('htmx:afterSettle');
+  h.join();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(h.voice.isJoined(), true, 'setup: the mesh huddle call is live');
+
+  h.screenClick(); // start sharing
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(sources.length, 1, 'setup: the first source is captured');
+  const first = sources[0];
+  assert.equal(first.stopped, false, 'the first source is live');
+
+  h.switchClick(); // switch source mid-share, same control as the 1:1 bar
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(sources.length, 2, 'the picker was re-invoked for the switch');
+  const second = sources[1];
+  assert.equal(first.stopped, true, 'the old source is stopped once the new one is in place');
+  assert.equal(second.stopped, false, 'the new source stays live - the share never dropped');
+  assert.equal(h.toasts.length, 0, 'switching source is not a fault');
+
   h.leaveClick();
 });
 
