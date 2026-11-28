@@ -22,7 +22,13 @@ Stage mode puts the room into a one-to-many audio layout. Speakers hold the mic;
 
 Any call participant can share a window or an entire screen. The share stream rides alongside the audio and video streams.
 
+While sharing, a Change source button lets you pick a different source with the browser/OS picker and swap to it without viewers seeing a drop. In the desktop app the picker offers screens and windows only; in a web browser it also offers tabs.
+
 On Linux, screen share needs PipeWire and the right portal backend installed. See [Installation](../installation.md).
+
+## Connection quality
+
+Each tile in a mesh call (1:1 calls and small huddles) shows a signal-bars indicator worked out from that peer's connection stats. Your own tile shows one too, derived from what every other participant reports about your link, and only turns yellow or red when the trouble looks shared rather than tied to one peer.
 
 ## In-call chat
 

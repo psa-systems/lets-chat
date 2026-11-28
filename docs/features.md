@@ -28,8 +28,9 @@ surfaces is in [configuration.md](configuration.md).
 - Call transcription, either in the speaker's browser (Web Speech) or server-side against a transcription endpoint you run
 - Consent-gated remote control: during a 1:1 call, request keyboard/mouse control of a peer's screen (desktop app, Windows only; verified-email gated, revocable at any time). Off by default; an admin must enable it at `/admin/remote-control` before users can request control, and can review the consent history on a dedicated audit page.
 - In-call text chat: a Chat tab inside the call's unified dock (alongside Transcript and Diagnostics) shows a panel where anyone in the call can send and read messages live during the call, posted to the voice room's own message channel
-- Screen-share alongside the audio/video stream
+- Screen-share alongside the audio/video stream, with a Change source control to switch to a different screen, window, or (in a Chromium browser) tab mid-share without stopping; the desktop app offers screens and windows only, since its webview cannot capture a browser tab.
 - Active voice rooms show a live in-call participant count in the sidebar
+- Mesh calls show a connection-quality signal-bars indicator on every tile, including your own, flagging a bad link only when most peers agree it is shared trouble (not one struggling peer)
 
 ### Linux screen sharing prerequisites
 
